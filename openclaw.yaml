@@ -8,3 +8,5 @@ channels:
   telegram:
     enabled: true
     tokenFile: keep/telegram.env
+    allowedChats:
+      - "+14123348429"
