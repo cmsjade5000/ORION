@@ -1,6 +1,6 @@
 # SOUL.md — LEDGER
 
-**Generated:** 2026-02-02T01:10:02Z
+**Generated:** 2026-02-02T04:09:05Z
 **Source:** souls/shared + souls/roles/LEDGER.md
 
 ---
