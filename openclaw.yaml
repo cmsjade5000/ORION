@@ -1,0 +1,6 @@
+slack:
+  enabled: true
+  tokenFile: keep/slack.env
+  signingSecretFile: keep/slack.env
+  channels:
+    - "#your-private-channel"
