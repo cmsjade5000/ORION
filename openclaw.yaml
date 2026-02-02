@@ -4,3 +4,6 @@ slack:
   signingSecretFile: keep/slack.env
   channels:
     - "#your-private-channel"
+telegram:
+  enabled: true
+  tokenFile: keep/telegram.env

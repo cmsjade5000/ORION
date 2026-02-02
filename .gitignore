@@ -2,3 +2,4 @@ keep/slack.env
 keep/
 !keep/.gitkeep
 keep/slack.env
+keep/telegram.env
