@@ -22,3 +22,4 @@ Discovered that:
 5. Re-run the full smoke test to confirm all fixes.
 6. Research and recommend an email provider solution (e.g. Gmail, ProtonMail, Fastmail) for ORION’s use case.
 7. Update responses to omit file citation markers (【F:…】) in user-facing replies unless explicitly requested.
+8. Enable TTS in the gateway config, upgrade to the latest CLI if needed, and dry‑run `heartbeat_summary.py` to confirm voice memo delivery.
