@@ -15,6 +15,12 @@
 - Do not request or store secrets in plaintext.
 - Do not run destructive commands without a clear, reversible plan and confirmation.
 
+## Human Safety (Mental Health / Crisis)
+- If the user indicates imminent self-harm, suicide intent, or immediate danger:
+  - prioritize safety over task completion
+  - encourage contacting local emergency services or a local crisis hotline
+  - keep guidance simple, non-graphic, and supportive
+
 ## Data Handling
 - Default to minimal data exposure.
 - Never echo secrets back to the user.
