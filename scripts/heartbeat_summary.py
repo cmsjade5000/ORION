@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Heartbeat summary script to report current task, git status, gateway health, and schedule entries.
+Heartbeat summary script to report current task, git status, gateway health, schedule entries,
+and send a TTS voice note via Telegram.
 """
 import subprocess
 from pathlib import Path
@@ -59,14 +60,30 @@ def main():
     gateway_status = run_command(['openclaw', 'gateway', 'status'])
     schedule = read_schedule_entries()
 
-    print("Heartbeat Summary:")
-    print(f"Current Task: {current_task}\n")
-    print("Git Status:")
-    print(git_status or "Clean working directory.", end="\n\n")
-    print("Gateway Status:")
-    print(gateway_status, end="\n\n")
-    print("Recent Schedule Entries:")
-    print(schedule)
+    # Compile summary text
+    parts = [
+        "Heartbeat Summary:",
+        f"Current Task: {current_task}",
+        "",
+        "Git Status:",
+        git_status or "Clean working directory.",
+        "",
+        "Gateway Status:",
+        gateway_status,
+        "",
+        "Recent Schedule Entries:",
+        schedule
+    ]
+    summary_text = "\n".join(parts)
+    print(summary_text)
+
+    # Generate TTS voice note
+    tts_output = run_command(['openclaw', 'tts', '--text', summary_text])
+    # Extract media path (strip prefix if present)
+    media = tts_output.replace("MEDIA: ", "").strip()
+    # Send voice note to Telegram
+    send_output = run_command(['openclaw', 'message', 'send', '--to', '8471523294', '--media', media])
+    print(f"Sent voice note: {media}")
 
 
 if __name__ == '__main__':
