@@ -13,3 +13,6 @@ channels:
 
 openrouter:
   api_key: ""
+
+agentToAgent:
+  enabled: true
