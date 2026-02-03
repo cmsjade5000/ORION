@@ -96,3 +96,16 @@ The memory stack organizes notes and session data:
 - **Long-term memory** (`MEMORY.md`): persistent notes and insights
 
 > On session start, the system automatically loads `memory/WORKING.md` into the session context as working memory.
+
+## Adding Specialist Skills
+
+The Gateway system supports extending functionality with specialist skill modules. To scaffold a new specialist skill, follow this directory structure:
+
+```text
+src/skills/<skillName>/
+├── README.md       # description of workflows and entry points
+├── index.ts        # skill implementation stubs
+└── __tests__/      # placeholder tests to verify module loading
+```
+
+The initial PULSE and STRATUS skill stubs are located under `src/skills/pulse` and `src/skills/stratus`, respectively. Refer to their README files for usage details.
