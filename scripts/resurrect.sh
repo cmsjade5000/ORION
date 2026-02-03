@@ -18,5 +18,9 @@ sleep 5
 echo "Checking gateway status..."
 openclaw gateway status
 
+# Send a Telegram notification of successful recovery
+echo "Sending recovery message to Telegram..."
+openclaw message send --to 8471523294 --message "🤖 ORION here: the server is back up and the gateway is running."
+
 # Completion message
 echo "Resurrect script complete."
