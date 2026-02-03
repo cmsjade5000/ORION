@@ -94,3 +94,5 @@ The memory stack organizes notes and session data:
 - **Working memory** (`memory/WORKING.md`): active task tracking
 - **Daily memory** (`memory/YYYY-MM-DD.md`): generated daily summaries of session dumps
 - **Long-term memory** (`MEMORY.md`): persistent notes and insights
+
+> On session start, the system automatically loads `memory/WORKING.md` into the session context as working memory.
