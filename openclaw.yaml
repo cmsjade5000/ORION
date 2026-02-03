@@ -14,5 +14,9 @@ channels:
 openrouter:
   api_key: ""
 
+messages:
+  tts:
+    enabled: false
+
 agentToAgent:
   enabled: true
