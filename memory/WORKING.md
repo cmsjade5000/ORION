@@ -28,4 +28,4 @@ Discovered that:
 11. Configure MailMolt API key in gateway config and restart.
 12. Send a test email from ORION to your human owner and verify delivery.
 13. Save the MailMolt API key securely (e.g., in `keep/telegram.env` as `MAILMOLT_API_KEY`).
-14. Confirm agent-to-agent messaging by sending a test request through the LEDGER agent.
+14. Confirm agent-to-agent messaging by sending a test request through the LEDGER agent (DONE).
