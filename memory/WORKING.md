@@ -22,4 +22,8 @@ Discovered that:
 5. Re-run the full smoke test to confirm all fixes.
 6. Research and recommend an email provider solution (e.g. Gmail, ProtonMail, Fastmail) for ORION’s use case.
 7. Update responses to omit file citation markers (【F:…】) in user-facing replies unless explicitly requested.
-8. Follow the MailMolt quickstart to register an agent email address via the API (POST /v1/agents/register) and obtain credentials.
+8. Follow the MailMolt quickstart to register an agent email address via the API and obtain credentials (DONE).
+9. Claim ownership of the MailMolt address via the provided claim URL (DONE).
+10. Store `mm_live_Ez6Z0DizTcrDFfNGuF1c1QTBshTOv9oa` in a secure environment variable (e.g., `MAILMOLT_API_KEY` in `keep/telegram.env`).
+11. Configure MailMolt API key in gateway config and restart.
+12. Send a test email from ORION to your human owner and verify delivery.
