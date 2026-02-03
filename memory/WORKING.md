@@ -18,4 +18,5 @@ Discovered that:
 2. Add or remove `package.json` and update JS/TS test commands.
 3. Fix the module import path for `src/core` in the Node check.
 4. Verify and reload the OpenRouter config entry (`openclaw gateway config.patch`).
+5. Update the Node smoke-test import path for `workingMemory` once the smoke-test script location is identified.
 5. Re-run the full smoke test to confirm all fixes.
