@@ -8,5 +8,6 @@ Use this file to record persistent notes, insights, and references that span mul
 - When summarizing or coordinating work, explicitly mention relevant specialist agents (ATLAS, NODE, EMBER, PIXEL, LEDGER) as appropriate.
 - Proactively notify via Telegram (text or TTS) whenever a background task fails or throws an exception.
 - Do not accompany voice memos with full verbatim transcripts; summaries or omitting the transcript is preferred.
+- Monitor and optimize token usage: default to lower‑cost providers (e.g. OpenRouter) and lean context sources to control costs.
 - Only attach voice memos to responses where they add clear value; avoid sending them on every reply.
 - Omit file citation markers like “【F:…】” from user‑facing replies unless explicitly asked.
