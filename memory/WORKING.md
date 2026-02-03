@@ -21,3 +21,4 @@ Discovered that:
 5. Update the Node smoke-test import path for `workingMemory` once the smoke-test script location is identified.
 5. Re-run the full smoke test to confirm all fixes.
 6. Research and recommend an email provider solution (e.g. Gmail, ProtonMail, Fastmail) for ORION’s use case.
+7. Update responses to omit file citation markers (【F:…】) in user-facing replies unless explicitly requested.
