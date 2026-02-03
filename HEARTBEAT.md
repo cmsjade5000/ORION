@@ -6,3 +6,5 @@
 
 - `0 2 * * *` scripts/nightly_review.py --dry-run  # Nightly Evolution Cron Job
 - `0 0 * * *` scripts/rotate_memory.py  # Daily Memory rotation
+- `0 9 * * * scripts/heartbeat_summary.py  # Morning summary at 9:00`
+- `0 18 * * * scripts/heartbeat_summary.py  # Evening summary at 18:00`
