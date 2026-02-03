@@ -20,3 +20,4 @@ Discovered that:
 4. Verify and reload the OpenRouter config entry (`openclaw gateway config.patch`).
 5. Update the Node smoke-test import path for `workingMemory` once the smoke-test script location is identified.
 5. Re-run the full smoke test to confirm all fixes.
+6. Research and recommend an email provider solution (e.g. Gmail, ProtonMail, Fastmail) for ORION’s use case.
