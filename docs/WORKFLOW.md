@@ -85,3 +85,12 @@ Before tagging and releasing a new version, perform the following:
    - Smoke test the gateway service.
 
 ---
+
+## Memory Stack
+
+The memory stack organizes notes and session data:
+
+- **Session dumps** (ephemeral session logs)
+- **Working memory** (`memory/WORKING.md`): active task tracking
+- **Daily memory** (`memory/YYYY-MM-DD.md`): generated daily summaries of session dumps
+- **Long-term memory** (`MEMORY.md`): persistent notes and insights
