@@ -22,3 +22,4 @@ Discovered that:
 5. Re-run the full smoke test to confirm all fixes.
 6. Research and recommend an email provider solution (e.g. Gmail, ProtonMail, Fastmail) for ORION’s use case.
 7. Update responses to omit file citation markers (【F:…】) in user-facing replies unless explicitly requested.
+8. Follow the MailMolt quickstart to register an agent email address via the API (POST /v1/agents/register) and obtain credentials.
