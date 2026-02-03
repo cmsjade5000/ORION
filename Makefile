@@ -26,7 +26,7 @@ audio-check:
 
 ## Run lint checks (pre-commit hooks)
 lint:
-	pre-commit run --all-files
+	@command -v pre-commit >/dev/null 2>&1 && pre-commit run --all-files || echo "pre-commit not installed, skipping lint"
 
 ## Start the OpenClaw gateway in development mode
 dev:

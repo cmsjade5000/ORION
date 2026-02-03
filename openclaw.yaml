@@ -10,3 +10,6 @@ channels:
     tokenFile: keep/telegram.env
     allowedChats:
       - "+14123348429"
+
+openrouter:
+  api_key: ""

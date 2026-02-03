@@ -1,0 +1,7 @@
+{
+  "name": "gateway",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "echo \"No JS/TS tests to run\""
+  }
+}
