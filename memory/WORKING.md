@@ -27,3 +27,4 @@ Discovered that:
 10. Store `mm_live_Ez6Z0DizTcrDFfNGuF1c1QTBshTOv9oa` in a secure environment variable (e.g., `MAILMOLT_API_KEY` in `keep/telegram.env`).
 11. Configure MailMolt API key in gateway config and restart.
 12. Send a test email from ORION to your human owner and verify delivery.
+13. Save the MailMolt API key securely (e.g., in `keep/telegram.env` as `MAILMOLT_API_KEY`).
