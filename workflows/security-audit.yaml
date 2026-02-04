@@ -1,0 +1,20 @@
+# Security Audit workflow definition
+# Schedules daily deep security audits with retry/backoff and failure alerts
+
+version: 1
+
+jobs:
+  security_audit:
+    description: "Daily security audit"
+    schedule: "0 3 * * *"
+    command: "clawdbot security audit --deep"
+    retry:
+      max_attempts: 3
+      backoff:
+        initial_delay: "5m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job security_audit failed after {{attempts}} attempts."

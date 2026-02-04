@@ -4,7 +4,5 @@
 
 # Add tasks below when you want the agent to check something periodically.
 
-- `0 2 * * *` scripts/nightly_review.py --dry-run  # Nightly Evolution Cron Job
-- `0 0 * * *` scripts/rotate_memory.py  # Daily Memory rotation
-- `0 9 * * * scripts/heartbeat_summary.py  # Morning summary at 9:00`
-- `0 18 * * * scripts/heartbeat_summary.py  # Evening summary at 18:00`
+# Heartbeat workflows are now defined in the workflow DSL:
+See `workflows/heartbeat.yaml` for heartbeat workflow definitions, including schedules, retry/backoff policies, and failure alerts.

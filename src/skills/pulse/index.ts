@@ -1,71 +1,102 @@
+import fs from 'fs';
+import path from 'path';
 import util from 'util';
 import child_process from 'child_process';
+import yaml from 'js-yaml';
 
 const execAsync = util.promisify(child_process.exec);
 
-interface Step {
-  id: string;
-  cmd: string;
-}
-
-const STEPS: Step[] = [
-  { id: 'rotate_memory', cmd: 'python3 scripts/rotate_memory.py' },
-  { id: 'heartbeat_summary', cmd: 'python3 scripts/heartbeat_summary.py' },
-  { id: 'resurrect', cmd: 'bash scripts/resurrect.sh' },
-  { id: 'nightly_review', cmd: 'python3 scripts/nightly_review.py' },
-];
-
-async function sendTelegramAlert(message: string): Promise<void> {
+async function sendTelegramAlert(channel: string, target: string, message: string): Promise<void> {
   try {
-    await execAsync(`openclaw message send --text "${message}"`);
+    await execAsync(
+      `openclaw message send --channel ${channel} --target ${target} --text "${message}"`
+    );
   } catch (err) {
     console.error('Failed to send Telegram alert:', err);
   }
 }
 
+function parseDuration(duration: string): number {
+  const match = duration.match(/^(\d+)([smhd])$/);
+  if (!match) {
+    return 0;
+  }
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  switch (unit) {
+    case 's':
+      return value * 1000;
+    case 'm':
+      return value * 60 * 1000;
+    case 'h':
+      return value * 60 * 60 * 1000;
+    case 'd':
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      return 0;
+  }
+}
+
 /**
- * Orchestrate the Memory-Stack pipeline: rotate_memory, heartbeat_summary,
- * resurrect, nightly_review in sequence. Retries failed steps.
+ * Orchestrate heartbeat jobs as defined in workflows/heartbeat.yaml.
+ * Loads job definitions, executes commands with retry/backoff, and handles failure alerts.
  */
 export async function orchestratePipeline(params: any): Promise<any> {
-  const results: Array<any> = [];
-  for (const step of STEPS) {
-    try {
-      const { stdout } = await execAsync(step.cmd);
-      results.push({ step: step.id, success: true, output: stdout });
-    } catch (error) {
-      const retryResult = await retryStep(step.id);
-      if (retryResult.success) {
-        results.push({ step: step.id, success: true, retried: true });
-      } else {
-        await sendTelegramAlert(
-          `PULSE: step ${step.id} failed after ${retryResult.attempts} attempts`
-        );
-        results.push({ step: step.id, success: false, error: retryResult.error });
+  const workflowPath = path.resolve(__dirname, '../../../workflows/heartbeat.yaml');
+  const content = fs.readFileSync(workflowPath, 'utf8');
+  const workflow = yaml.load(content) as any;
+  const results: any[] = [];
+
+  for (const [jobId, jobDef] of Object.entries(workflow.jobs || {})) {
+    const cmd = (jobDef as any).command as string;
+    const retryPolicy = (jobDef as any).retry || {};
+    const maxAttempts = (retryPolicy as any).max_attempts || 1;
+    const backoff = (retryPolicy as any).backoff || {};
+    const initialDelayMs = parseDuration((backoff as any).initial_delay || '');
+    const factor = (backoff as any).factor || 1;
+
+    let attempt = 0;
+    let success = false;
+    let lastError: any;
+    let delayMs = initialDelayMs;
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        const { stdout } = await execAsync(cmd);
+        results.push({ job: jobId, success: true, output: stdout, attempts: attempt });
+        success = true;
+        break;
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, delayMs));
+          delayMs *= factor;
+        }
       }
     }
+
+    if (!success) {
+      for (const hook of ((jobDef as any).on_failure || [])) {
+        if ((hook as any).message) {
+          const msgHook = (hook as any).message;
+          const msg = (msgHook.message as string).replace(
+            /{{\s*attempts\s*}}/g,
+            String(attempt)
+          );
+          await sendTelegramAlert(msgHook.channel, msgHook.target, msg);
+        }
+      }
+      results.push({ job: jobId, success: false, error: lastError, attempts: attempt });
+    }
   }
+
   return results;
 }
 
 /**
- * Retry a failed pipeline step up to 2 times, then return failure.
+ * Retry entrypoint retained for compatibility. Dynamic workflows handle retry internally.
  */
 export async function retryStep(stepId: string): Promise<any> {
-  const step = STEPS.find((s) => s.id === stepId);
-  if (!step) {
-    throw new Error(`Unknown step "${stepId}"`);
-  }
-  let attempts = 0;
-  let lastError: any;
-  while (attempts < 2) {
-    attempts++;
-    try {
-      await execAsync(step.cmd);
-      return { step: stepId, success: true, attempts };
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  return { step: stepId, success: false, attempts, error: lastError };
+  throw new Error('retryStep is not supported in dynamic workflow mode');
 }
