@@ -1,0 +1,77 @@
+# Dev Audit Pipeline workflow definitions
+# Schedules a nightly pipeline that chains Mino scan, security audit, cost report, and infra drift check
+
+version: 1
+
+jobs:
+  state_dir_setup:
+    description: "Ensure state directory for incremental audit pipeline"
+    schedule: "30 3 * * *"
+    command: >-
+      mkdir -p "$(yq eval '.pulse.devAuditPipeline.stateDir // \".state\"' openclaw.yaml)"
+    retry:
+      max_attempts: 1
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job state_dir_setup failed after {{attempts}} attempts."
+  repo_mino_scan:
+    description: "Pipeline: Nightly Mino scan of curated repositories"
+    depends_on: ["state_dir_setup"]
+    command: "scripts/scan_repos_with_mino.sh"
+    retry:
+      max_attempts: 3
+      backoff:
+        initial_delay: "5m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job repo_mino_scan failed after {{attempts}} attempts."
+
+  skill_repo_audit:
+    description: "Pipeline: Nightly security audit of skill repositories"
+    depends_on: ["repo_mino_scan"]
+    command: "scripts/audit_skill_repos.sh"
+    retry:
+      max_attempts: 3
+      backoff:
+        initial_delay: "5m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job skill_repo_audit failed after {{attempts}} attempts."
+
+  cost_report:
+    description: "Pipeline: Daily LLM cost report"
+    depends_on: ["skill_repo_audit"]
+    command: "scripts/cost_report.sh"
+    retry:
+      max_attempts: 3
+      backoff:
+        initial_delay: "5m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job cost_report failed after {{attempts}} attempts."
+
+  infra_drift_check:
+    description: "Pipeline: Infrastructure drift check"
+    depends_on: ["cost_report"]
+    command: "scripts/infra_drift_check.sh"
+    retry:
+      max_attempts: 3
+      backoff:
+        initial_delay: "5m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job infra_drift_check failed after {{attempts}} attempts."

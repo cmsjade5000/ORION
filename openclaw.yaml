@@ -6,19 +6,19 @@ channels:
     channels:
       - "#your-private-channel"
   telegram:
-  enabled: true
-  tokenFile: keep/telegram.env
-  bots:
-    - tokenFile: keep/telegram.env   # ORION
-    - tokenFile: keep/atlas.env     # ATLAS
-    - tokenFile: keep/pixel.env     # PIXEL
-    - tokenFile: keep/pulse.env     # PULSE
-    - tokenFile: keep/stratus.env   # STRATUS
-    - tokenFile: keep/ember.env     # EMBER
-    - tokenFile: keep/ledger.env    # LEDGER
-    - tokenFile: keep/node.env      # NODE (provision later)
-  allowedChats:
-    - "+14123348429"
+    enabled: true
+    tokenFile: keep/telegram.env
+    bots:
+      - tokenFile: keep/telegram.env   # ORION
+      - tokenFile: keep/atlas.env      # ATLAS
+      - tokenFile: keep/pixel.env      # PIXEL
+      - tokenFile: keep/pulse.env      # PULSE
+      - tokenFile: keep/stratus.env    # STRATUS
+      - tokenFile: keep/ember.env      # EMBER
+      - tokenFile: keep/ledger.env     # LEDGER
+      - tokenFile: keep/node.env       # NODE (provision later)
+    allowedChats:
+      - "+14123348429"
 
 openrouter:
   api_key: ""
@@ -29,3 +29,40 @@ messages:
 
 agentToAgent:
   enabled: true
+  allow: ["main", "ember"]  # only ORION (main) and EMBER respond by default in this chat
+
+tools:
+  mino:
+    apiKeyFile: keep/mino.env  # Mino Web Agent API key
+
+pulse:
+  enableAgentChatDemo: false  # false to disable demo mode
+  repoMinoScan:
+    repos:
+      - https://github.com/vemetric/vemetric
+      - https://github.com/AppFlowy/AppFlowy
+      - https://github.com/taipy/taipy
+      - https://github.com/nocodb/nocodb
+      - https://github.com/kestra-io/kestra
+      - https://github.com/composio-dev/composio
+      - https://github.com/nocobase/nocobase
+      - https://github.com/mattermost/mattermost-server
+      - https://github.com/tooljet/tooljet
+      - https://github.com/postiz/postiz
+  skillRepoAudit:
+    # List of Git repository URLs to audit nightly
+    repos: []
+  devAuditPipeline:
+    # Directory to store state for incremental runs (default: .state)
+    stateDir: .state
+    cost:
+      warningThreshold: 100
+      alertThreshold: 200
+    drift:
+      resources: {}
+
+memory:
+  backends:
+    qmd:
+      enabled: true
+      path: ./memory
