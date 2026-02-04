@@ -1,6 +1,6 @@
 # SOUL.md — ATLAS
 
-**Generated:** 2026-02-03T02:51:53Z
+**Generated:** 2026-02-03T16:00:04Z
 **Source:** souls/shared + souls/roles/ATLAS.md
 
 ---

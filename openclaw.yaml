@@ -6,10 +6,19 @@ channels:
     channels:
       - "#your-private-channel"
   telegram:
-    enabled: true
-    tokenFile: keep/telegram.env
-    allowedChats:
-      - "+14123348429"
+  enabled: true
+  tokenFile: keep/telegram.env
+  bots:
+    - tokenFile: keep/telegram.env   # ORION
+    - tokenFile: keep/atlas.env     # ATLAS
+    - tokenFile: keep/pixel.env     # PIXEL
+    - tokenFile: keep/pulse.env     # PULSE
+    - tokenFile: keep/stratus.env   # STRATUS
+    - tokenFile: keep/ember.env     # EMBER
+    - tokenFile: keep/ledger.env    # LEDGER
+    - tokenFile: keep/node.env      # NODE (provision later)
+  allowedChats:
+    - "+14123348429"
 
 openrouter:
   api_key: ""
