@@ -76,6 +76,12 @@ gateway/
 
 ---
 
+## Memory Backends
+
+See [docs/MEMORY_BACKENDS.md](docs/MEMORY_BACKENDS.md) for configuring optional memory backends such as the QMD workspace.
+
+---
+
 ## Agent Model
 
 Gateway uses a modular **SOUL architecture** to avoid prompt bloat and identity drift.

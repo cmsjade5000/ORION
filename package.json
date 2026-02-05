@@ -5,7 +5,8 @@
     "test": "echo \"No JS/TS tests to run\""
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "node-fetch": "^2.7.0"
   },
   "devDependencies": {
     "clawhub": "^0.5.0"

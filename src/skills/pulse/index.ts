@@ -41,6 +41,10 @@ function parseDuration(duration: string): number {
  * Orchestrate heartbeat jobs as defined in workflows/heartbeat.yaml.
  * Loads job definitions, executes commands with retry/backoff, and handles failure alerts.
  */
+export async function start(): Promise<string> {
+  return "Hello! PULSE here—ready to manage and orchestrate your workflows.";
+}
+
 export async function orchestratePipeline(params: any): Promise<any> {
   const workflowPath = path.resolve(__dirname, '../../../workflows/heartbeat.yaml');
   const content = fs.readFileSync(workflowPath, 'utf8');
@@ -99,4 +103,37 @@ export async function orchestratePipeline(params: any): Promise<any> {
  */
 export async function retryStep(stepId: string): Promise<any> {
   throw new Error('retryStep is not supported in dynamic workflow mode');
+}
+
+/**
+ * Orchestrate agent-chat-demo workflow as defined in workflows/agent-chat-demo.yaml.
+ * Checks ENABLE_AGENT_CHAT_DEMO env var or openclaw.yaml config flag before running.
+ */
+export async function orchestrateDemo(): Promise<any> {
+  let enabled = false;
+  if (process.env.ENABLE_AGENT_CHAT_DEMO !== undefined) {
+    enabled = process.env.ENABLE_AGENT_CHAT_DEMO.toLowerCase() === 'true';
+  } else {
+    const configPath = path.resolve(__dirname, '../../../openclaw.yaml');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    const config = yaml.load(configContent) as any;
+    enabled = config.pulse && config.pulse.enableAgentChatDemo;
+  }
+  if (!enabled) {
+    return 'Agent chat demo mode is disabled';
+  }
+  const workflowPath = path.resolve(__dirname, '../../../workflows/agent-chat-demo.yaml');
+  const content = fs.readFileSync(workflowPath, 'utf8');
+  const workflow = yaml.load(content) as any;
+  const results: any[] = [];
+  for (const [jobId, jobDef] of Object.entries(workflow.jobs || {})) {
+    const msgHook = (jobDef as any).message as any;
+    if (msgHook && msgHook.channel && msgHook.target && msgHook.message) {
+      await sendTelegramAlert(msgHook.channel, msgHook.target, msgHook.message as string);
+      results.push({ job: jobId, success: true });
+    } else {
+      results.push({ job: jobId, success: false, error: 'Invalid message hook' });
+    }
+  }
+  return results;
 }

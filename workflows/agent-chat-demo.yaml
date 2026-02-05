@@ -1,0 +1,41 @@
+# Agent Chat Demo workflow definitions
+# Defines an on-demand sequence of handoff messages among agents
+
+version: 1
+
+jobs:
+  atlas:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "Running nightly_review job now. @Pulse_GatewayBot"
+  pulse:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "Scheduled nightly_review with retry/backoff; @Stratus_GatewayBot"
+  stratus:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "Infra healthy; CI/CD green. @Pixel_GatewayBot"
+  pixel:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "Scanning for plugin updates… @Ledger_GatewayBot"
+  ledger:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "Token spend under budget. @Ember_GatewayBot"
+  ember:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "Team morale good. @ORION_25_BOT"
+  orion:
+    message:
+      channel: telegram
+      target: "+14123348429"
+      message: "All agents reported in. Next steps?"

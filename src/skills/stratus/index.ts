@@ -6,6 +6,10 @@ const execAsync = util.promisify(child_process.exec);
 /**
  * Stub out a Docker-based test environment launch.
  */
+export async function start(): Promise<string> {
+  return "STRATUS online—your infrastructure and DevOps specialist is at your service.";
+}
+
 export async function provisionResources(params: any): Promise<any> {
   const cmd = 'docker run --rm my-test-environment';
   console.log(`STRATUS: stub provisioning with command: ${cmd}`);

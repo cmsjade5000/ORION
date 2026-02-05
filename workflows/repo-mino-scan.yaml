@@ -1,0 +1,20 @@
+# Repo Mino Scan workflow definitions
+# Schedules a nightly Mino-powered scan of curated repositories
+
+version: 1
+
+jobs:
+  repo_mino_scan:
+    description: "Nightly Mino scan of curated repositories"
+    schedule: "0 1 * * *"
+    command: "scripts/scan_repos_with_mino.sh"  # full scan mode
+    retry:
+      max_attempts: 2
+      backoff:
+        initial_delay: "5m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job repo_mino_scan failed after {{attempts}} attempts."
