@@ -75,3 +75,18 @@ jobs:
           channel: telegram
           target: "+14123348429"
           message: "Job infra_drift_check failed after {{attempts}} attempts."
+
+  repo_sync:
+    description: "Pipeline: Nightly Git repo sync to remote"
+    depends_on: ["infra_drift_check"]
+    command: "scripts/nightly_repo_sync.sh"
+    retry:
+      max_attempts: 2
+      backoff:
+        initial_delay: "2m"
+        factor: 2
+    on_failure:
+      - message:
+          channel: telegram
+          target: "+14123348429"
+          message: "Job repo_sync failed after {{attempts}} attempts."

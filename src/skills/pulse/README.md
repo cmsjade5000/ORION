@@ -102,3 +102,13 @@ On failure of any step, PULSE sends an alert to Telegram. To trigger the pipelin
 ```bash
 openclaw sessions send --label pulse --message "dev-audit-pipeline"
 ```
+
+### Nightly Git Repo Sync
+
+As the final step of the Dev Audit Pipeline, a `repo_sync` job runs `scripts/nightly_repo_sync.sh` to push any new commits on `HEAD` back to the `origin` remote:
+
+```bash
+# Manually trigger just the repo sync step
+openclaw sessions send --label pulse --message "repo-sync"
+```
+
