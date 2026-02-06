@@ -10,7 +10,7 @@ This system is designed to be:
 - cost-aware
 - resistant to drift
 
-Gateway runs locally (Ubuntu VM) and is backed by Git for transparency and long-term maintainability.
+Gateway runs locally on the Mac mini (macOS) and is backed by Git for transparency and long-term maintainability.
 
 ---
 
@@ -47,38 +47,43 @@ ORION
 
 ORION interprets intent, delegates to specialists, integrates responses, and presents a coherent outcome to the user.
 
+Current runtime mode is single-bot ingress: only ORION is Telegram-facing; specialists run through internal delegated sessions.
+
 ---
 
 ## Repository Structure
 
-gateway/
+ORION/
 ├── README.md        # This file
 ├── VISION.md        # Long-term intent and guiding principles
 ├── SECURITY.md      # Threat model and trust boundaries
 ├── KEEP.md          # Secrets doctrine
+├── USER.md          # User preferences and authority
+├── IDENTITY.md      # ORION identity metadata (avatar, tone, etc.)
+├── MEMORY.md        # Long-term memory policy notes
 │
 ├── src/             # Application source code
 │   ├── core/        # Core modules (shared logic and routing)
-│   ├── agents/      # Agent role definitions
+│   ├── agents/      # Agent role definitions (source of truth)
 │   ├── plugins/     # Plugin modules
-│   └── utils/       # Utility functions
-│
-├── souls/           # Source-of-truth agent identity modules
-│   ├── shared/      # Imported by core modules
-│   └── roles/       # Deprecated: roles moved to src/agents
+│   ├── memory/      # Memory backends
+│   └── skills/      # Skill implementations
 │
 ├── agents/          # Generated agent artifacts (SOUL.md)
+├── docs/            # System and workflow documentation
+├── memory/          # Working + daily memory artifacts
+├── tasks/           # Task queue and execution artifacts
 │
 ├── scripts/         # Build and maintenance scripts
 │   └── soul_factory.sh
 │
-└── keep/            # (Reserved) encrypted secrets storage
+└── keep/            # Local-only secrets storage (not committed)
 
 ---
 
 ## Memory Backends
 
-See [docs/MEMORY_BACKENDS.md](docs/MEMORY_BACKENDS.md) for configuring optional memory backends such as the QMD workspace.
+Memory currently uses the local `memory/` folder only. QMD integration is deferred for now.
 
 ---
 
@@ -105,11 +110,11 @@ This allows:
 Agent SOULs are generated via the Soul Factory script.
 
 To regenerate all agents:
-./scripts/soul_factory.sh –all
+./scripts/soul_factory.sh --all
 
 Source files live in:
-- `souls/shared/`
-- `souls/roles/`
+- `src/core/shared/`
+- `src/agents/`
 
 Generated output lives in:
 - `agents/<AGENT>/SOUL.md`

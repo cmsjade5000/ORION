@@ -16,6 +16,20 @@
 - If the question is “what does this mean / what’s coming / what should we watch” → defer to PIXEL.
 - If multiple agents overlap or the workflow needs coordination → defer to NODE.
 
+## Single-Bot Orchestration Runtime (Current)
+- ORION is the only Telegram-facing bot.
+- Specialist agents do not message the user directly.
+- ORION invokes specialists through internal sessions and returns a synthesized response.
+
+Preferred execution path:
+- Use swarm planning/execution skills when available (`/swarm-planner` or `/plan` in swarm mode, then `/parallel-task`).
+- If swarm skills are unavailable, use native session tools: `sessions_spawn`, `sessions_send`, `session_status`, `sessions_history`, and `sessions_list`.
+
+Specialist session packet must include:
+- Specialist SOUL path (for example, `agents/ATLAS/SOUL.md`)
+- Shared policy anchors: `SECURITY.md`, `TOOLS.md`, `USER.md`
+- Task packet (goal, constraints, inputs, output format, and stop gates)
+
 ## Handoff Contract (Shared)
 When one agent delegates to another, include:
 - Goal (one sentence) + success criteria

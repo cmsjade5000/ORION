@@ -35,8 +35,8 @@ Final agent identities are generated and stored at:
 Agent identities are **generated artifacts**.
 
 Source-of-truth lives in:
-- `souls/shared/`
-- `souls/roles/`
+- `src/core/shared/`
+- `src/agents/`
 
 Do not hand-edit generated SOUL files.
 Changes must flow through the Soul Factory.

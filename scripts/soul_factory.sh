@@ -42,7 +42,7 @@ build_agent() {
     echo "# SOUL.md — ${agent}"
     echo
     echo "**Generated:** $(timestamp)"
-    echo "**Source:** souls/shared + souls/roles/${agent}.md"
+    echo "**Source:** src/core/shared + src/agents/${agent}.md"
     echo
     echo "---"
     echo

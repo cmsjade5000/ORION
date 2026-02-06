@@ -1,7 +1,6 @@
 keep/slack.env
 keep/
 !keep/.gitkeep
-keep/slack.env
 keep/telegram.env
 
 # generated / local
@@ -11,3 +10,8 @@ res.json
 package-lock.json
 agent-lightning-dev.tar
 *.tgz
+.vite/
+
+# python cache
+__pycache__/
+*.pyc

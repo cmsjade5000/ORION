@@ -1,39 +1,29 @@
-# Proactive Heartbeat
+# Heartbeat (OpenClaw-Compatible)
 
-## 1. Quick Checks (30 seconds)
+This file is intended to be used by OpenClaw's heartbeat runner. Keep it cheap.
 
-- [ ] Human messages waiting? → Handle immediately
-- [ ] Critical blockers? → Escalate
-- [ ] Team needs coordination? → Respond
+## Principles
 
-If nothing urgent, proceed to work mode.
+- Human messages first.
+- Do not burn tokens "just to be busy".
+- In current single-bot mode, only ORION may message Cory via Telegram.
 
-## 2. Work Mode (use your time)
+## Step 1: Triage (fast)
 
-1. Read `tasks/QUEUE.md`
-2. Pick highest-priority Ready task you can do
-3. Do meaningful work on it
-4. Update the queue (move to Done or note progress)
-5. If time/tokens remain, pick another task
-6. Check crypto wallet tasks in tasks/QUEUE.md (bridge, swap, monitoring)
+1. Check `tasks/QUEUE.md`.
+2. If there is a clear Ready task that is safe and bounded, pick exactly one.
+3. If anything is ambiguous, risky, or needs confirmation, stop and ask Cory.
 
-## 3. Before Finishing
+## Step 2: Execute (bounded)
 
-- [ ] Log what you did to `memory/YYYY-MM-DD.md`
-- [ ] Update task queue with new tasks discovered
-- [ ] Post update to team if significant
+If you picked a task:
 
----
+1. Mark it as in progress with `@orion: ...` in `tasks/QUEUE.md`.
+2. Do the smallest useful unit of work.
+3. Update `tasks/QUEUE.md` and write a short note in `memory/YYYY-MM-DD.md` if anything meaningful changed.
 
-## Token Strategy
+## Step 3: Idle Behavior
 
-- Human requests: ALWAYS FIRST
-- Urgent tasks: Time-sensitive items
-- High-impact tasks: Move needles
-- Maintenance: Improvements and cleanup
+If there is no urgent work and no Ready task you can safely execute:
 
-If approaching limits: wrap up, write handoff notes, sleep.
-
----
-
-*Idle time = wasted tokens. Keep working.*
+- Output exactly: `HEARTBEAT_OK`

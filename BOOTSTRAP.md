@@ -10,7 +10,7 @@ This document records the bootstrapping process for adding the following special
 
 ## Steps Taken
 
-1. **Defined role stubs** in `souls/roles/` for each agent, capturing core responsibilities, boundaries, and output preferences.
+1. **Defined role stubs** in `src/agents/` for each agent, capturing core responsibilities, boundaries, and output preferences.
 2. **Regenerated agent identities** using the Soul Factory, combining shared constitutional, foundational, and routing layers with each role definition:
 
    ```bash

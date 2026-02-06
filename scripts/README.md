@@ -30,8 +30,8 @@ into a final, agent-specific `SOUL.md`.
 ### Source of Truth
 
 Inputs:
-- `souls/shared/`
-- `souls/roles/`
+- `src/core/shared/`
+- `src/agents/`
 
 Output:
 - `agents/<AGENT>/SOUL.md`

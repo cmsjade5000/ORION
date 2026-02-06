@@ -2,43 +2,25 @@
 
 This document defines the group chat conventions, agent roles, reaction mappings, and onboarding steps for inviting Gateway specialist agents into a shared Telegram group.
 
+**Current mode:** Single bot only (ORION). Multi-bot group chat is deferred. Keep the multi-bot sections below as a future plan.
+
 ---
 ## 1. Bot Identities (Telegram Handles)
+
+Active now:
 
 | Agent    | Bot Name                             | Telegram Link                        |
 |:---------|:-------------------------------------|:-------------------------------------|
 | **ORION**   | ORION (Primary Interface)           | @ORION_25_BOT (t.me/ORION_25_BOT)    |
-| **ATLAS**   | ATLAS (Execution & Operations)      | @Atlas_GatewayBot                    |
-| **PIXEL**   | PIXEL (Discovery & Tech)            | @Pixel_GatewayBot                    |
-| **PULSE**   | PULSE (Workflow Orchestration)      | @Pulse_GatewayBot                    |
-| **STRATUS** | STRATUS (Infrastructure & DevOps)   | @Stratus_GatewayBot                  |
-| **EMBER**   | EMBER (Emotional Support)           | @Ember_GatewayBot                    |
-| **LEDGER**  | LEDGER (Financial Insights)         | @Ledger_GatewayBot                   |
-| **NODE***   | NODE (System Glue & Architecture)   | ·· (To be added)                     |
 
-*NODE bot will be provisioned later.
+**Note:** Specialists do not have Telegram access in the current runtime. ORION invokes them internally via swarm/session tools.
 
 ---
 ## 2. Hierarchy & Speaking Protocol
 
-1. **ORION** monitors all messages, orchestrates turn‑taking, and issues high‑level goals.
-2. **Specialists** respond only when:
-   - A comment or question falls within their domain (see Roles below).
-   - They have a status update or critical finding to share.
-3. **Turn‑taking rules:**
-   - Agents avoid talking over each other—wait for Orion’s prompt if multiple speak.
-   - Use direct mentions to request a specific agent: e.g., `@Atlas_GatewayBot, can you run ...?`.
-4. **Rate limiting:**
-   - Each agent should send no more than 5 messages per 30 minutes to avoid chat flooding.
-
-
-1. **ORION** monitors all messages, orchestrates turn‑taking, and issues high‑level goals.
-2. **Specialists** respond only when:
-   - A comment or question falls within their domain (see Roles below).
-   - They have a status update or critical finding to share.
-3. **Turn‑taking rules:**
-   - Agents avoid talking over each other—wait for Orion’s prompt if multiple speak.
-   - Use direct mentions to request a specific agent: e.g., `@Atlas_GatewayBot, can you run ...?`.
+1. **ORION** is the only bot responding in Telegram right now.
+2. **Specialists** are invoked internally by ORION and do not speak directly in Telegram.
+3. **Future (multi-bot) rules** remain below once multi-bot is re-enabled.
 
 ### Agent Roles & Triggers
 - **ATLAS:** Executes and reports on operational tasks (installations, smoke tests, automation).
@@ -67,27 +49,20 @@ For warnings (⚠️) and completions (✅), agents should reply inline with cle
 ---
 ## 4. Onboarding & Token Configuration
 
-1. **Generate Bot Tokens** via BotFather for each agent (ATLAS, PIXEL, PULSE, STRATUS, EMBER, LEDGER, NODE).
-2. **Store credentials** in `keep/` as environment files:
+1. **Generate Bot Token** via BotFather for ORION.
+2. **Store token** in a token file (plain token value only):
    ```bash
-   # keep/atlas.env
-   ATLAS_TELEGRAM_TOKEN=<token>
-   # keep/pixel.env
-   PIXEL_TELEGRAM_TOKEN=<token>
-   # ...and so on for pulse.env, stratus.env, ember.env, ledger.env, node.env
+   mkdir -p ~/.config/clawdbot/secrets
+   printf '%s\n' '<telegram-bot-token>' > ~/.config/clawdbot/secrets/telegram.token
+   chmod 600 ~/.config/clawdbot/secrets/telegram.token
    ```
-3. **Update `openclaw.yaml`** under the `telegram:` section to add each bot’s token and allowedChats entry.
-4. **Reload OpenClaw** (or restart gateway) to apply the new bots configuration.
-5. **Create Telegram group** and invite all agent bots and the user.
-6. **Verify** each bot responds to `ping` or simple commands (e.g. `@Atlas_GatewayBot help`).
+3. **Update `~/.openclaw/openclaw.json`** under `channels.telegram` to set `tokenFile` to that path and configure allowed groups/users.
+4. **Reload OpenClaw** (or restart gateway) to apply the configuration.
+5. **Create Telegram group** and invite ORION and the user (if using a group).
+6. **Verify** ORION responds to `ping` or simple commands.
 
 ---
 ## 5. Questions & Concerns
 
-- Do we need any additional change management or scheduling to invite all bots at once?
-- Shall we include a group description or pinned rules for quick reference?
-- Any permissions or privacy settings needed for the group (e.g. restricted invites)?
-
-
----
-*Document created by ORION (Gateway orchestrator).*
+- When we re-enable multi-bot Telegram, do we want separate bot tokens per specialist or keep specialists internal-only and add only one more bot at a time?
+- Do we want a pinned group rules message at that time (roles + reactions + safety)?

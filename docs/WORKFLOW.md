@@ -12,7 +12,7 @@ This document outlines the recommended workflow for developing and maintaining t
 2. **Clone the repository**
    ```bash
    git clone <repo-url>
-   cd gateway
+   cd ORION
    ```
 3. **Install pre-commit hooks**
    ```bash
@@ -24,9 +24,12 @@ This document outlines the recommended workflow for developing and maintaining t
    make soul
    ```
 5. **Configure integrations**
-   - Copy `keep/telegram.env.sample` to `keep/telegram.env` and set your Telegram bot token.
-   - Copy `keep/slack.env.sample` to `keep/slack.env` and set your Slack credentials.
-   - Review `openclaw.yaml` to enable/disable channels and configure allowed chats.
+   - Create a Telegram token file at `~/.config/clawdbot/secrets/telegram.token` (plain token value).
+   - Create `keep/slack.env` and set your Slack credentials (if using Slack).
+   - The active OpenClaw config is `~/.openclaw/openclaw.json`. Use it for runtime settings.
+   - Keep `openclaw.yaml` in this repo as a project reference template.
+   - See `docs/OPENCLAW_CONFIG_MIGRATION.md` for mapping details.
+   - For single-bot delegation behavior, follow `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`.
 
 ## Daily Commands
 
@@ -63,7 +66,7 @@ Add or update hooks in `.pre-commit-config.yaml` as needed.
 Before tagging and releasing a new version, perform the following:
 
 1. **Update version & changelog**
-   - Bump the version number in relevant files (e.g., `openclaw.yaml`, documentation).
+   - Bump the version number in relevant files (e.g., `~/.openclaw/openclaw.json` notes + repository documentation).
    - Update `CHANGELOG.md` with new changes.
 2. **Run tests and checks**
    ```bash

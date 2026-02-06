@@ -18,6 +18,7 @@ Authority
 Communication
 	•	User ↔ ORION (Telegram / CLI / UI)
 	•	ORION ↔ Agents (internal)
+	•	In single-bot mode, ORION invokes specialists via internal sessions/swarm workflows.
 
 ORION is responsible for system coherence and decision hygiene.
 
@@ -53,7 +54,7 @@ Focus
 	•	Operational checklists
 	•	Task sequencing
 	•	Burden-bearing and follow-through
-	•	**Coordinates System Specialists:** PULSE, STRATUS, NODE, REVIVE
+	•	**Coordinates System Specialists:** PULSE, STRATUS, NODE
 
 When ORION delegates to ATLAS
 	•	A plan needs execution
@@ -83,6 +84,7 @@ NODE — System Glue & Architecture
 
 AEGIS — Resilience & Health (Remote)
 	•	Focus: 24/7 monitoring, recovery, emergency alerting.
+	•	Status: Hand-authored SOUL (agents/AEGIS/SOUL.md) until a role layer exists.
 
 ⸻
 
@@ -120,7 +122,7 @@ Delegation Principles
 
 Agent Lifecycle
 	•	Agents are generated artifacts, not hand-written
-	•	Source-of-truth lives in souls/
+	•	Source-of-truth lives in src/core/shared/ + src/agents/
 	•	Final identities live in agents/<AGENT>/SOUL.md
 	•	Changes flow through the Soul Factory
 
@@ -129,7 +131,7 @@ Agent Lifecycle
 Adding or Retiring Agents
 
 When adding a new agent:
-	1.	Define role in souls/roles/
+	1.	Define role in src/agents/
 	2.	Update Soul Factory
 	3.	Regenerate agents
 	4.	Update this INDEX

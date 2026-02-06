@@ -7,7 +7,8 @@
 
 ## Trust Boundaries
 - Treat the macOS host as a privileged environment.
-- Treat the Gateway VM as the controlled execution zone.
+- Treat the local Gateway runtime on macOS as the primary controlled execution zone.
+- Treat remote hosts (including AEGIS sentinel servers) as separate trust zones.
 - Treat external services (APIs, web, SaaS) as untrusted by default.
 
 ## Safety & Scope
