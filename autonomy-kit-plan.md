@@ -10,7 +10,7 @@
 
 ## T3: Integrate Templates
 - **depends_on:** [T2]
-- **description:** Copy `templates/HEARTBEAT.md` and `templates/QUEUE.md` into project root and ensure `skills/new-skill/SKILL.md` references them.
+- **description:** (Deprecated) This repo no longer uses the bundled "agent-autonomy-kit" skill. Use the top-level `HEARTBEAT.md` + `tasks/QUEUE.md` workflow instead.
 
 ## T4: Configure Cron Jobs
 - **depends_on:** [T3]

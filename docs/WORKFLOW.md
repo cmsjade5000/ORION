@@ -61,6 +61,13 @@ pre-commit run --all-files
 
 Add or update hooks in `.pre-commit-config.yaml` as needed.
 
+## Update Policy (Manual)
+
+Updates are manual by default.
+
+- Do not enable auto-updating behaviors until the gateway is stable and you explicitly want drift.
+- When updating OpenClaw or skills, do it intentionally, record changes, and smoke test the gateway.
+
 ## Release Checklist
 
 Before tagging and releasing a new version, perform the following:
