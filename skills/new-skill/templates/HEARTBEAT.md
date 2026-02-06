@@ -15,7 +15,6 @@ If nothing urgent, proceed to work mode.
 3. Do meaningful work on it
 4. Update the queue (move to Done or note progress)
 5. If time/tokens remain, pick another task
-6. Check crypto wallet tasks in tasks/QUEUE.md (bridge, swap, monitoring)
 
 ## 3. Before Finishing
 

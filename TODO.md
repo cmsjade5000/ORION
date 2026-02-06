@@ -19,3 +19,4 @@
 - [ ] Install qmd-skill (Quick Markdown Search) for local hybrid search of Markdown notes and docs to complement memory_search
 - [ ] Install `yq` on the gateway host (e.g. `sudo apt-get install -y yq` or `brew install yq`) so the repo‑mino‑scan workflow can parse its configuration
 - [ ] Install the QMD CLI on the gateway host (e.g. `brew install qmd` or `npm install -g qmd`) to enable full indexing in the QMD workspace memory backend
+- [ ] Task: Configure macOS Remote Login (SSH), firewall, and port forwarding; then transfer the revivebot SSH key from server to local machine. **Part of:** AEGIS Key Transfer

@@ -5,6 +5,8 @@
     "test": "echo \"No JS/TS tests to run\""
   },
   "dependencies": {
+    "dotenv": "^17.2.4",
+    "ethers": "^6.16.0",
     "js-yaml": "^4.1.0",
     "node-fetch": "^2.7.0"
   },

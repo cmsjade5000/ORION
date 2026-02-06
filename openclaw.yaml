@@ -19,6 +19,8 @@ channels:
       - tokenFile: keep/node.env       # NODE (provision later)
     allowedChats:
       - "+14123348429"
+      - "8471523294"
+      - "-1003742519270"
 
 openrouter:
   api_key: ""

@@ -64,3 +64,14 @@ jobs:
           channel: telegram
           target: "+14123348429"
           message: "Job heartbeat_summary_evening failed after {{attempts}} attempts."
+
+  system_pulse:
+    description: "System Pulse (5min keep-alive)"
+    schedule: "*/5 * * * *"
+    command: "echo 'pulse'"
+    retry:
+      max_attempts: 1
+      backoff:
+        initial_delay: "1m"
+        factor: 2
+    on_failure: []

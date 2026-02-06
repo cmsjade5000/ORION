@@ -1,13 +1,6 @@
-# Long-Term Memory
 
-Use this file to record persistent notes, insights, and references that span multiple sessions.
+## Communication Protocol Override
 
-## Agent Preferences
-
-- Agents may run multiple rounds of patches and testing loops autonomously when implementing features, and only report back once those rounds are complete.
-- When summarizing or coordinating work, explicitly mention relevant specialist agents (ATLAS, NODE, EMBER, PIXEL, LEDGER) as appropriate.
-- Proactively notify via Telegram (text or TTS) whenever a background task fails or throws an exception.
-- Do not accompany voice memos with full verbatim transcripts; summaries or omitting the transcript is preferred.
-- Monitor and optimize token usage: default to lower‑cost providers (e.g. OpenRouter) and lean context sources to control costs.
-- Only attach voice memos to responses where they add clear value; avoid sending them on every reply.
-- Omit file citation markers like “【F:…】” from user‑facing replies unless explicitly asked.
+- **ORION** is the only agent that communicates with you via Telegram.
+- Specialist bots (ATLAS, NODE, etc.) do not send Telegram messages directly and operate via `/swarm-planner`, `/parallel-task`, and the `tasks/QUEUE.md` workflow.
+- Team channel integration is paused until further notice.
