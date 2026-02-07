@@ -53,7 +53,7 @@ ORION integrates responses and presents a coherent outcome to Cory.
 When specialist reasoning is needed, ORION should spin up internal specialist sessions instead of handing off user chat access.
 
 Invocation order:
-- If isolated OpenClaw specialist agents exist (agent ids like `atlas`, `node`, `pulse`), prefer delegating via `agentToAgent` using a Task Packet.
+- If isolated OpenClaw specialist agents exist (agent ids like `atlas`, `node`, `pulse`), prefer delegating via `sessions_spawn` using a Task Packet.
 - First choice: run swarm planning (`/swarm-planner` or `/plan` in swarm style) to decompose work, then `/parallel-task` to execute specialist tasks in parallel.
 - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run a specialist turn with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
 

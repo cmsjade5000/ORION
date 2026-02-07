@@ -22,7 +22,7 @@
 - ORION invokes specialists through isolated OpenClaw agents and returns a synthesized response.
 
 Preferred execution path:
-- If isolated OpenClaw agents exist for specialists (for example: `atlas`, `node`, `pulse`), prefer `agentToAgent` to delegate to the correct agent id using a Task Packet.
+- If isolated OpenClaw agents exist for specialists (for example: `atlas`, `node`, `pulse`), prefer `sessions_spawn` to delegate to the correct agent id using a Task Packet.
 - Use swarm planning/execution skills when available (`/swarm-planner` or `/plan` in swarm mode, then `/parallel-task`).
 - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run a specialist turn with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
 

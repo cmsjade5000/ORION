@@ -31,7 +31,7 @@ Final agent identities are generated and stored at:
 
 - Only ORION may message Cory via Telegram.
 - Specialists must treat their output as internal and return it to ORION only.
-  - Use `agentToAgent` when available, or
+  - ORION should delegate via `sessions_spawn` (preferred) with a Task Packet, or
   - Write results under the originating Task Packet (for example `tasks/INBOX/<AGENT>.md`).
 
 ---

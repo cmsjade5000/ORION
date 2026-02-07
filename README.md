@@ -13,7 +13,7 @@ Design goals:
 
 - **ORION** (`agentId: main`) is the only Telegram-facing bot.
 - Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **EMBER**, **LEDGER**.
-- ORION delegates using `agentToAgent` plus a Task Packet (see `docs/TASK_PACKET.md`).
+- ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
 
 ## Go Live (macOS)

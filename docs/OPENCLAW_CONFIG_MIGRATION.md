@@ -13,6 +13,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `agents.defaults.model.primary = "openrouter/openrouter/auto"`
 - `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]`
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
+- `agents.list[0].subagents.allowAgents = ["*"]` (so ORION can target specialists via `sessions_spawn`)
 - `channels.telegram.enabled = true`
 - `channels.telegram.dmPolicy = "pairing"`
 - `channels.telegram.tokenFile = "~/.openclaw/secrets/telegram.token"`
@@ -44,6 +45,7 @@ Or via environment variables (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`) if your ga
 ```bash
 openclaw models status
 openclaw config get agents.defaults.workspace
+openclaw config get 'agents.list[0].subagents.allowAgents'
 openclaw config get channels.telegram
 openclaw config get tools.agentToAgent
 ```
