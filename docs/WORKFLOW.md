@@ -24,12 +24,23 @@ This document outlines the recommended workflow for developing and maintaining t
    make soul
    ```
 5. **Configure integrations**
-   - Create a Telegram token file at `~/.config/clawdbot/secrets/telegram.token` (plain token value).
-   - Create `keep/slack.env` and set your Slack credentials (if using Slack).
+   - Create a Telegram token file at `~/.openclaw/secrets/telegram.token` (plain token value).
    - The active OpenClaw config is `~/.openclaw/openclaw.json`. Use it for runtime settings.
    - Keep `openclaw.yaml` in this repo as a project reference template.
    - See `docs/OPENCLAW_CONFIG_MIGRATION.md` for mapping details.
    - For single-bot delegation behavior, follow `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`.
+   - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.
+   - For best gateway-service reliability, store model/provider auth using `openclaw models auth paste-token` (LaunchAgent services may not inherit your shell env vars).
+
+6. **Go live locally (recommended order)**
+   ```bash
+   openclaw gateway install
+   openclaw gateway start
+   openclaw doctor --repair
+   openclaw security audit --deep
+   openclaw channels status --probe
+   openclaw agents list --bindings
+   ```
 
 ## Daily Commands
 
@@ -100,22 +111,13 @@ Before tagging and releasing a new version, perform the following:
 
 The memory stack organizes notes and session data:
 
-- **Session dumps** (ephemeral session logs)
 - **Working memory** (`memory/WORKING.md`): active task tracking
-- **Daily memory** (`memory/YYYY-MM-DD.md`): generated daily summaries of session dumps
-- **Long-term memory** (`MEMORY.md`): persistent notes and insights
+- **Long-term memory** (`MEMORY.md`): persistent notes and guardrails
 
-> On session start, the system automatically loads `memory/WORKING.md` into the session context as working memory.
+On session start, the system should load `memory/WORKING.md` as working memory.
 
-## Adding Specialist Skills
+## Adding Skills
 
-The Gateway system supports extending functionality with specialist skill modules. To scaffold a new specialist skill, follow this directory structure:
+This repo stores OpenClaw skills under `skills/`.
 
-```text
-src/skills/<skillName>/
-├── README.md       # description of workflows and entry points
-├── index.ts        # skill implementation stubs
-└── __tests__/      # placeholder tests to verify module loading
-```
-
-The initial PULSE and STRATUS skill stubs are located under `src/skills/pulse` and `src/skills/stratus`, respectively. Refer to their README files for usage details.
+Install/update skills manually, then smoke test the gateway.

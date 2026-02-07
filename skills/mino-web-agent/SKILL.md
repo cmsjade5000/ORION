@@ -19,6 +19,15 @@ Use this skill to drive a headless web agent capable of navigating pages, comple
 ```bash
 # Fetch product data from a storefront
 node -e "
-const { fetchWithMino } = require('./manifest');
-fetchWithMino('https://example.com/products','products').then(console.log);
+const { fetchWithMino } = require('./skills/mino-web-agent/manifest');
+fetchWithMino('https://example.com/products','products')
+  .then(console.log)
+  .catch(console.error);
+"
+```
+
+Or run the included demo:
+
+```bash
+node scripts/demo_mino.js
 ```

@@ -1,5 +1,8 @@
 # Comprehensive Breakdown of REVIVEBOT Project
 
+> Archived plan (remote AEGIS sentinel). Not part of the current local Mac mini go-live.
+> Paths and tooling references may be outdated. AEGIS template lives at `docs/archive/AEGIS/`.
+
 ## Phase 0: Progress Updates (in place)
 - **Periodic updates** via PULSE cron (`workflows/revivebot-progress.yaml`) to send Telegram notices every 10 minutes during provisioning.
 
@@ -35,12 +38,12 @@
 ## Phase 4: AEGIS Code & Service Deployment
 
 **4.0 Code Deployment**
-- Sync local `agents/AEGIS/` directory to remote `/home/revivebot/aegis` (e.g. `rsync -avz agents/AEGIS/ revivebot@${HOST}:/home/revivebot/aegis`).
+- Sync local `docs/archive/AEGIS/` directory to remote `/home/revivebot/aegis` (e.g. `rsync -avz docs/archive/AEGIS/ revivebot@${HOST}:/home/revivebot/aegis`).
 - Ensure `index.js` and `package.json` are present.
 - Run `npm install` in `/home/revivebot/aegis`.
 
 ## Phase 4.1: AEGIS Identity Deployment
-- Upload `agents/AEGIS/SOUL.md` to remote host.
+- Upload `docs/archive/AEGIS/SOUL.md` to remote host.
 - Configure local LLM prompt to respect SOUL directives.
 - Ensure Telegram bot identity matches "AEGIS" (User to set name/avatar in BotFather).
 

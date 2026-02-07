@@ -1,26 +1,26 @@
 # ATLAS Inbox
 
-Use `docs/TASK_PACKET.md`. Append new packets below.
+Append new Task Packets below. Spec: `docs/TASK_PACKET.md`.
 
----
+Example:
 
+```text
 TASK_PACKET v1
 Owner: ATLAS
 Requester: ORION
-Objective: (empty)
+Objective: Install and start the OpenClaw gateway service on macOS.
 Success Criteria:
-- (empty)
+- `openclaw gateway status` shows running.
 Constraints:
-- (empty)
+- Keep gateway bind loopback.
 Inputs:
-- (empty)
+- docs/WORKFLOW.md
 Risks:
 - low
 Stop Gates:
-- Any destructive command.
-- Any credential change.
+- Any network exposure change.
 Output Format:
-- Checklist + commands or a diff.
+- Commands run + resulting status output.
+```
 
-Result:
-- (empty)
+## Packets

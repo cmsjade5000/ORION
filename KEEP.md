@@ -16,9 +16,13 @@ It does not include:
 
 ## Where Secrets Live
 Primary locations (local machine only):
-- `~/.config/clawdbot/secrets/` (token files like Telegram)
-- `~/.openclaw/.env` (provider keys used by OpenClaw)
-- `~/.openclaw/agents/main/agent/auth-profiles.json` (OAuth/token profiles; treat as secret)
+- `~/.openclaw/secrets/` (token files like Telegram)
+- `~/.openclaw/.env` (provider keys used by OpenClaw services)
+- `~/.openclaw/agents/<agent>/agent/auth-profiles.json` (provider API keys and OAuth/token profiles; treat as secret)
+
+Notes:
+- Prefer storing model/provider auth using `openclaw models auth paste-token` so the LaunchAgent gateway service can use it.
+- If you rely on shell environment variables (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`), the gateway service may not inherit them.
 
 Rules:
 - Never commit these paths to Git.

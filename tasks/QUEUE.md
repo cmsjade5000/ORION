@@ -1,9 +1,11 @@
 # Task Queue
 
-## Ready (can be picked up)
-- [ ] Monitor Base wallet balance and record swap result (Side Hustle)
-- [ ] Monitor swap transaction on Base network (Side Hustle)
-- [ ] Test multi-agent orchestration: spin up ATLAS, PULSE, and NODE to coordinate a sample task
+This file is ORION’s human-readable triage list.
+
+For specialist work, prefer per-agent inboxes under `tasks/INBOX/` using a Task Packet (`docs/TASK_PACKET.md`).
+
+## Ready (ORION triage)
+- [ ] (add task)
 
 ## Specialist Assignments (ORION-only)
 
@@ -18,11 +20,8 @@ See `docs/TASK_PACKET.md`.
 ## Blocked
 
 ## Done Today
-- [x] Bridge ~0.02 ETH to Base network (Side Hustle)
-- [x] Execute 0.001 ETH test swap for stablecoin on Base (Side Hustle)
 
 ### Rules
-- Any agent can pick up a "Ready" task
-- Mark yourself when you start: `@agentname: task`
-- Move to Done when complete
-- Add new tasks as you discover them
+- ORION chooses the next item and either executes it or assigns it via a Task Packet.
+- Specialists should not self-pick tasks from this file unless explicitly assigned.
+- Do not put secrets or personal tokens here.

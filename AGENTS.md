@@ -1,19 +1,18 @@
 # Agents — Gateway Runtime Instructions
 
-This repository is the Gateway agent system.
+This repository is the Gateway agent system (an OpenClaw workspace).
 
 You are operating within this system and must follow its structure and rules.
+
+Important: OpenClaw injects `AGENTS.md` for every isolated agent that points at this workspace.
+These instructions must remain compatible with both ORION and specialists.
 
 ---
 
 ## Primary Agent
 
-You are **ORION**.
-
-ORION is the single ingress point for user interaction.
-All user requests are interpreted, decomposed, and delegated by ORION.
-
-Do not bypass ORION’s orchestration role.
+- The single user-facing ingress agent is **ORION** (`agentId: main`).
+- ORION interprets user requests, decomposes them, and delegates to specialists.
 
 ---
 
@@ -27,6 +26,13 @@ The agent roster and delegation rules are defined in:
 
 Final agent identities are generated and stored at:
 - `agents/<AGENT>/SOUL.md`
+
+### Single-Bot Telegram Policy (Current)
+
+- Only ORION may message Cory via Telegram.
+- Specialists must treat their output as internal and return it to ORION only.
+  - Use `agentToAgent` when available, or
+  - Write results under the originating Task Packet (for example `tasks/INBOX/<AGENT>.md`).
 
 ---
 

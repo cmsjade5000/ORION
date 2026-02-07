@@ -1,145 +1,81 @@
-# Gateway
+# ORION Gateway (OpenClaw Workspace)
 
-Gateway is a personal, local-first agent orchestration system.
+This repo is an **OpenClaw workspace** for a local-first agent orchestration system ("Gateway").
 
-It provides a secure, modular environment where multiple AI agents collaborate under a single coordinating interface to help with planning, execution, discovery, emotional regulation, and financial decision-making.
+Design goals:
+- single user-facing ingress (ORION)
+- specialists are scoped and non-user-facing
+- identities are generated to reduce drift
+- delegation is structured and auditable (Task Packets)
+- secrets never enter Git
 
-This system is designed to be:
-- intentional
-- auditable
-- cost-aware
-- resistant to drift
+## Runtime Model
 
-Gateway runs locally on the Mac mini (macOS) and is backed by Git for transparency and long-term maintainability.
+- **ORION** (`agentId: main`) is the only Telegram-facing bot.
+- Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **EMBER**, **LEDGER**.
+- ORION delegates using `agentToAgent` plus a Task Packet (see `docs/TASK_PACKET.md`).
+- Specialists return results to ORION only (never message Cory directly).
 
----
+## Go Live (macOS)
 
-## What Problem This Solves
+Required for reliable heartbeats/cron:
 
-Most AI “agent systems” suffer from:
-- unclear authority and overlap
-- massive prompt bloat and token waste
-- identity drift over time
-- poor separation between planning and execution
-- weak security and secret handling
+```bash
+openclaw gateway install
+openclaw gateway start
+openclaw doctor --repair
+openclaw security audit --deep
+openclaw channels status --probe
+```
 
-Gateway addresses these by:
-- using a single primary interface agent (ORION)
-- clearly scoping specialist agents
-- enforcing shared constitutional rules
-- generating agent identities from modular source files
-- keeping secrets and execution boundaries explicit
+Verify agents are configured:
 
----
+```bash
+openclaw agents list --bindings
+openclaw models status
+```
 
-## High-Level Architecture
+## Workspace Contract (OpenClaw)
 
-User (Telegram / CLI / UI)
-|
-v
-ORION
-|
-+–> EMBER   (mental health, grounding)
-+–> ATLAS   (execution, ops)
-+–> PIXEL   (discovery, tech, culture)
-+–> NODE    (system glue, architecture)
-+–> LEDGER  (money, value, finance)
+OpenClaw injects these workspace files on the first turn of new sessions:
+- `AGENTS.md`
+- `SOUL.md`
+- `TOOLS.md`
+- `IDENTITY.md`
+- `USER.md`
+- `BOOTSTRAP.md` (one-time; delete after go-live)
 
-ORION interprets intent, delegates to specialists, integrates responses, and presents a coherent outcome to the user.
+## Repository Layout
 
-Current runtime mode is single-bot ingress: only ORION is Telegram-facing; specialists run through internal delegated sessions.
-
----
-
-## Repository Structure
-
-ORION/
-├── README.md        # This file
-├── VISION.md        # Long-term intent and guiding principles
-├── SECURITY.md      # Threat model and trust boundaries
-├── KEEP.md          # Secrets doctrine
-├── USER.md          # User preferences and authority
-├── IDENTITY.md      # ORION identity metadata (avatar, tone, etc.)
-├── MEMORY.md        # Long-term memory policy notes
-│
-├── src/             # Application source code
-│   ├── core/        # Core modules (shared logic and routing)
-│   ├── agents/      # Agent role definitions (source of truth)
-│   ├── plugins/     # Plugin modules
-│   ├── memory/      # Memory backends
-│   └── skills/      # Skill implementations
-│
-├── agents/          # Generated agent artifacts (SOUL.md)
-├── docs/            # System and workflow documentation
-├── memory/          # Working + daily memory artifacts
-├── tasks/           # Task queue and execution artifacts
-│
-├── scripts/         # Build and maintenance scripts
-│   └── soul_factory.sh
-│
-└── keep/            # Local-only secrets storage (not committed)
-
----
-
-## Memory Backends
-
-Memory currently uses the local `memory/` folder only. QMD integration is deferred for now.
-
----
-
-## Agent Model
-
-Gateway uses a modular **SOUL architecture** to avoid prompt bloat and identity drift.
-
-Each agent’s final `SOUL.md` is generated from:
-- shared constitutional rules
-- shared foundational identity
-- shared routing logic
-- a minimal role-specific layer
-
-This allows:
-- consistent behavior across agents
-- low and predictable token overhead
-- system-wide updates without drift
-- clean Git diffs and rollbacks
-
----
-
-## Soul Factory
-
-Agent SOULs are generated via the Soul Factory script.
-
-To regenerate all agents:
-./scripts/soul_factory.sh --all
-
-Source files live in:
 - `src/core/shared/`
+  - Shared identity layers included in every generated SOUL.
 - `src/agents/`
+  - Role definitions (source of truth).
+- `scripts/soul_factory.sh`
+  - Generates `agents/<AGENT>/SOUL.md`.
+- `agents/`
+  - Generated SOUL artifacts.
+- `docs/TASK_PACKET.md`
+  - Delegation spec (cron payloads + ORION -> specialist).
+- `tasks/QUEUE.md`
+  - Human-readable queue for ORION triage.
+- `tasks/INBOX/*.md`
+  - Per-agent inboxes for specialist assignments.
+- `memory/WORKING.md`
+  - Current working state (keep it lean).
+- `skills/`
+  - Workspace skills (manual installs/updates).
 
-Generated output lives in:
-- `agents/<AGENT>/SOUL.md`
+## Regenerating SOULs
 
----
+```bash
+make soul
+```
 
-## What This Is Not
+Do not hand-edit `agents/*/SOUL.md`. Change sources in `src/core/shared/` or `src/agents/` and re-run the Soul Factory.
 
-Gateway is **not**:
-- an autonomous system acting without user intent
-- a replacement for professional medical or financial advice
-- a cloud-first or SaaS-dependent platform
-- a black box with hidden state
+## Secrets
 
-Human authority, transparency, and reversibility are core design principles.
+Do not commit secrets. See `KEEP.md`.
 
----
-
-## Status
-
-This project is under active development.
-
-Current focus:
-- identity and orchestration
-- safe local execution
-- clean ingress paths (Telegram, CLI, future UI)
-
-Behavior, skills, and integrations will evolve incrementally.
+OpenClaw runtime config and credentials live under `~/.openclaw/` and must remain local.

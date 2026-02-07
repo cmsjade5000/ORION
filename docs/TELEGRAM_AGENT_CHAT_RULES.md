@@ -52,9 +52,9 @@ For warnings (⚠️) and completions (✅), agents should reply inline with cle
 1. **Generate Bot Token** via BotFather for ORION.
 2. **Store token** in a token file (plain token value only):
    ```bash
-   mkdir -p ~/.config/clawdbot/secrets
-   printf '%s\n' '<telegram-bot-token>' > ~/.config/clawdbot/secrets/telegram.token
-   chmod 600 ~/.config/clawdbot/secrets/telegram.token
+   mkdir -p ~/.openclaw/secrets
+   printf '%s\n' '<telegram-bot-token>' > ~/.openclaw/secrets/telegram.token
+   chmod 600 ~/.openclaw/secrets/telegram.token
    ```
 3. **Update `~/.openclaw/openclaw.json`** under `channels.telegram` to set `tokenFile` to that path and configure allowed groups/users.
 4. **Reload OpenClaw** (or restart gateway) to apply the configuration.

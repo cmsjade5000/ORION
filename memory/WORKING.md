@@ -1,31 +1,34 @@
 # Working Memory
 
-## Current Task
+## Current Goal
 
-Address smoke test failures for linting, JS/TS tests, Node workingMemory check, and OpenRouter config lookup.
+Go live locally on the Mac mini:
 
-## Status
+- ORION is the only Telegram-facing bot.
+- Specialists run as isolated OpenClaw agents (`atlas`, `node`, `pulse`, etc.) with ORION delegating via Task Packets.
 
-Discovered that:
-- Linting fails due to missing pre‑commit
-- JS/TS tests fail (no package.json)
-- Node workingMemory check errors (module path incorrect)
-- OpenRouter entry not detected in config via CLI
+## Current Status
 
-## Next Steps
+- OpenClaw workspace points at this repo.
+- Isolated specialist agents are configured locally.
 
-1. Install/configure pre‑commit or adjust the `make lint` target.
-2. Add or remove `package.json` and update JS/TS test commands.
-3. Fix the module import path for `src/core` in the Node check.
-4. Verify and reload the OpenRouter config entry (`openclaw gateway config.patch`).
-5. Update the Node smoke-test import path for `workingMemory` once the smoke-test script location is identified.
-5. Re-run the full smoke test to confirm all fixes.
-6. Research and recommend an email provider solution (e.g. Gmail, ProtonMail, Fastmail) for ORION’s use case.
-7. Update responses to omit file citation markers (【F:…】) in user-facing replies unless explicitly requested.
-8. Follow the MailMolt quickstart to register an agent email address via the API and obtain credentials (DONE).
-9. Claim ownership of the MailMolt address via the provided claim URL (DONE).
-10. Store `mm_live_Ez6Z0DizTcrDFfNGuF1c1QTBshTOv9oa` in a secure environment variable (e.g., `MAILMOLT_API_KEY` in `keep/telegram.env`).
-11. Configure MailMolt API key in gateway config and restart.
-12. Send a test email from ORION to your human owner and verify delivery.
-13. Save the MailMolt API key securely (e.g., in `keep/telegram.env` as `MAILMOLT_API_KEY`).
-14. Confirm agent-to-agent messaging by sending a test request through the LEDGER agent (DONE).
+## Known Blockers / Risks
+
+- Gateway service is not installed/running persistently yet (cron + agentToAgent reliability depends on this).
+- Ensure no secrets ever land in Git (run `skills/secrets-scan` before pushes).
+
+## Next Steps (Go-Live Checklist)
+
+1. Install + start the gateway service:
+   - `openclaw gateway install`
+   - `openclaw gateway start`
+2. Run hardening checks:
+   - `openclaw doctor --repair`
+   - `openclaw security audit --deep`
+3. Verify Telegram channel health:
+   - `openclaw channels status --probe`
+4. Verify delegation:
+   - ORION sends one Task Packet to `atlas` and receives a result.
+5. Add minimal cron jobs (deliver=false by default):
+   - heartbeat (15m)
+   - daily review (21:00 America/New_York)

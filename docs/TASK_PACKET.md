@@ -92,3 +92,11 @@ Inbox files are append-only queues of Task Packets.
 
 - ORION assigns by appending a new Task Packet to `tasks/INBOX/<AGENT>.md`.
 - Specialist marks completion by adding a short `Result:` block under the packet.
+
+## Validation (Recommended)
+
+Validate inbox packets stay structured:
+
+```bash
+python3 scripts/validate_task_packets.py
+```

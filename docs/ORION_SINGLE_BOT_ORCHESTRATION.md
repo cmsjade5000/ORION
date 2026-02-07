@@ -7,7 +7,7 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 ## Runtime Model
 
 - User-facing channel access: ORION only
-- Specialist reasoning: internal sessions only
+- Specialist reasoning: isolated OpenClaw agents (internal-only)
 - AEGIS: remote sentinel only (monitor/revive), not a user-facing chat bot
 
 ## Orchestration Flow
@@ -15,15 +15,10 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 1. ORION receives user request.
 2. ORION decides direct answer vs specialist delegation.
 3. If delegation is needed:
-   - Preferred when configured: delegate to isolated OpenClaw specialist agents via `agentToAgent` using a Task Packet.
-   - Preferred: swarm planning (`/swarm-planner` or `/plan` in swarm mode), then `/parallel-task`
-   - Fallback: native session tools (`sessions_spawn`, `sessions_send`, `session_status`, `sessions_history`, `sessions_list`)
-4. ORION seeds each specialist session with:
-   - `agents/<AGENT>/SOUL.md`
-   - `SECURITY.md`
-   - `TOOLS.md`
-   - `USER.md`
-   - A Task Packet (per `docs/TASK_PACKET.md`) + any task-specific files
+   - Preferred: delegate to isolated OpenClaw specialist agents via `agentToAgent` using a Task Packet.
+   - Optional: swarm planning (`swarm-planner`) and parallel execution (`parallel-task`) when you explicitly want it.
+   - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run the specialist turn manually with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
+4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
 5. ORION collects outputs, resolves conflicts, and returns one response to the user.
 
 ## Non-Negotiables

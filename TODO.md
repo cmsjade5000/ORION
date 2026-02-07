@@ -1,14 +1,25 @@
 # TODO
 
-## TODO
+This is the short, current work queue for getting ORION live locally.
 
-- [ ] Task: Obtain production API gateway/middleware access or deployment details to complete auth enforcement, rate limiting, error handling, and security headers/CORS setup. **Part of:** Clawloan API Hardening
-- [ ] Task: Explore opencode.ai integration by signing up for an API key and evaluating cloud session sharing, remote execution, and analytics features. **Part of:** Clawloan API Hardening
-- [ ] Task: Implement LLM fallback logic to handle OpenAI out-of-funds errors (402), automatically switching to a backup provider or model. **Part of:** Clawloan API Hardening
-- [ ] Task: Ensure Docker is installed and the gateway VM user has daemon access (e.g., add to the docker group) to enable container-based demos and builds. **Part of:** Clawloan API Hardening
-- [ ] Task: Fix Telegram bots’ `/start` handlers and Privacy Mode settings so they respond correctly in DMs and groups (and simulate multi-agent chat via Orion using agent tags). **Part of:** Telegram Bot Group Chat Fix
-- [ ] Task: Install the qmd-skill (Quick Markdown Search) for local hybrid search of Markdown notes and docs. **Part of:** QMD Memory Backend Implementation (Deferred)
-- [ ] Task: Install `yq` on the gateway host (e.g. `sudo apt-get install -y yq` or `brew install yq`). **Part of:** Repo Mino Scan Improvement
-- [ ] Task: Install the QMD CLI on the gateway host (e.g. `brew install qmd` or `npm install -g qmd`). **Part of:** QMD Memory Backend Prerequisites (Deferred)
+## Go-Live (Local)
 
-- [ ] Task: Configure macOS Remote Login (SSH), firewall, and port forwarding; then transfer the revivebot SSH key from server to local machine. **Part of:** AEGIS Key Transfer
+- [ ] Install gateway service: `openclaw gateway install`
+- [ ] Start gateway service: `openclaw gateway start`
+- [ ] Run health/repair: `openclaw doctor --repair`
+- [ ] Run security audit: `openclaw security audit --deep`
+- [ ] Probe channels: `openclaw channels status --probe`
+- [ ] Verify ORION-only Telegram behavior (no specialist delivers to Telegram)
+- [ ] Verify specialist delegation:
+  - ORION -> `atlas` via Task Packet
+  - ORION -> `node` via Task Packet
+- [ ] Create minimal cron jobs using Task Packets (deliver=false by default)
+
+## Cleanup / Hardening
+
+- [ ] Rotate any secrets that were pasted into chat during setup.
+- [ ] Add `gitleaks` to your local toolchain and run `skills/secrets-scan` before pushes.
+
+## AEGIS (Future, Remote)
+
+- [ ] Decide where AEGIS will run (Hetzner / other) and what it should monitor (gateway process vs health endpoint).

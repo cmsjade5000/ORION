@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim avatar audio-check lint dev
+.PHONY: soul restart routingsim avatar audio-check lint dev task-packets
 
 ## Regenerate all agent SOUL.md files
 soul:
@@ -28,6 +28,10 @@ audio-check:
 lint:
 	@command -v pre-commit >/dev/null 2>&1 && pre-commit run --all-files || echo "pre-commit not installed, skipping lint"
 
-## Start the OpenClaw gateway in development mode
+## Start the OpenClaw gateway service (LaunchAgent)
 dev:
 	openclaw gateway start
+
+## Validate Task Packets in per-agent inbox files
+task-packets:
+	python3 scripts/validate_task_packets.py

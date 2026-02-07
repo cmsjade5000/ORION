@@ -1,4 +1,5 @@
 # Reference config for this repo. Runtime config lives at ~/.openclaw/openclaw.json.
+# This file is a human-readable template only. Do not store secrets here.
 agents:
   defaults:
     model:
@@ -9,29 +10,23 @@ agents:
     # workspace: /Users/corystoner/Desktop/ORION
 
 channels:
-  slack:
-    enabled: false
-    tokenFile: keep/slack.env
-    signingSecretFile: keep/slack.env
-    channels:
-      - "#your-private-channel"
   telegram:
     enabled: true
-    tokenFile: ~/.config/clawdbot/secrets/telegram.token
+    # Token file contains only the raw bot token + trailing newline.
+    # Keep secrets out of Git (see KEEP.md).
+    tokenFile: ~/.openclaw/secrets/telegram.token
     dmPolicy: pairing
     groupPolicy: allowlist
     groupAllowFrom:
-      - "8471523294"
+      - "<CORY_TELEGRAM_USER_ID>"
     groups:
-      "-1003742519270": {}
+      "<TELEGRAM_GROUP_ID>": {}
     reactionLevel: ack
     streamMode: partial
-
-messages:
-  tts:
-    enabled: false
 
 tools:
   agentToAgent:
     enabled: true
-    allow: ["main"]  # single-bot Telegram for now
+    # Allow ORION to delegate to specialists via agent-to-agent messaging.
+    # This does not grant Telegram user-facing permissions to specialists.
+    allow: ["main", "atlas", "node", "pulse", "stratus", "pixel", "ember", "ledger"]

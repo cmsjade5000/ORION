@@ -36,10 +36,10 @@ Examples (pick one):
 ```bash
 openclaw cron add \
   --name "ORION heartbeat (15m)" \
+  --agent main \
   --every "15m" \
   --session isolated \
   --wake "next-heartbeat" \
-  --deliver false \
   --message "$(cat <<'MSG'
 TASK_PACKET v1
 Owner: ORION
@@ -68,11 +68,11 @@ MSG
 ```bash
 openclaw cron add \
   --name "ORION daily review (21:00)" \
+  --agent main \
   --cron "0 21 * * *" \
   --tz "America/New_York" \
   --session isolated \
   --wake "next-heartbeat" \
-  --deliver false \
   --message "$(cat <<'MSG'
 TASK_PACKET v1
 Owner: ORION
@@ -97,6 +97,6 @@ MSG
 
 ## Guardrails
 
-- Default `deliver=false` unless Cory explicitly wants a notification.
+- Default is **no `--deliver`** unless Cory explicitly wants a notification.
 - Avoid high-frequency schedules until the system is stable.
 - Keep cron payloads bounded; do not browse endlessly.

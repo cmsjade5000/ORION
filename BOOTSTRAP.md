@@ -1,21 +1,47 @@
-# BOOTSTRAP.md
+# BOOTSTRAP.md (One-Time)
 
-This document records the bootstrapping process for adding the following specialist agents to the Gateway system:
+OpenClaw injects `BOOTSTRAP.md` on the first turn of a new session. This file is intended to be temporary.
 
-- **EMBER** — Emotional Regulation & Grounding
-- **ATLAS** — Execution & Operations
-- **PIXEL** — Discovery, Tech, & Culture
-- **NODE** — System Glue & Architecture
-- **LEDGER** — Money, Value, & Financial Reasoning
+When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md` to keep prompts lean.
 
-## Steps Taken
+## Go-Live Checklist (Mac mini, local-first)
 
-1. **Defined role stubs** in `src/agents/` for each agent, capturing core responsibilities, boundaries, and output preferences.
-2. **Regenerated agent identities** using the Soul Factory, combining shared constitutional, foundational, and routing layers with each role definition:
-
+1. Regenerate SOULs (source-of-truth lives in `src/core/shared/` and `src/agents/`):
    ```bash
-   ./scripts/soul_factory.sh --all
+   make soul
    ```
+2. Verify OpenClaw sees all isolated agents (ORION + specialists):
+   ```bash
+   openclaw agents list
+   ```
+3. Verify model routing (OpenRouter primary, Gemini fallback):
+   ```bash
+   openclaw models status
+   ```
+4. Verify Telegram token file exists and is locked down (`600`):
+   - Config uses `channels.telegram.tokenFile`
+   - Token file should contain only the raw token + newline
+5. Install and start the gateway service (required for cron reliability):
+   ```bash
+   openclaw gateway install
+   openclaw gateway start
+   ```
+6. Repair and harden:
+   ```bash
+   openclaw doctor --repair
+   openclaw security audit --deep
+   ```
+7. Verify channel health:
+   ```bash
+   openclaw channels status --probe
+   ```
+8. Verify delegation (ORION -> ATLAS via `agentToAgent` + Task Packet):
+   - Use `docs/TASK_PACKET.md`
+   - Specialists never message Telegram directly
+9. Add minimal cron jobs (optional; keep delivery off unless explicitly wanted):
+   - Use `skills/cron-manager`
 
-3. **Verified** the generated `agents/<AGENT>/SOUL.md` files to ensure correctness and completeness.
-4. **Committed** all changes to version control with an atomic commit covering role definitions, generated artifacts, and this bootstrap record.
+## Post-Bootstrap
+
+- Delete this file (`BOOTSTRAP.md`) after go-live so it stops being injected.
+- Keep ongoing state in `memory/WORKING.md` and `tasks/`.

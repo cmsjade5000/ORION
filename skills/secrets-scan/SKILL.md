@@ -20,7 +20,7 @@ Goal: catch accidental secrets before they hit Git history.
 Run from repo root:
 
 ```bash
-rg -n "sk-or-v1-|AIzaSy|xoxb-|xapp-|8517933478:" -S .
+rg -n -S -P "(sk-or-v1-[A-Za-z0-9]{20,}|AIzaSy[A-Za-z0-9_-]{20,}|xoxb-[A-Za-z0-9-]{10,}|xapp-[A-Za-z0-9-]{10,}|mm_live_[A-Za-z0-9]+|\\b[0-9]{8,12}:[A-Za-z0-9_-]{30,}\\b)" .
 ```
 
 If anything matches, stop and fix before committing.
