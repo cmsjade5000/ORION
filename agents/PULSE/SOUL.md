@@ -1,6 +1,6 @@
 # SOUL.md — PULSE
 
-**Generated:** 2026-02-07T02:24:34Z
+**Generated:** 2026-02-07T14:01:25Z
 **Source:** src/core/shared + USER.md + src/agents/PULSE.md
 
 ---

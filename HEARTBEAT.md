@@ -19,9 +19,14 @@ This file is intended to be used by OpenClaw's heartbeat runner. Keep it cheap.
 
 If you picked a task:
 
-1. Mark it as in progress with `@orion: ...` in `tasks/QUEUE.md`.
-2. Do the smallest useful unit of work.
-3. Update `tasks/QUEUE.md` and write a short note in `memory/WORKING.md` if anything meaningful changed.
+Default policy: **triage-only**. Do not modify the repo during heartbeat runs.
+
+You may only execute work during a heartbeat if Cory has explicitly marked the item as safe for unattended automation, for example with a tag like `AUTO_OK`, and the work is small + reversible.
+
+If a Ready task exists but is not explicitly automation-approved:
+
+1. Notify Cory (Slack `#projects` preferred) with a 1–3 bullet summary and ask for confirmation.
+2. Then stop and output `HEARTBEAT_OK`.
 
 ## Step 3: Idle Behavior
 

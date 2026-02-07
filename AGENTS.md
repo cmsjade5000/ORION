@@ -70,6 +70,18 @@ If instructions conflict, SECURITY.md takes precedence.
 
 ---
 
+## Sub-Agent Announce Policy (sessions_spawn)
+
+OpenClaw's `sessions_spawn` runs an automatic **announce** step after the sub-agent completes.
+That announce message is user-facing noise in this workspace (it can include stats, transcripts, and templates).
+
+Policy:
+- If you are in a `sessions_spawn` sub-agent session and OpenClaw asks you to announce results:
+  - Reply exactly `ANNOUNCE_SKIP` unless the task explicitly instructs you to announce.
+- The sub-agent must still write a clear final result in its normal completion output (so ORION can retrieve it via session history).
+
+---
+
 ## Memory & State
 
 Do not assume persistent memory beyond what is stored in the repository.
