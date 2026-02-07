@@ -2,7 +2,9 @@
 
 This project uses:
 - Runtime config (JSON5): `~/.openclaw/openclaw.json`
-- Repo reference template: `openclaw.yaml` (sanitized, no secrets)
+- Repo reference templates (sanitized, no secrets):
+  - `openclaw.yaml`
+  - `openclaw.json.example`
 
 ## Scope
 
@@ -15,15 +17,18 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
 - `agents.list[0].subagents.allowAgents = ["*"]` (so ORION can target specialists via `sessions_spawn`)
 - `channels.telegram.enabled = true`
-- `channels.telegram.dmPolicy = "pairing"`
+- `channels.telegram.commands.native = false` (avoid Telegram bot command registration churn)
+- `channels.telegram.commands.nativeSkills = false`
+- `channels.telegram.dmPolicy = "allowlist"`
+- `channels.telegram.allowFrom = ["<CORY_TELEGRAM_USER_ID>"]`
 - `channels.telegram.tokenFile = "~/.openclaw/secrets/telegram.token"`
 - `channels.telegram.groupPolicy = "allowlist"`
 - `channels.telegram.groupAllowFrom = ["<CORY_TELEGRAM_USER_ID>"]`
 - `channels.telegram.groups = { "<TELEGRAM_GROUP_ID>": {} }`
 - `channels.telegram.streamMode = "partial"`
 - `channels.telegram.reactionLevel = "ack"`
-- `tools.agentToAgent.enabled = true`
-- `tools.agentToAgent.allow = ["main", "atlas", "node", "pulse", "stratus", "pixel", "ember", "ledger"]`
+
+Non-required channels were removed from runtime config to keep the local gateway minimal.
 
 ## Not Migrated (Schema Or Install Specific)
 
@@ -47,5 +52,4 @@ openclaw models status
 openclaw config get agents.defaults.workspace
 openclaw config get 'agents.list[0].subagents.allowAgents'
 openclaw config get channels.telegram
-openclaw config get tools.agentToAgent
 ```

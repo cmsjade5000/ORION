@@ -1,0 +1,54 @@
+{
+  "_comment": "Example OpenClaw config for ORION local development. Runtime config lives at ~/.openclaw/openclaw.json. Do not store secrets in Git.",
+  "agents": {
+    "defaults": {
+      "workspace": "/Users/corystoner/Desktop/ORION",
+      "model": {
+        "primary": "openrouter/openrouter/auto",
+        "fallbacks": ["google/gemini-2.5-flash-lite"]
+      },
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "subagents": {
+          "allowAgents": ["*"]
+        }
+      }
+    ]
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "tokenFile": "~/.openclaw/secrets/telegram.token",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["<CORY_TELEGRAM_USER_ID>"],
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": ["<CORY_TELEGRAM_USER_ID>"],
+      "groups": {
+        "<TELEGRAM_GROUP_ID>": {}
+      },
+      "commands": {
+        "native": false,
+        "nativeSkills": false
+      },
+      "reactionLevel": "ack",
+      "streamMode": "partial"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true
+      }
+    }
+  }
+}
+

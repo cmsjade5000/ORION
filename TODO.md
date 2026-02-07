@@ -4,11 +4,11 @@ This is the short, current work queue for getting ORION live locally.
 
 ## Go-Live (Local)
 
-- [ ] Install gateway service: `openclaw gateway install`
-- [ ] Start gateway service: `openclaw gateway start`
-- [ ] Run health/repair: `openclaw doctor --repair`
-- [ ] Run security audit: `openclaw security audit --deep`
-- [ ] Probe channels: `openclaw channels status --probe`
+- [x] Install gateway service: `openclaw gateway install`
+- [x] Start gateway service: `openclaw gateway start`
+- [x] Run health/repair: `openclaw doctor --repair`
+- [x] Run security audit: `openclaw security audit --deep`
+- [x] Probe channels: `openclaw channels status --probe`
 - [ ] Verify ORION-only Telegram behavior (no specialist delivers to Telegram)
 - [ ] Verify specialist delegation:
   - ORION -> `atlas` via Task Packet

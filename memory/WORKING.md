@@ -14,19 +14,18 @@ Go live locally on the Mac mini:
 
 ## Known Blockers / Risks
 
-- Gateway service is not installed/running persistently yet (cron + agentToAgent reliability depends on this).
+- Telegram inbound (DM -> ORION auto-reply) must be verified before enabling cron-driven automation.
 - Ensure no secrets ever land in Git (run `skills/secrets-scan` before pushes).
 
 ## Next Steps (Go-Live Checklist)
 
-1. Install + start the gateway service:
-   - `openclaw gateway install`
-   - `openclaw gateway start`
-2. Run hardening checks:
+1. Run hardening checks:
    - `openclaw doctor --repair`
    - `openclaw security audit --deep`
-3. Verify Telegram channel health:
+2. Verify Telegram channel health:
    - `openclaw channels status --probe`
+3. Verify Telegram inbound DM works:
+   - DM `@ORION_25_BOT` and confirm ORION responds.
 4. Verify delegation:
    - ORION sends one Task Packet to `atlas` and receives a result.
 5. Add minimal cron jobs (deliver=false by default):

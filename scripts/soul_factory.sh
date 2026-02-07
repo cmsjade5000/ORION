@@ -7,10 +7,12 @@ CORE_DIR="$SRC_DIR/core"
 SHARED_DIR="$CORE_DIR/shared"
 ROLES_DIR="$SRC_DIR/agents"
 AGENTS_DIR="$ROOT_DIR/agents"
+USER_MD="$ROOT_DIR/USER.md"
 
 # Ordered shared layers (edit order here if you ever change it)
 SHARED_LAYERS=(
   "CONSTITUTION.md"
+  "USER.md"
   "FOUNDATION.md"
   "ROUTING.md"
 )
@@ -35,21 +37,29 @@ build_agent() {
 
   require_file "$role_file"
   for f in "${SHARED_LAYERS[@]}"; do
-    require_file "$SHARED_DIR/$f"
+    if [[ "$f" == "USER.md" ]]; then
+      require_file "$USER_MD"
+    else
+      require_file "$SHARED_DIR/$f"
+    fi
   done
 
   {
     echo "# SOUL.md — ${agent}"
     echo
     echo "**Generated:** $(timestamp)"
-    echo "**Source:** src/core/shared + src/agents/${agent}.md"
+    echo "**Source:** src/core/shared + USER.md + src/agents/${agent}.md"
     echo
     echo "---"
     echo
     # Shared layers
     for f in "${SHARED_LAYERS[@]}"; do
       echo "<!-- BEGIN shared/${f} -->"
-      cat "$SHARED_DIR/$f"
+      if [[ "$f" == "USER.md" ]]; then
+        cat "$USER_MD"
+      else
+        cat "$SHARED_DIR/$f"
+      fi
       echo
       echo "<!-- END shared/${f} -->"
       echo

@@ -4,8 +4,9 @@ This file defines which agents exist and when ORION should delegate to them.
 
 Important runtime policy:
 - ORION (`agentId: main`) is the only Telegram-facing bot.
-- Specialists are internal-only and return results to ORION via `agentToAgent` or Task Packet `Result:` blocks.
+- Specialists are internal-only and return results to ORION via Task Packet `Result:` blocks.
 - Delegation should use `docs/TASK_PACKET.md` and `tasks/INBOX/<AGENT>.md`.
+ - Delegation should prefer `sessions_spawn` against isolated OpenClaw agents when available.
 
 ## Primary Agent
 

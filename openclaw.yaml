@@ -12,10 +12,18 @@ agents:
 channels:
   telegram:
     enabled: true
+    commands:
+      # Disable Telegram bot command registration to avoid "BOT_COMMANDS_TOO_MUCH"
+      # while the repo is still iterating on skill naming.
+      native: false
+      nativeSkills: false
     # Token file contains only the raw bot token + trailing newline.
     # Keep secrets out of Git (see KEEP.md).
     tokenFile: ~/.openclaw/secrets/telegram.token
-    dmPolicy: pairing
+    # For local single-user use, prefer allowlist for predictable DM behavior.
+    dmPolicy: allowlist
+    allowFrom:
+      - "<CORY_TELEGRAM_USER_ID>"
     groupPolicy: allowlist
     groupAllowFrom:
       - "<CORY_TELEGRAM_USER_ID>"
@@ -24,9 +32,6 @@ channels:
     reactionLevel: ack
     streamMode: partial
 
-tools:
-  agentToAgent:
-    enabled: true
-    # Allow ORION to delegate to specialists via agent-to-agent messaging.
-    # This does not grant Telegram user-facing permissions to specialists.
-    allow: ["main", "atlas", "node", "pulse", "stratus", "pixel", "ember", "ledger"]
+# Delegation note:
+# ORION should delegate to specialists using OpenClaw isolated agents (preferred: sessions_spawn),
+# not by granting specialists any external channel permissions.
