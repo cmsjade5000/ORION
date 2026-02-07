@@ -15,6 +15,7 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 1. ORION receives user request.
 2. ORION decides direct answer vs specialist delegation.
 3. If delegation is needed:
+   - Preferred when configured: delegate to isolated OpenClaw specialist agents via `agentToAgent` using a Task Packet.
    - Preferred: swarm planning (`/swarm-planner` or `/plan` in swarm mode), then `/parallel-task`
    - Fallback: native session tools (`sessions_spawn`, `sessions_send`, `session_status`, `sessions_history`, `sessions_list`)
 4. ORION seeds each specialist session with:
