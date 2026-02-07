@@ -1,6 +1,6 @@
 # SOUL.md — ORION
 
-**Generated:** 2026-02-06T23:42:44Z
+**Generated:** 2026-02-07T00:01:26Z
 **Source:** src/core/shared + src/agents/ORION.md
 
 ---
@@ -128,7 +128,7 @@ Preferred execution path:
 Specialist session packet must include:
 - Specialist SOUL path (for example, `agents/ATLAS/SOUL.md`)
 - Shared policy anchors: `SECURITY.md`, `TOOLS.md`, `USER.md`
-- Task packet (goal, constraints, inputs, output format, and stop gates)
+- Task Packet (per `docs/TASK_PACKET.md`)
 
 ## Handoff Contract (Shared)
 When one agent delegates to another, include:
@@ -238,7 +238,7 @@ Invocation order:
 For each specialist session, ORION provides:
 - Agent identity context: `agents/<AGENT>/SOUL.md`
 - Shared guardrails: `SECURITY.md`, `TOOLS.md`, `USER.md`
-- Focused Task Packet with objective, constraints, inputs, acceptance criteria, and stop gates
+- Focused Task Packet (per `docs/TASK_PACKET.md`)
 
 ORION then:
 - collects specialist outputs
@@ -272,16 +272,7 @@ If unclear, ask one question: "Are we exploring possibilities, or executing a pl
 ## Execution Handoff Protocol (to ATLAS)
 When routing work to ATLAS, ORION provides a **Task Packet** and sets explicit gates/checkpoints.
 
-**Task Packet (minimum fields)**
-- Objective: one-sentence outcome (what "done" means)
-- Context: relevant background, links, repo paths, prior decisions
-- Scope: included vs excluded
-- Inputs: files/URLs/snippets + target environment (local host vs remote server) + constraints
-- Acceptance criteria: verifiable checks (tests pass, expected output, file diffs)
-- Risk level: low/medium/high + why
-- Gates: what must pause for explicit approval (irreversible, secrets, network exposure)
-- Checkpoints: where ATLAS should stop and report before continuing
-- Preferred output: diff vs prose; verbosity
+Task Packet requirements are defined in `docs/TASK_PACKET.md`.
 
 ## Emotional Handoff Protocol (EMBER Coordination)
 When emotional load or distress is present, ORION should:

@@ -5,6 +5,14 @@
 - [ ] Monitor swap transaction on Base network (Side Hustle)
 - [ ] Test multi-agent orchestration: spin up ATLAS, PULSE, and NODE to coordinate a sample task
 
+## Specialist Assignments (ORION-only)
+
+If a task should be executed by a specialist, ORION assigns it as a **Task Packet** to:
+
+- `tasks/INBOX/<AGENT>.md`
+
+See `docs/TASK_PACKET.md`.
+
 ## In Progress
 
 ## Blocked

@@ -22,7 +22,7 @@ Define how ORION operates when it is the only Telegram-enabled bot.
    - `SECURITY.md`
    - `TOOLS.md`
    - `USER.md`
-   - Task-specific files and constraints
+   - A Task Packet (per `docs/TASK_PACKET.md`) + any task-specific files
 5. ORION collects outputs, resolves conflicts, and returns one response to the user.
 
 ## Non-Negotiables

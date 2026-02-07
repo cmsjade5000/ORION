@@ -40,7 +40,29 @@ openclaw cron add \
   --session isolated \
   --wake "next-heartbeat" \
   --deliver false \
-  --message "Run heartbeat using repo HEARTBEAT.md; if idle, return HEARTBEAT_OK."
+  --message "$(cat <<'MSG'
+TASK_PACKET v1
+Owner: ORION
+Requester: ORION
+Objective: Run heartbeat once and update tasks/QUEUE.md if needed.
+Success Criteria:
+- Returns HEARTBEAT_OK when idle.
+- Updates tasks/QUEUE.md only when there is a clear Ready item.
+Constraints:
+- Do not browse endlessly.
+- Do not message Telegram unless explicitly asked in the task.
+Inputs:
+- HEARTBEAT.md
+- tasks/QUEUE.md
+Risks:
+- low
+Stop Gates:
+- Any destructive command.
+- Any credential change.
+Output Format:
+- Short checklist of what was checked + what changed.
+MSG
+)"
 ```
 
 ```bash
@@ -51,7 +73,26 @@ openclaw cron add \
   --session isolated \
   --wake "next-heartbeat" \
   --deliver false \
-  --message "Review tasks/QUEUE.md; summarize progress and propose next steps."
+  --message "$(cat <<'MSG'
+TASK_PACKET v1
+Owner: ORION
+Requester: ORION
+Objective: Review tasks/QUEUE.md and propose the next 1-3 highest leverage tasks.
+Success Criteria:
+- Produces a short summary + next steps.
+Constraints:
+- No browsing unless required.
+Inputs:
+- tasks/QUEUE.md
+Risks:
+- low
+Stop Gates:
+- Any destructive command.
+- Any credential change.
+Output Format:
+- Bullet summary + next actions.
+MSG
+)"
 ```
 
 ## Guardrails
