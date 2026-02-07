@@ -11,7 +11,7 @@ Active now:
 
 | Agent    | Bot Name                             | Telegram Link                        |
 |:---------|:-------------------------------------|:-------------------------------------|
-| **ORION**   | ORION (Primary Interface)           | @ORION_25_BOT (t.me/ORION_25_BOT)    |
+| **ORION**   | ORION (Gateway Orchestrator)        | @Orion_GatewayBot (t.me/Orion_GatewayBot)    |
 
 **Note:** Specialists do not have Telegram access in the current runtime. ORION invokes them internally via swarm/session tools.
 

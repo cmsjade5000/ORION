@@ -25,7 +25,7 @@ Go live locally on the Mac mini:
 2. Verify Telegram channel health:
    - `openclaw channels status --probe`
 3. Verify Telegram inbound DM works:
-   - DM `@ORION_25_BOT` and confirm ORION responds.
+   - DM `@Orion_GatewayBot` and confirm ORION responds.
 4. Verify delegation:
    - ORION sends one Task Packet to `atlas` and receives a result.
 5. Add minimal cron jobs (deliver=false by default):
