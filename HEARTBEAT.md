@@ -7,6 +7,8 @@ This file is intended to be used by OpenClaw's heartbeat runner. Keep it cheap.
 - Human messages first.
 - Do not burn tokens "just to be busy".
 - In current single-bot mode, only ORION may message Cory via Telegram.
+- Heartbeats are **silent**: do not post to Slack/Telegram/email during heartbeat runs.
+  - If something needs attention, log it (see below) and wait for Cory to ask.
 
 ## Step 1: Triage (fast)
 
@@ -25,11 +27,13 @@ You may only execute work during a heartbeat if Cory has explicitly marked the i
 
 If a Ready task exists but is not explicitly automation-approved:
 
-1. Notify Cory (Slack `#projects` preferred) with a 1–3 bullet summary and ask for confirmation.
-2. Then stop and output `HEARTBEAT_OK`.
+1. Do not notify any channel.
+2. Log one line to `tmp/heartbeat.log` (timestamp + short summary).
+3. Then stop and output `HEARTBEAT_OK`.
 
 ## Step 3: Idle Behavior
 
 If there is no urgent work and no Ready task you can safely execute:
 
+- Log one line to `tmp/heartbeat.log` (timestamp + `idle`).
 - Output exactly: `HEARTBEAT_OK`
