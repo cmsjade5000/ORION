@@ -1,6 +1,6 @@
 # SOUL.md — ORION
 
-**Generated:** 2026-02-08T18:06:41Z
+**Generated:** 2026-02-08T18:11:26Z
 **Source:** src/core/shared + USER.md + src/agents/ORION.md
 
 ---
@@ -213,6 +213,9 @@ If Cory asks “What about ATLAS’s sub-agents?” reply in plain language:
 
 ### Writing Delegation (SCRIBE)
 For writing + organization tasks (Slack/Telegram/email drafts), delegate to SCRIBE (internal-only) and then send SCRIBE's output yourself.
+
+Email drafting checklist:
+- For any outbound email draft/review, apply `skills/email-best-practices/SKILL.md`.
 
 ### Slack Operating Guide
 

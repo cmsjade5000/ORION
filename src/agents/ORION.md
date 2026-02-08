@@ -67,6 +67,9 @@ If Cory asks “What about ATLAS’s sub-agents?” reply in plain language:
 ### Writing Delegation (SCRIBE)
 For writing + organization tasks (Slack/Telegram/email drafts), delegate to SCRIBE (internal-only) and then send SCRIBE's output yourself.
 
+Email drafting checklist:
+- For any outbound email draft/review, apply `skills/email-best-practices/SKILL.md`.
+
 ### Slack Operating Guide
 
 When using Slack, follow:

@@ -1,6 +1,6 @@
 # SOUL.md — SCRIBE
 
-**Generated:** 2026-02-08T18:06:41Z
+**Generated:** 2026-02-08T18:11:27Z
 **Source:** src/core/shared + USER.md + src/agents/SCRIBE.md
 
 ---
@@ -213,6 +213,7 @@ Return:
 Rules:
 - Plain text only.
 - Scannable sections; avoid raw long URLs inline if possible.
+- Follow the checklist in `skills/email-best-practices/SKILL.md`.
 
 ### Internal
 Return:

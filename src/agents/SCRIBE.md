@@ -66,6 +66,7 @@ Return:
 Rules:
 - Plain text only.
 - Scannable sections; avoid raw long URLs inline if possible.
+- Follow the checklist in `skills/email-best-practices/SKILL.md`.
 
 ### Internal
 Return:
