@@ -9,6 +9,7 @@ set -euo pipefail
 # Usage:
 #   ./scripts/agentmail_send.sh --to you@example.com --subject "Hi" --text "Body"
 #   ./scripts/agentmail_send.sh --to you@example.com --subject "Hi" --text-file /tmp/body.txt
+#   ./scripts/agentmail_send.sh you@example.com "Hi" "Body"  # positional compatibility
 #
 # Env:
 # - AGENTMAIL_FROM (default: orion_gatewaybot@agentmail.to)
@@ -29,11 +30,24 @@ subject=""
 text=""
 text_file=""
 
+# Positional compatibility:
+#   agentmail_send.sh <to> <subject> <text...>
+if [ "${#}" -gt 0 ] && [[ "${1}" != --* ]] && [[ "${1}" != -* ]]; then
+  to="${1-}"
+  subject="${2-}"
+  shift 2 || true
+  if [ "${#}" -gt 0 ]; then
+    text="$*"
+    shift "${#}" || true
+  fi
+fi
+
 while [ "${#}" -gt 0 ]; do
   case "$1" in
     --to) to="${2-}"; shift 2 ;;
     --subject) subject="${2-}"; shift 2 ;;
     --text) text="${2-}"; shift 2 ;;
+    --body) text="${2-}"; shift 2 ;; # common alias
     --text-file) text_file="${2-}"; shift 2 ;;
     -h|--help)
       sed -n '1,120p' "$0"
