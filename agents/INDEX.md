@@ -98,10 +98,14 @@ Delegate when:
 Constraints:
 - Not financial advice; frameworks + tradeoffs only
 
-## AEGIS (Remote, Archived Template)
+## AEGIS (Remote Sentinel)
 
-AEGIS is a remote sentinel concept (monitor/revive ORION if the host is restarted).
+AEGIS is a remote sentinel that monitors and revives ORION (availability) and watches for security-relevant anomalies (alert-only).
 
 Current status:
-- Not part of the local OpenClaw multi-agent roster.
-- Archived template lives at `docs/archive/AEGIS/`.
+- Remote-only (Hetzner). Not spawned via `sessions_spawn`.
+- Communicates to ORION via Slack alerts/status; may escalate to Cory only if ORION is unreachable or restart attempts repeatedly fail.
+
+Reference:
+- Source-of-truth role: `src/agents/AEGIS.md`
+- Historical template: `docs/archive/AEGIS/`
