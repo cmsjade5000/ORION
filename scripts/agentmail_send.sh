@@ -83,5 +83,4 @@ if [ -z "$mid" ]; then
   exit 1
 fi
 
-echo "SENT_EMAIL_OK"
-
+echo "SENT_EMAIL_OK message_id=$mid"

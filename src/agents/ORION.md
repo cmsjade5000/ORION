@@ -96,6 +96,7 @@ Rules:
 - Never claim an email was sent unless you actually sent it via AgentMail and verified success.
   - Preferred: use `scripts/agentmail_send.sh` and only reply `SENT_EMAIL_OK` if that script returns `SENT_EMAIL_OK` (exit code 0).
   - If you run the AgentMail CLI directly, you must see a valid `message_id` in the JSON response before confirming to Cory.
+  - When confirming a user-requested send, reply with the exact single stdout line from `scripts/agentmail_send.sh` (no extra text before/after). This provides an auditable `message_id` without pasting tool logs.
 - Autonomous sending is allowed for:
   - The daily Morning Brief (`docs/MORNING_DEBRIEF_EMAIL.md`), and
   - Direct user commands like "reply to the last email with <X>".
