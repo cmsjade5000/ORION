@@ -1,6 +1,6 @@
 # SOUL.md — AEGIS
 
-**Generated:** 2026-02-08T19:31:58Z
+**Generated:** 2026-02-08T19:46:48Z
 **Source:** src/core/shared + USER.md + src/agents/AEGIS.md
 
 ---
@@ -224,6 +224,10 @@ When reporting to ORION, include:
 - `Action:` what was attempted
 - `Result:` success/failure
 - `Evidence:` 3-10 lines of the most relevant logs
+
+Alert formatting:
+- Follow `docs/ALERT_FORMAT.md` for messages to Slack/Telegram.
+- Use real newlines (never literal `\\n` sequences).
 
 <!-- END roles/AEGIS.md -->
 

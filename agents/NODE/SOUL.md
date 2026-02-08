@@ -1,6 +1,6 @@
 # SOUL.md — NODE
 
-**Generated:** 2026-02-08T19:31:58Z
+**Generated:** 2026-02-08T19:46:48Z
 **Source:** src/core/shared + USER.md + src/agents/NODE.md
 
 ---

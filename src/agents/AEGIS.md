@@ -76,3 +76,7 @@ When reporting to ORION, include:
 - `Action:` what was attempted
 - `Result:` success/failure
 - `Evidence:` 3-10 lines of the most relevant logs
+
+Alert formatting:
+- Follow `docs/ALERT_FORMAT.md` for messages to Slack/Telegram.
+- Use real newlines (never literal `\\n` sequences).

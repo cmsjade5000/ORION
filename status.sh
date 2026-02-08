@@ -61,6 +61,35 @@ else
   printf 'openclaw: not found\n'
 fi
 
+hr "Host Resources (Local)"
+uname_s="$(uname -s 2>/dev/null || true)"
+if [ "$uname_s" = "Darwin" ]; then
+  printf 'time: %s\n' "$(date)"
+  printf 'uptime: %s\n' "$(uptime)"
+  printf '\n-- disk (df -h /) --\n'
+  df -h / || true
+  if have memory_pressure; then
+    printf '\n-- memory_pressure -Q --\n'
+    memory_pressure -Q 2>/dev/null || true
+  else
+    printf '\n-- vm_stat (first 12 lines) --\n'
+    vm_stat 2>/dev/null | sed -n '1,12p' || true
+  fi
+  if have ps; then
+    printf '\n-- openclaw processes (ps) --\n'
+    if have rg; then
+      ps aux | rg -n "openclaw" -S | sed -n '1,12p' || true
+    else
+      ps aux | grep -i openclaw | head -n 12 || true
+    fi
+  fi
+else
+  printf 'time: %s\n' "$(date)"
+  printf 'uptime: %s\n' "$(uptime 2>/dev/null || true)"
+  printf '\n-- disk (df -h) --\n'
+  df -h 2>/dev/null | sed -n '1,12p' || true
+fi
+
 hr "Local Gateway Logs (tail 20)"
 for f in "$HOME/.openclaw/logs/gateway.log" "$HOME/.openclaw/logs/gateway.err.log"; do
   if [ -f "$f" ]; then

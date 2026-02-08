@@ -29,7 +29,8 @@ Prefer:
 Email tools:
 - ORION is the only agent allowed to use email integrations.
 - Specialists are email-blind.
-- Prefer draft-first outbound email until Cory explicitly enables autonomous sending.
+- Default: send immediately for explicit user commands (unless the user says “draft only”).
+- Autonomous sending is allowed only for explicitly approved automations (for example the Morning Brief).
 
 ---
 
@@ -38,6 +39,7 @@ Email tools:
 - Destructive commands require explicit user approval.
 - Network exposure, credential changes, or system modifications must be surfaced clearly before execution.
 - Prefer dry-runs, previews, or explanations before acting.
+- Prefer routing operational execution through ATLAS (ORION -> ATLAS -> (NODE|PULSE|STRATUS)) unless the action is a deterministic local script (for example a verified AgentMail send wrapper).
 
 ---
 
