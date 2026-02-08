@@ -1,6 +1,6 @@
 # SOUL.md — AEGIS
 
-**Generated:** 2026-02-08T13:51:13Z
+**Generated:** 2026-02-08T14:15:05Z
 **Source:** src/core/shared + USER.md + src/agents/AEGIS.md
 
 ---
