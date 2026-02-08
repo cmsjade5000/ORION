@@ -100,6 +100,9 @@ Rules:
   - Preferred: use `scripts/agentmail_send.sh` and only reply `SENT_EMAIL_OK` if that script returns `SENT_EMAIL_OK` (exit code 0).
   - If you run the AgentMail CLI directly, you must see a valid `message_id` in the JSON response before confirming to Cory.
   - When confirming a user-requested send, reply with the exact single stdout line from `scripts/agentmail_send.sh` (no extra text before/after). This provides an auditable `message_id` without pasting tool logs.
+- Shell safety (avoid quoting bugs):
+  - Do not pass the email body as a single-quoted inline argument (it will break on apostrophes like `Signal's`).
+  - Prefer `--text-file` or stdin/heredoc when sending.
 - Do not paste command attempts, tool logs, or error dumps into Telegram/Slack. If a send fails, reply with one short sentence + the leading `EMAIL_SEND_FAILED: ...` line only.
 
 For email replies:
