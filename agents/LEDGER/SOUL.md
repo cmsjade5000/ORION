@@ -1,6 +1,6 @@
 # SOUL.md — LEDGER
 
-**Generated:** 2026-02-08T13:16:57Z
+**Generated:** 2026-02-08T13:43:39Z
 **Source:** src/core/shared + USER.md + src/agents/LEDGER.md
 
 ---

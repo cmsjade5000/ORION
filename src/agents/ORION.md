@@ -196,6 +196,13 @@ When ATLAS is unavailable:
    - what changed (if anything)
    - prevention steps
 
+### Incident Logging (Always)
+For an auditable history, ORION should also append an `INCIDENT v1` entry to `tasks/INCIDENTS.md` whenever:
+- ORION triggers or requests a gateway restart (ORION gateway or AEGIS gateway).
+- ORION receives an AEGIS security alert (SSH anomalies, fail2ban spikes, config drift, Tailscale peer changes).
+
+Keep entries short and factual (no secrets, no tool logs). Link follow-up work to Task Packets.
+
 ## Specialist Invocation Protocol (Single Telegram Bot)
 When specialist reasoning is needed, ORION should spin up internal specialist sessions instead of handing off user chat access.
 

@@ -118,6 +118,15 @@ Throttling:
 - Typical windows are 10–30 minutes per alert type.
 - The Tailscale peer-change alert is intentionally more conservative (currently 60 minutes) to avoid noise from normal device flapping.
 
+## Incident Logging (Auditable History)
+
+AEGIS writes a local, append-only incident history on the Hetzner host:
+- Monitor incidents: `/var/lib/aegis-monitor/incidents.md`
+- Sentinel incidents: `/var/lib/aegis-sentinel/incidents.md`
+
+The ORION workspace incident log (git-tracked) is:
+- `tasks/INCIDENTS.md`
+
 ## ORION Restart Loop Guard (Anti-Flap)
 
 AEGIS will attempt to restart ORION when ORION fails health checks, but it includes a **restart-loop guard** to prevent endless restart flapping (bad config, upstream/model outage, etc.).
@@ -139,6 +148,18 @@ Manual clear (Hetzner):
 - `sudo rm -f /var/lib/aegis-monitor/orion_restart_guard.lock`
 - Optional (also clear the attempt counter):
   - `sudo rm -f /var/lib/aegis-monitor/orion_restart_attempts.log`
+
+## Log Rotation
+
+AEGIS writes plain log files:
+- `/var/log/aegis-monitor/monitor.log`
+- `/var/log/aegis-sentinel/sentinel.log`
+
+These should be managed via `logrotate` on the Hetzner host (recommended).
+
+Recommended `logrotate` units (Hetzner):
+- `/etc/logrotate.d/aegis-monitor`
+- `/etc/logrotate.d/aegis-sentinel`
 
 ## Heartbeat / “Is AEGIS Alive?”
 

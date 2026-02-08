@@ -35,6 +35,10 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
    ```bash
    openclaw channels status --probe
    ```
+   - Fast triage summary (local + AEGIS remote):
+     ```bash
+     ./status.sh
+     ```
 8. Verify delegation (ORION -> ATLAS via `sessions_spawn` + Task Packet):
    - Use `docs/TASK_PACKET.md`
    - Specialists never message Telegram directly

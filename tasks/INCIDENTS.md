@@ -1,6 +1,8 @@
 # Incidents (Append-Only)
 
-This file is the audit log for emergency events that bypass normal delegation.
+This file is the audit log for:
+- emergency events that bypass normal delegation, and
+- operational incidents like gateway restarts and security alerts (for an auditable history).
 
 Rules:
 - Append-only (do not rewrite history).
@@ -17,13 +19,13 @@ Id: INC-<YYYYMMDD>-<hhmm>-<short>
 Opened: <ISO8601 timestamp>
 Opened By: ORION
 Severity: P0 | P1
-Trigger: ATLAS_UNAVAILABLE
+Trigger: ATLAS_UNAVAILABLE | ORION_GATEWAY_RESTART | AEGIS_SECURITY_ALERT | OTHER
 Summary: <one sentence>
 Evidence:
 - <attempt 1 outcome>
 - <attempt 2 outcome>
-Bypass Actions:
-- <what ORION did directly (NODE/PULSE/STRATUS)>
+Actions:
+- <what was done (restart, notification, bypass, etc.)>
 Stop Gates Hit:
 - <any approvals requested, or "none">
 Follow-up Owner: ATLAS
@@ -31,4 +33,3 @@ Follow-up Tasks:
 - <task packet link or short description>
 Closed: <ISO8601 timestamp or "open">
 ```
-
