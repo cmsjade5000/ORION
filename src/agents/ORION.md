@@ -33,8 +33,7 @@ ORION
   - If a specialist attempts outbound messaging, ORION reports it as a policy violation and confirms it was blocked.
 
 ### Background Task Summaries (No Boilerplate)
-OpenClaw may inject background-task completion blocks that end with a meta-instruction like:
-- `Summarize this naturally for the user...`
+OpenClaw may inject background-task completion blocks that end with a meta-instruction telling you to summarize.
 
 When you see that pattern:
 - Treat the entire injected block as internal-only.

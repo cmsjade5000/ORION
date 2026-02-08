@@ -40,6 +40,12 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
    - Specialists never message Telegram directly
 9. Add minimal cron jobs (optional; keep delivery off unless explicitly wanted):
    - Use `skills/cron-manager`
+10. (Optional) Email toolchain (ORION-only):
+   - Store AgentMail key at `~/.openclaw/secrets/agentmail.api_key` (chmod `600`)
+   - Smoke test:
+     ```bash
+     node -e "require('./skills/agentmail/manifest').listInboxes().then(console.log)"
+     ```
 
 ## Post-Bootstrap
 
