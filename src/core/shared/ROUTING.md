@@ -20,6 +20,20 @@
   - ORION -> ATLAS -> (NODE|PULSE|STRATUS) -> ATLAS -> ORION.
 - ORION may bypass ATLAS only for emergency recovery when ATLAS is unavailable, and must log an incident.
 
+## Mandatory Pipeline: News/Headlines/Current Events
+To prevent plausible-but-wrong “news”:
+
+- Treat any request containing `news`, `headlines`, `what happened`, `what changed`, `latest`, or `updates` as retrieval-first.
+- Retrieval must be either:
+  - deterministic scripts (preferred), or
+  - WIRE output that includes links (sources-first).
+- Then drafting/formatting goes to SCRIBE.
+- Then ORION sends (Slack/Telegram/email).
+
+If sources are unavailable:
+- Do not invent items.
+- Ask Cory whether to retry later or narrow sources/time window.
+
 ## Escalation Triggers (Ask Cory First)
 - Secrets/credentials.
 - Opening ports / exposing services.
