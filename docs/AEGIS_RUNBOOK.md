@@ -111,7 +111,9 @@ Security sentinel:
 - `AEGIS: own OpenClaw service is down and restart failed.`
 
 Throttling:
-- Alerts are throttled (typically 10–30 minutes per alert type) to prevent spam loops.
+- Alerts are throttled to prevent spam loops.
+- Typical windows are 10–30 minutes per alert type.
+- The Tailscale peer-change alert is intentionally more conservative (currently 60 minutes) to avoid noise from normal device flapping.
 
 ## Heartbeat / “Is AEGIS Alive?”
 
