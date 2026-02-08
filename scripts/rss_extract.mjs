@@ -28,12 +28,21 @@ function decodeEntities(s) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
 }
 
 function firstMatch(text, re) {
   const m = text.match(re);
   return m ? m[1] : "";
+}
+
+function stripHtml(s) {
+  // Good enough for RSS snippets (Google News uses <a> + <font>).
+  return String(s)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractItems(xml) {
@@ -75,6 +84,32 @@ function extractLink(kind, block) {
   return decodeEntities(raw.replace(/\s+/g, " ").trim());
 }
 
+function extractPubDate(kind, block) {
+  if (kind === "atom") {
+    const updated = firstMatch(block, /<updated\b[^>]*>([\s\S]*?)<\/updated>/i);
+    const published = firstMatch(block, /<published\b[^>]*>([\s\S]*?)<\/published>/i);
+    const raw = updated || published || "";
+    return decodeEntities(String(raw).replace(/\s+/g, " ").trim());
+  }
+  const raw = firstMatch(block, /<pubDate\b[^>]*>([\s\S]*?)<\/pubDate>/i);
+  return decodeEntities(String(raw || "").replace(/\s+/g, " ").trim());
+}
+
+function extractSource(kind, block) {
+  if (kind === "atom") return "";
+  const raw = firstMatch(block, /<source\b[^>]*>([\s\S]*?)<\/source>/i);
+  return decodeEntities(String(raw || "").replace(/\s+/g, " ").trim());
+}
+
+function extractSnippet(kind, block) {
+  const raw =
+    firstMatch(block, /<description\b[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>/i) ||
+    firstMatch(block, /<description\b[^>]*>([\s\S]*?)<\/description>/i) ||
+    firstMatch(block, /<summary\b[^>]*>([\s\S]*?)<\/summary>/i);
+  const cleaned = stripHtml(decodeEntities(String(raw || "")));
+  return cleaned;
+}
+
 async function main() {
   const { max } = parseArgs(process.argv);
 
@@ -87,10 +122,19 @@ async function main() {
   for (const block of blocks) {
     const title = extractTitle(block);
     const link = extractLink(kind, block);
+    const publishedAt = extractPubDate(kind, block);
+    const source = extractSource(kind, block);
+    const snippet = extractSnippet(kind, block);
     if (!title || !link) continue;
     // Drop obvious feed self-referential entries.
     if (/^https?:\/\/news\.google\.com\//.test(link) && title.toLowerCase() === "google news") continue;
-    out.push({ title, link });
+    out.push({
+      title,
+      link,
+      source: source || null,
+      publishedAt: publishedAt || null,
+      snippet: snippet || null,
+    });
     if (out.length >= max) break;
   }
   // Important: this must be valid JSON on stdout (no stray characters).
