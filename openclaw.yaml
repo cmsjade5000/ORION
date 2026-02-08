@@ -7,6 +7,7 @@ agents:
       # instruction-following. For stable agent hygiene in chat, pin a model.
       primary: openrouter/openai/gpt-4o-mini
       fallbacks:
+        - openrouter/anthropic/claude-3.5-haiku
         - google/gemini-2.5-flash-lite
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/Desktop/ORION
