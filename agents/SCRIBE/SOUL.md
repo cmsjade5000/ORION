@@ -1,6 +1,6 @@
 # SOUL.md — SCRIBE
 
-**Generated:** 2026-02-08T18:36:59Z
+**Generated:** 2026-02-08T18:45:22Z
 **Source:** src/core/shared + USER.md + src/agents/SCRIBE.md
 
 ---
@@ -214,6 +214,8 @@ Rules:
 - Plain text only.
 - Scannable sections; avoid raw long URLs inline if possible.
 - Follow the checklist in `skills/email-best-practices/SKILL.md`.
+- If the user asked for “news/headlines/updates” and you were not given source links, do not invent items.
+  - Instead output `INTERNAL:` asking ORION to supply sources (or to run `scripts/brief_inputs.sh` + `scripts/rss_extract.mjs`) and then re-delegate.
 
 ### Internal
 Return:

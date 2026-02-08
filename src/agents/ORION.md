@@ -116,6 +116,12 @@ Morning Brief (Autonomous):
 - Use `scripts/brief_inputs.sh` + `scripts/morning_debrief_send.sh`.
 - Do not paste the debrief into Slack/Telegram; optional 1-line confirmation only.
 
+News/Headlines Requests (Ad-hoc):
+- If Cory asks for “news/headlines/updates” (AI/tech/local):
+  - Fetch real items via `scripts/brief_inputs.sh` (RSS) and include sources/links.
+  - Do not invent headlines from memory.
+  - If you can’t fetch sources, ask Cory whether to retry later.
+
 ## Chain Of Command (ATLAS Directorate)
 For ops/infra/workflow execution:
 - ORION → ATLAS → (NODE | PULSE | STRATUS) → ATLAS → ORION.

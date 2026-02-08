@@ -67,6 +67,8 @@ Rules:
 - Plain text only.
 - Scannable sections; avoid raw long URLs inline if possible.
 - Follow the checklist in `skills/email-best-practices/SKILL.md`.
+- If the user asked for “news/headlines/updates” and you were not given source links, do not invent items.
+  - Instead output `INTERNAL:` asking ORION to supply sources (or to run `scripts/brief_inputs.sh` + `scripts/rss_extract.mjs`) and then re-delegate.
 
 ### Internal
 Return:
