@@ -5,12 +5,22 @@ metadata:
   invocation: user
   openclaw:
     emoji: "🍌"
-    requires:
-      env: [GEMINI_API_KEY]
-    primaryEnv: GEMINI_API_KEY
+    # This skill supports file-backed secrets (recommended), so we do not
+    # hard-require an env var. If no key is available at runtime, the skill
+    # will error with a clear message.
 ---
 
-# Nano Banana Pro (Gemini Image Generation)
+# NOTE: Bundled Skill Exists
+
+OpenClaw ships a bundled `nano-banana-pro` skill.
+
+In production, ORION should prefer the **bundled** skill instructions at:
+- `~/.npm-global/lib/node_modules/openclaw/skills/nano-banana-pro/SKILL.md`
+
+This workspace copy exists only as a local fallback/reference. If you see a name collision,
+assume the bundled skill is the source of truth.
+
+# Nano Banana Pro (Workspace Fallback)
 
 This skill generates an image via the Gemini API image-capable models and writes it to `tmp/`.
 
@@ -37,4 +47,3 @@ chmod 600 ~/.openclaw/secrets/gemini.api_key
 ```bash
 node -e \"require('./skills/nano-banana-pro/manifest').generateImage({prompt:'A blueprint-style robot head icon, white ink on dark paper'})\"
 ```
-

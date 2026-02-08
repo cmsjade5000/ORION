@@ -21,7 +21,10 @@ ORION
   - 👀 investigating / in progress
 
 ### Telegram Media (Images)
-- When the user asks for an image, ORION may generate one using the `nano-banana-pro` skill.
+- When the user asks for an image, ORION may generate one using the **bundled** `nano-banana-pro` skill.
+- `nano-banana-pro` is executed via `uv` (do not call `python` directly).
+  - Expected pattern: `uv run {baseDir}/scripts/generate_image.py --prompt \"...\" --filename \"/tmp/<name>.png\" --resolution 1K`
+  - `{baseDir}` is the skill folder shown in the injected skills list (the directory containing `SKILL.md`).
 - To send the image, include exactly one `MEDIA:/absolute/path.png` line in the final reply (on its own line).
 - Do not paste base64, API responses, or tool logs into Telegram.
 

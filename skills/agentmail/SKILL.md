@@ -5,9 +5,9 @@ metadata:
   invocation: user
   openclaw:
     emoji: "📧"
-    requires:
-      env: [AGENTMAIL_API_KEY]
-    primaryEnv: AGENTMAIL_API_KEY
+    # This skill supports file-backed secrets (recommended), so we do not
+    # hard-require an env var. If no key is available at runtime, the skill
+    # will error with a clear message.
 ---
 
 # AgentMail (ORION Only)
@@ -64,4 +64,3 @@ Send email:
 ```bash
 node -e \"require('./skills/agentmail/manifest').sendMessage(process.env.INBOX_ID,{to:'you@example.com',subject:'Test',text:'Hello from ORION'}).then(console.log)\"
 ```
-
