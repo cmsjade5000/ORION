@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const fs = require('fs');
 const { listInboxes, listMessages, getMessage, sendMessage } = require('./manifest');
 
 function usage() {
@@ -13,8 +14,10 @@ function usage() {
   console.error('');
   console.error('Send (flag form):');
   console.error('  send --from <from_inbox_id> --to <to> --subject <subject> --text <text...>');
+  console.error('  send --from <from_inbox_id> --to <to> --subject <subject> --text-file <path>');
   console.error('Reply-last (flag form):');
   console.error('  reply-last --from <from_inbox_id> --text <text...> [--from-email <sender_email>]');
+  console.error('  reply-last --from <from_inbox_id> --text-file <path> [--from-email <sender_email>]');
   console.error('');
   console.error('Examples:');
   console.error('  node skills/agentmail/cli.js list-inboxes');
@@ -99,7 +102,9 @@ async function main() {
       flags._[0];
     const to = flags.to ?? flags._[1];
     const subject = flags.subject ?? flags._[2];
+    const textFile = flags['text-file'] ?? flags.text_file ?? flags.textFile ?? null;
     const text =
+      (textFile ? fs.readFileSync(String(textFile), 'utf8') : null) ??
       flags.text ??
       (flags._.length >= 4 ? flags._.slice(3).join(' ') : null);
 
@@ -124,7 +129,11 @@ async function main() {
       flags.from_addr ??
       flags.fromAddr;
     // Note: flags.from is used for inboxId above; also accept --from-email for sender match.
-    const text = flags.text ?? (flags._.length >= 2 ? flags._.slice(1).join(' ') : null);
+    const textFile = flags['text-file'] ?? flags.text_file ?? flags.textFile ?? null;
+    const text =
+      (textFile ? fs.readFileSync(String(textFile), 'utf8') : null) ??
+      flags.text ??
+      (flags._.length >= 2 ? flags._.slice(1).join(' ') : null);
     if (!inboxId || !text) usage();
 
     const out = await listMessages(inboxId, { limit: 20 });
