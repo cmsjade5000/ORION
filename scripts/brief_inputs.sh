@@ -11,6 +11,20 @@ set -euo pipefail
 
 CITY="${CITY:-Pittsburgh}"
 MAX_ITEMS="${MAX_ITEMS:-8}"
+AI_MAX_ITEMS="${AI_MAX_ITEMS:-}"
+TECH_MAX_ITEMS="${TECH_MAX_ITEMS:-}"
+PGH_MAX_ITEMS="${PGH_MAX_ITEMS:-}"
+
+# Default to a small total link count (2-5 total) unless explicitly overridden.
+# If MAX_ITEMS is set, it acts as a fallback cap.
+if [ -z "${AI_MAX_ITEMS}" ]; then AI_MAX_ITEMS="2"; fi
+if [ -z "${TECH_MAX_ITEMS}" ]; then TECH_MAX_ITEMS="2"; fi
+if [ -z "${PGH_MAX_ITEMS}" ]; then PGH_MAX_ITEMS="1"; fi
+
+# Allow legacy MAX_ITEMS to override if it's smaller (global guard).
+if [ "${MAX_ITEMS}" -lt "${AI_MAX_ITEMS}" ]; then AI_MAX_ITEMS="${MAX_ITEMS}"; fi
+if [ "${MAX_ITEMS}" -lt "${TECH_MAX_ITEMS}" ]; then TECH_MAX_ITEMS="${MAX_ITEMS}"; fi
+if [ "${MAX_ITEMS}" -lt "${PGH_MAX_ITEMS}" ]; then PGH_MAX_ITEMS="${MAX_ITEMS}"; fi
 
 have() { command -v "$1" >/dev/null 2>&1; }
 for bin in curl jq node; do
@@ -83,9 +97,9 @@ rss_fetch "https://news.google.com/rss/search?q=artificial%20intelligence%20OR%2
 rss_fetch "https://news.google.com/rss/search?q=technology%20when%3A1d&hl=en-US&gl=US&ceid=US:en" "$tech_rss"
 rss_fetch "https://news.google.com/rss/search?q=Pittsburgh%20when%3A1d&hl=en-US&gl=US&ceid=US:en" "$pgh_rss"
 
-ai_items="$(node "$RSS_EXTRACT" --max "$MAX_ITEMS" <"$ai_rss")"
-tech_items="$(node "$RSS_EXTRACT" --max "$MAX_ITEMS" <"$tech_rss")"
-pgh_items="$(node "$RSS_EXTRACT" --max "$MAX_ITEMS" <"$pgh_rss")"
+ai_items="$(node "$RSS_EXTRACT" --max "$AI_MAX_ITEMS" <"$ai_rss")"
+tech_items="$(node "$RSS_EXTRACT" --max "$TECH_MAX_ITEMS" <"$tech_rss")"
+pgh_items="$(node "$RSS_EXTRACT" --max "$PGH_MAX_ITEMS" <"$pgh_rss")"
 
 now_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -106,4 +120,3 @@ jq -n \
       pittsburgh: $pgh
     }
   }'
-

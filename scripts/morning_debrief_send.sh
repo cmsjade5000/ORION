@@ -12,7 +12,10 @@ set -euo pipefail
 #
 # Env:
 # - BRIEF_CITY (default: Pittsburgh)
-# - BRIEF_MAX_ITEMS (default: 8)
+# - BRIEF_MAX_ITEMS (default: 8) (legacy guard cap)
+# - BRIEF_AI_MAX_ITEMS (default: 2)
+# - BRIEF_TECH_MAX_ITEMS (default: 2)
+# - BRIEF_PGH_MAX_ITEMS (default: 1)
 # - BRIEF_TZ (default: America/New_York)
 # - AGENTMAIL_FROM (default: orion_gatewaybot@agentmail.to)
 # - AGENTMAIL_TO (default: boughs.gophers-2t@icloud.com)
@@ -29,6 +32,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CITY="${BRIEF_CITY:-Pittsburgh}"
 MAX_ITEMS="${BRIEF_MAX_ITEMS:-8}"
+AI_MAX_ITEMS="${BRIEF_AI_MAX_ITEMS:-2}"
+TECH_MAX_ITEMS="${BRIEF_TECH_MAX_ITEMS:-2}"
+PGH_MAX_ITEMS="${BRIEF_PGH_MAX_ITEMS:-1}"
 TZNAME="${BRIEF_TZ:-America/New_York}"
 
 FROM_INBOX="${AGENTMAIL_FROM:-orion_gatewaybot@agentmail.to}"
@@ -40,7 +46,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 inputs="$tmpdir/inputs.json"
 body="$tmpdir/body.txt"
 
-CITY="$CITY" MAX_ITEMS="$MAX_ITEMS" "$ROOT/scripts/brief_inputs.sh" >"$inputs"
+CITY="$CITY" MAX_ITEMS="$MAX_ITEMS" \
+  AI_MAX_ITEMS="$AI_MAX_ITEMS" TECH_MAX_ITEMS="$TECH_MAX_ITEMS" PGH_MAX_ITEMS="$PGH_MAX_ITEMS" \
+  "$ROOT/scripts/brief_inputs.sh" >"$inputs"
 
 local_date="$(TZ="$TZNAME" date '+%A, %B %d, %Y')"
 subject="ORION Morning Brief — ${local_date}"
@@ -50,6 +58,11 @@ jq -r --arg date "$local_date" --arg city "$CITY" '
 def hr($t): "\n" + $t + "\n" + ("-" * ($t|length)) + "\n";
 def bullet($x): "- " + ($x|tostring);
 def safe($x): if ($x==null) then "n/a" else ($x|tostring) end;
+def domain($u):
+  ($u|tostring
+    | sub("^https?://";"")
+    | split("/")[0]
+  );
 def short($x):
   if $x==null then null
   else ($x|tostring) as $t
@@ -59,12 +72,12 @@ def short($x):
     else $s
     end
   end;
-def itemLine($it):
+def itemLine($it; $label):
   bullet(
     ($it.title|tostring)
     + (if ($it.source!=null and ($it.source|tostring|length)>0) then (" — " + ($it.source|tostring)) else "" end)
   )
-  + "\n  " + ($it.link|tostring)
+  + "\n  Read: " + domain($it.link) + " (" + $label + ")"
   + (if (short($it.snippet) != null) then ("\n  " + short($it.snippet)) else "" end);
 
 "ORION Morning Brief — " + $date + "\n"
@@ -80,15 +93,25 @@ def itemLine($it):
 
 + hr("AI / LLM News (Last ~24h)")
 + (if (.news.ai|length)==0 then "(no items)\n"
-    else (.news.ai | map(itemLine(.)) | join("\n")) + "\n" end)
+    else (.news.ai | to_entries | map(itemLine(.value; ("AI-" + ((.key+1)|tostring)))) | join("\n")) + "\n" end)
 
 + hr("Tech News (Last ~24h)")
 + (if (.news.tech|length)==0 then "(no items)\n"
-    else (.news.tech | map(itemLine(.)) | join("\n")) + "\n" end)
+    else (.news.tech | to_entries | map(itemLine(.value; ("TECH-" + ((.key+1)|tostring)))) | join("\n")) + "\n" end)
 
 + hr("Pittsburgh News (Last ~24h)")
 + (if (.news.pittsburgh|length)==0 then "(no items)\n"
-    else (.news.pittsburgh | map(itemLine(.)) | join("\n")) + "\n" end)
+    else (.news.pittsburgh | to_entries | map(itemLine(.value; ("PGH-" + ((.key+1)|tostring)))) | join("\n")) + "\n" end)
+
++ hr("Links")
++ ([
+    (.news.ai | to_entries | map("AI-" + ((.key+1)|tostring) + ": " + (.value.link|tostring)) | join("\n")),
+    (.news.tech | to_entries | map("TECH-" + ((.key+1)|tostring) + ": " + (.value.link|tostring)) | join("\n")),
+    (.news.pittsburgh | to_entries | map("PGH-" + ((.key+1)|tostring) + ": " + (.value.link|tostring)) | join("\n"))
+  ]
+  | map(select(length>0))
+  | if length==0 then "(no links)\n" else (join("\n") + "\n") end
+ )
 
 + hr("Notes")
 + "If you want this to include a short ORION-written summary/commentary section, we can add an agent step later.\n"

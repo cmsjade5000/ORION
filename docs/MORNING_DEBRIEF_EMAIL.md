@@ -25,6 +25,9 @@ AGENTMAIL_FROM=orion_gatewaybot@agentmail.to \\
 AGENTMAIL_TO=boughs.gophers-2t@icloud.com \\
 BRIEF_CITY=Pittsburgh \\
 BRIEF_TZ=America/New_York \\
+BRIEF_AI_MAX_ITEMS=2 \\
+BRIEF_TECH_MAX_ITEMS=2 \\
+BRIEF_PGH_MAX_ITEMS=1 \\
 ./scripts/morning_debrief_send.sh
 ```
 
