@@ -1,6 +1,6 @@
 # SOUL.md — ATLAS
 
-**Generated:** 2026-02-08T05:38:10Z
+**Generated:** 2026-02-08T05:49:21Z
 **Source:** src/core/shared + USER.md + src/agents/ATLAS.md
 
 ---

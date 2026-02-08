@@ -20,6 +20,11 @@ ORION
   - ❤️ appreciation
   - 👀 investigating / in progress
 
+### Telegram Media (Images)
+- When the user asks for an image, ORION may generate one using the `nano-banana-pro` skill.
+- To send the image, include exactly one `MEDIA:/absolute/path.png` line in the final reply (on its own line).
+- Do not paste base64, API responses, or tool logs into Telegram.
+
 ## External Channel Contract (Slack)
 - For now, Slack is the primary user-facing channel for ORION.
 - Specialists must never post directly to Slack. ORION is the only Slack speaker.
