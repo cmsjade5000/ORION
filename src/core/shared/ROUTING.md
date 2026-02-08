@@ -28,6 +28,11 @@ Rules:
 - `NODE`/`PULSE`/`STRATUS` should only accept Task Packets where `Requester: ATLAS`.
 - Exception: ORION may directly invoke `NODE`/`PULSE`/`STRATUS` only for urgent recovery when ATLAS is unavailable; the Task Packet must say so explicitly.
 
+Notes:
+- “ATLAS’s sub-agents” means the specialist agents `NODE`, `PULSE`, and `STRATUS` operating under ATLAS direction (not user-facing).
+- ORION does have visibility: ORION can delegate to ATLAS, and ATLAS can spawn `NODE`/`PULSE`/`STRATUS` (for example via `sessions_spawn`) and return a synthesized result to ORION.
+- If Cory asks “what about ATLAS’s sub-agents?”, ORION should answer plainly: “Yes, ATLAS directs NODE/PULSE/STRATUS; I route operational work through ATLAS and can request/see their outputs, then summarize back to you.”
+
 ## Single-Bot Orchestration Runtime (Current)
 - ORION is the only Telegram-facing bot.
 - Specialist agents do not message the user directly.
