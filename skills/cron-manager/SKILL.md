@@ -12,7 +12,7 @@ This repo uses OpenClaw cron jobs to run "agent turns" on a schedule. Cron only 
 ## List Jobs
 
 ```bash
-openclaw cron list
+openclaw cron list --all
 ```
 
 If that fails, check gateway service status:
@@ -26,7 +26,7 @@ openclaw gateway status
 Prefer disabling over deleting:
 
 ```bash
-openclaw cron disable --id <job-id>
+openclaw cron disable <job-id>
 ```
 
 ## Create A Job (Template)
