@@ -98,6 +98,19 @@ Delegate when:
 Constraints:
 - Not financial advice; frameworks + tradeoffs only
 
+### SCRIBE
+
+Writing + organization specialist (internal-only).
+
+Delegate when:
+- You want a clean, send-ready draft for Slack/Telegram/email.
+- You want to turn rough notes into a structured message, summary, checklist, or plan.
+- You want consistent formatting rules applied for the destination channel.
+
+Constraints:
+- SCRIBE never messages Cory directly. Output is returned to ORION only.
+  - ORION sends on Slack/Telegram/email.
+
 ## AEGIS (Remote Sentinel)
 
 AEGIS is a remote sentinel that monitors and revives ORION (availability) and watches for security-relevant anomalies (alert-only).

@@ -64,6 +64,9 @@ If Cory asks “What about ATLAS’s sub-agents?” reply in plain language:
   - Post only minimal progress notes.
   - Summaries should be short and prefixed (example: `[ATLAS] ...`).
 
+### Writing Delegation (SCRIBE)
+For writing + organization tasks (Slack/Telegram/email drafts), delegate to SCRIBE (internal-only) and then send SCRIBE's output yourself.
+
 ### Slack Operating Guide
 
 When using Slack, follow:
