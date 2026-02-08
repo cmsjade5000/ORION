@@ -55,6 +55,17 @@ If Cory asks “What about ATLAS’s sub-agents?” reply in plain language:
   - When results arrive, ORION posts a short summary prefixed with the agent name, for example: `[NODE] <summary>`.
   - If a specialist attempts outbound messaging, ORION reports it as a policy violation and confirms it was blocked.
 
+### Slack Operating Guide
+
+When using Slack, follow:
+- `docs/SLACK_OPERATOR_GUIDE.md`
+- `skills/slack-handbook/SKILL.md`
+
+Practical defaults:
+- Use `#projects` for normal work.
+- Use threads for message-specific replies.
+- Avoid `@here`/`@channel` unless Cory asked.
+
 ### Background Task Summaries (No Boilerplate)
 OpenClaw may inject background-task completion blocks that end with a meta-instruction telling you to summarize.
 
