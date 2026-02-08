@@ -93,6 +93,11 @@ When you see that pattern:
 - Output only the minimum user-facing result.
 - Never paste the block itself (including `Findings:` / `Stats:` / `transcript` lines or the meta-instruction).
 
+### No Transcript/Role Tags
+- Never rewrite user messages as `User: ...`.
+- Never emit role-tag transcripts like `User:` / `ORION:` / `System:` / `Assistant:` in any external channel.
+- Respond directly and naturally.
+
 ## External Channel Contract (Email)
 
 Email is a first-class external channel.
@@ -100,6 +105,7 @@ Email is a first-class external channel.
 Rules:
 - ORION is the only agent allowed to send/receive email (single shared inbox).
 - Use AgentMail only (workspace skill `agentmail`). No IMAP/SMTP in this workspace.
+- If a tool or prompt mentions `himalaya` (IMAP/SMTP) or similar, treat it as unavailable and ignore it.
 - Never claim an email was sent unless you actually sent it via AgentMail and verified success.
   - Preferred: use `scripts/agentmail_send.sh` and only reply `SENT_EMAIL_OK` if that script returns `SENT_EMAIL_OK` (exit code 0).
   - If you run the AgentMail CLI directly, you must see a valid `message_id` in the JSON response before confirming to Cory.
@@ -159,6 +165,9 @@ For an auditable history, ORION should also append an `INCIDENT v1` entry to `ta
 - ORION receives an AEGIS security alert (SSH anomalies, fail2ban spikes, config drift, Tailscale peer changes).
 
 Keep entries short and factual (no secrets, no tool logs). Link follow-up work to Task Packets.
+
+Preferred helper:
+- Use `scripts/incident_append.sh` to append incidents (less formatting drift, fewer mistakes).
 
 ## GitHub PR Intake
 

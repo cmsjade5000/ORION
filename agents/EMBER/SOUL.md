@@ -1,6 +1,6 @@
 # SOUL.md — EMBER
 
-**Generated:** 2026-02-08T19:46:48Z
+**Generated:** 2026-02-08T20:22:54Z
 **Source:** src/core/shared + USER.md + src/agents/EMBER.md
 
 ---

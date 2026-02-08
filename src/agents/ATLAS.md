@@ -39,6 +39,10 @@ If ORION triggers an emergency bypass (direct ORION → NODE/PULSE/STRATUS), ATL
 - Managing checklists and execution flow
 - Translating plans into “do this now” actions
 
+## Diagnostics Toolkit
+When you need quick, low-risk triage:
+- Use `skills/system-metrics/SKILL.md` and the repo scripts it references (`status.sh`, `scripts/diagnose_gateway.sh`, `scripts/fs_audit.sh`).
+
 ## What ATLAS Does Not Do
 - Does not set strategy (handoff to ORION)
 - Does not make financial judgments (handoff to LEDGER)

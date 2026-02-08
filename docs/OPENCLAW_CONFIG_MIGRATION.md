@@ -12,8 +12,8 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 
 ## Migrated To Runtime
 
-- `agents.defaults.model.primary = "openrouter/openrouter/auto"`
-- `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]`
+- `agents.defaults.model.primary = "openrouter/openai/gpt-4o-mini"` (pinned; avoid `openrouter/auto`)
+- `agents.defaults.model.fallbacks = ["openrouter/anthropic/claude-3.5-haiku", "google/gemini-2.5-flash-lite"]`
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
 - `agents.list[0].subagents.allowAgents = ["*"]` (so ORION can target specialists via `sessions_spawn`)
 - `channels.telegram.enabled = true`
@@ -37,7 +37,7 @@ All secrets and provider auth live outside the repo. Do not commit them.
 ## Auth Required For Model Routing
 
 Current runtime model routing requires auth for:
-- `openrouter` (for `openrouter/openrouter/auto`)
+- `openrouter` (for `openrouter/openai/gpt-4o-mini` + Claude fallback)
 - `google` (for `google/gemini-2.5-flash-lite` fallback)
 
 Set auth with either:
