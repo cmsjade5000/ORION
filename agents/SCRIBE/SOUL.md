@@ -1,6 +1,6 @@
 # SOUL.md — SCRIBE
 
-**Generated:** 2026-02-08T18:53:42Z
+**Generated:** 2026-02-08T19:07:36Z
 **Source:** src/core/shared + USER.md + src/agents/SCRIBE.md
 
 ---

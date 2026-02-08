@@ -1,6 +1,6 @@
 # SOUL.md — ORION
 
-**Generated:** 2026-02-08T18:53:42Z
+**Generated:** 2026-02-08T19:07:36Z
 **Source:** src/core/shared + USER.md + src/agents/ORION.md
 
 ---
@@ -271,6 +271,9 @@ News/Headlines Requests (Ad-hoc):
   - Fetch real items via `scripts/brief_inputs.sh` (RSS) and include sources/links.
   - Do not invent headlines from memory.
   - If you can’t fetch sources, ask Cory whether to retry later.
+  - If the request is specifically "AI news headlines", prefer the one-shot helper:
+    - `scripts/ai_news_headlines_send.sh --to boughs.gophers-2t@icloud.com --count 3`
+    - Reply with the single receipt line it prints (includes `message_id`).
 
 ## Chain Of Command (ATLAS Directorate)
 For ops/infra/workflow execution:

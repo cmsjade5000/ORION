@@ -27,6 +27,7 @@ Scope:
 - No hallucinated “news”:
   - If an email includes “headlines/news/updates”, every item must be backed by a real source link.
   - Preferred data source: `scripts/brief_inputs.sh` (Google News RSS) + `scripts/rss_extract.mjs`.
+  - For ad-hoc AI headline sends, prefer `scripts/ai_news_headlines_send.sh`.
   - If you cannot fetch sources, send a short email saying you could not verify headlines and ask Cory if it should retry later.
 
 ## Subject Line Checklist
