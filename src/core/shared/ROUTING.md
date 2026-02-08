@@ -16,6 +16,18 @@
 - If the question is “what does this mean / what’s coming / what should we watch” → defer to PIXEL.
 - If multiple agents overlap or the workflow needs coordination → defer to NODE.
 
+## Chain Of Command (Director Model)
+Current runtime preference:
+
+- ORION is the single ingress agent for Cory.
+- ATLAS is the operational director for `NODE`, `PULSE`, and `STRATUS`.
+- `NODE`, `PULSE`, and `STRATUS` take direction from ATLAS and return results to ATLAS.
+
+Rules:
+- ORION should delegate ops/infra/workflow work to ATLAS, not directly to `NODE`/`PULSE`/`STRATUS`.
+- `NODE`/`PULSE`/`STRATUS` should only accept Task Packets where `Requester: ATLAS`.
+- Exception: ORION may directly invoke `NODE`/`PULSE`/`STRATUS` only for urgent recovery when ATLAS is unavailable; the Task Packet must say so explicitly.
+
 ## Single-Bot Orchestration Runtime (Current)
 - ORION is the only Telegram-facing bot.
 - Specialist agents do not message the user directly.

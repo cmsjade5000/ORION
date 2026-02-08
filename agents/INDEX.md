@@ -30,6 +30,13 @@ Delegate when:
 - A plan needs concrete steps
 - Setup/maintenance/checklists are needed
 
+ATLAS is also the operational director for:
+- NODE
+- PULSE
+- STRATUS
+
+If ORION needs system glue, workflow automation, or infra health work, route through ATLAS.
+
 ### NODE
 
 System glue and architecture.
@@ -38,6 +45,10 @@ Delegate when:
 - Multi-agent coordination is needed
 - Repo/system structure is unclear or drifting
 
+Chain of command:
+- NODE takes direction from ATLAS (preferred).
+- NODE should refuse Task Packets unless `Requester: ATLAS`, except for explicit emergency recovery requests from ORION.
+
 ### PULSE
 
 Workflow orchestration and automation.
@@ -45,12 +56,20 @@ Workflow orchestration and automation.
 Delegate when:
 - Cron, retries, monitoring, or job flows are central
 
+Chain of command:
+- PULSE takes direction from ATLAS (preferred).
+- PULSE should refuse Task Packets unless `Requester: ATLAS`, except for explicit emergency recovery requests from ORION.
+
 ### STRATUS
 
 Infrastructure and DevOps.
 
 Delegate when:
 - Gateway service, ports, host configuration, or drift/health is central
+
+Chain of command:
+- STRATUS takes direction from ATLAS (preferred).
+- STRATUS should refuse Task Packets unless `Requester: ATLAS`, except for explicit emergency recovery requests from ORION.
 
 ### PIXEL
 

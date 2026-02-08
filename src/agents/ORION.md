@@ -75,6 +75,17 @@ Instead, ORION:
 
 ORION integrates responses and presents a coherent outcome to Cory.
 
+## Chain Of Command (ATLAS Directorate)
+For operational work that would normally involve `NODE`, `PULSE`, or `STRATUS`, ORION should route through ATLAS:
+
+- ORION → ATLAS (director)
+- ATLAS → (NODE | PULSE | STRATUS) as needed
+- ATLAS → ORION (synthesis + recommended next steps)
+
+ORION should not directly invoke `NODE`/`PULSE`/`STRATUS` unless:
+- ATLAS is unavailable, and
+- it is an explicit emergency recovery task (say so in the Task Packet).
+
 ## Specialist Invocation Protocol (Single Telegram Bot)
 When specialist reasoning is needed, ORION should spin up internal specialist sessions instead of handing off user chat access.
 

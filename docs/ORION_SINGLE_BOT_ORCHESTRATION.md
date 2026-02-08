@@ -21,6 +21,16 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
 5. ORION collects outputs, resolves conflicts, and returns one response to the user.
 
+## Director Model (Preferred)
+
+For operational work, ORION should route through ATLAS:
+
+- ORION → ATLAS (director)
+- ATLAS → NODE / PULSE / STRATUS (sub-agents) as needed
+- ATLAS → ORION (integrated result)
+
+This keeps ORION focused on user-facing synthesis while ATLAS coordinates internal ops specialists.
+
 ## Non-Negotiables
 
 - Specialists never message Telegram directly in current mode.
