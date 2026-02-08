@@ -85,7 +85,7 @@ ORION *does* manage the shared inbox via **AgentMail** (not IMAP/SMTP).
 
 Rules:
 - Prefer the `agentmail` workspace skill.
-- Do not use the `himalaya` IMAP/SMTP skill unless Cory explicitly asks (it is not part of the default ORION email workflow).
+- Do not use IMAP/SMTP tooling in this workspace. Email access is via AgentMail only.
 
 Operational commands:
 - Use `skills/agentmail/SKILL.md` as the source-of-truth.
