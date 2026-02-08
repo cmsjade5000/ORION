@@ -113,6 +113,22 @@ Security sentinel:
 Throttling:
 - Alerts are throttled (typically 10–30 minutes per alert type) to prevent spam loops.
 
+## Heartbeat / “Is AEGIS Alive?”
+
+AEGIS is designed to be silent when everything is normal, so the canonical “alive” checks are:
+
+Tailscale console:
+- Check the device `Last seen` / `Connected` status for the Hetzner host.
+
+On the Hetzner host:
+- `systemctl is-active openclaw-aegis.service`
+- `systemctl is-active aegis-monitor-orion.timer`
+- `systemctl is-active aegis-sentinel.timer`
+
+Quick status summary (Hetzner):
+- `/usr/local/bin/aegis-status`
+  - Prints systemd status + most recent `last_ok` timestamps + last log lines.
+
 ## Operations
 
 Restart components (Hetzner):
@@ -138,4 +154,3 @@ Smoke test (controlled):
 - Do not commit `/etc/aegis-monitor.env` or any secrets to this repository.
 - Treat any bot tokens posted in chat as compromised; rotate them and update `/etc/aegis-monitor.env`.
 - Keep AEGIS “alert-only” for security findings. If you want defensive actions later, add a separate approval flow and post-incident review.
-
