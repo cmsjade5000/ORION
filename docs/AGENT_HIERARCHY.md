@@ -28,9 +28,47 @@ Exceptions:
 - All non-trivial delegation must include a Task Packet (`docs/TASK_PACKET.md`).
 - Sub-agent Task Packets must set `Requester: ATLAS`.
 
+## ATLAS Unavailable Threshold
+
+ORION treats ATLAS as unavailable when:
+
+1. ORION attempts an "ATLAS ping" twice, and
+2. both attempts fail to receive `ATLAS_OK` within 90 seconds, and
+3. the two attempts occur within a 5-minute window.
+
+ATLAS ping is a minimal Task Packet to ATLAS that requires one-line output:
+
+```text
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Severity: P1
+Objective: Return ATLAS_OK if you are available.
+Success Criteria:
+- Output exactly: ATLAS_OK
+Constraints:
+- No external messaging.
+Inputs:
+- none
+Risks:
+- low
+Stop Gates:
+- none
+Output Format:
+- One line only.
+```
+
+## Emergency Bypass (Auditable)
+
+When ATLAS is unavailable:
+
+1. ORION opens an incident by appending an entry to `tasks/INCIDENTS.md`.
+2. ORION may directly invoke `NODE`, `PULSE`, and/or `STRATUS` only for reversible, diagnostic, or recovery tasks.
+3. ORION includes `Emergency: ATLAS_UNAVAILABLE` and `Incident: <id>` in the Task Packet.
+4. ORION assigns a post-incident review to ATLAS (once ATLAS is back) with follow-up fixes and prevention steps.
+
 ## Rationale
 
 - Keeps ORION focused on user-facing synthesis and policy enforcement.
 - Gives ATLAS a stable operational surface to manage infra/workflow specialists.
 - Reduces duplicated work and conflicting actions from parallel specialist turns.
-

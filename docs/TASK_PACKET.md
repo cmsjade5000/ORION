@@ -44,6 +44,9 @@ Output Format:
 - `Timebox:` e.g., `30m` or `2h`
 - `Dependencies:` other tasks/agents needed first
 - `Checkpoints:` interim status points
+- `Severity:` `P0` (emergency) | `P1` (urgent) | `P2` (normal) | `P3` (backlog)
+- `Emergency:` use only for explicit emergency modes (example: `ATLAS_UNAVAILABLE`)
+- `Incident:` incident id when an emergency bypass is used (see `tasks/INCIDENTS.md`)
 
 ## Cron Payload Guidance
 

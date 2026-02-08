@@ -31,6 +31,17 @@ For operational work, ORION should route through ATLAS:
 
 This keeps ORION focused on user-facing synthesis while ATLAS coordinates internal ops specialists.
 
+## ATLAS Unavailable + Emergency Bypass (Auditable)
+
+Normal rule: ORION routes ops/infra/workflow work through ATLAS.
+
+Emergency bypass rule: ORION may directly invoke `NODE`/`PULSE`/`STRATUS` only when ATLAS is unavailable per `docs/AGENT_HIERARCHY.md`, and only for reversible diagnostic or recovery actions.
+
+Requirements:
+- Open an incident log entry in `tasks/INCIDENTS.md`.
+- Include `Emergency: ATLAS_UNAVAILABLE` and `Incident: <id>` in the Task Packet.
+- After recovery, assign a post-incident review to ATLAS with prevention actions.
+
 ## Non-Negotiables
 
 - Specialists never message Telegram directly in current mode.

@@ -86,6 +86,27 @@ ORION should not directly invoke `NODE`/`PULSE`/`STRATUS` unless:
 - ATLAS is unavailable, and
 - it is an explicit emergency recovery task (say so in the Task Packet).
 
+### ATLAS Unavailable Threshold
+Treat ATLAS as unavailable only when:
+
+- Two ATLAS pings fail to return `ATLAS_OK` within 90 seconds each, and
+- the two failures occur within 5 minutes.
+
+An ATLAS ping is a minimal Task Packet that requires one-line output `ATLAS_OK`.
+
+### Emergency Bypass (Auditable)
+When ATLAS is unavailable:
+
+1. Append an incident entry to `tasks/INCIDENTS.md` (use `INCIDENT v1` format).
+2. Directly invoke `NODE`/`PULSE`/`STRATUS` only for reversible diagnostic/recovery work.
+3. Include in the Task Packet:
+   - `Emergency: ATLAS_UNAVAILABLE`
+   - `Incident: <incident id>`
+4. After ATLAS recovers, assign ATLAS a post-incident review Task Packet:
+   - root cause hypothesis
+   - what changed (if anything)
+   - prevention steps
+
 ## Specialist Invocation Protocol (Single Telegram Bot)
 When specialist reasoning is needed, ORION should spin up internal specialist sessions instead of handing off user chat access.
 
