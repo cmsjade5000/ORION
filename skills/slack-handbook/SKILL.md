@@ -21,16 +21,10 @@ Canonical local guide:
 
 ## Navigation Helpers (OpenClaw CLI via exec)
 
-List channels:
+Resolve channel IDs (when needed):
 
 ```bash
-openclaw message channel list --channel slack --json
-```
-
-Channel info by name:
-
-```bash
-openclaw message channel info --channel slack --target "#projects" --json
+openclaw channels resolve --channel slack "#projects" --json
 ```
 
 Read recent messages:
@@ -56,4 +50,3 @@ openclaw message send --channel slack --target "#projects" --message "..." --thr
 - If you don’t know the right channel: ask Cory once ("#projects or #general?").
 - If you don’t know whether to reply in-thread: default to in-thread.
 - If you don’t have enough context: read the last 20 messages from the channel first.
-
