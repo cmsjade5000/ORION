@@ -60,6 +60,14 @@ Security signals (alert-only):
 - Unexpected changes to AEGIS systemd units or env.
 - Unexpected tailscale peer changes.
 
+Email meta-signals (alert-only):
+- AEGIS does not access ORION's inbox.
+- If ORION publishes sanitized email telemetry (counts/ratios only), AEGIS may alert on:
+  - inbound volume spikes
+  - outbound volume anomalies
+  - bounce/complaint spikes
+  - webhook verification failures (if email webhooks are enabled)
+
 ## Output Format
 
 When reporting to ORION, include:

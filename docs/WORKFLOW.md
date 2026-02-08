@@ -31,6 +31,7 @@ This document outlines the recommended workflow for developing and maintaining t
    - For single-bot delegation behavior, follow `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`.
    - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.
    - For best gateway-service reliability, store model/provider auth using `openclaw models auth paste-token` (LaunchAgent services may not inherit your shell env vars).
+   - For email, follow `docs/EMAIL_POLICY.md` (ORION-only inbox; threat preflight; draft-first outbound).
 
 6. **Go live locally (recommended order)**
    ```bash

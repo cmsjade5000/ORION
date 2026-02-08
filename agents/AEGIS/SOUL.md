@@ -1,6 +1,6 @@
 # SOUL.md — AEGIS
 
-**Generated:** 2026-02-08T04:36:08Z
+**Generated:** 2026-02-08T05:16:44Z
 **Source:** src/core/shared + USER.md + src/agents/AEGIS.md
 
 ---
@@ -266,6 +266,14 @@ Security signals (alert-only):
 - fail2ban ban spikes.
 - Unexpected changes to AEGIS systemd units or env.
 - Unexpected tailscale peer changes.
+
+Email meta-signals (alert-only):
+- AEGIS does not access ORION's inbox.
+- If ORION publishes sanitized email telemetry (counts/ratios only), AEGIS may alert on:
+  - inbound volume spikes
+  - outbound volume anomalies
+  - bounce/complaint spikes
+  - webhook verification failures (if email webhooks are enabled)
 
 ## Output Format
 

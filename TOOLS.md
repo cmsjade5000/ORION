@@ -26,6 +26,11 @@ Prefer:
 - NODE reviews architectural or systemic implications.
 - Other agents may recommend tools but do not invoke them.
 
+Email tools:
+- ORION is the only agent allowed to use email integrations.
+- Specialists are email-blind.
+- Prefer draft-first outbound email until Cory explicitly enables autonomous sending.
+
 ---
 
 ## Execution Rules
