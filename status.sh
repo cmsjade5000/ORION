@@ -99,12 +99,12 @@ if [ -f /var/lib/aegis-monitor/orion_restart_guard.lock ]; then
 fi
 if [ -f /var/lib/aegis-monitor/incidents.md ]; then
   echo ""
-  echo \"-- /var/lib/aegis-monitor/incidents.md (tail 20) --\"
+  echo "-- /var/lib/aegis-monitor/incidents.md (tail 20) --"
   tail -n 20 /var/lib/aegis-monitor/incidents.md 2>/dev/null || true
 fi
 if [ -f /var/lib/aegis-sentinel/incidents.md ]; then
   echo ""
-  echo \"-- /var/lib/aegis-sentinel/incidents.md (tail 20) --\"
+  echo "-- /var/lib/aegis-sentinel/incidents.md (tail 20) --"
   tail -n 20 /var/lib/aegis-sentinel/incidents.md 2>/dev/null || true
 fi
 '
