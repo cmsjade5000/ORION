@@ -117,8 +117,7 @@ def itemLine($it; $label):
 + "If you want this to include a short ORION-written summary/commentary section, we can add an agent step later.\n"
 ' "$inputs" >"$body"
 
-node "$ROOT/skills/agentmail/cli.js" send \
-  --from "$FROM_INBOX" \
+AGENTMAIL_FROM="$FROM_INBOX" "$ROOT/scripts/agentmail_send.sh" \
   --to "$TO_EMAIL" \
   --subject "$subject" \
   --text-file "$body" \
