@@ -3,7 +3,9 @@
 agents:
   defaults:
     model:
-      primary: openrouter/openrouter/auto
+      # Note: openrouter/auto can pick models that are less strict about
+      # instruction-following. For stable agent hygiene in chat, pin a model.
+      primary: openrouter/openai/gpt-4o-mini
       fallbacks:
         - google/gemini-2.5-flash-lite
     # RECOMMENDED when running this repo locally:

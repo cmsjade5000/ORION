@@ -4,7 +4,8 @@
     "defaults": {
       "workspace": "/Users/corystoner/Desktop/ORION",
       "model": {
-        "primary": "openrouter/openrouter/auto",
+        "_comment_model": "Pin a stable model for chat hygiene. openrouter/auto can pick models that ignore system rules.",
+        "primary": "openrouter/openai/gpt-4o-mini",
         "fallbacks": ["google/gemini-2.5-flash-lite"]
       },
       "compaction": {
@@ -51,4 +52,3 @@
     }
   }
 }
-
