@@ -36,7 +36,7 @@ chmod 600 ~/.openclaw/secrets/agentmail.api_key
 ## Quick Test
 
 ```bash
-node -e "require('./skills/agentmail/manifest').listInboxes().then(console.log)"
+node skills/agentmail/cli.js list-inboxes
 ```
 
 ## Common Operations
@@ -44,7 +44,7 @@ node -e "require('./skills/agentmail/manifest').listInboxes().then(console.log)"
 List inboxes:
 
 ```bash
-node -e "require('./skills/agentmail/manifest').listInboxes().then(console.log)"
+node skills/agentmail/cli.js list-inboxes
 ```
 
 Create an inbox (optional):
@@ -56,11 +56,11 @@ node -e "require('./skills/agentmail/manifest').createInbox({displayName:'ORION 
 List messages:
 
 ```bash
-node -e "require('./skills/agentmail/manifest').listMessages(process.env.INBOX_ID,{limit:10}).then(console.log)"
+node skills/agentmail/cli.js list-messages "$INBOX_ID" 10
 ```
 
 Send email:
 
 ```bash
-node -e \"require('./skills/agentmail/manifest').sendMessage(process.env.INBOX_ID,{to:'you@example.com',subject:'Test',text:'Hello from ORION'}).then(console.log)\"
+node skills/agentmail/cli.js send "$INBOX_ID" "you@example.com" "Test" "Hello from ORION"
 ```
