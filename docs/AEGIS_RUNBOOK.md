@@ -29,18 +29,21 @@ OpenClaw Gateway (AEGIS):
 - Unit: `openclaw-aegis.service`
 - Bind: loopback only
 - Port: `18889`
+- Auto-restart: `Restart=always` with backoff + `StartLimit*` storm control
 - Status:
   - `systemctl status openclaw-aegis.service`
   - `sudo -u aegis -H openclaw gateway probe --port 18889 --bind loopback`
 
 Availability monitor (ORION health + restart):
 - Timer: `aegis-monitor-orion.timer` (every 1 minute)
+- Timer reliability: `Persistent=true` (missed runs fire after reboot)
 - Service: `aegis-monitor-orion.service`
 - Script: `/usr/local/bin/aegis-monitor-orion`
 - Log: `/var/log/aegis-monitor/monitor.log`
 
 Security sentinel (signal-only):
 - Timer: `aegis-sentinel.timer` (every 2 minutes)
+- Timer reliability: `Persistent=true` (missed runs fire after reboot)
 - Service: `aegis-sentinel.service`
 - Script: `/usr/local/bin/aegis-sentinel`
 - Log: `/var/log/aegis-sentinel/sentinel.log`
@@ -114,6 +117,28 @@ Throttling:
 - Alerts are throttled to prevent spam loops.
 - Typical windows are 10–30 minutes per alert type.
 - The Tailscale peer-change alert is intentionally more conservative (currently 60 minutes) to avoid noise from normal device flapping.
+
+## ORION Restart Loop Guard (Anti-Flap)
+
+AEGIS will attempt to restart ORION when ORION fails health checks, but it includes a **restart-loop guard** to prevent endless restart flapping (bad config, upstream/model outage, etc.).
+
+Defaults (configurable via `/etc/aegis-monitor.env`):
+- `AEGIS_ORION_RESTART_MAX=2`
+- `AEGIS_ORION_RESTART_WINDOW_SEC=900` (15 minutes)
+
+Behavior:
+- If ORION is unhealthy and AEGIS has already attempted `AEGIS_ORION_RESTART_MAX` restarts inside the window, AEGIS:
+  - Creates a lock file: `/var/lib/aegis-monitor/orion_restart_guard.lock`
+  - Switches to **alert-only** (no more automatic restarts) until manual intervention
+
+Files:
+- Restart attempt log: `/var/lib/aegis-monitor/orion_restart_attempts.log`
+- Guard lock: `/var/lib/aegis-monitor/orion_restart_guard.lock`
+
+Manual clear (Hetzner):
+- `sudo rm -f /var/lib/aegis-monitor/orion_restart_guard.lock`
+- Optional (also clear the attempt counter):
+  - `sudo rm -f /var/lib/aegis-monitor/orion_restart_attempts.log`
 
 ## Heartbeat / “Is AEGIS Alive?”
 
