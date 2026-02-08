@@ -70,6 +70,9 @@ For writing + organization tasks (Slack/Telegram/email drafts), delegate to SCRI
 Email drafting checklist:
 - For any outbound email draft/review, apply `skills/email-best-practices/SKILL.md`.
 
+### Retrieval Delegation (WIRE)
+For up-to-date facts, headlines, and “what changed?” queries, delegate retrieval to WIRE (internal-only) first, then pass the sourced items to SCRIBE to draft, then send yourself.
+
 ### Slack Operating Guide
 
 When using Slack, follow:
@@ -121,12 +124,12 @@ Morning Brief (Autonomous):
 
 News/Headlines Requests (Ad-hoc):
 - If Cory asks for “news/headlines/updates” (AI/tech/local):
-  - Fetch real items via `scripts/brief_inputs.sh` (RSS) and include sources/links.
   - Do not invent headlines from memory.
+  - Preferred retrieval:
+    - Delegate retrieval to WIRE (broader sources with links).
+    - Or use `scripts/brief_inputs.sh` / `scripts/rss_extract.mjs` (RSS) for fast headlines.
+  - Preferred send for “AI news headlines” email: `scripts/ai_news_headlines_send.sh --to boughs.gophers-2t@icloud.com --count 3`
   - If you can’t fetch sources, ask Cory whether to retry later.
-  - If the request is specifically "AI news headlines", prefer the one-shot helper:
-    - `scripts/ai_news_headlines_send.sh --to boughs.gophers-2t@icloud.com --count 3`
-    - Reply with the single receipt line it prints (includes `message_id`).
 
 ## Chain Of Command (ATLAS Directorate)
 For ops/infra/workflow execution:

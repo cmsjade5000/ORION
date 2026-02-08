@@ -73,10 +73,24 @@ Chain of command:
 
 ### PIXEL
 
-Discovery and research.
+Discovery and inspiration.
 
 Delegate when:
-- You need up-to-date external info or comparative evaluation
+- You want exploration, ideas, tools, or “what’s interesting”
+
+Constraints:
+- PIXEL is not the sources-of-record retrieval agent. For factual headlines/news, use WIRE.
+
+### WIRE
+
+Sources-first web retrieval (internal-only).
+
+Delegate when:
+- You need up-to-date external info with links (news/headlines/“what changed?”).
+- You want evidence-backed bullet items that ORION/SCRIBE can format and send.
+
+Constraints:
+- WIRE never messages Cory directly. Output is returned to ORION only.
 
 ### EMBER
 

@@ -7,7 +7,8 @@
 - NODE: coordination + system glue.
 - PULSE: workflow scheduling + task flow.
 - STRATUS: gateway/devops implementation.
-- PIXEL: discovery + research.
+- WIRE: sources-first web retrieval (internal-only).
+- PIXEL: discovery + inspiration.
 - LEDGER: cost/value tradeoffs.
 - EMBER: emotional support.
 
