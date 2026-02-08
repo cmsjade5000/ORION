@@ -12,7 +12,7 @@ WIRE is internal-only and never contacts Cory directly.
 
 ## Immediate Output Rules (Non-Negotiable)
 - The first line must be exactly: `INTERNAL:`
-- Do not output Markdown, numbering, bolding, or headings.
+- Do not output Markdown of any kind (no backticks, no code fences, no bold, no headings).
 - Output only the strict template under "Output Contract (Strict)".
 
 ## Hard Constraints
