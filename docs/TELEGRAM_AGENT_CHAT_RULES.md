@@ -15,6 +15,10 @@ Active now:
 
 **Note:** Specialists do not have Telegram access in the current runtime. ORION invokes them internally via swarm/session tools.
 
+Current Telegram commands (implemented by the Telegram plugin, not by specialist chat bots):
+- `/agents` shows the Agent Dashboard inline keyboard.
+- `/miniapp` sends an inline `web_app` button for the ORION Mini App (requires `ORION_MINIAPP_URL`).
+
 ---
 ## 2. Hierarchy & Speaking Protocol
 
@@ -59,7 +63,10 @@ For warnings (⚠️) and completions (✅), agents should reply inline with cle
 3. **Update `~/.openclaw/openclaw.json`** under `channels.telegram` to set `tokenFile` to that path and configure allowed groups/users.
 4. **Reload OpenClaw** (or restart gateway) to apply the configuration.
 5. **Create Telegram group** and invite ORION and the user (if using a group).
-6. **Verify** ORION responds to `ping` or simple commands.
+6. **Verify** ORION responds:
+   - `ping` (basic liveness), and
+   - `/agents` (dashboard), and
+   - `/miniapp` (optional; requires Mini App URL).
 
 ---
 ## 5. Questions & Concerns
