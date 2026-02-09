@@ -358,9 +358,8 @@ function markRealEvent() {
   lastIngestAt = Date.now();
 }
 
-// Keep mock motion by default until ORION begins pushing real events.
-// Set MOCK_STATE=0 in production once ORION is streaming.
-const MOCK_STATE = process.env.MOCK_STATE !== "0";
+// Mock motion is now opt-in (off by default). Set MOCK_STATE=1 to enable.
+const MOCK_STATE = process.env.MOCK_STATE === "1";
 
 const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const STALE_MS = Number(process.env.STALE_MS || 20_000); // clear agent activity if no updates
@@ -544,6 +543,10 @@ function snapshotLiveState() {
 
   const io = STORE.orionIo?.until && STORE.orionIo.until > now ? STORE.orionIo.mode : null;
   const badge = STORE.orionBadge?.until && STORE.orionBadge.until > now ? STORE.orionBadge.emoji : null;
+  const orionProcesses =
+    badges.length === 0 && !activeAgentId && !io && !badge
+      ? ["😴"] // Stable idle indicator when nothing is happening.
+      : badges.slice(0, 3).map((b) => b.emoji);
 
   return {
     ts: now,
@@ -552,7 +555,7 @@ function snapshotLiveState() {
     agents,
     orion: {
       status: activeAgentId || badges.length ? "busy" : "idle",
-      processes: badges.slice(0, 3).map((b) => b.emoji),
+      processes: orionProcesses,
       badge,
       io,
     },
