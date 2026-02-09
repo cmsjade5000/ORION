@@ -46,6 +46,46 @@ function createId(prefix) {
 
 const AGENTS = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"];
 let tick = 0;
+let commandIdx = 0;
+let ledgerPulseIdx = 0;
+
+const ACTIVITY_RULES = [
+  { activity: "error", match: /(?:error|fail|failed|panic|broken|crash)/i },
+  { activity: "search", match: /(?:search|find|lookup|research|scan)/i },
+  { activity: "files", match: /(?:file|files|docs?|read|summarize|note|notes)/i },
+  { activity: "tooling", match: /(?:tool|run|exec|execute|command|script|deploy|build)/i },
+  { activity: "messaging", match: /(?:message|notify|send|email|ping|telegram)/i },
+  { activity: "thinking", match: /(?:think|plan|analyz|strategy|reason|design)/i },
+];
+
+function normalizeText(text) {
+  return String(text || "").trim();
+}
+
+function inferActivity(text) {
+  const raw = normalizeText(text);
+  if (!raw) return "idle";
+  for (const rule of ACTIVITY_RULES) {
+    if (rule.match.test(raw)) return rule.activity;
+  }
+  return "thinking";
+}
+
+function parseAgent(text) {
+  const raw = normalizeText(text).toLowerCase();
+  if (!raw) return null;
+  for (const id of AGENTS) {
+    const needle = id.toLowerCase();
+    const re = new RegExp(`\\b${needle}\\b`, "i");
+    if (re.test(raw)) return id;
+  }
+  return null;
+}
+
+function pickNextAgent() {
+  commandIdx = (commandIdx + 1) % AGENTS.length;
+  return AGENTS[commandIdx];
+}
 
 function buildMockLiveState() {
   // Simple deterministic animation so the UI shows motion.
@@ -90,6 +130,7 @@ function buildMockLiveState() {
 // Once ORION emits real `state` snapshots, clients will recover via SSE + polling.
 const STORE = createStore();
 let lastIngestAt = 0;
+let hasRealEvents = false;
 
 // Keep mock motion by default until ORION begins pushing real events.
 // Set MOCK_STATE=0 in production once ORION is streaming.
@@ -241,6 +282,8 @@ function snapshotLiveState() {
 }
 
 function currentLiveState() {
+  // Once real events arrive, stick with real snapshots (avoid reverting to mock loops).
+  if (hasRealEvents) return snapshotLiveState();
   // If ORION has recently pushed events, prefer that.
   if (Date.now() - lastIngestAt < 30_000) return snapshotLiveState();
   // Otherwise keep the UI alive with mock motion until real wiring lands.
@@ -416,6 +459,7 @@ app.post("/api/ingest", (req, res) => {
   }
 
   lastIngestAt = Date.now();
+  hasRealEvents = true;
 
   const eventId = createId("evt");
   const eventTs = typeof req.body?.ts === "number" ? req.body.ts : Date.now();
@@ -487,16 +531,32 @@ app.post("/api/command", (req, res) => {
     clientTs,
   });
 
-  // Placeholder: push an event so the frontend can react instantly if desired.
+  // Wire commands into the live state so nodes light up immediately.
+  const targetAgent = parseAgent(text) ?? pickNextAgent();
+  const activity = inferActivity(text);
+  lastIngestAt = Date.now();
+  hasRealEvents = true;
+
+  if (targetAgent === "LEDGER") {
+    ledgerPulseIdx += 1;
+  }
+
+  if (targetAgent === "LEDGER" && ledgerPulseIdx % 4 === 0) {
+    applyEventToStore({ type: "tool.started", agentId: targetAgent });
+  } else {
+    applyEventToStore({ type: "agent.activity", agentId: targetAgent, activity });
+  }
+
   if (STREAM_CLIENTS.size > 0) {
     sseBroadcast("command.accepted", {
       requestId,
       acceptedId,
       receivedAt: Date.now(),
+      targetAgent,
+      activity,
       // Avoid pushing initData to clients.
       textPreview: text.slice(0, 120),
     });
-    addOrionBadge("🧠", 5200);
     scheduleStateBroadcast();
   }
 
