@@ -77,6 +77,11 @@ export default function NetworkDashboard(props: { state: LiveState }) {
     const cx = w / 2;
     const cy = h / 2;
 
+    // Special portrait layout: AEGIS is "remote" (top centered + slightly clipped),
+    // other agents sit in the corners around ORION.
+    const hasAegis = agents.some((a) => a.id === "AEGIS");
+    const frameMode = portrait && agents.length === 5 && hasAegis;
+
     const rXMax = Math.max(96, w / 2 - safePadX);
     const rYMax = Math.max(96, h / 2 - safePadY);
 
@@ -92,18 +97,34 @@ export default function NetworkDashboard(props: { state: LiveState }) {
     const ringW = clamp(2 * (rX + agentRadius + ringPad), 220, w);
     const ringH = clamp(2 * (rY + agentRadius + ringPad), 220, h);
 
-    return { w, h, cx, cy, rX, rY, ringW, ringH };
-  }, [size.w, size.h]);
+    // Frame positions
+    const cornerPadX = clamp(safePadX + 4, 74, Math.max(74, w / 2 - 30));
+    const cornerPadY = clamp(safePadY + 10, 86, Math.max(86, h / 2 - 30));
+
+    const positions: Record<string, { x: number; y: number; variant?: "remote" }> = {};
+    if (frameMode) {
+      // Put AEGIS a bit above the top edge so it feels "remote" / partially off-canvas.
+      positions.AEGIS = { x: cx, y: cornerPadY - agentRadius * 0.9, variant: "remote" };
+      positions.ATLAS = { x: cornerPadX, y: cornerPadY };
+      positions.EMBER = { x: w - cornerPadX, y: cornerPadY };
+      positions.PIXEL = { x: cornerPadX, y: h - cornerPadY };
+      positions.LEDGER = { x: w - cornerPadX, y: h - cornerPadY };
+    }
+
+    return { w, h, cx, cy, rX, rY, ringW, ringH, portrait, frameMode, positions };
+  }, [size.w, size.h, agents]);
 
   return (
     <div className="orbit" ref={containerRef}>
-      <div
-        className="ring"
-        style={{
-          width: `${layout.ringW}px`,
-          height: `${layout.ringH}px`,
-        }}
-      />
+      {layout.frameMode ? null : (
+        <div
+          className="ring"
+          style={{
+            width: `${layout.ringW}px`,
+            height: `${layout.ringH}px`,
+          }}
+        />
+      )}
 
       {/* Connections (ORION -> active agent) */}
       <ConnectionLayer activeAgentId={active} link={props.state.link ?? null} containerRef={containerRef} />
@@ -128,10 +149,12 @@ export default function NetworkDashboard(props: { state: LiveState }) {
           In v1 we only pulse the currently active agent.
       */}
       {agents.map((a, idx) => {
-        // Fixed positions (readable + stable): evenly spaced around ORION.
+        const framePos = layout.frameMode ? layout.positions[a.id] : null;
+        // Default: evenly spaced around ORION.
         const theta = (idx / Math.max(1, agents.length)) * Math.PI * 2 - Math.PI / 2;
-        const x = layout.cx + Math.cos(theta) * layout.rX;
-        const y = layout.cy + Math.sin(theta) * layout.rY;
+        const x = framePos ? framePos.x : layout.cx + Math.cos(theta) * layout.rX;
+        const y = framePos ? framePos.y : layout.cy + Math.sin(theta) * layout.rY;
+        const remote = framePos?.variant === "remote";
 
         return (
           <Node
@@ -141,10 +164,11 @@ export default function NetworkDashboard(props: { state: LiveState }) {
             activity={smoothed[a.id] ?? a.activity}
             kind="agent"
             active={active === a.id}
+            className={remote ? "nodeRemote" : undefined}
             style={{
               left: `${x}px`,
               top: `${y}px`,
-              transform: "translate(-50%, -50%)",
+              transform: remote ? "translate(-50%, -50%) scale(0.86)" : "translate(-50%, -50%)",
             }}
           />
         );

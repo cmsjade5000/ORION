@@ -31,6 +31,7 @@ export default function Node(props: {
   processes?: string[];
   kind: "central" | "agent";
   active?: boolean;
+  className?: string;
   style?: CSSProperties;
 }) {
   const lit =
@@ -39,7 +40,7 @@ export default function Node(props: {
       props.status === "busy" ||
       (props.activity && props.activity !== "idle"));
 
-  const cls = ["node", props.kind === "central" ? "nodeCentral" : "", props.active ? "nodeActive" : ""]
+  const cls = ["node", props.kind === "central" ? "nodeCentral" : "", props.active ? "nodeActive" : "", props.className || ""]
     .concat(lit ? ["nodeLit"] : [])
     .filter(Boolean)
     .join(" ");

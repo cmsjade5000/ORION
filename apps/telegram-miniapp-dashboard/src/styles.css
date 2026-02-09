@@ -230,6 +230,15 @@ html {
   border: 1px solid rgba(124, 247, 193, 0.30);
 }
 
+.nodeRemote {
+  opacity: 0.82;
+  filter: saturate(0.82) brightness(0.96);
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.10);
+  background: radial-gradient(60px 60px at 30% 30%, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.45));
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.28);
+}
+
 .nodeLit {
   outline: 2px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.06), 0 12px 22px rgba(0, 0, 0, 0.45);

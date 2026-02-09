@@ -70,12 +70,15 @@ export default function ConnectionLayer(props: {
 
       const a = geomOf(orion, stageRect);
       const b = geomOf(target, stageRect);
-      const dx = b.c.x - a.c.x;
-      const dy = b.c.y - a.c.y;
+      // Directionality: out means ORION -> agent, in means agent -> ORION.
+      const start = dir === "in" ? b : a;
+      const end = dir === "in" ? a : b;
+      const dx = end.c.x - start.c.x;
+      const dy = end.c.y - start.c.y;
       const len = Math.hypot(dx, dy);
       if (!len) {
-        setFrom(a.c);
-        setTo(b.c);
+        setFrom(start.c);
+        setTo(end.c);
         setHoleA(a);
         setHoleB(b);
         setVb({ w: stageRect.width, h: stageRect.height });
@@ -92,8 +95,8 @@ export default function ConnectionLayer(props: {
       const padFrom = 28;
       const padTo = 32;
 
-      setFrom({ x: a.c.x + ux * (a.r + padFrom), y: a.c.y + uy * (a.r + padFrom) });
-      setTo({ x: b.c.x - ux * (b.r + padTo), y: b.c.y - uy * (b.r + padTo) });
+      setFrom({ x: start.c.x + ux * (start.r + padFrom), y: start.c.y + uy * (start.r + padFrom) });
+      setTo({ x: end.c.x - ux * (end.r + padTo), y: end.c.y - uy * (end.r + padTo) });
       setHoleA(a);
       setHoleB(b);
       setVb({ w: stageRect.width, h: stageRect.height });
@@ -111,7 +114,7 @@ export default function ConnectionLayer(props: {
       window.removeEventListener("resize", onResize);
       if (t) window.clearInterval(t);
     };
-  }, [agentId, props.containerRef, key]);
+  }, [agentId, dir, props.containerRef, key]);
 
   if (!from || !to || !holeA || !holeB || !vb) return null;
 
