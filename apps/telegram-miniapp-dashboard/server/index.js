@@ -202,20 +202,48 @@ function inferActivity(text) {
   return "thinking";
 }
 
-function activityToEmoji(activity) {
+// Sub-agents have their own activity emojis (on their node badges).
+// ORION's central node should use *face* emojis only (exclusive) to reflect emotion/stance.
+function orionFaceForActivity(activity) {
   switch (activity) {
     case "thinking":
-      return "🧠";
+      return "🤔";
     case "search":
-      return "🔎";
+      return "🧐";
     case "files":
-      return "📁";
+      return "😎";
     case "tooling":
-      return "🛠️";
+      return "😬";
     case "messaging":
-      return "✉️";
+      return "🙂";
     case "error":
-      return "⚠️";
+      return "😵‍💫";
+    default:
+      return null;
+  }
+}
+
+function orionFaceForTool(type) {
+  switch (type) {
+    case "tool.started":
+      return "😬";
+    case "tool.finished":
+      return "😌";
+    case "tool.failed":
+      return "😵‍💫";
+    default:
+      return null;
+  }
+}
+
+function orionFaceForTask(type) {
+  switch (type) {
+    case "task.started":
+      return "😤";
+    case "task.completed":
+      return "😌";
+    case "task.failed":
+      return "😵‍💫";
     default:
       return null;
   }
@@ -312,6 +340,7 @@ function createStore() {
     activeUpdatedAt: 0,
     orionBadges: new Map(), // emoji -> until
     link: { agentId: null, dir: "out", until: 0 },
+    orionIo: { mode: null, until: 0 },
   };
 }
 
@@ -346,6 +375,12 @@ function setLink(agentId, dir, holdMs = LINK_STALE_MS) {
 function addOrionBadge(emoji, holdMs = 5200) {
   if (!emoji) return;
   STORE.orionBadges.set(emoji, Math.max(STORE.orionBadges.get(emoji) || 0, Date.now() + holdMs));
+}
+
+function setOrionIo(mode, holdMs = 2400) {
+  if (mode !== "receiving" && mode !== "dispatching") return;
+  STORE.orionIo.mode = mode;
+  STORE.orionIo.until = Math.max(STORE.orionIo.until || 0, Date.now() + Math.max(300, holdMs));
 }
 
 function applyEventToStore(body) {
@@ -384,13 +419,14 @@ function applyEventToStore(body) {
       setLink(agentId, "out");
     }
     // Mirror activity to the central node so the user can see what ORION is doing.
-    const em = activityToEmoji(activity);
-    if (em) addOrionBadge(em, 5200);
+    const face = orionFaceForActivity(activity);
+    if (face) addOrionBadge(face, 5200);
     return;
   }
 
   if (type === "tool.started" || type === "tool.finished" || type === "tool.failed") {
-    addOrionBadge("🛠️", 5200);
+    const face = orionFaceForTool(type);
+    if (face) addOrionBadge(face, 5200);
     if (agentId) {
       setAgentStatus(agentId, "busy");
       setAgentActivity(agentId, type === "tool.failed" ? "error" : "tooling");
@@ -401,18 +437,20 @@ function applyEventToStore(body) {
   }
 
   if (type.startsWith("task.")) {
-    addOrionBadge("🧭", 5200);
+    const face = orionFaceForTask(type);
+    if (face) addOrionBadge(face, 5200);
     if (agentId) {
       if (type === "task.completed" || type === "task.failed") {
         // Conservative: mark idle at the end of a task unless later events say otherwise.
         setAgentActivity(agentId, "idle");
         setAgentStatus(agentId, "idle");
         // Show return-flow back into ORION.
-        addOrionBadge("📥", 5200);
+        setOrionIo("receiving", 2200);
         setLink(agentId, "in", LINK_STALE_MS);
       } else {
         setAgentStatus(agentId, "active");
         setLink(agentId, "out");
+        setOrionIo("dispatching", 1600);
       }
       bumpActive(agentId);
     }
@@ -448,6 +486,8 @@ function snapshotLiveState() {
   }
   badges.sort((a, b) => b.until - a.until);
 
+  const io = STORE.orionIo?.until && STORE.orionIo.until > now ? STORE.orionIo.mode : null;
+
   return {
     ts: now,
     activeAgentId,
@@ -456,6 +496,7 @@ function snapshotLiveState() {
     orion: {
       status: activeAgentId || badges.length ? "busy" : "idle",
       processes: badges.slice(0, 3).map((b) => b.emoji),
+      io,
     },
   };
 }
@@ -738,8 +779,9 @@ app.post("/api/command", (req, res) => {
   const activity = inferActivity(text);
   markRealEvent();
 
-  // Visual: ORION is dispatching work outwards.
-  addOrionBadge("📤", 2600);
+  // Visual: ORION is dispatching work outwards (faces only).
+  addOrionBadge("😤", 2600);
+  setOrionIo("dispatching", 2000);
 
   if (targetAgent === "LEDGER") {
     ledgerPulseIdx += 1;

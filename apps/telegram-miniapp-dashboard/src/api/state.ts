@@ -21,6 +21,8 @@ export type OrionState = {
   // High-level orchestration indicators (emojis) shown on the central ORION node.
   // Examples: routing 🧭, tooling 🛠️, synthesis ✨, thinking 🧠
   processes?: string[];
+  // Optional IO phase for the central status line.
+  io?: "receiving" | "dispatching" | null;
 };
 
 export type LinkDir = "out" | "in";

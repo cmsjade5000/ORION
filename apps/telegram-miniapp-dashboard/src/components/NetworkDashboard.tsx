@@ -134,6 +134,7 @@ export default function NetworkDashboard(props: { state: LiveState }) {
         id="ORION"
         status={orion?.status ?? (active ? "busy" : "idle")}
         processes={orion?.processes}
+        io={orion?.io ?? null}
         kind="central"
         active={Boolean(active || linkAgentId)}
         style={{

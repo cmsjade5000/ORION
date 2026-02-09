@@ -29,6 +29,8 @@ export default function Node(props: {
   activity?: AgentActivity;
   // Central node only: orchestration indicators (emojis) shown instead of status words.
   processes?: string[];
+  // Central node only: IO phase (controls the status subline).
+  io?: "receiving" | "dispatching" | null;
   kind: "central" | "agent";
   active?: boolean;
   className?: string;
@@ -63,9 +65,8 @@ export default function Node(props: {
   const processes = props.kind === "central" ? (props.processes ?? []) : [];
   const centralSub = (() => {
     if (props.kind !== "central") return props.status;
-    // Give ORION a human-readable substatus when we have directional IO badges.
-    if (processes.includes("📥")) return "receiving";
-    if (processes.includes("📤")) return "dispatching";
+    if (props.io === "receiving") return "receiving";
+    if (props.io === "dispatching") return "dispatching";
     // Fall back to the raw status string.
     return props.status;
   })();
