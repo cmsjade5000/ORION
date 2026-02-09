@@ -303,6 +303,30 @@ function parseAgent(text) {
   return null;
 }
 
+function parseAgentSequence(text) {
+  const raw = normalizeText(text).toLowerCase();
+  if (!raw) return [];
+
+  const hits = [];
+  for (const id of AGENTS) {
+    const needle = id.toLowerCase();
+    const re = new RegExp(`\\b${needle}\\b`, "i");
+    const idx = raw.search(re);
+    if (idx >= 0) hits.push({ id, idx });
+  }
+  hits.sort((a, b) => a.idx - b.idx);
+
+  // Preserve ordering by appearance, de-dupe.
+  const out = [];
+  const seen = new Set();
+  for (const h of hits) {
+    if (seen.has(h.id)) continue;
+    seen.add(h.id);
+    out.push(h.id);
+  }
+  return out;
+}
+
 function pickNextAgent() {
   commandIdx = (commandIdx + 1) % AGENTS.length;
   return AGENTS[commandIdx];
@@ -864,7 +888,8 @@ app.post("/api/command", (req, res) => {
   });
 
   // Wire commands into the live state so nodes light up immediately.
-  const targetAgent = parseAgent(text) ?? pickNextAgent();
+  const targets = parseAgentSequence(text);
+  const targetAgent = (targets[0] ?? parseAgent(text) ?? pickNextAgent());
   const activity = inferActivity(text);
   markRealEvent();
 
@@ -873,22 +898,30 @@ app.post("/api/command", (req, res) => {
   setOrionIo("dispatching", 2000);
   setOrionBadge(orionBadgeForActivity(activity) || "💭", 2000);
 
-  if (targetAgent === "LEDGER") {
-    ledgerPulseIdx += 1;
-  }
+  const sequence = targets.length ? targets : [targetAgent];
 
-  if (targetAgent === "LEDGER" && ledgerPulseIdx % 4 === 0) {
-    applyEventToStore({ type: "tool.started", agentId: targetAgent });
-  } else {
-    applyEventToStore({ type: "agent.activity", agentId: targetAgent, activity });
-  }
+  // Kick the first hop immediately so the UI responds to "send".
+  const startHop = (agentId) => {
+    applyEventToStore({ type: "task.started", agentId });
+
+    if (agentId === "LEDGER") {
+      ledgerPulseIdx += 1;
+    }
+
+    if (agentId === "LEDGER" && ledgerPulseIdx % 4 === 0) {
+      applyEventToStore({ type: "tool.started", agentId });
+    } else {
+      applyEventToStore({ type: "agent.activity", agentId, activity });
+    }
+  };
+  startHop(sequence[0]);
 
   if (STREAM_CLIENTS.size > 0) {
     sseBroadcast("command.accepted", {
       requestId,
       acceptedId,
       receivedAt: Date.now(),
-      targetAgent,
+      targetAgent: sequence[0],
       activity,
       // Avoid pushing initData to clients.
       textPreview: text.slice(0, 120),
@@ -905,18 +938,42 @@ app.post("/api/command", (req, res) => {
   // If we're not actually routing into ORION, simulate a quick round-trip so the UI can
   // show a "return transmission" and ORION "receiving" behavior as a control.
   if (!shouldRoute || !deliverTarget) {
-    setTimeout(() => {
-      applyEventToStore({ type: "task.completed", agentId: targetAgent });
+    const hopMs = Number(process.env.SIM_HOP_MS || 950);
+    const gapMs = Number(process.env.SIM_GAP_MS || 260);
+
+    const completeHop = (agentId) => {
+      applyEventToStore({ type: "task.completed", agentId });
       if (STREAM_CLIENTS.size > 0) {
         sseBroadcast("task.completed", {
           id: acceptedId,
           ts: Date.now(),
           type: "task.completed",
-          data: { requestId, ok: true, code: 0, agentId: targetAgent, simulated: true },
+          data: { requestId, ok: true, code: 0, agentId, simulated: true },
         });
         scheduleStateBroadcast();
       }
-    }, 1200);
+    };
+
+    const run = (i) => {
+      if (i >= sequence.length) return;
+      const agentId = sequence[i];
+      // We already started hop 0 above.
+      if (i > 0) {
+        // Visual: ORION dispatches each hop.
+        addOrionBadge("😤", 1800);
+        setOrionIo("dispatching", 1400);
+        setOrionBadge(orionBadgeForActivity(activity) || "💭", 1400);
+        startHop(agentId);
+        if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
+      }
+
+      setTimeout(() => {
+        completeHop(agentId);
+        setTimeout(() => run(i + 1), gapMs);
+      }, hopMs);
+    };
+
+    run(0);
   }
 
   if (shouldRoute && deliverTarget) {
