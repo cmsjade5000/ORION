@@ -29,6 +29,5 @@ fi
 
 curl -fsS "https://api.telegram.org/bot${TOKEN}/sendMessage" \
   -H "content-type: application/json" \
-  -d "$(node -e 'const chat_id=process.argv[1]; const text=process.argv.slice(2).join(" "); console.log(JSON.stringify({chat_id, text, disable_web_page_preview:true}));' "${CHAT_ID}" ${TEXT@Q})" \
+  -d "$(node -e 'const chat_id=process.argv[1]; const text=process.argv[2]; console.log(JSON.stringify({chat_id, text, disable_web_page_preview:true}));' "${CHAT_ID}" "${TEXT}")" \
   >/dev/null
-
