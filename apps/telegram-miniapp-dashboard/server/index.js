@@ -433,6 +433,19 @@ const LINK_STALE_MS = Number(process.env.LINK_STALE_MS || 1_800); // how long to
 const AEGIS_ALARM_MS = Number(process.env.AEGIS_ALARM_MS || 30_000);
 const AEGIS_WARN_MS = Number(process.env.AEGIS_WARN_MS || 0);
 
+const ARTIFACT_TTL_MS = Number(process.env.ARTIFACT_TTL_MS || 60 * 60_000);
+const MAX_ARTIFACTS = Number(process.env.MAX_ARTIFACTS || 24);
+const ARTIFACTS_DIR = String(process.env.ARTIFACTS_DIR || path.join(os.tmpdir(), "orion-miniapp-artifacts")).trim();
+try {
+  fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+} catch {
+  // ignore (uploads will fail with a clear error)
+}
+
+const FEED_TTL_MS = Number(process.env.FEED_TTL_MS || 60 * 60_000);
+const MAX_FEED_ITEMS = Number(process.env.MAX_FEED_ITEMS || 30);
+const WORKFLOW_STALE_MS = Number(process.env.WORKFLOW_STALE_MS || 2 * 60_000);
+
 const CONFIG_WARN =
   (process.env.SSE_TOKEN_SECRET || "") === "" ||
   (process.env.SSE_TOKEN_SECRET || "") === "dev-insecure-change-me" ||
@@ -464,7 +477,274 @@ function createStore() {
     orionIo: { mode: null, until: 0 },
     orionBadge: { emoji: null, until: 0 },
     system: { alarmUntil: 0, warnUntil: 0 },
+    artifacts: [], // newest-first
+    artifactsById: new Map(), // id -> record
+    feed: [], // newest-first
+    feedById: new Map(), // id -> record
+    workflow: null,
   };
+}
+
+function safeFilename(name) {
+  const raw = String(name || "").trim() || "artifact";
+  // Avoid path separators and control characters.
+  const cleaned = raw
+    .replace(/[\/\\\u0000-\u001f]+/g, "_")
+    .replace(/["';]+/g, "_")
+    .slice(0, 120)
+    .trim();
+  return cleaned || "artifact";
+}
+
+function extFor(mime, name) {
+  const m = String(mime || "").toLowerCase();
+  const n = String(name || "").toLowerCase();
+  if (m === "application/pdf" || n.endsWith(".pdf")) return ".pdf";
+  if (m === "text/plain" || n.endsWith(".txt")) return ".txt";
+  if (m === "text/markdown" || n.endsWith(".md")) return ".md";
+  if (m === "application/json" || n.endsWith(".json")) return ".json";
+  if (m === "text/csv" || n.endsWith(".csv")) return ".csv";
+  if (m === "application/zip" || m === "application/x-zip-compressed" || n.endsWith(".zip")) return ".zip";
+  if (m === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || n.endsWith(".xlsx")) return ".xlsx";
+  if (m === "application/vnd.ms-excel" || n.endsWith(".xls")) return ".xls";
+  if (m.startsWith("audio/")) {
+    if (n.endsWith(".mp3")) return ".mp3";
+    if (n.endsWith(".wav")) return ".wav";
+    if (n.endsWith(".m4a")) return ".m4a";
+    if (n.endsWith(".ogg")) return ".ogg";
+  }
+  if (m.startsWith("video/")) {
+    if (n.endsWith(".mp4")) return ".mp4";
+    if (n.endsWith(".webm")) return ".webm";
+    if (n.endsWith(".mov")) return ".mov";
+  }
+  if (m.startsWith("image/")) {
+    const t = m.split("/")[1] || "img";
+    if (/^[a-z0-9.+-]+$/.test(t)) return `.${t}`;
+  }
+  return "";
+}
+
+function escapePdfString(s) {
+  // PDF literal string escaping for (), and backslash.
+  return String(s || "").replace(/([()\\])/g, "\\$1");
+}
+
+function renderSimplePdfBytes(opts) {
+  const title = String(opts?.title || "ORION Export").slice(0, 200);
+  const body = String(opts?.body || "").slice(0, 600);
+  const lines = [title, body].filter(Boolean);
+  const content =
+    "BT\n" +
+    "/F1 18 Tf\n" +
+    "72 740 Td\n" +
+    lines.map((ln, i) => `${i === 0 ? "" : "0 -26 Td\n"}(${escapePdfString(ln)}) Tj\n`).join("") +
+    "ET\n";
+
+  const header = "%PDF-1.4\n%----\n";
+
+  const obj1 = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
+  const obj2 = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
+  const obj3 =
+    "3 0 obj\n" +
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> >>\n" +
+    "endobj\n";
+  const contentLen = Buffer.byteLength(content, "utf8");
+  const obj4 = `4 0 obj\n<< /Length ${contentLen} >>\nstream\n${content}endstream\nendobj\n`;
+  const obj5 = "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
+  const objects = [obj1, obj2, obj3, obj4, obj5];
+
+  // Byte offsets for xref. Object numbers are 1..N.
+  const offsets = [0]; // entry 0 is the free object
+  let offset = Buffer.byteLength(header, "utf8");
+  for (const obj of objects) {
+    offsets.push(offset);
+    offset += Buffer.byteLength(obj, "utf8");
+  }
+
+  const startXref = offset;
+  const xrefLines = [];
+  xrefLines.push(`xref\n0 ${objects.length + 1}\n`);
+  xrefLines.push("0000000000 65535 f \n");
+  for (let i = 1; i <= objects.length; i += 1) {
+    const off = String(offsets[i]).padStart(10, "0");
+    xrefLines.push(`${off} 00000 n \n`);
+  }
+
+  const trailer =
+    "trailer\n" +
+    `<< /Size ${objects.length + 1} /Root 1 0 R >>\n` +
+    "startxref\n" +
+    `${startXref}\n` +
+    "%%EOF\n";
+
+  const pdf = header + objects.join("") + xrefLines.join("") + trailer;
+  return Buffer.from(pdf, "utf8");
+}
+
+function inferPdfRequest(text) {
+  const raw = String(text || "");
+  if (!/\bpdf\b/i.test(raw)) return null;
+  const m = raw.match(/\bpdf\b(?:\s+(?:of|for))?\s+["“](.+?)["”]/i) || raw.match(/\bpdf\b(?:\s+(?:of|for))?\s+(.{1,80})$/i);
+  const subject = m && m[1] ? String(m[1]).trim() : "export";
+  const base = safeFilename(subject).replace(/\s+/g, "_").slice(0, 48) || "export";
+  return { name: `${base}.pdf`, title: `PDF: ${subject}` };
+}
+
+function pruneArtifacts(now = Date.now()) {
+  const keep = [];
+  for (const a of STORE.artifacts) {
+    if (a && typeof a.expiresAt === "number" && a.expiresAt > now) {
+      keep.push(a);
+      continue;
+    }
+
+    if (a && a.id) STORE.artifactsById.delete(a.id);
+
+    // Best-effort cleanup of on-disk files. (The in-memory store is ephemeral, but disk can grow.)
+    const filePath = a && typeof a.filePath === "string" ? a.filePath : "";
+    if (!filePath) continue;
+    try {
+      const abs = path.resolve(filePath);
+      const root = path.resolve(ARTIFACTS_DIR) + path.sep;
+      if (abs.startsWith(root) && fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {
+      // ignore
+    }
+  }
+  STORE.artifacts = keep.slice(0, MAX_ARTIFACTS);
+}
+
+function pruneFeed(now = Date.now()) {
+  const keep = [];
+  for (const it of STORE.feed) {
+    if (it && typeof it.expiresAt === "number" && it.expiresAt > now) keep.push(it);
+    else if (it && it.id) STORE.feedById.delete(it.id);
+  }
+  STORE.feed = keep.slice(0, MAX_FEED_ITEMS);
+}
+
+function addFeedItem(rec) {
+  if (!rec || typeof rec.id !== "string") return null;
+  pruneFeed(Date.now());
+  STORE.feedById.set(rec.id, rec);
+  STORE.feed = [rec, ...STORE.feed.filter((it) => it && it.id !== rec.id)].slice(0, MAX_FEED_ITEMS);
+  return rec;
+}
+
+function setWorkflow(steps, { id } = {}) {
+  const now = Date.now();
+  const list = Array.isArray(steps) ? steps.filter((s) => typeof s === "string" && s.trim()).slice(0, 8) : [];
+  if (list.length === 0) {
+    STORE.workflow = null;
+    return;
+  }
+  STORE.workflow = {
+    id: String(id || createId("wf")),
+    status: "running",
+    steps: list.map((agentId) => ({ agentId, status: "pending" })),
+    currentIndex: 0,
+    updatedAt: now,
+    until: now + WORKFLOW_STALE_MS,
+  };
+}
+
+function touchWorkflow() {
+  if (!STORE.workflow) return;
+  const now = Date.now();
+  STORE.workflow.updatedAt = now;
+  STORE.workflow.until = now + WORKFLOW_STALE_MS;
+}
+
+function workflowIndexOf(agentId) {
+  if (!STORE.workflow || !agentId) return -1;
+  const steps = STORE.workflow.steps || [];
+  return steps.findIndex((s) => s && s.agentId === agentId);
+}
+
+function workflowSetActive(agentId) {
+  if (!STORE.workflow) return;
+  const idx = workflowIndexOf(agentId);
+  if (idx < 0) return;
+  for (let i = 0; i < STORE.workflow.steps.length; i += 1) {
+    const s = STORE.workflow.steps[i];
+    if (!s) continue;
+    if (i < idx && s.status === "pending") s.status = "done";
+    if (i === idx) s.status = "active";
+  }
+  STORE.workflow.currentIndex = idx;
+  STORE.workflow.status = "running";
+  touchWorkflow();
+}
+
+function workflowSetDone(agentId, ok) {
+  if (!STORE.workflow) return;
+  const idx = workflowIndexOf(agentId);
+  if (idx < 0) return;
+  const s = STORE.workflow.steps[idx];
+  if (s) s.status = ok ? "done" : "failed";
+
+  // Advance pointer if the current step completed successfully.
+  if (ok && STORE.workflow.currentIndex === idx) {
+    STORE.workflow.currentIndex = Math.min(STORE.workflow.steps.length, idx + 1);
+    const next = STORE.workflow.steps[STORE.workflow.currentIndex];
+    if (next && next.status === "pending") {
+      // leave it pending until it starts
+    }
+  }
+
+  if (!ok) {
+    STORE.workflow.status = "failed";
+  } else {
+    const allDone = STORE.workflow.steps.every((st) => st && st.status === "done");
+    if (allDone) STORE.workflow.status = "completed";
+  }
+  touchWorkflow();
+}
+
+function addArtifactRecord(rec) {
+  if (!rec || typeof rec.id !== "string") return null;
+  pruneArtifacts(Date.now());
+  STORE.artifactsById.set(rec.id, rec);
+  // Newest-first list (dedupe).
+  STORE.artifacts = [rec, ...STORE.artifacts.filter((a) => a && a.id !== rec.id)].slice(0, MAX_ARTIFACTS);
+  return rec;
+}
+
+function simulatePdfArtifact({ text, agentId }) {
+  const req = inferPdfRequest(text);
+  if (!req) return null;
+
+  const id = createId("art");
+  const mime = "application/pdf";
+  const bytes = renderSimplePdfBytes({ title: req.title, body: "Generated by ORION (simulated)." });
+
+  let filePath;
+  try {
+    const ext = extFor(mime, req.name);
+    filePath = path.join(ARTIFACTS_DIR, `${id}${ext || ".pdf"}`);
+    fs.writeFileSync(filePath, bytes);
+  } catch {
+    return null;
+  }
+
+  const createdAt = Date.now();
+  const rec = addArtifactRecord({
+    id,
+    kind: "file",
+    name: req.name,
+    mime,
+    url: `/api/artifacts/${id}`,
+    createdAt,
+    expiresAt: createdAt + Math.max(10_000, ARTIFACT_TTL_MS),
+    sizeBytes: bytes.length,
+    agentId: agentId || null,
+    filePath,
+  });
+
+  applyEventToStore({ type: "artifact.created", agentId: agentId || null, artifact: rec });
+  scheduleStateBroadcast();
+  return rec;
 }
 
 function setAgentStatus(id, status) {
@@ -516,6 +796,57 @@ function applyEventToStore(body) {
   const type = typeof body?.type === "string" ? body.type : "";
   const agentId = typeof body?.agentId === "string" ? body.agentId : null;
   const activity = typeof body?.activity === "string" ? body.activity : null;
+
+  if (type === "response.created") {
+    const text = String(body?.text || body?.response?.text || "").trim();
+    if (!text) return;
+    const ts = typeof body?.ts === "number" ? body.ts : Date.now();
+    const id = typeof body?.id === "string" ? body.id : createId("feed");
+    addFeedItem({
+      id,
+      kind: "response",
+      ts,
+      icon: "💬",
+      text: text.slice(0, 500),
+      agentId,
+      expiresAt: ts + Math.max(10_000, FEED_TTL_MS),
+    });
+    return;
+  }
+
+  if (type === "artifact.created") {
+    const art = body?.artifact && typeof body.artifact === "object" ? body.artifact : null;
+    const id = typeof art?.id === "string" ? art.id : createId("art");
+    const name = safeFilename(art?.name);
+    const mime = String(art?.mime || "application/octet-stream");
+    const url = typeof art?.url === "string" ? art.url : `/api/artifacts/${id}`;
+    const createdAt = typeof art?.createdAt === "number" ? art.createdAt : Date.now();
+    const ttlMs = typeof art?.ttlMs === "number" ? art.ttlMs : ARTIFACT_TTL_MS;
+    const expiresAt = createdAt + Math.max(10_000, Number(ttlMs) || 0);
+    const sizeBytes = typeof art?.sizeBytes === "number" ? art.sizeBytes : null;
+    const rec = addArtifactRecord({
+      id,
+      kind: "file",
+      name,
+      mime,
+      url,
+      createdAt,
+      expiresAt,
+      sizeBytes,
+      agentId,
+      // Optional server-local storage for uploaded artifacts.
+      filePath: typeof art?.filePath === "string" ? art.filePath : null,
+    });
+
+    // Visual hint: treat artifacts as "return transmission".
+    if (agentId) setLink(agentId, "in", 1400);
+    setOrionIo("receiving", 1800);
+    addOrionBadge("📎", 3800);
+    setOrionBadge("✅", 2000);
+    bumpActive(agentId || STORE.activeAgentId || "LEDGER");
+
+    return rec;
+  }
 
   // Allow ORION to push full snapshots in the future.
   if (type === "state" && body?.state && typeof body.state === "object") {
@@ -599,11 +930,18 @@ function applyEventToStore(body) {
     if (type === "task.failed") {
       STORE.system.alarmUntil = Math.max(STORE.system.alarmUntil || 0, Date.now() + AEGIS_ALARM_MS);
     }
+    // Update workflow progress if present.
+    if (type === "task.started") workflowSetActive(agentId);
+    if (type === "task.completed") workflowSetDone(agentId, true);
+    if (type === "task.failed") workflowSetDone(agentId, false);
   }
 }
 
 function snapshotLiveState() {
   const now = Date.now();
+  pruneArtifacts(now);
+  pruneFeed(now);
+  if (STORE.workflow?.until && STORE.workflow.until <= now) STORE.workflow = null;
   const agents = AGENTS.map((id) => {
     const a = STORE.agents.get(id);
     if (!a) return { id, status: "idle", activity: "idle" };
@@ -659,6 +997,38 @@ function snapshotLiveState() {
       badge,
       io,
     },
+    artifacts: STORE.artifacts
+      .filter((a) => a && a.expiresAt && a.expiresAt > now)
+      .map((a) => ({
+        id: a.id,
+        kind: "file",
+        name: a.name,
+        mime: a.mime,
+        url: a.url,
+        createdAt: a.createdAt,
+        sizeBytes: a.sizeBytes ?? null,
+        agentId: a.agentId ?? null,
+      })),
+    feed: STORE.feed
+      .filter((it) => it && it.expiresAt && it.expiresAt > now)
+      .slice(0, 12)
+      .map((it) => ({
+        id: it.id,
+        kind: it.kind,
+        ts: it.ts,
+        icon: it.icon ?? null,
+        text: it.text,
+        agentId: it.agentId ?? null,
+      })),
+    workflow: STORE.workflow
+      ? {
+          id: STORE.workflow.id,
+          status: STORE.workflow.status,
+          steps: (STORE.workflow.steps || []).map((s) => ({ agentId: s.agentId, status: s.status })),
+          currentIndex: STORE.workflow.currentIndex || 0,
+          updatedAt: STORE.workflow.updatedAt || now,
+        }
+      : null,
   };
 }
 
@@ -681,6 +1051,132 @@ const MAX_STREAM_CLIENTS_PER_IP = Number(process.env.MAX_STREAM_CLIENTS_PER_IP |
 // NOTE: Fly.io can run multiple machines; do not store auth tokens in memory.
 // Instead we issue a short-lived, signed token that any machine can verify.
 const SSE_TOKEN_SECRET = process.env.SSE_TOKEN_SECRET || "dev-insecure-change-me";
+
+// ---- Artifacts (files created by ORION) ----
+// Uploads are authenticated with INGEST_TOKEN (service-to-service).
+// Downloads are authenticated with either:
+// - `?token=` (same signed token format as SSE), or
+// - verified Telegram initData header (XHR/fetch use-case).
+
+app.post(
+  "/api/artifacts",
+  express.raw({ type: () => true, limit: String(process.env.ARTIFACT_UPLOAD_LIMIT || "16mb") }),
+  (req, res) => {
+    if (INGEST_TOKEN) {
+      const auth = String(req.header("authorization") || "");
+      if (auth !== `Bearer ${INGEST_TOKEN}`) {
+        return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Bad token" } });
+      }
+    } else if (IS_PROD) {
+      return res.status(503).json({
+        ok: false,
+        error: { code: "MISCONFIGURED", message: "INGEST_TOKEN is required in production" },
+      });
+    }
+
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from([]);
+    if (buf.length === 0) {
+      return res.status(400).json({ ok: false, error: { code: "BAD_REQUEST", message: "Empty body" } });
+    }
+
+    const nameHeader = String(req.header("x-artifact-name") || "").trim();
+    const mimeHeader = String(req.header("content-type") || "").trim();
+    const agentId = String(req.header("x-agent-id") || req.query?.agentId || "").trim() || null;
+
+    const id = createId("art");
+    const nameBase = safeFilename(nameHeader || `artifact-${id}${extFor(mimeHeader, nameHeader)}`);
+    const mime = mimeHeader || "application/octet-stream";
+
+    const ext = extFor(mime, nameBase);
+    const name = nameBase.endsWith(ext) ? nameBase : `${nameBase}${ext}`;
+
+    let filePath;
+    try {
+      filePath = path.join(ARTIFACTS_DIR, `${id}${ext || ""}`);
+      fs.writeFileSync(filePath, buf);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return res.status(500).json({ ok: false, error: { code: "WRITE_FAILED", message: msg } });
+    }
+
+    markRealEvent();
+
+    const createdAt = Date.now();
+    const url = `/api/artifacts/${id}`;
+    const rec = addArtifactRecord({
+      id,
+      kind: "file",
+      name,
+      mime,
+      url,
+      createdAt,
+      expiresAt: createdAt + Math.max(10_000, ARTIFACT_TTL_MS),
+      sizeBytes: buf.length,
+      agentId,
+      filePath,
+    });
+
+    // Mirror through the normal event path so clients update quickly.
+    applyEventToStore({ type: "artifact.created", agentId, artifact: rec });
+    scheduleStateBroadcast();
+
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({ ok: true, artifact: { id, kind: "file", name, mime, url, createdAt, sizeBytes: buf.length, agentId } });
+  }
+);
+
+app.get("/api/artifacts/:id", (req, res) => {
+  const id = String(req.params?.id || "").trim();
+  if (!id) {
+    return res.status(400).json({ ok: false, error: { code: "BAD_REQUEST", message: "Missing id" } });
+  }
+
+  let allowed = false;
+  const token = typeof req.query?.token === "string" ? req.query.token : "";
+  if (token) {
+    const v = verifySseToken({ token, secret: SSE_TOKEN_SECRET });
+    allowed = Boolean(v.ok);
+  } else {
+    // Fetch/XHR fallback: allow verified initData (won't work for a plain link click).
+    const ctx = extractTelegramContext(req);
+    if (ctx.verified || canAcceptUnverifiedInitData()) allowed = true;
+  }
+
+  if (!allowed) {
+    return res.status(401).json({
+      ok: false,
+      error: { code: "UNAUTHORIZED", message: "Missing/invalid token. Open from the Mini App or use a signed token." },
+    });
+  }
+
+  pruneArtifacts(Date.now());
+  const rec = STORE.artifactsById.get(id);
+  if (!rec) {
+    return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Unknown artifact" } });
+  }
+
+  const filePath = typeof rec.filePath === "string" ? rec.filePath : "";
+  if (!filePath) {
+    return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Artifact has no file payload" } });
+  }
+
+  const abs = path.resolve(filePath);
+  const root = path.resolve(ARTIFACTS_DIR) + path.sep;
+  if (!abs.startsWith(root)) {
+    return res.status(403).json({ ok: false, error: { code: "FORBIDDEN", message: "Bad artifact path" } });
+  }
+
+  if (!fs.existsSync(abs)) {
+    return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "File missing" } });
+  }
+
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Type", rec.mime || "application/octet-stream");
+  // Note: keep filename ASCII-ish; Telegram clients can be picky.
+  const fname = safeFilename(rec.name || "artifact");
+  res.setHeader("Content-Disposition", `attachment; filename=\"${fname}\"`);
+  return res.sendFile(abs);
+});
 
 function sseWrite(res, event, data) {
   if (event) res.write(`event: ${event}\n`);
@@ -984,6 +1480,7 @@ app.post("/api/command", (req, res) => {
   setOrionBadge(orionBadgeForActivity(activity) || "💭", 2000);
 
   const sequence = targets.length ? targets : [targetAgent];
+  setWorkflow(sequence, { id: acceptedId });
 
   // Kick the first hop immediately so the UI responds to "send".
   const startHop = (agentId) => {
@@ -1061,6 +1558,18 @@ app.post("/api/command", (req, res) => {
         // by the next dispatch). Cap the final return-link duration.
         if (i === sequence.length - 1) {
           setLink(agentId, "in", gapMs + 200);
+          // Demo behavior: if the user asked for a PDF, produce a small simulated PDF
+          // and surface it as a floating artifact bubble in the Mini App.
+          simulatePdfArtifact({ text, agentId });
+          // Demo behavior: surface a short simulated response in the in-app feed so
+          // live Telegram testing is useful even before ORION routing is wired.
+          const flat = String(text || "").replace(/\s+/g, " ").trim();
+          const preview = flat.length > 220 ? `${flat.slice(0, 220)}…` : flat;
+          applyEventToStore({
+            type: "response.created",
+            agentId: "ORION",
+            text: preview ? `Simulated reply: received "${preview}"` : "Simulated reply: received.",
+          });
           if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
         }
         setTimeout(() => run(i + 1), gapMs);
@@ -1087,6 +1596,54 @@ app.post("/api/command", (req, res) => {
       deliverTarget,
       "--json",
     ];
+
+    const shortText = (s) => {
+      const raw = String(s || "").trim();
+      const flat = raw.replace(/```/g, "").replace(/\s+/g, " ").trim();
+      if (!flat) return "";
+      if (flat.length <= 320) return flat;
+      return `${flat.slice(0, 320)}…`;
+    };
+
+    const extractReplyText = (stdoutRaw) => {
+      const s = String(stdoutRaw || "").trim();
+      if (!s) return "";
+
+      // Try parse JSON (OpenClaw --json).
+      const tryParse = (candidate) => {
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          return null;
+        }
+      };
+
+      let obj = tryParse(s);
+      if (!obj) {
+        // Sometimes there are logs before/after JSON; try a substring.
+        const first = s.indexOf("{");
+        const last = s.lastIndexOf("}");
+        if (first >= 0 && last > first) obj = tryParse(s.slice(first, last + 1));
+      }
+
+      const pick = (v) => (typeof v === "string" ? v : "");
+      if (obj && typeof obj === "object") {
+        // Heuristic: chase common shapes without assuming a fixed schema.
+        const candidates = [
+          pick(obj.reply?.text),
+          pick(obj.reply?.message),
+          pick(obj.reply?.content),
+          pick(obj.result?.reply?.text),
+          pick(obj.result?.reply?.message),
+          pick(obj.output?.text),
+          pick(obj.text),
+        ].filter(Boolean);
+        if (candidates.length) return candidates[0];
+      }
+
+      // Fallback: show the raw stdout (trimmed).
+      return s;
+    };
 
     try {
       const child = spawn("openclaw", args, {
@@ -1143,6 +1700,10 @@ app.post("/api/command", (req, res) => {
 
         // Treat completion as a return-flow back into ORION.
         applyEventToStore({ type: ok ? "task.completed" : "task.failed", agentId: targetAgent });
+        // Surface a short in-app response. (Telegram delivery still happens via --deliver.)
+        const replyText = ok ? extractReplyText(out) : err;
+        const short = shortText(replyText);
+        if (short) applyEventToStore({ type: "response.created", agentId: "ORION", text: short });
         if (STREAM_CLIENTS.size > 0) {
           sseBroadcast(ok ? "task.completed" : "task.failed", {
             id: acceptedId,

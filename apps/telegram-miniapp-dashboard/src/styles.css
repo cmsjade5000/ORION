@@ -78,6 +78,29 @@ html {
   box-shadow: var(--shadow);
 }
 
+.footerPanel {
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  /* Keep the network stage stable; drawers scroll inside the footer instead. */
+  height: clamp(190px, 34dvh, 330px);
+  overflow: hidden;
+}
+
+.footerDrawers {
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 4px; /* leave room for iOS overlay scrollbars */
+}
+
+.footerComposer {
+  display: grid;
+  gap: 8px;
+}
+
 .stage {
   position: relative;
   overflow: hidden;
@@ -87,6 +110,88 @@ html {
   position: relative;
   height: 100%;
 }
+
+.extrasLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.extraNode {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: radial-gradient(38px 38px at 30% 30%, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.38));
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: extraFloat 3.4s ease-in-out infinite;
+}
+
+.extraEmoji {
+  font-size: 18px;
+  line-height: 1;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.55));
+}
+
+.extraHold {
+  position: absolute;
+  inset: -5px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.extraHoldBg {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.40);
+  stroke-width: 4;
+}
+
+.extraHoldRing {
+  fill: none;
+  stroke: rgba(124, 247, 193, 0.85);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 126;
+  stroke-dashoffset: 126;
+  animation: extraHoldRing var(--hold-ms, 1400ms) linear forwards;
+  filter: drop-shadow(0 0 10px rgba(124, 247, 193, 0.22));
+}
+
+@keyframes extraHoldRing {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.extraNodeDismissing {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.72);
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+@keyframes extraFloat {
+  0% {
+    transform: translate(-50%, -50%) translateY(0px);
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-4px);
+  }
+  100% {
+    transform: translate(-50%, -50%) translateY(0px);
+  }
+}
+
+/* (artifact tray styles removed) */
+
+/* Artifact tray UI removed (replaced by orbit bubbles + Files drawer). */
 
 .legend {
   display: flex;
@@ -365,6 +470,15 @@ html {
   .nodeBadgeEmojiOut {
     animation: none !important;
   }
+  .extraNode {
+    animation: none !important;
+  }
+  .extraHoldRing {
+    animation: none !important;
+  }
+  .feedNotifyPulse {
+    animation: none !important;
+  }
 }
 
 .nodePulse {
@@ -420,6 +534,381 @@ html {
   background: rgba(0, 0, 0, 0.20);
 }
 
+.feedPanel {
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.filesPanel {
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.filesHeaderButton {
+  width: 100%;
+  min-height: 44px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.filesPanelClosed .filesHeader {
+  border-bottom: 0;
+}
+
+.filesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.filesTitle {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+  text-transform: uppercase;
+}
+
+.filesHint {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.filesList {
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.filesItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.filesOpen {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  border-radius: 12px;
+  padding: 10px 10px;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.filesIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.filesBody {
+  min-width: 0;
+}
+
+.filesName {
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filesMeta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filesDismiss {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.84);
+  cursor: pointer;
+}
+
+.filesDismiss:active {
+  transform: translateY(1px);
+}
+
+.workflowPanel {
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.workflowHeaderButton {
+  width: 100%;
+  min-height: 44px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workflowPanelClosed .workflowHeader {
+  border-bottom: 0;
+}
+
+.workflowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.workflowTitle {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+  text-transform: uppercase;
+}
+
+.workflowHint {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  max-width: 70%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflowList {
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.workflowItem {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.workflowIcon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.workflowStep {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.workflowAgent {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.workflowStatus {
+  color: var(--muted);
+}
+
+.feedHeaderButton {
+  width: 100%;
+  min-height: 44px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.feedPanelClosed .feedHeader {
+  border-bottom: 0;
+}
+
+.feedHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.feedTitle {
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.86);
+  text-transform: uppercase;
+}
+
+.feedHint {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.feedNotify {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 247, 193, 0.22);
+  background: rgba(124, 247, 193, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+  flex: 0 0 auto;
+}
+
+.feedNotifyIcon {
+  font-size: 12px;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.feedNotifyCount {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.feedNotifyPulse {
+  animation: feedNotifyPulse 1.25s ease-in-out infinite;
+}
+
+@keyframes feedNotifyPulse {
+  0% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 rgba(124, 247, 193, 0.0);
+  }
+  50% {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 8px rgba(124, 247, 193, 0.10);
+  }
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 rgba(124, 247, 193, 0.0);
+  }
+}
+
+.feedList {
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.feedItem {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.feedIcon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.feedBody {
+  min-width: 0;
+}
+
+.feedText {
+  font-size: 14px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+  word-break: break-word;
+}
+
+.feedMeta {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.feedAgent {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.22);
+}
+
 .input {
   min-height: 42px;
   height: auto;
@@ -456,6 +945,15 @@ html {
 @media (max-width: 420px) {
   .orbit {
     inset: 12px;
+  }
+
+  .extraNode {
+    width: 44px;
+    height: 44px;
+  }
+
+  .extraEmoji {
+    font-size: 17px;
   }
 
   .node {

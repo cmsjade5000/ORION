@@ -3,16 +3,31 @@ import type { LiveState } from "../api/state";
 import Node from "./Node";
 import ConnectionLayer from "./ConnectionLayer";
 import { useSmoothedActivities } from "../hooks/useSmoothedActivities";
+import OrbitExtras from "./OrbitExtras";
 
-export default function NetworkDashboard(props: { state: LiveState }) {
+export default function NetworkDashboard(props: {
+  state: LiveState;
+  token: string;
+  telegramWebApp?: any;
+  onOpenFeed?: () => void;
+  onOpenFiles?: () => void;
+  hiddenOrbitArtifactIds?: Set<string>;
+  onHideOrbitArtifact?: (id: string) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [viewport, setViewport] = useState<{ w: number; h: number }>({
+    w: typeof window !== "undefined" ? window.innerWidth : 0,
+    h: typeof window !== "undefined" ? window.innerHeight : 0,
+  });
 
   const agents = useMemo(() => props.state.agents, [props.state.agents]);
   const active = props.state.activeAgentId;
   const linkAgentId = props.state.link?.agentId ?? null;
   const smoothed = useSmoothedActivities(agents);
   const orion = props.state.orion;
+  const artifacts = props.state.artifacts || [];
+  const feed = props.state.feed || [];
 
   useEffect(() => {
     const el = containerRef.current;
@@ -55,13 +70,22 @@ export default function NetworkDashboard(props: { state: LiveState }) {
     };
   }, []);
 
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const layout = useMemo(() => {
     const w = size.w || 520;
     const h = size.h || 520;
 
     // On iPhone portrait the orbit container can be tall and narrow. A circular orbit wastes
     // vertical space, so switch to an ellipse with independent X/Y radii.
-    const portrait = h > w * 1.12;
+    // Important: base "portrait" on the viewport, not the stage container height, so opening
+    // drawers in the footer doesn't flip the layout mode and reorder nodes.
+    const portrait = (viewport.h || h) > (viewport.w || w) * 1.12;
 
     // Approximate padding needed to keep nodes + badge + shadow inside the stage.
     // (Orbit container already has its own inset via CSS.)
@@ -114,7 +138,7 @@ export default function NetworkDashboard(props: { state: LiveState }) {
     }
 
     return { w, h, cx, cy, rX, rY, ringW, ringH, portrait, frameMode, positions };
-  }, [size.w, size.h, agents]);
+  }, [size.w, size.h, viewport.w, viewport.h, agents]);
 
   return (
     <div className="orbit" ref={containerRef}>
@@ -148,14 +172,31 @@ export default function NetworkDashboard(props: { state: LiveState }) {
         }}
       />
 
+      <OrbitExtras
+        cx={layout.cx}
+        cy={layout.cy}
+        radius={Math.min(layout.rX, layout.rY) * 0.42}
+        artifacts={artifacts}
+        feed={feed}
+        token={props.token}
+        telegramWebApp={props.telegramWebApp}
+        onOpenFeed={props.onOpenFeed}
+        onOpenFiles={props.onOpenFiles}
+        hiddenOrbitArtifactIds={props.hiddenOrbitArtifactIds}
+        onHideOrbitArtifact={props.onHideOrbitArtifact}
+      />
+
       {/* Orbiting nodes
           Placeholder: node state animation.
           In v1 we only pulse the currently active agent.
       */}
       {agents.map((a, idx) => {
         const framePos = layout.frameMode ? layout.positions[a.id] : null;
-        // Default: evenly spaced around ORION.
-        const theta = (idx / Math.max(1, agents.length)) * Math.PI * 2 - Math.PI / 2;
+        // Stable placement: use a fixed agent order so node positions don't change if
+        // upstream state arrays reorder.
+        const ORDER = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"];
+        const stableIdx = ORDER.includes(a.id) ? ORDER.indexOf(a.id) : idx;
+        const theta = (stableIdx / Math.max(1, agents.length)) * Math.PI * 2 - Math.PI / 2;
         const x = framePos ? framePos.x : layout.cx + Math.cos(theta) * layout.rX;
         const y = framePos ? framePos.y : layout.cy + Math.sin(theta) * layout.rY;
         const remote = framePos?.variant === "remote";

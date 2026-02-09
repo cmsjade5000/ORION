@@ -1,0 +1,65 @@
+import type { FeedItem } from "../api/state";
+
+function relTime(ts: number, now: number) {
+  const d = Math.max(0, now - ts);
+  if (d < 10_000) return "now";
+  const s = Math.floor(d / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h`;
+}
+
+export default function FeedPanel(props: {
+  items: FeedItem[];
+  open: boolean;
+  onToggle: () => void;
+  unreadCount?: number;
+}) {
+  const items = (props.items || []).slice(0, 10);
+  const now = Date.now();
+
+  const hint = items.length === 0 ? "Waiting" : `${items.length} recent`;
+  const unread = Math.max(0, Number(props.unreadCount || 0));
+
+  return (
+    <div className={props.open ? "feedPanel feedPanelOpen" : "feedPanel feedPanelClosed"} aria-label="Responses">
+      <button
+        type="button"
+        className="feedHeader feedHeaderButton"
+        onClick={props.onToggle}
+        aria-expanded={props.open}
+      >
+        <div className="feedTitle">Responses</div>
+        <div className="feedHint">
+          {!props.open && unread > 0 ? (
+            <span className="feedNotify feedNotifyPulse" aria-label={`${unread} new`}>
+              <span className="feedNotifyIcon" aria-hidden="true">🔔</span>
+              <span className="feedNotifyCount" aria-hidden="true">{unread > 9 ? "9+" : String(unread)}</span>
+            </span>
+          ) : null}
+          {hint} {props.open ? "\u25B4" : "\u25BE"}
+        </div>
+      </button>
+      {props.open ? (
+        <div className="feedList" role="log" aria-live="polite">
+          {items.map((it) => (
+            <div key={it.id} className="feedItem">
+              <div className="feedIcon" aria-hidden="true">
+                {it.icon || (it.kind === "artifact" ? "📎" : it.kind === "event" ? "•" : "💬")}
+              </div>
+              <div className="feedBody">
+                <div className="feedText">{it.text}</div>
+                <div className="feedMeta">
+                  <span className="feedTime">{relTime(it.ts, now)}</span>
+                  {it.agentId ? <span className="feedAgent">{it.agentId}</span> : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}

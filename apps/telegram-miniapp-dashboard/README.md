@@ -16,7 +16,7 @@ This is a starter scaffold for a **Telegram Mini App** that opens from ORION’s
   - `GET /api/state` mock live state
   - `POST /api/sse-auth` + `GET /api/events` SSE stream (push updates)
   - `POST /api/ingest` ORION -> Mini App event ingest (rebroadcasts over SSE)
-  - `POST /api/command` command ingestion (`202 accepted`, optional OpenClaw routing)
+- `POST /api/command` command ingestion (`202 accepted`, optional OpenClaw routing)
   - Serves `dist/` in production
 
 ## SSE Event Types (v0)
@@ -24,6 +24,7 @@ This is a starter scaffold for a **Telegram Mini App** that opens from ORION’s
 The SSE endpoint (`GET /api/events`) emits:
 
 - `state`: periodic full snapshot (recovery + UI render source of truth)
+- `artifact.created` (optional): a file/export was generated and is available to download
 - `agent.activity`
 - `tool.started`, `tool.finished`, `tool.failed`
 - `task.created`, `task.routed`, `task.started`, `task.completed`, `task.failed`
@@ -31,6 +32,7 @@ The SSE endpoint (`GET /api/events`) emits:
 Notes:
 - The server will also emit some extra convenience events (for example `command.accepted`) during development.
 - `state` frames are the authoritative UI state; the fine-grained events exist for low-latency UX and future replay/debugging.
+- Dev convenience: when `/api/command` is running in simulated mode (OpenClaw routing disabled) and the command text includes `pdf`, the server generates a small valid PDF and surfaces it via `artifact.created` so you can test the UI without wiring ORION yet.
 
 ## ORION -> Mini App Ingest (v0)
 
@@ -50,6 +52,26 @@ Example payloads:
 ```
 
 ```json
+{ "type": "response.created", "agentId": "ORION", "text": "Short reply for the user.", "ts": 1739068800345 }
+```
+
+```json
+{
+  "type": "artifact.created",
+  "agentId": "LEDGER",
+  "artifact": {
+    "id": "art_123",
+    "kind": "file",
+    "name": "xyz.pdf",
+    "mime": "application/pdf",
+    "url": "https://example.com/xyz.pdf",
+    "createdAt": 1739068800789,
+    "sizeBytes": 192031
+  }
+}
+```
+
+```json
 { "type": "tool.started", "agentId": "PIXEL", "tool": { "name": "web.run" }, "ts": 1739068800123 }
 ```
 
@@ -62,6 +84,30 @@ Optional (future): full snapshots:
 ```json
 { "type": "state", "state": { "ts": 1739068800000, "activeAgentId": null, "agents": [], "orion": { "status": "idle", "processes": ["🧭"] } } }
 ```
+
+## Artifact Upload (v0)
+
+If ORION generates a file locally and wants the Mini App to serve it (so users can tap a bubble and download), upload it to:
+
+- `POST /api/artifacts`
+
+Auth:
+- `Authorization: Bearer $INGEST_TOKEN`
+
+Headers:
+- `Content-Type`: the MIME type (example `application/pdf`)
+- `x-artifact-name`: download filename (example `xyz.pdf`)
+- `x-agent-id` (optional): which agent produced it (example `LEDGER`)
+
+Body:
+- raw bytes of the file
+
+Response:
+- `{ ok: true, artifact: { id, url, ... } }`
+
+Notes:
+- The server stores artifacts in an ephemeral directory by default (`/tmp/...`), controlled by `ARTIFACTS_DIR`.
+- Downloads are authorized via the same short-lived signed token used for SSE; the frontend appends `?token=...` automatically.
 
 ## Local Dev
 

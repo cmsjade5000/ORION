@@ -22,6 +22,9 @@ export type TelegramWebApp = {
   expand: () => void;
   close: () => void;
 
+  // Open a link with Telegram handling (where supported).
+  openLink?: (url: string) => void;
+
   // Send data to the bot (delivered as message.web_app_data on the bot side).
   // Docs: https://core.telegram.org/bots/webapps#initializing-mini-apps
   sendData?: (data: string) => void;

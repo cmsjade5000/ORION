@@ -37,6 +37,47 @@ export type ActiveLink = {
   dir: LinkDir;
 };
 
+export type ArtifactKind = "file";
+
+export type Artifact = {
+  id: string;
+  kind: ArtifactKind;
+  name: string;
+  mime: string;
+  url: string;
+  createdAt: number;
+  sizeBytes?: number | null;
+  agentId?: string | null;
+};
+
+export type FeedItemKind = "response" | "event" | "artifact";
+
+export type FeedItem = {
+  id: string;
+  kind: FeedItemKind;
+  ts: number;
+  icon?: string | null;
+  text: string;
+  agentId?: string | null;
+};
+
+export type WorkflowStepStatus = "pending" | "active" | "done" | "failed";
+
+export type WorkflowStep = {
+  agentId: string;
+  status: WorkflowStepStatus;
+};
+
+export type WorkflowStatus = "idle" | "running" | "completed" | "failed";
+
+export type WorkflowState = {
+  id: string;
+  status: WorkflowStatus;
+  steps: WorkflowStep[];
+  currentIndex: number;
+  updatedAt: number;
+};
+
 export type LiveState = {
   ts: number;
   activeAgentId: string | null;
@@ -44,6 +85,12 @@ export type LiveState = {
   link?: ActiveLink | null;
   agents: AgentState[];
   orion?: OrionState;
+  // Optional: recent artifacts created by ORION (PDFs, exports, etc.).
+  artifacts?: Artifact[];
+  // Optional: short response/activity feed entries.
+  feed?: FeedItem[];
+  // Optional: current command workflow (multi-hop routing).
+  workflow?: WorkflowState | null;
 };
 
 /**
