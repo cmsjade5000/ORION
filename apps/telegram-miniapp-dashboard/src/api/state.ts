@@ -14,6 +14,9 @@ export type AgentState = {
   id: string;
   status: AgentStatus;
   activity?: AgentActivity;
+  // Optional fixed/per-agent badge emoji (overrides `activity` badge).
+  // Used for AEGIS (system state), etc.
+  badge?: string | null;
 };
 
 export type OrionState = {

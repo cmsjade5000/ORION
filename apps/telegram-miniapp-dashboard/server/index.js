@@ -365,6 +365,13 @@ const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const STALE_MS = Number(process.env.STALE_MS || 20_000); // clear agent activity if no updates
 const ACTIVE_STALE_MS = Number(process.env.ACTIVE_STALE_MS || 8_000); // clear ORION->agent focus line
 const LINK_STALE_MS = Number(process.env.LINK_STALE_MS || 4_200); // how long to show directional flow
+const AEGIS_ALARM_MS = Number(process.env.AEGIS_ALARM_MS || 30_000);
+const AEGIS_WARN_MS = Number(process.env.AEGIS_WARN_MS || 0);
+
+const CONFIG_WARN =
+  (process.env.SSE_TOKEN_SECRET || "") === "" ||
+  (process.env.SSE_TOKEN_SECRET || "") === "dev-insecure-change-me" ||
+  !resolveTelegramBotToken();
 
 function createStore() {
   const agents = new Map();
@@ -384,6 +391,7 @@ function createStore() {
     link: { agentId: null, dir: "out", until: 0 },
     orionIo: { mode: null, until: 0 },
     orionBadge: { emoji: null, until: 0 },
+    system: { alarmUntil: 0, warnUntil: 0 },
   };
 }
 
@@ -486,6 +494,12 @@ function applyEventToStore(body) {
       bumpActive(agentId);
       setLink(agentId, "out");
     }
+
+    if (type === "tool.failed") {
+      STORE.system.alarmUntil = Math.max(STORE.system.alarmUntil || 0, Date.now() + AEGIS_ALARM_MS);
+    } else if (type === "tool.started" && AEGIS_WARN_MS > 0) {
+      STORE.system.warnUntil = Math.max(STORE.system.warnUntil || 0, Date.now() + AEGIS_WARN_MS);
+    }
     return;
   }
 
@@ -509,6 +523,10 @@ function applyEventToStore(body) {
       }
       bumpActive(agentId);
     }
+
+    if (type === "task.failed") {
+      STORE.system.alarmUntil = Math.max(STORE.system.alarmUntil || 0, Date.now() + AEGIS_ALARM_MS);
+    }
   }
 }
 
@@ -521,7 +539,17 @@ function snapshotLiveState() {
     const stale = !a.updatedAt || now - a.updatedAt > STALE_MS;
     const status = stale ? "idle" : a.status;
     const activity = stale ? "idle" : a.activity;
-    return { id, status, activity };
+
+    // AEGIS is a "system/remote" agent: show a semi-permanent badge.
+    // Prefer alarming icons for recent failures.
+    let badge = null;
+    if (id === "AEGIS") {
+      const alarm = STORE.system?.alarmUntil && STORE.system.alarmUntil > now;
+      const warn = (STORE.system?.warnUntil && STORE.system.warnUntil > now) || CONFIG_WARN;
+      badge = alarm ? "🚨" : warn ? "⚠️" : "🛰️";
+    }
+
+    return { id, status, activity, badge };
   });
 
   const activeAgentId =

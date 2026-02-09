@@ -31,7 +31,7 @@ export default function Node(props: {
   processes?: string[];
   // Central node only: IO phase (controls the status subline).
   io?: "receiving" | "dispatching" | null;
-  // Central node only: a floating badge emoji (non-face icons) like the sub-agents.
+  // Floating badge emoji. For agents this can override activity. For ORION this is used for process clarity.
   badgeEmoji?: string | null;
   kind: "central" | "agent";
   active?: boolean;
@@ -49,7 +49,10 @@ export default function Node(props: {
     .filter(Boolean)
     .join(" ");
 
-  const emoji = props.kind === "agent" ? activityEmoji(props.activity) : (props.badgeEmoji ?? null);
+  const emoji =
+    props.kind === "agent"
+      ? (props.badgeEmoji ?? activityEmoji(props.activity))
+      : (props.badgeEmoji ?? null);
   const [curEmoji, setCurEmoji] = useState<string | null>(emoji);
   const [prevEmoji, setPrevEmoji] = useState<string | null>(null);
   const curRef = useRef<string | null>(emoji);

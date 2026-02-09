@@ -166,6 +166,7 @@ export default function NetworkDashboard(props: { state: LiveState }) {
             id={a.id}
             status={a.status}
             activity={smoothed[a.id] ?? a.activity}
+            badgeEmoji={a.badge ?? null}
             kind="agent"
             active={active === a.id}
             className={remote ? "nodeRemote" : undefined}

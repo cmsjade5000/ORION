@@ -160,10 +160,10 @@ export default function ConnectionLayer(props: {
           viewBox="0 0 10 10"
           refX="8.5"
           refY="5"
-          markerWidth="5"
-          markerHeight="5"
+          markerWidth="4"
+          markerHeight="4"
           orient="auto"
-          markerUnits="strokeWidth"
+          markerUnits="userSpaceOnUse"
         >
           <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(124, 247, 193, 0.95)" />
         </marker>
