@@ -131,7 +131,9 @@ AEGIS is a remote sentinel that monitors and revives ORION (availability) and wa
 
 Current status:
 - Remote-only (Hetzner). Not spawned via `sessions_spawn`.
-- Communicates to ORION via Slack alerts/status; may escalate to Cory only if ORION is unreachable or restart attempts repeatedly fail.
+- Communicates to ORION via Slack alerts/status.
+  - In the default “single-bot Telegram” posture, AEGIS does not DM Cory directly in Telegram.
+  - Any out-of-band paging to Cory (if desired) must be an explicit, documented exception.
 
 Reference:
 - Source-of-truth role: `src/agents/AEGIS.md`

@@ -14,7 +14,17 @@ This file is intended to be used by OpenClaw's heartbeat runner. Keep it cheap.
 ## Step 1: Triage (fast)
 
 1. Check `tasks/QUEUE.md`.
-2. Check `tasks/INBOX/` for any newly completed Task Packets (look for `Result:` blocks).
+2. Check the per-agent inbox *files* for any newly completed Task Packets (look for `Result:` blocks):
+   - `tasks/INBOX/ATLAS.md`
+   - `tasks/INBOX/NODE.md`
+   - `tasks/INBOX/PULSE.md`
+   - `tasks/INBOX/STRATUS.md`
+   - `tasks/INBOX/WIRE.md`
+   - `tasks/INBOX/SCRIBE.md`
+   - `tasks/INBOX/PIXEL.md`
+   - `tasks/INBOX/EMBER.md`
+   - `tasks/INBOX/LEDGER.md`
+   - Do not `read` the `tasks/INBOX/` directory path directly (it triggers EISDIR errors).
 3. If there is a clear Ready task that is safe and bounded, pick exactly one.
 4. If anything is ambiguous, risky, or needs confirmation, stop and ask Cory.
 

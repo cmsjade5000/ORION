@@ -244,6 +244,11 @@ remote() {
 
 outage_id_file="$STATE_DIR/orion_outage_id"
 
+# Note: `ssh` exits 255 for transport/auth failures (host down, network, key problems).
+# Treat those as "unreachable" and do NOT burn restart attempts or trip the anti-flap guard.
+#
+# If the SSH transport is up but the remote forced-command rejects the command or `openclaw health`
+# fails, ssh will typically exit non-255; those are actionable and may warrant a restart attempt.
 if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
   mark_ok
   if [ -f "$outage_id_file" ]; then
@@ -263,6 +268,9 @@ if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
   exit 0
 fi
 
+# Capture the most recent health failure type for power/network scenarios.
+health_rc=$?
+
 # Ensure we have an incident id as soon as we detect an outage.
 incident_id=""
 if [ -f "$outage_id_file" ]; then
@@ -271,6 +279,29 @@ fi
 if [ -z "$incident_id" ]; then
   incident_id="INC-AEGIS-$(date -u '+%Y%m%dT%H%M%SZ')"
   echo "$incident_id" >"$outage_id_file"
+fi
+
+# If ORION is unreachable over SSH, restarting cannot work. Avoid burning restart attempts.
+if [ "$health_rc" -eq 255 ]; then
+  log "ALERT: ORION unreachable via SSH ($incident_id)"
+  if throttle_ok "orion_unreachable_incident" 900; then
+    incident_append \
+      "$incident_id" \
+      "P0" \
+      "ORION_UNREACHABLE" \
+      "ORION is unreachable over SSH (host down, network, or auth issue)." \
+      "No restart attempted (SSH transport failure)." \
+      "open"
+  fi
+  if throttle_ok "orion_unreachable" 900; then
+    notify "$(msg_fail \
+      "ORION is unreachable." \
+      "SSH transport failed (host down, network, or auth issue)." \
+      "Did not attempt gateway restart (cannot reach host)." \
+      "Check power/network/Tailscale on the Mac mini, then re-run status. If SSH restrictions/keys changed, repair authorized_keys forced-command config." \
+      "$incident_id")"
+  fi
+  exit 2
 fi
 
 # Restart loop guard.
@@ -297,8 +328,32 @@ if ! restart_allowed_or_lock; then
 fi
 
 log "WARN: ORION health failed, attempting restart ($incident_id)"
+restart_rc=0
+if ! remote "$ORION_OPENCLAW_RESTART_CMD" >/dev/null 2>&1; then
+  restart_rc=$?
+fi
+if [ "$restart_rc" -eq 255 ]; then
+  log "ALERT: ORION became unreachable during restart attempt ($incident_id)"
+  if throttle_ok "orion_restart_unreachable_incident" 900; then
+    incident_append \
+      "$incident_id" \
+      "P0" \
+      "ORION_UNREACHABLE" \
+      "ORION was unhealthy and then became unreachable during restart attempt." \
+      "Restart skipped (SSH transport failure during restart)." \
+      "open"
+  fi
+  if throttle_ok "orion_restart_unreachable" 900; then
+    notify "$(msg_fail \
+      "ORION is unreachable during restart." \
+      "Health checks failed, then SSH transport failed while attempting restart." \
+      "Restart did not run (cannot reach host)." \
+      "Check power/network/Tailscale/SSH on the Mac mini. Once SSH is reachable again, AEGIS will resume health checks and restart attempts (subject to restart guard)." \
+      "$incident_id")"
+  fi
+  exit 2
+fi
 record_restart_attempt
-remote "$ORION_OPENCLAW_RESTART_CMD" >/dev/null 2>&1 || true
 sleep 3
 
 if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
@@ -318,4 +373,3 @@ if throttle_ok "orion_down" 900; then
   notify "$(msg_fail "ORION is still offline." "Health checks failed and ORION did not recover." "Restarted the ORION OpenClaw gateway, but the health check still fails." "Please check the Mac mini: OpenClaw gateway logs and system status." "$incident_id")"
 fi
 exit 2
-

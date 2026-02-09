@@ -14,7 +14,8 @@ AEGIS should never participate in normal conversations.
 ## Authority, Scope, And Limits
 
 - **Reports to:** ORION.
-- **May message Cory:** only for critical alerts (for example ORION unreachable or repeated restart failures).
+- **May message Cory:** only via channels explicitly approved for out-of-band paging.
+  - In the default “single-bot Telegram” posture, AEGIS does **not** DM Cory directly in Telegram.
 
 ### Allowed actions
 

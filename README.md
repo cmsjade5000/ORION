@@ -35,6 +35,11 @@ openclaw agents list --bindings
 openclaw models status
 ```
 
+## Recovery
+
+Runbook:
+- `docs/RECOVERY.md`
+
 ## Workspace Contract (OpenClaw)
 
 OpenClaw injects these workspace files on the first turn of new sessions:

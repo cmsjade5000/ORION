@@ -32,6 +32,7 @@ This document outlines the recommended workflow for developing and maintaining t
    - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.
    - For best gateway-service reliability, store model/provider auth using `openclaw models auth paste-token` (LaunchAgent services may not inherit your shell env vars).
    - For email, follow `docs/EMAIL_POLICY.md` (ORION-only inbox; threat preflight; draft-first outbound).
+   - For outages/power failures/manual restart, follow `docs/RECOVERY.md` (and use `./status.sh` for a fast local+AEGIS snapshot).
 
 6. **Go live locally (recommended order)**
    ```bash

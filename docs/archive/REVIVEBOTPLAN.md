@@ -1,7 +1,15 @@
 # Comprehensive Breakdown of REVIVEBOT Project
 
 > Archived plan (remote AEGIS sentinel). Not part of the current local Mac mini go-live.
-> Paths and tooling references may be outdated. AEGIS template lives at `docs/archive/AEGIS/`.
+> Paths and tooling references are outdated. Do not implement this plan as-is.
+>
+> Current AEGIS design and tooling lives in:
+> - `docs/AEGIS_RUNBOOK.md` (systemd timers + restricted SSH + defense plan flow)
+> - `scripts/aegis_remote/` (deployed scripts)
+>
+> Key divergences vs this archive:
+> - No public ORION health endpoint exposure is required (restricted SSH allowlist is used instead).
+> - Single-bot Telegram posture: ORION is the only user-facing Telegram bot.
 
 ## Phase 0: Progress Updates (in place)
 - **Periodic updates** via PULSE cron (`workflows/revivebot-progress.yaml`) to send Telegram notices every 10 minutes during provisioning.

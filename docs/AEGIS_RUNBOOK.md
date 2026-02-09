@@ -21,6 +21,16 @@ As of 2026-02-08:
 Notes:
 - Prefer Tailscale IPs/hostnames. Public IPs and hostnames may change after rebuilds.
 
+## Policy Notes (Single-Bot Telegram Mode)
+
+This workspace’s default posture is “single-bot Telegram”:
+- ORION is the only user-facing Telegram bot.
+- Specialists do not DM Cory directly in Telegram.
+
+Implication for AEGIS alerting:
+- Prefer Slack alerts from AEGIS (or no outbound alerts).
+- If you enable Telegram alerts from the Hetzner host anyway, use them only for critical P0 “ORION unreachable” scenarios, and treat the Telegram token on the Hetzner host as sensitive credential material.
+
 ## Services (Hetzner)
 
 These are installed as `systemd` units and are enabled at boot.
@@ -156,6 +166,14 @@ Common flow:
    - Window: `scripts/aegis_defense.sh approve <INCIDENT_ID> --minutes 30 --code <ApprovalCode>`
 4. ORION executes allowlisted actions only through `aegis-defend`.
 
+## ORION Proactive DM (Optional)
+
+If you want ORION to proactively DM you in Telegram when a new defense plan appears:
+- Install the Mac mini LaunchAgent:
+  - `scripts/install_orion_aegis_defense_watch_launchagent.sh /Users/corystoner/Desktop/ORION`
+- It polls `aegis-defend list` on Hetzner every ~2 minutes and sends a private DM when it sees a new plan.
+- To force the DM target chat id, set env var `ORION_TELEGRAM_CHAT_ID` for the LaunchAgent (recommended). Otherwise it will fall back to `AEGIS_TELEGRAM_CHAT_ID` from `/etc/aegis-monitor.env` on Hetzner.
+
 ## ORION Restart Loop Guard (Anti-Flap)
 
 AEGIS will attempt to restart ORION when ORION fails health checks, but it includes a **restart-loop guard** to prevent endless restart flapping (bad config, upstream/model outage, etc.).
@@ -235,3 +253,16 @@ Smoke test (controlled):
 - Do not commit `/etc/aegis-monitor.env` or any secrets to this repository.
 - Treat any bot tokens posted in chat as compromised; rotate them and update `/etc/aegis-monitor.env`.
 - Keep AEGIS “alert-only” for security findings. If you want defensive actions later, add a separate approval flow and post-incident review.
+
+## Power Failure / Reboot Behavior (What To Expect)
+
+Power/network failures are a common root cause of “ORION down”.
+
+Expected behavior:
+- The systemd timers on Hetzner are `Persistent=true`, so missed runs will fire after the Hetzner host reboots.
+- AEGIS can only restart ORION once the Mac mini is reachable over Tailscale SSH and the Mac mini forced-command allowlist is still valid.
+- If ORION is unreachable over SSH (host down, network, auth), AEGIS will alert and will not burn restart attempts or trip the restart guard.
+
+If ORION comes back but is still unhealthy:
+- AEGIS will attempt `openclaw gateway restart` over restricted SSH.
+- If ORION keeps failing health checks after restart attempts, AEGIS will trip the restart guard to prevent flapping (see above).
