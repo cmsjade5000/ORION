@@ -237,6 +237,17 @@ html {
   border-color: rgba(255, 255, 255, 0.10);
   background: radial-gradient(60px 60px at 30% 30%, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.45));
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.28);
+  /* AEGIS is partially off-canvas; push label down into the visible half. */
+  place-items: end center;
+  padding-bottom: 16px;
+}
+
+.nodeRemote .nodeSub {
+  display: none;
+}
+
+.nodeRemote .nodeLabel {
+  transform: translateY(2px);
 }
 
 .nodeLit {
