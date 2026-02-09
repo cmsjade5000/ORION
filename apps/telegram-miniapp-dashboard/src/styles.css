@@ -382,9 +382,20 @@ html {
   filter: drop-shadow(0 0 6px rgba(124, 247, 193, 0.22));
 }
 
+.connectionLineIn {
+  /* Reverse the dash flow to look like a return transmission back toward ORION. */
+  animation: dashIn 0.7s linear infinite;
+}
+
 @keyframes dash {
   to {
     stroke-dashoffset: -18;
+  }
+}
+
+@keyframes dashIn {
+  to {
+    stroke-dashoffset: 18;
   }
 }
 

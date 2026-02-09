@@ -60,6 +60,12 @@ Security signals (alert-only):
 - Unexpected changes to AEGIS systemd units or env.
 - Unexpected tailscale peer changes.
 
+Human-in-the-loop defense plans (proposal only):
+- For security signals, AEGIS may write a short "Defense Plan" artifact on the Hetzner host with:
+  - What/why, evidence, recommended allowlisted actions, and rollback.
+- AEGIS must not execute defensive changes automatically.
+- ORION is the only executor, and only via a tight allowlist (see `docs/AEGIS_RUNBOOK.md`).
+
 Email meta-signals (alert-only):
 - AEGIS does not access ORION's inbox.
 - If ORION publishes sanitized email telemetry (counts/ratios only), AEGIS may alert on:

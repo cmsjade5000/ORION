@@ -65,6 +65,9 @@ fi
 : "${AEGIS_TELEGRAM_TOKEN:=}"
 : "${AEGIS_TELEGRAM_CHAT_ID:=}"
 
+DEFENSE_PLANS_DIR="$STATE_DIR/defense_plans"
+ALERT_SENT=0
+
 post_slack() {
   local text="$1"
   if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL_ID" ]; then
@@ -121,7 +124,8 @@ msg_system() {
 }
 
 alert_throttled() {
-  # alert_throttled <key> <ttl_seconds> <text> <severity> <trigger> <summary> <actions>
+  # alert_throttled <key> <ttl_seconds> <text> <severity> <trigger> <summary> <actions> [incident_id]
+  # Sets global ALERT_SENT=1 when sent, 0 when skipped.
   local key="$1"
   local ttl="$2"
   local text="$3"
@@ -129,19 +133,83 @@ alert_throttled() {
   local trigger="${5:-}"
   local summary="${6:-}"
   local actions="${7:-}"
+  local incident_id="${8:-}"
   local f="$STATE_DIR/alert_${key}"
   local now
   now=$(date +%s)
   local last=0
+  ALERT_SENT=0
   [ -f "$f" ] && last=$(cat "$f" 2>/dev/null || echo 0)
   if [ $((now - last)) -lt "$ttl" ]; then
     return 0
   fi
   echo "$now" >"$f"
   if [ -n "$severity" ]; then
-    incident_append "INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')" "$severity" "$trigger" "$summary" "$actions" "open"
+    if [ -z "$incident_id" ]; then
+      incident_id="INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')"
+    fi
+    incident_append "$incident_id" "$severity" "$trigger" "$summary" "$actions" "open"
   fi
   notify "$text"
+  ALERT_SENT=1
+  return 0
+}
+
+rand_code() {
+  # 10 chars from a restricted alphabet for easy transcription.
+  local code=""
+  if [ -r /dev/urandom ]; then
+    code="$(tr -dc 'A-Z2-7' </dev/urandom | head -c 10 || true)"
+  fi
+  if [ -z "$code" ]; then
+    code="$(date -u '+%H%M%S' | tr -dc '0-9' | head -c 6)"
+  fi
+  printf '%s' "$code"
+}
+
+write_defense_plan_ssh_anomaly() {
+  # write_defense_plan_ssh_anomaly <incident_id> <count> <top_ips_csv>
+  local incident_id="$1"
+  local count="$2"
+  local top_ips="$3"
+  local now code file
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  code="$(rand_code)"
+  file="$DEFENSE_PLANS_DIR/${incident_id}.md"
+
+  mkdir -p "$DEFENSE_PLANS_DIR"
+  if getent group aegis >/dev/null 2>&1; then
+    chgrp -R aegis "$DEFENSE_PLANS_DIR" 2>/dev/null || true
+  fi
+  chmod 0750 "$DEFENSE_PLANS_DIR" 2>/dev/null || true
+
+  {
+    printf 'DEFENSE PLAN v1\n'
+    printf 'Incident: %s\n' "$incident_id"
+    printf 'Detected: %s\n' "$now"
+    printf 'Signal: SSH_AUTH_ANOMALY\n'
+    printf 'Why: Many failed SSH logins were detected in a short window.\n'
+    printf 'ApprovalCode: %s\n' "$code"
+    printf '\n'
+    printf 'Evidence:\n'
+    printf -- '- Failed logins (~5m): %s\n' "$count"
+    printf -- '- Top sources: %s\n' "$top_ips"
+    printf '\n'
+    printf 'Recommended (HITL, allowlisted):\n'
+    printf -- '- View details: aegis-defend show %s\n' "$incident_id"
+    printf -- '- Diagnose (no changes): aegis-defend run %s diagnose_ssh\n' "$incident_id"
+    printf -- '- Ban an IP via fail2ban (temporary): aegis-defend run %s fail2ban_banip --ip <IP>\n' "$incident_id"
+    printf '\n'
+    printf 'Rollback:\n'
+    printf -- '- Unban an IP: aegis-defend run %s fail2ban_unbanip --ip <IP>\n' "$incident_id"
+    printf '\n'
+    printf 'Notes:\n'
+    printf -- '- All actions require explicit approval via the ApprovalCode above (or a short-lived approval window).\n'
+    printf -- '- Prefer banning specific IPs over changing SSH/UFW config unless you are actively responding to an incident.\n'
+  } >"$file"
+
+  chmod 0640 "$file" 2>/dev/null || true
+  log "INFO: defense plan written file=$file incident=$incident_id"
 }
 
 # 1) OpenClaw service down (allowed action: restart AEGIS gateway)
@@ -181,10 +249,15 @@ if [ -n "$ssh_lines" ]; then
       | sed -nE 's/.*from ([0-9.]+).*/\\1/p' | sort | uniq -c | sort -nr | head -n 3 | awk '{print $2" ("$1")"}' | paste -sd', ' -)
     [ -z "$top_ips" ] && top_ips="unknown"
     log "ALERT: SSH anomaly count=$count top=$top_ips"
+    incident_id="INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')"
     alert_throttled \
       "ssh_anomaly" 900 \
-      "$(msg_security "Many failed SSH login attempts." "$count failed logins in the last ~5 minutes. Top sources: $top_ips" "No automatic action taken. If unexpected, review auth logs + firewall/fail2ban.")" \
-      "P1" "AEGIS_SECURITY_ALERT" "Many failed SSH login attempts." "Alerted only; no automatic defensive action."
+      "$(msg_security "Many failed SSH login attempts." "$count failed logins in the last ~5 minutes. Top sources: $top_ips" "Defense plan prepared ($incident_id). Ask ORION to review/execute allowlisted steps.")" \
+      "P1" "AEGIS_SECURITY_ALERT" "Many failed SSH login attempts." "Alerted only; defense actions require ORION approval." \
+      "$incident_id"
+    if [ "$ALERT_SENT" -eq 1 ]; then
+      write_defense_plan_ssh_anomaly "$incident_id" "$count" "$top_ips"
+    fi
   fi
 fi
 
@@ -278,4 +351,3 @@ fi
 
 mark_ok
 log "OK: sentinel cycle"
-

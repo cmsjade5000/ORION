@@ -50,6 +50,12 @@ Security sentinel (signal-only):
   - Repo source: `scripts/aegis_remote/aegis-sentinel` (copy to `/usr/local/bin/aegis-sentinel` on Hetzner)
 - Log: `/var/log/aegis-sentinel/sentinel.log`
 
+Human-in-the-loop defender (allowlisted executor):
+- Script: `/usr/local/bin/aegis-defend`
+  - Repo source: `scripts/aegis_remote/aegis-defend` (copy to `/usr/local/bin/aegis-defend` on Hetzner)
+- Purpose: execute a *tight allowlist* of defensive actions only when ORION (and Cory) explicitly approve.
+- Local wrapper (Mac mini / ORION workspace): `scripts/aegis_defense.sh`
+
 Tailscale:
 - Unit: `tailscaled`
 - Status: `tailscale status`
@@ -128,6 +134,27 @@ AEGIS writes a local, append-only incident history on the Hetzner host:
 
 The ORION workspace incident log (git-tracked) is:
 - `tasks/INCIDENTS.md`
+
+## Defense Plans (HITL)
+
+For security signals, AEGIS can write a defense plan file on the Hetzner host. This is a proposal only; AEGIS does not execute defensive changes automatically.
+
+- Plans directory (Hetzner): `/var/lib/aegis-sentinel/defense_plans/`
+- Each plan contains:
+  - What happened (why this triggered)
+  - Evidence (small, non-secret summary)
+  - Suggested allowlisted commands to run via `aegis-defend`
+  - Rollback steps
+  - An `ApprovalCode` used to ensure each action is explicitly approved
+
+Common flow:
+1. AEGIS emits an alert with an `INC-AEGIS-...` incident id.
+2. ORION reviews the plan:
+   - `scripts/aegis_defense.sh show <INCIDENT_ID>`
+3. Cory approves (one-time) or opens a short window (example 30 minutes):
+   - One-time: `scripts/aegis_defense.sh run <INCIDENT_ID> <ACTION> --code <ApprovalCode> ...`
+   - Window: `scripts/aegis_defense.sh approve <INCIDENT_ID> --minutes 30 --code <ApprovalCode>`
+4. ORION executes allowlisted actions only through `aegis-defend`.
 
 ## ORION Restart Loop Guard (Anti-Flap)
 

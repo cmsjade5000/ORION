@@ -294,6 +294,7 @@ const MOCK_STATE = process.env.MOCK_STATE !== "0";
 const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const STALE_MS = Number(process.env.STALE_MS || 20_000); // clear agent activity if no updates
 const ACTIVE_STALE_MS = Number(process.env.ACTIVE_STALE_MS || 8_000); // clear ORION->agent focus line
+const LINK_STALE_MS = Number(process.env.LINK_STALE_MS || 4_200); // how long to show directional flow
 
 function createStore() {
   const agents = new Map();
@@ -310,6 +311,7 @@ function createStore() {
     activeAgentId: null,
     activeUpdatedAt: 0,
     orionBadges: new Map(), // emoji -> until
+    link: { agentId: null, dir: "out", until: 0 },
   };
 }
 
@@ -331,6 +333,14 @@ function bumpActive(id) {
   if (!id) return;
   STORE.activeAgentId = id;
   STORE.activeUpdatedAt = Date.now();
+}
+
+function setLink(agentId, dir, holdMs = LINK_STALE_MS) {
+  if (!agentId) return;
+  const until = Date.now() + Math.max(250, holdMs);
+  STORE.link.agentId = agentId;
+  STORE.link.dir = dir === "in" ? "in" : "out";
+  STORE.link.until = Math.max(STORE.link.until || 0, until);
 }
 
 function addOrionBadge(emoji, holdMs = 5200) {
@@ -371,6 +381,7 @@ function applyEventToStore(body) {
         if (activity) setAgentActivity(agentId, activity);
       }
       bumpActive(agentId);
+      setLink(agentId, "out");
     }
     // Mirror activity to the central node so the user can see what ORION is doing.
     const em = activityToEmoji(activity);
@@ -384,6 +395,7 @@ function applyEventToStore(body) {
       setAgentStatus(agentId, "busy");
       setAgentActivity(agentId, type === "tool.failed" ? "error" : "tooling");
       bumpActive(agentId);
+      setLink(agentId, "out");
     }
     return;
   }
@@ -395,8 +407,12 @@ function applyEventToStore(body) {
         // Conservative: mark idle at the end of a task unless later events say otherwise.
         setAgentActivity(agentId, "idle");
         setAgentStatus(agentId, "idle");
+        // Show return-flow back into ORION.
+        addOrionBadge("📥", 5200);
+        setLink(agentId, "in", LINK_STALE_MS);
       } else {
         setAgentStatus(agentId, "active");
+        setLink(agentId, "out");
       }
       bumpActive(agentId);
     }
@@ -420,6 +436,11 @@ function snapshotLiveState() {
       ? STORE.activeAgentId
       : null;
 
+  const link =
+    STORE.link?.agentId && STORE.link.until && STORE.link.until > now
+      ? { agentId: STORE.link.agentId, dir: STORE.link.dir }
+      : null;
+
   // Keep only recent badges, prefer the most recent few.
   const badges = [];
   for (const [emoji, until] of STORE.orionBadges.entries()) {
@@ -430,6 +451,7 @@ function snapshotLiveState() {
   return {
     ts: now,
     activeAgentId,
+    link,
     agents,
     orion: {
       status: activeAgentId || badges.length ? "busy" : "idle",
@@ -716,6 +738,9 @@ app.post("/api/command", (req, res) => {
   const activity = inferActivity(text);
   markRealEvent();
 
+  // Visual: ORION is dispatching work outwards.
+  addOrionBadge("📤", 2600);
+
   if (targetAgent === "LEDGER") {
     ledgerPulseIdx += 1;
   }
@@ -744,6 +769,24 @@ app.post("/api/command", (req, res) => {
   const shouldRoute = process.env.OPENCLAW_ROUTE_COMMANDS === "1";
   // Prefer DM replies (userId) to avoid spamming groups when a miniapp is opened from a group context.
   const deliverTarget = String(ctx.userId ?? ctx.chatId ?? "").trim();
+
+  // If we're not actually routing into ORION, simulate a quick round-trip so the UI can
+  // show a "return transmission" and ORION "receiving" behavior as a control.
+  if (!shouldRoute || !deliverTarget) {
+    setTimeout(() => {
+      applyEventToStore({ type: "task.completed", agentId: targetAgent });
+      if (STREAM_CLIENTS.size > 0) {
+        sseBroadcast("task.completed", {
+          id: acceptedId,
+          ts: Date.now(),
+          type: "task.completed",
+          data: { requestId, ok: true, code: 0, agentId: targetAgent, simulated: true },
+        });
+        scheduleStateBroadcast();
+      }
+    }, 1200);
+  }
+
   if (shouldRoute && deliverTarget) {
     const agentId = process.env.OPENCLAW_AGENT_ID?.trim() || "main";
     const args = [
@@ -779,18 +822,31 @@ app.post("/api/command", (req, res) => {
       child.on("error", (e) => {
         // eslint-disable-next-line no-console
         console.log("[miniapp] openclaw spawn failed", { message: e?.message || String(e) });
+        applyEventToStore({ type: "task.failed", agentId: targetAgent });
+        if (STREAM_CLIENTS.size > 0) {
+          sseBroadcast("task.failed", {
+            id: acceptedId,
+            ts: Date.now(),
+            type: "task.failed",
+            data: { requestId, ok: false, code: null, agentId: targetAgent, error: e?.message || String(e) },
+          });
+          scheduleStateBroadcast();
+        }
       });
       child.on("close", (code) => {
         const ok = code === 0;
         const preview = (ok ? out : err).trim().slice(0, 600);
         // eslint-disable-next-line no-console
         console.log("[miniapp] openclaw route result", { ok, code, preview });
+
+        // Treat completion as a return-flow back into ORION.
+        applyEventToStore({ type: ok ? "task.completed" : "task.failed", agentId: targetAgent });
         if (STREAM_CLIENTS.size > 0) {
           sseBroadcast(ok ? "task.completed" : "task.failed", {
             id: acceptedId,
             ts: Date.now(),
             type: ok ? "task.completed" : "task.failed",
-            data: { requestId, ok, code },
+            data: { requestId, ok, code, agentId: targetAgent },
           });
           scheduleStateBroadcast();
         }
@@ -798,6 +854,16 @@ app.post("/api/command", (req, res) => {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.log("[miniapp] openclaw route exception", { message: (e && e.message) || String(e) });
+      applyEventToStore({ type: "task.failed", agentId: targetAgent });
+      if (STREAM_CLIENTS.size > 0) {
+        sseBroadcast("task.failed", {
+          id: acceptedId,
+          ts: Date.now(),
+          type: "task.failed",
+          data: { requestId, ok: false, code: null, agentId: targetAgent, error: (e && e.message) || String(e) },
+        });
+        scheduleStateBroadcast();
+      }
     }
   }
 

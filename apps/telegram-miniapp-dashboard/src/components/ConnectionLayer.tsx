@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { RefObject } from "react";
+import type { ActiveLink } from "../api/state";
 
 type Point = { x: number; y: number };
 type NodeGeom = { c: Point; r: number };
@@ -23,6 +24,7 @@ function geomOf(el: HTMLElement, relativeTo: DOMRect): NodeGeom {
  */
 export default function ConnectionLayer(props: {
   activeAgentId: string | null;
+  link?: ActiveLink | null;
   containerRef: RefObject<HTMLDivElement>;
 }) {
   const rid = useId();
@@ -32,9 +34,12 @@ export default function ConnectionLayer(props: {
   const [holeB, setHoleB] = useState<NodeGeom | null>(null);
   const [vb, setVb] = useState<{ w: number; h: number } | null>(null);
 
+  const agentId = props.link?.agentId ?? props.activeAgentId;
+  const dir = props.link?.dir ?? "out";
+
   const key = useMemo(() => {
-    return props.activeAgentId ? `ORION->${props.activeAgentId}` : "none";
-  }, [props.activeAgentId]);
+    return agentId ? `${dir}:${agentId}` : "none";
+  }, [agentId, dir]);
 
   const maskId = useMemo(() => {
     // Stable-ish per-connection id so Safari doesn't reuse masks incorrectly.
@@ -50,8 +55,8 @@ export default function ConnectionLayer(props: {
     const update = () => {
       const stageRect = container.getBoundingClientRect();
       const orion = container.querySelector<HTMLElement>("[data-node-id='ORION']");
-      const target = props.activeAgentId
-        ? container.querySelector<HTMLElement>(`[data-node-id='${props.activeAgentId}']`)
+      const target = agentId
+        ? container.querySelector<HTMLElement>(`[data-node-id='${agentId}']`)
         : null;
 
       if (!orion || !target) {
@@ -97,7 +102,7 @@ export default function ConnectionLayer(props: {
     // Nodes are fixed-position now; update on resize + a light interval while active
     // to handle Telegram WebView layout shifts.
     update();
-    const t = props.activeAgentId ? window.setInterval(update, 250) : null;
+    const t = agentId ? window.setInterval(update, 250) : null;
 
     const onResize = () => update();
     window.addEventListener("resize", onResize);
@@ -106,7 +111,7 @@ export default function ConnectionLayer(props: {
       window.removeEventListener("resize", onResize);
       if (t) window.clearInterval(t);
     };
-  }, [props.activeAgentId, props.containerRef, key]);
+  }, [agentId, props.containerRef, key]);
 
   if (!from || !to || !holeA || !holeB || !vb) return null;
 
@@ -144,7 +149,7 @@ export default function ConnectionLayer(props: {
       </defs>
 
       <line
-        className="connectionLine"
+        className={["connectionLine", dir === "in" ? "connectionLineIn" : ""].filter(Boolean).join(" ")}
         x1={from.x}
         y1={from.y}
         x2={to.x}

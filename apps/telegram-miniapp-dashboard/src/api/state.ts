@@ -23,9 +23,17 @@ export type OrionState = {
   processes?: string[];
 };
 
+export type LinkDir = "out" | "in";
+export type ActiveLink = {
+  agentId: string;
+  dir: LinkDir;
+};
+
 export type LiveState = {
   ts: number;
   activeAgentId: string | null;
+  // Optional richer link metadata for connection animations (directionality).
+  link?: ActiveLink | null;
   agents: AgentState[];
   orion?: OrionState;
 };

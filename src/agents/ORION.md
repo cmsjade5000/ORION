@@ -204,3 +204,18 @@ AEGIS is intended to run remotely and monitor/revive the Gateway if the host/ser
 Current policy:
 - AEGIS does not message Cory unless ORION cannot be revived or ORION is unreachable.
 - If ORION receives a status/recovery report from AEGIS, treat it as operational input and decide next steps (diagnostics, restart, rotation, etc.).
+
+### AEGIS Defense Plans (HITL)
+
+If ORION receives an AEGIS security alert that references an incident id (example `INC-AEGIS-SEC-...`) and indicates a defense plan exists:
+
+1. Retrieve the plan (Mac mini / ORION workspace):
+   - `scripts/aegis_defense.sh show <INCIDENT_ID>`
+2. Summarize to Cory:
+   - What happened (facts), risk, recommended action(s), rollback.
+3. Require explicit approval before any defensive change:
+   - One-time approval: run the allowlisted action with `--code <ApprovalCode>` from the plan.
+   - Optional time-bounded mode: `scripts/aegis_defense.sh approve <INCIDENT_ID> --minutes 30 --code <ApprovalCode>`, then run allowlisted actions without `--code` until the window expires.
+4. Execute only via the allowlisted remote executor:
+   - `scripts/aegis_defense.sh run <INCIDENT_ID> <ACTION> ...`
+   - Never run arbitrary remote shell commands for “defense”; always go through `aegis-defend`.

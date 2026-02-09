@@ -10,6 +10,7 @@ export default function NetworkDashboard(props: { state: LiveState }) {
 
   const agents = useMemo(() => props.state.agents, [props.state.agents]);
   const active = props.state.activeAgentId;
+  const linkAgentId = props.state.link?.agentId ?? null;
   const smoothed = useSmoothedActivities(agents);
   const orion = props.state.orion;
 
@@ -105,7 +106,7 @@ export default function NetworkDashboard(props: { state: LiveState }) {
       />
 
       {/* Connections (ORION -> active agent) */}
-      <ConnectionLayer activeAgentId={active} containerRef={containerRef} />
+      <ConnectionLayer activeAgentId={active} link={props.state.link ?? null} containerRef={containerRef} />
 
       {/* Central node */}
       <Node
@@ -113,7 +114,7 @@ export default function NetworkDashboard(props: { state: LiveState }) {
         status={orion?.status ?? (active ? "busy" : "idle")}
         processes={orion?.processes}
         kind="central"
-        active={!!active}
+        active={Boolean(active || linkAgentId)}
         style={{
           position: "absolute",
           top: "50%",

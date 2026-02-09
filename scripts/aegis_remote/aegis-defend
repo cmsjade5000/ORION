@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# aegis-defend: allowlisted, auditable defensive operations on the AEGIS host.
+# Intended to be invoked by ORION after explicit human approval (HITL).
+
+STATE_DIR="/var/lib/aegis-sentinel"
+PLANS_DIR="$STATE_DIR/defense_plans"
+APPROVALS_DIR="$STATE_DIR/defense_approvals"
+ACTIONS_LOG="$STATE_DIR/defense_actions.log"
+
+LOG_DIR="/var/log/aegis-sentinel"
+LOG_FILE="$LOG_DIR/defense.log"
+
+mkdir -p "$STATE_DIR" "$PLANS_DIR" "$APPROVALS_DIR" "$LOG_DIR"
+touch "$ACTIONS_LOG" "$LOG_FILE"
+chmod 0640 "$ACTIONS_LOG" "$LOG_FILE" 2>/dev/null || true
+
+if getent group aegis >/dev/null 2>&1; then
+  chgrp -R aegis "$STATE_DIR" "$PLANS_DIR" "$APPROVALS_DIR" "$LOG_DIR" 2>/dev/null || true
+fi
+chmod 0750 "$STATE_DIR" "$PLANS_DIR" "$APPROVALS_DIR" "$LOG_DIR" 2>/dev/null || true
+
+log() {
+  local msg="$*"
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$msg" >>"$LOG_FILE"
+  logger -t aegis-defend -- "$msg" || true
+}
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 2
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  aegis-defend list
+  aegis-defend show <INCIDENT_ID>
+  aegis-defend approve <INCIDENT_ID> --minutes <N> --code <APPROVAL_CODE>
+  aegis-defend run <INCIDENT_ID> <ACTION> [--code <APPROVAL_CODE>] [action args...]
+
+Actions (allowlisted):
+  diagnose_ssh
+  fail2ban_banip --ip <IPv4> [--jail <name>]
+  fail2ban_unbanip --ip <IPv4> [--jail <name>]
+
+Notes:
+  - run requires either --code matching the plan's ApprovalCode OR a valid time-bounded approval (approve).
+  - Plans live under /var/lib/aegis-sentinel/defense_plans/<INCIDENT_ID>.md
+EOF
+}
+
+is_ipv4() {
+  local ip="$1"
+  [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+  local IFS=.
+  local -a parts
+  read -r -a parts <<<"$ip"
+  local p
+  for p in "${parts[@]}"; do
+    [ "$p" -ge 0 ] 2>/dev/null && [ "$p" -le 255 ] 2>/dev/null || return 1
+  done
+  return 0
+}
+
+plan_file() {
+  local incident="$1"
+  echo "$PLANS_DIR/${incident}.md"
+}
+
+plan_code() {
+  local f="$1"
+  # Extract "ApprovalCode: XYZ"
+  sed -nE 's/^ApprovalCode:[[:space:]]*([A-Z2-7]{4,})[[:space:]]*$/\1/p' "$f" | head -n 1
+}
+
+require_plan() {
+  local incident="$1"
+  local f
+  f="$(plan_file "$incident")"
+  [ -f "$f" ] || die "No defense plan found for incident=$incident (expected $f)"
+  echo "$f"
+}
+
+approval_file() {
+  local incident="$1"
+  echo "$APPROVALS_DIR/${incident}.expires"
+}
+
+check_or_require_approval() {
+  # check_or_require_approval <incident> <maybe_code>
+  local incident="$1"
+  local maybe_code="${2:-}"
+  local f code
+  f="$(require_plan "$incident")"
+  code="$(plan_code "$f")"
+  [ -n "$code" ] || die "Plan missing ApprovalCode: $f"
+
+  # 1) One-shot approval code path
+  if [ -n "$maybe_code" ] && [ "$maybe_code" = "$code" ]; then
+    return 0
+  fi
+
+  # 2) Time-bounded approval window path
+  local af now exp
+  af="$(approval_file "$incident")"
+  now="$(date +%s)"
+  if [ -f "$af" ]; then
+    exp="$(cat "$af" 2>/dev/null || echo 0)"
+    if [ "$exp" -gt "$now" ] 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  die "Approval required. Provide --code matching the plan ApprovalCode, or run: aegis-defend approve $incident --minutes <N> --code <ApprovalCode>"
+}
+
+cmd_list() {
+  find "$PLANS_DIR" -maxdepth 1 -type f -name 'INC-*.md' -printf '%f\n' 2>/dev/null \
+    | sed -E 's/\.md$//' \
+    | sort || true
+}
+
+cmd_show() {
+  local incident="$1"
+  local f
+  f="$(require_plan "$incident")"
+  cat "$f"
+}
+
+cmd_approve() {
+  local incident="$1"
+  shift
+  local minutes="" code=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --minutes) minutes="${2:-}"; shift 2 ;;
+      --code) code="${2:-}"; shift 2 ;;
+      *) die "Unknown approve arg: $1" ;;
+    esac
+  done
+  [ -n "$minutes" ] || die "approve requires --minutes"
+  [ -n "$code" ] || die "approve requires --code"
+  [[ "$minutes" =~ ^[0-9]+$ ]] || die "--minutes must be an integer"
+  [ "$minutes" -ge 1 ] && [ "$minutes" -le 180 ] || die "--minutes must be between 1 and 180"
+
+  local f expected now exp af
+  f="$(require_plan "$incident")"
+  expected="$(plan_code "$f")"
+  [ -n "$expected" ] || die "Plan missing ApprovalCode: $f"
+  [ "$code" = "$expected" ] || die "ApprovalCode mismatch"
+
+  now="$(date +%s)"
+  exp=$((now + minutes * 60))
+  af="$(approval_file "$incident")"
+  printf '%s\n' "$exp" >"$af"
+  chmod 0640 "$af" 2>/dev/null || true
+  log "APPROVED: incident=$incident minutes=$minutes exp=$exp"
+  echo "APPROVED_OK incident=$incident minutes=$minutes"
+}
+
+append_action_audit() {
+  local incident="$1"
+  local action="$2"
+  local detail="$3"
+  printf '%s incident=%s action=%s detail=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$incident" "$action" "$detail" >>"$ACTIONS_LOG"
+}
+
+action_diagnose_ssh() {
+  # No changes; safe diagnostics.
+  echo "UTC: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "Host: $(hostname)"
+  echo "User: $(whoami)"
+  echo
+  if journalctl -u ssh --since '15 minutes ago' >/dev/null 2>&1; then
+    echo "SSH failures (last ~15m):"
+    journalctl -u ssh --since '15 minutes ago' --no-pager \
+      | grep -E 'Failed (password|publickey)|Invalid user|authentication failure' \
+      | tail -n 30 || true
+  elif journalctl -u sshd --since '15 minutes ago' >/dev/null 2>&1; then
+    echo "SSHD failures (last ~15m):"
+    journalctl -u sshd --since '15 minutes ago' --no-pager \
+      | grep -E 'Failed (password|publickey)|Invalid user|authentication failure' \
+      | tail -n 30 || true
+  elif [ -f /var/log/auth.log ]; then
+    echo "auth.log failures (tail):"
+    tail -n 200 /var/log/auth.log \
+      | grep -E 'Failed (password|publickey)|Invalid user|authentication failure' \
+      | tail -n 30 || true
+  else
+    echo "No ssh journal or auth.log found."
+  fi
+  echo
+  if command -v fail2ban-client >/dev/null 2>&1; then
+    echo "fail2ban status sshd:"
+    fail2ban-client status sshd 2>/dev/null || true
+  else
+    echo "fail2ban-client not installed."
+  fi
+}
+
+action_fail2ban_banip() {
+  local jail="$1"
+  local ip="$2"
+  command -v fail2ban-client >/dev/null 2>&1 || die "fail2ban-client not installed"
+  is_ipv4 "$ip" || die "Invalid IPv4: $ip"
+  fail2ban-client set "$jail" banip "$ip" >/dev/null
+}
+
+action_fail2ban_unbanip() {
+  local jail="$1"
+  local ip="$2"
+  command -v fail2ban-client >/dev/null 2>&1 || die "fail2ban-client not installed"
+  is_ipv4 "$ip" || die "Invalid IPv4: $ip"
+  fail2ban-client set "$jail" unbanip "$ip" >/dev/null
+}
+
+cmd_run() {
+  local incident="$1"
+  local action="$2"
+  shift 2
+
+  local code=""
+  if [ "${1:-}" = "--code" ]; then
+    code="${2:-}"
+    shift 2
+  fi
+
+  check_or_require_approval "$incident" "$code"
+
+  case "$action" in
+    diagnose_ssh)
+      append_action_audit "$incident" "$action" "no_change"
+      log "RUN: incident=$incident action=$action"
+      action_diagnose_ssh
+      ;;
+    fail2ban_banip|fail2ban_unbanip)
+      local ip="" jail="sshd"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --ip) ip="${2:-}"; shift 2 ;;
+          --jail) jail="${2:-}"; shift 2 ;;
+          *) die "Unknown $action arg: $1" ;;
+        esac
+      done
+      [ -n "$ip" ] || die "$action requires --ip"
+      append_action_audit "$incident" "$action" "jail=$jail ip=$ip"
+      log "RUN: incident=$incident action=$action jail=$jail ip=$ip"
+      if [ "$action" = "fail2ban_banip" ]; then
+        action_fail2ban_banip "$jail" "$ip"
+      else
+        action_fail2ban_unbanip "$jail" "$ip"
+      fi
+      echo "OK action=$action ip=$ip jail=$jail"
+      ;;
+    *)
+      die "Action not allowlisted: $action"
+      ;;
+  esac
+}
+
+main() {
+  local cmd="${1:-}"
+  case "$cmd" in
+    ""|-h|--help) usage; exit 0 ;;
+    list) cmd_list ;;
+    show) [ $# -ge 2 ] || die "show requires <INCIDENT_ID>"; cmd_show "$2" ;;
+    approve) [ $# -ge 2 ] || die "approve requires <INCIDENT_ID>"; shift; cmd_approve "$@" ;;
+    run) [ $# -ge 3 ] || die "run requires <INCIDENT_ID> <ACTION>"; shift; cmd_run "$@" ;;
+    *) die "Unknown command: $cmd (try --help)" ;;
+  esac
+}
+
+main "$@"

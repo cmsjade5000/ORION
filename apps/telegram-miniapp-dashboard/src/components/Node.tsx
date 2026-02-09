@@ -60,6 +60,14 @@ export default function Node(props: {
 
   // ORION central process emoji rotation (smooth, not flickery).
   const processes = props.kind === "central" ? (props.processes ?? []) : [];
+  const centralSub = (() => {
+    if (props.kind !== "central") return props.status;
+    // Give ORION a human-readable substatus when we have directional IO badges.
+    if (processes.includes("📥")) return "receiving";
+    if (processes.includes("📤")) return "dispatching";
+    // Fall back to the raw status string.
+    return props.status;
+  })();
   const [procIdx, setProcIdx] = useState(0);
   const curProc = processes.length ? processes[procIdx % processes.length] : null;
   const [curProcEmoji, setCurProcEmoji] = useState<string | null>(curProc);
@@ -117,7 +125,7 @@ export default function Node(props: {
         <div className="nodeLabel">{props.id}</div>
         {props.kind === "central" ? (
           <>
-            <div className="nodeSub">{props.status}</div>
+            <div className="nodeSub">{centralSub}</div>
             <div className="nodeSub nodeSubCentral" aria-hidden="true">
             {prevProcEmoji ? (
               <span key={`${prevProcEmoji}-out`} className="nodeProcEmoji nodeProcEmojiOut">
