@@ -98,13 +98,15 @@ export default function NetworkDashboard(props: { state: LiveState }) {
     const ringH = clamp(2 * (rY + agentRadius + ringPad), 220, h);
 
     // Frame positions
-    const cornerPadX = clamp(safePadX + 4, 74, Math.max(74, w / 2 - 30));
-    const cornerPadY = clamp(safePadY + 10, 86, Math.max(86, h / 2 - 30));
+    // Corner padding: keep nodes mostly inside the stage, but intentionally tighter in portrait
+    // so the layout uses more of the screen.
+    const cornerPadX = clamp(agentExtent * 0.90, 58, Math.max(58, w / 2 - agentRadius - 14));
+    const cornerPadY = clamp(agentExtent * 0.98, 68, Math.max(68, h / 2 - agentRadius - 18));
 
     const positions: Record<string, { x: number; y: number; variant?: "remote" }> = {};
     if (frameMode) {
       // Put AEGIS a bit above the top edge so it feels "remote" / partially off-canvas.
-      positions.AEGIS = { x: cx, y: cornerPadY - agentRadius * 0.9, variant: "remote" };
+      positions.AEGIS = { x: cx, y: -agentRadius * 0.18, variant: "remote" };
       positions.ATLAS = { x: cornerPadX, y: cornerPadY };
       positions.EMBER = { x: w - cornerPadX, y: cornerPadY };
       positions.PIXEL = { x: cornerPadX, y: h - cornerPadY };

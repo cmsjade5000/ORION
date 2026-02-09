@@ -451,7 +451,7 @@ html {
 /* Small iPhone portrait tuning */
 @media (max-width: 420px) {
   .orbit {
-    inset: 18px;
+    inset: 12px;
   }
 
   .node {
