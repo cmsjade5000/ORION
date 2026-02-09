@@ -938,8 +938,9 @@ app.post("/api/command", (req, res) => {
   // If we're not actually routing into ORION, simulate a quick round-trip so the UI can
   // show a "return transmission" and ORION "receiving" behavior as a control.
   if (!shouldRoute || !deliverTarget) {
-    const hopMs = Number(process.env.SIM_HOP_MS || 950);
-    const gapMs = Number(process.env.SIM_GAP_MS || 260);
+    // Theatric pacing (human-observable). Override with env if desired.
+    const hopMs = Number(process.env.SIM_HOP_MS || 1800);
+    const gapMs = Number(process.env.SIM_GAP_MS || 800);
 
     const completeHop = (agentId) => {
       applyEventToStore({ type: "task.completed", agentId });
