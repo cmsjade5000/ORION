@@ -48,6 +48,11 @@ export default function ConnectionLayer(props: {
     return `clip_${safeRid}_${key.replace(/[^a-zA-Z0-9_\\-]/g, "_")}`;
   }, [key, rid]);
 
+  const markerId = useMemo(() => {
+    const safeRid = rid.replace(/[^a-zA-Z0-9_\\-]/g, "_");
+    return `arrow_${safeRid}_${key.replace(/[^a-zA-Z0-9_\\-]/g, "_")}`;
+  }, [key, rid]);
+
   useEffect(() => {
     const container = props.containerRef.current;
     if (!container) return;
@@ -149,15 +154,39 @@ export default function ConnectionLayer(props: {
           {/* evenodd: rect visible, circles removed */}
           <path d={punch} fillRule="evenodd" clipRule="evenodd" />
         </clipPath>
+        {/* Subtle arrow head. Direction is controlled by swapping endpoints based on `dir`. */}
+        <marker
+          id={markerId}
+          viewBox="0 0 10 10"
+          refX="8.5"
+          refY="5"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(124, 247, 193, 0.95)" />
+        </marker>
       </defs>
 
       <line
-        className={["connectionLine", dir === "in" ? "connectionLineIn" : ""].filter(Boolean).join(" ")}
+        className="connectionLine"
         x1={from.x}
         y1={from.y}
         x2={to.x}
         y2={to.y}
         clipPath={`url(#${maskId})`}
+      />
+
+      {/* "Packet" that travels along the link to make direction obvious. */}
+      <line
+        className="connectionPacket"
+        x1={from.x}
+        y1={from.y}
+        x2={to.x}
+        y2={to.y}
+        clipPath={`url(#${maskId})`}
+        markerEnd={`url(#${markerId})`}
       />
     </svg>
   );

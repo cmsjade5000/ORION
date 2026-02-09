@@ -402,20 +402,26 @@ html {
   filter: drop-shadow(0 0 6px rgba(124, 247, 193, 0.22));
 }
 
-.connectionLineIn {
-  /* Reverse the dash flow to look like a return transmission back toward ORION. */
-  animation: dashIn 0.7s linear infinite;
-}
-
 @keyframes dash {
   to {
     stroke-dashoffset: -18;
   }
 }
 
-@keyframes dashIn {
+/* A single moving "packet" dash to make direction obvious. */
+.connectionPacket {
+  stroke: rgba(124, 247, 193, 0.95);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 2 9999;
+  animation: packet 0.85s linear infinite;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 10px rgba(124, 247, 193, 0.18));
+}
+
+@keyframes packet {
   to {
-    stroke-dashoffset: 18;
+    stroke-dashoffset: -1000;
   }
 }
 
