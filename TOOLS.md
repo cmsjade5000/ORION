@@ -24,6 +24,7 @@ Prefer:
 - ORION orchestrates tool usage decisions.
 - ATLAS executes approved operational tools.
 - NODE reviews architectural or systemic implications.
+- WIRE performs sources-first retrieval (links/evidence) and returns results to ORION only (internal-only).
 - Other agents may recommend tools but do not invoke them.
 
 Email tools:
@@ -38,6 +39,7 @@ Email tools:
 
 - Destructive commands require explicit user approval.
 - Network exposure, credential changes, or system modifications must be surfaced clearly before execution.
+- Enabling Mini App command routing into ORION (`OPENCLAW_ROUTE_COMMANDS=1` in `apps/telegram-miniapp-dashboard/`) is treated as a system modification and requires explicit approval.
 - Prefer dry-runs, previews, or explanations before acting.
 - Prefer routing operational execution through ATLAS (ORION -> ATLAS -> (NODE|PULSE|STRATUS)) unless the action is a deterministic local script (for example a verified AgentMail send wrapper).
 

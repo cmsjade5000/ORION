@@ -40,6 +40,16 @@ openclaw models status
 Runbook:
 - `docs/RECOVERY.md`
 
+## Telegram Mini App (Optional)
+
+This repo includes an optional Telegram Mini App dashboard:
+- App: `apps/telegram-miniapp-dashboard/`
+- ORION command: `/miniapp` (sends a `web_app` button via the Telegram plugin)
+
+Config:
+- Set `ORION_MINIAPP_URL` to your deployed HTTPS URL (see `openclaw.json.example` / `openclaw.yaml`).
+- Security note: do not enable command routing from the Mini App into ORION unless you explicitly accept the risk (see `SECURITY.md` and the Mini App README).
+
 ## Workspace Contract (OpenClaw)
 
 OpenClaw injects these workspace files on the first turn of new sessions:

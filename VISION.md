@@ -11,6 +11,7 @@ The system should:
 
 ## What Success Looks Like
 - ORION reliably responds on Telegram and can delegate work internally.
+- Optional: a Telegram Mini App dashboard can be opened from ORION to show live system state (observability-first; control paths are opt-in only).
 - Cron/heartbeat automation runs predictably without spamming or wasting tokens.
 - Tasks move through `tasks/QUEUE.md` with clear ownership and completion notes.
 - Secrets never leak into Git, logs, or prompts.
