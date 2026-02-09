@@ -8,10 +8,28 @@ import type { Bot } from "grammy";
  */
 export function registerMiniApp(bot: Bot) {
   bot.command("miniapp", async (ctx) => {
-    const url = process.env.ORION_MINIAPP_URL;
+    const raw = String(process.env.ORION_MINIAPP_URL || "").trim();
+    let url: string = raw;
     if (!url) {
       await ctx.reply(
         "Mini App URL not configured.\n\nSet ORION_MINIAPP_URL to your deployed HTTPS URL (for example https://<app>.fly.dev) and restart ORION."
+      );
+      return;
+    }
+
+    try {
+      const u = new URL(url);
+      if (u.protocol !== "https:") {
+        await ctx.reply(
+          "Mini App URL must be HTTPS.\n\nSet ORION_MINIAPP_URL to your deployed HTTPS URL (for example https://<app>.fly.dev) and restart ORION."
+        );
+        return;
+      }
+      // Normalize to a string (also prevents accidental whitespace).
+      url = u.toString();
+    } catch {
+      await ctx.reply(
+        "Mini App URL is invalid.\n\nSet ORION_MINIAPP_URL to your deployed HTTPS URL (for example https://<app>.fly.dev) and restart ORION."
       );
       return;
     }

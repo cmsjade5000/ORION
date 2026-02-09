@@ -6,20 +6,73 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import express from "express";
 import cors from "cors";
+import { parseTelegramInitData, verifyTelegramInitData } from "./lib/telegram.js";
+import { issueSseToken, verifySseToken } from "./lib/sse_token.js";
+import { createFixedWindowLimiter } from "./lib/rate_limit.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.disable("x-powered-by");
+
+const NODE_ENV = process.env.NODE_ENV || "development";
+const IS_PROD = NODE_ENV === "production";
 
 // Default to loopback to comply with SECURITY.md (no inbound exposure by default).
 // For production hosting, set HOST=0.0.0.0 explicitly.
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
 
+function parseAllowedOrigins() {
+  const raw = String(process.env.MINIAPP_ALLOWED_ORIGINS || "").trim();
+  const out = new Set();
+  if (raw) {
+    for (const part of raw.split(",")) {
+      const s = part.trim();
+      if (!s) continue;
+      out.add(s);
+    }
+    return out;
+  }
+
+  // Default to the configured Mini App URL origin if present.
+  const url = String(process.env.ORION_MINIAPP_URL || "").trim();
+  if (url) {
+    try {
+      out.add(new URL(url).origin);
+    } catch {
+      // ignore
+    }
+  }
+
+  return out;
+}
+
+const ALLOWED_ORIGINS = parseAllowedOrigins();
+let corsWarned = false;
+
 app.use(
   cors({
-    origin: true,
+    origin: (origin, cb) => {
+      // Same-origin requests often omit Origin; allow those.
+      if (!origin) return cb(null, true);
+
+      // If no allowlist is configured, keep CORS open (initData verification is the real gate).
+      // In production, you should set MINIAPP_ALLOWED_ORIGINS to your app origin(s) anyway.
+      if (ALLOWED_ORIGINS.size === 0) {
+        if (IS_PROD && !corsWarned) {
+          corsWarned = true;
+          // eslint-disable-next-line no-console
+          console.log("[miniapp] WARNING: MINIAPP_ALLOWED_ORIGINS not set; CORS is permissive.");
+        }
+        return cb(null, true);
+      }
+
+      if (ALLOWED_ORIGINS.has(origin)) return cb(null, true);
+      return cb(null, false);
+    },
+    // We don't use cookies, but some embedded WebViews send credentials anyway.
     credentials: true,
   })
 );
@@ -28,6 +81,14 @@ app.use(
 app.use(express.json({ limit: "256kb" }));
 
 app.set("trust proxy", 1);
+
+// Basic security headers. Keep this conservative to avoid breaking Telegram WebViews.
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  next();
+});
 
 function readFirstExistingFile(paths) {
   for (const p of paths) {
@@ -57,57 +118,21 @@ function resolveTelegramBotToken() {
   return fromFile?.trim() || "";
 }
 
-function parseTelegramInitData(initData) {
-  const params = new URLSearchParams(String(initData || ""));
-  const out = {};
-  for (const [k, v] of params.entries()) out[k] = v;
-  return out;
-}
-
-function verifyTelegramInitData({ initData, botToken, maxAgeSec }) {
-  const params = parseTelegramInitData(initData);
-  const hashRaw = typeof params.hash === "string" ? params.hash : "";
-  const hash = hashRaw.trim().toLowerCase();
-  if (!hash) return { ok: false, error: "missing_hash", params };
-
-  const pairs = [];
-  for (const [k, v] of Object.entries(params)) {
-    if (k === "hash") continue;
-    pairs.push([k, String(v)]);
-  }
-  pairs.sort((a, b) => a[0].localeCompare(b[0]));
-  const dataCheckString = pairs.map(([k, v]) => `${k}=${v}`).join("\n");
-
-  // Telegram Mini App (WebApp) verification:
-  // secret_key = HMAC_SHA256(key="WebAppData", msg=bot_token)
-  // Ref: https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
-  const secretKey = crypto
-    .createHmac("sha256", "WebAppData")
-    .update(String(botToken))
-    .digest();
-  const computed = crypto
-    .createHmac("sha256", secretKey)
-    .update(dataCheckString)
-    .digest("hex");
-
-  const safeEq =
-    computed.length === hash.length &&
-    crypto.timingSafeEqual(Buffer.from(computed, "utf8"), Buffer.from(hash, "utf8"));
-  if (!safeEq) return { ok: false, error: "bad_sig", params };
-
-  const authDate = Number.parseInt(String(params.auth_date || ""), 10);
-  if (Number.isFinite(authDate) && authDate > 0 && Number.isFinite(maxAgeSec) && maxAgeSec > 0) {
-    const ageSec = Math.floor(Date.now() / 1000) - authDate;
-    if (ageSec > maxAgeSec) return { ok: false, error: "expired", params };
-  }
-
-  return { ok: true, params };
-}
-
 function extractTelegramContext(req) {
   const initData = req.header("x-telegram-init-data") || "";
   const raw = typeof initData === "string" ? initData : "";
   const trimmed = raw.trim();
+  // Guard: initData should be small. Very large headers are suspicious / accidental.
+  if (trimmed && trimmed.length > 8192) {
+    return {
+      initData: "",
+      verified: false,
+      params: null,
+      userId: null,
+      chatId: null,
+      error: "too_large",
+    };
+  }
   if (!trimmed) {
     return {
       initData: "",
@@ -132,7 +157,12 @@ function extractTelegramContext(req) {
     };
   }
 
-  const v = verifyTelegramInitData({ initData: trimmed, botToken, maxAgeSec });
+  const v = verifyTelegramInitData({
+    initData: trimmed,
+    botToken,
+    maxAgeSec,
+    clockSkewSec: Number(process.env.TELEGRAM_INITDATA_CLOCK_SKEW_SEC || 60),
+  });
   const params = v.params ?? null;
 
   let userId = null;
@@ -173,6 +203,17 @@ function createId(prefix) {
   // Node 18+ has crypto.randomUUID().
   const id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex");
   return `${prefix}_${id}`;
+}
+
+// Fail closed in production if key security knobs aren't set.
+if (IS_PROD) {
+  const sseSecret = String(process.env.SSE_TOKEN_SECRET || "").trim();
+  if (!sseSecret || sseSecret === "dev-insecure-change-me") {
+    throw new Error("[miniapp] SSE_TOKEN_SECRET must be set to a strong value in production.");
+  }
+  if (!String(process.env.INGEST_TOKEN || "").trim()) {
+    throw new Error("[miniapp] INGEST_TOKEN must be set in production (prevents unauthenticated ingest).");
+  }
 }
 
 const AGENTS = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"];
@@ -396,6 +437,13 @@ const CONFIG_WARN =
   (process.env.SSE_TOKEN_SECRET || "") === "" ||
   (process.env.SSE_TOKEN_SECRET || "") === "dev-insecure-change-me" ||
   !resolveTelegramBotToken();
+
+// Best-effort per-instance rate limits.
+const RL_SSE_AUTH = createFixedWindowLimiter({ name: "sse_auth", windowMs: 60_000, max: 30 });
+const RL_STATE = createFixedWindowLimiter({ name: "state", windowMs: 60_000, max: 120 });
+const RL_COMMAND_IP = createFixedWindowLimiter({ name: "cmd_ip", windowMs: 60_000, max: 30 });
+const RL_COMMAND_USER = createFixedWindowLimiter({ name: "cmd_user", windowMs: 60_000, max: 12 });
+const RL_INGEST = createFixedWindowLimiter({ name: "ingest", windowMs: 10_000, max: 60 });
 
 function createStore() {
   const agents = new Map();
@@ -626,60 +674,13 @@ function currentLiveState() {
 
 // ---- SSE: token exchange + streaming ----
 const STREAM_CLIENTS = new Set(); // Set<express.Response>
+const STREAM_CLIENTS_BY_IP = new Map(); // ip -> count
+const MAX_STREAM_CLIENTS = Number(process.env.MAX_STREAM_CLIENTS || 250);
+const MAX_STREAM_CLIENTS_PER_IP = Number(process.env.MAX_STREAM_CLIENTS_PER_IP || 10);
 
 // NOTE: Fly.io can run multiple machines; do not store auth tokens in memory.
 // Instead we issue a short-lived, signed token that any machine can verify.
 const SSE_TOKEN_SECRET = process.env.SSE_TOKEN_SECRET || "dev-insecure-change-me";
-
-function b64urlEncode(buf) {
-  return Buffer.from(buf).toString("base64url");
-}
-
-function b64urlDecode(s) {
-  return Buffer.from(String(s), "base64url").toString("utf8");
-}
-
-function issueSseToken(initData) {
-  // This token is only an initData *privacy* measure (keeps initData out of URLs).
-  // It is not a substitute for verifying initData server-side.
-  const now = Date.now();
-  const payload = {
-    iat: now,
-    // 10 minutes: long enough for EventSource retries, short enough to limit leakage.
-    exp: now + 10 * 60_000,
-    // Bind the token to the initData contents (prevents token reuse across users).
-    initDataSha256: crypto.createHash("sha256").update(String(initData || "")).digest("hex"),
-  };
-  const payloadJson = JSON.stringify(payload);
-  const payloadB64 = b64urlEncode(payloadJson);
-  const sig = crypto.createHmac("sha256", SSE_TOKEN_SECRET).update(payloadB64).digest();
-  const sigB64 = b64urlEncode(sig);
-  return { token: `${payloadB64}.${sigB64}`, expiresAt: payload.exp };
-}
-
-function verifySseToken(token) {
-  const parts = String(token || "").split(".");
-  if (parts.length !== 2) return { ok: false, error: "bad_format" };
-  const [payloadB64, sigB64] = parts;
-  const sig = Buffer.from(sigB64, "base64url");
-  const expected = crypto.createHmac("sha256", SSE_TOKEN_SECRET).update(payloadB64).digest();
-  if (sig.length !== expected.length || !crypto.timingSafeEqual(sig, expected)) {
-    return { ok: false, error: "bad_sig" };
-  }
-  let payload;
-  try {
-    payload = JSON.parse(b64urlDecode(payloadB64));
-  } catch {
-    return { ok: false, error: "bad_payload" };
-  }
-  if (!payload || typeof payload.exp !== "number" || payload.exp <= Date.now()) {
-    return { ok: false, error: "expired" };
-  }
-  if (typeof payload.initDataSha256 !== "string" || payload.initDataSha256.length < 16) {
-    return { ok: false, error: "bad_claims" };
-  }
-  return { ok: true, payload };
-}
 
 function sseWrite(res, event, data) {
   if (event) res.write(`event: ${event}\n`);
@@ -697,19 +698,54 @@ function sseBroadcast(event, data) {
 }
 
 app.post("/api/sse-auth", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const rl = RL_SSE_AUTH.hit(req.ip || "unknown");
+  res.setHeader("X-RateLimit-Limit", String(rl.limit));
+  res.setHeader("X-RateLimit-Remaining", String(rl.remaining));
+  res.setHeader("X-RateLimit-Reset", String(Math.floor(rl.resetAt / 1000)));
+  if (!rl.ok) {
+    return res.status(429).json({ ok: false, error: { code: "RATE_LIMITED", message: "Too many requests" } });
+  }
+
   const ctx = extractTelegramContext(req);
-  const initData = ctx.verified || canAcceptUnverifiedInitData() ? ctx.initData : "";
-  const { token, expiresAt } = issueSseToken(initData);
+  if (!ctx.verified && !canAcceptUnverifiedInitData()) {
+    return res.status(401).json({
+      ok: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Telegram initData not verified. Open via the bot Web App button and retry.",
+      },
+    });
+  }
+
+  const initDataSha256 = crypto.createHash("sha256").update(String(ctx.initData || "")).digest("hex");
+  const { token, expiresAt } = issueSseToken({ initDataSha256, secret: SSE_TOKEN_SECRET });
   return res.json({ ok: true, token, expiresAt });
 });
 
 app.get("/api/events", (req, res) => {
   const token = typeof req.query?.token === "string" ? req.query.token : "";
-  const v = verifySseToken(token);
+  const v = verifySseToken({ token, secret: SSE_TOKEN_SECRET });
   if (!v.ok) {
     return res.status(401).json({
       ok: false,
       error: { code: "UNAUTHORIZED", message: `Invalid stream token (${v.error})` },
+    });
+  }
+
+  if (STREAM_CLIENTS.size >= MAX_STREAM_CLIENTS) {
+    return res.status(429).json({
+      ok: false,
+      error: { code: "RATE_LIMITED", message: "Too many active stream connections" },
+    });
+  }
+
+  const ip = req.ip || "unknown";
+  const curIp = STREAM_CLIENTS_BY_IP.get(ip) || 0;
+  if (curIp >= MAX_STREAM_CLIENTS_PER_IP) {
+    return res.status(429).json({
+      ok: false,
+      error: { code: "RATE_LIMITED", message: "Too many active streams from this IP" },
     });
   }
 
@@ -724,6 +760,7 @@ app.get("/api/events", (req, res) => {
   sseWrite(res, "state", currentLiveState());
 
   STREAM_CLIENTS.add(res);
+  STREAM_CLIENTS_BY_IP.set(ip, curIp + 1);
 
   const keepAlive = setInterval(() => {
     try {
@@ -736,6 +773,9 @@ app.get("/api/events", (req, res) => {
   req.on("close", () => {
     clearInterval(keepAlive);
     STREAM_CLIENTS.delete(res);
+    const n = (STREAM_CLIENTS_BY_IP.get(ip) || 1) - 1;
+    if (n <= 0) STREAM_CLIENTS_BY_IP.delete(ip);
+    else STREAM_CLIENTS_BY_IP.set(ip, n);
   });
 });
 
@@ -758,18 +798,37 @@ setInterval(() => {
 
 app.get("/api/state", (req, res) => {
   const ctx = extractTelegramContext(req);
-  const live = currentLiveState();
+  const rl = RL_STATE.hit(req.ip || "unknown");
+  res.setHeader("X-RateLimit-Limit", String(rl.limit));
+  res.setHeader("X-RateLimit-Remaining", String(rl.remaining));
+  res.setHeader("X-RateLimit-Reset", String(Math.floor(rl.resetAt / 1000)));
+  if (!rl.ok) {
+    return res.status(429).json({ ok: false, error: { code: "RATE_LIMITED", message: "Too many requests" } });
+  }
 
-  res.json({
-    ...live,
-    // Helpful for debugging; remove once verification is implemented.
-    debug: {
+  if (!ctx.verified && !canAcceptUnverifiedInitData()) {
+    return res.status(401).json({
+      ok: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Telegram initData not verified. Open via the bot Web App button to view state.",
+      },
+    });
+  }
+
+  const live = currentLiveState();
+  const out = { ...live };
+  // Avoid leaking initData or internal verification hints in production responses.
+  if (!IS_PROD) {
+    out.debug = {
       initDataPresent: Boolean(ctx.initData),
       initDataLen: ctx.initData.length,
       initDataVerified: ctx.verified,
       initDataError: ctx.error,
-    },
-  });
+    };
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.json(out);
 });
 
 /**
@@ -782,11 +841,24 @@ app.get("/api/state", (req, res) => {
  * NOTE: do not use Telegram initData for service-to-service auth.
  */
 app.post("/api/ingest", (req, res) => {
+  const rl = RL_INGEST.hit(req.ip || "unknown");
+  res.setHeader("X-RateLimit-Limit", String(rl.limit));
+  res.setHeader("X-RateLimit-Remaining", String(rl.remaining));
+  res.setHeader("X-RateLimit-Reset", String(Math.floor(rl.resetAt / 1000)));
+  if (!rl.ok) {
+    return res.status(429).json({ ok: false, error: { code: "RATE_LIMITED", message: "Too many requests" } });
+  }
+
   if (INGEST_TOKEN) {
     const auth = String(req.header("authorization") || "");
     if (auth !== `Bearer ${INGEST_TOKEN}`) {
       return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Bad token" } });
     }
+  } else if (IS_PROD) {
+    return res.status(503).json({
+      ok: false,
+      error: { code: "MISCONFIGURED", message: "INGEST_TOKEN is required in production" },
+    });
   }
 
   const type = typeof req.body?.type === "string" ? req.body.type.trim() : "";
@@ -831,10 +903,24 @@ app.post("/api/ingest", (req, res) => {
  * Later: this is where ORION will map user input -> task packets / sessions.
  */
 app.post("/api/command", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
   const ctx = extractTelegramContext(req);
   const initData = ctx.initData;
   const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
   const clientTs = typeof req.body?.clientTs === "number" ? req.body.clientTs : null;
+
+  // Rate limit (best-effort). Prefer Telegram userId when verified, else fall back to IP.
+  const ip = req.ip || "unknown";
+  const rlIp = RL_COMMAND_IP.hit(ip);
+  if (!rlIp.ok) {
+    return res.status(429).json({ ok: false, error: { code: "RATE_LIMITED", message: "Too many commands" } });
+  }
+  if (ctx.verified && typeof ctx.userId === "number") {
+    const rlUser = RL_COMMAND_USER.hit(String(ctx.userId));
+    if (!rlUser.ok) {
+      return res.status(429).json({ ok: false, error: { code: "RATE_LIMITED", message: "Slow down a bit" } });
+    }
+  }
 
   if (!text) {
     return res.status(400).json({
@@ -874,15 +960,14 @@ app.post("/api/command", (req, res) => {
 
   // SECURITY NOTE:
   // `initData` contains signed Telegram context and user identifiers; treat it as sensitive.
-  // We log only a short prefix + length for local correlation during development.
-  // If you truly need full initData for debugging, change this consciously.
+  // Avoid logging user-supplied command text in full (it can include secrets).
   // eslint-disable-next-line no-console
   console.log("[miniapp] /api/command accepted", {
     requestId,
     acceptedId,
-    text,
+    textLen: text.length,
+    textPreview: text.slice(0, 120),
     initDataVerified: ctx.verified,
-    initDataPrefix: initData ? initData.slice(0, 48) : "",
     initDataLen: initData.length,
     clientTs,
   });
@@ -931,9 +1016,11 @@ app.post("/api/command", (req, res) => {
 
   // Optional: route the command into ORION via OpenClaw (local-first).
   // Best-effort; deployments without OpenClaw installed can leave this off.
-  const shouldRoute = process.env.OPENCLAW_ROUTE_COMMANDS === "1";
+  // Security: never route (deliver) based on unverified initData, even in dev mode.
+  const shouldRoute = process.env.OPENCLAW_ROUTE_COMMANDS === "1" && ctx.verified;
   // Prefer DM replies (userId) to avoid spamming groups when a miniapp is opened from a group context.
-  const deliverTarget = String(ctx.userId ?? ctx.chatId ?? "").trim();
+  const deliverTargetRaw = ctx.verified ? String(ctx.userId ?? ctx.chatId ?? "").trim() : "";
+  const deliverTarget = /^[0-9]+$/.test(deliverTargetRaw) ? deliverTargetRaw : "";
 
   // If we're not actually routing into ORION, simulate a quick round-trip so the UI can
   // show a "return transmission" and ORION "receiving" behavior as a control.
@@ -1007,15 +1094,33 @@ app.post("/api/command", (req, res) => {
         env: process.env,
       });
 
+      const MAX_LOG_BYTES = Number(process.env.OPENCLAW_ROUTE_MAX_LOG_BYTES || 64 * 1024);
       let out = "";
       let err = "";
+      const push = (target, chunk) => {
+        const next = target + chunk;
+        if (next.length <= MAX_LOG_BYTES) return next;
+        return next.slice(0, MAX_LOG_BYTES);
+      };
+
       child.stdout.on("data", (d) => {
-        out += d.toString("utf8");
+        out = push(out, d.toString("utf8"));
       });
       child.stderr.on("data", (d) => {
-        err += d.toString("utf8");
+        err = push(err, d.toString("utf8"));
       });
+
+      const timeoutMs = Number(process.env.OPENCLAW_ROUTE_TIMEOUT_MS || 45_000);
+      const killTimer = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // ignore
+        }
+      }, Math.max(5_000, timeoutMs));
+
       child.on("error", (e) => {
+        clearTimeout(killTimer);
         // eslint-disable-next-line no-console
         console.log("[miniapp] openclaw spawn failed", { message: e?.message || String(e) });
         applyEventToStore({ type: "task.failed", agentId: targetAgent });
@@ -1030,6 +1135,7 @@ app.post("/api/command", (req, res) => {
         }
       });
       child.on("close", (code) => {
+        clearTimeout(killTimer);
         const ok = code === 0;
         const preview = (ok ? out : err).trim().slice(0, 600);
         // eslint-disable-next-line no-console

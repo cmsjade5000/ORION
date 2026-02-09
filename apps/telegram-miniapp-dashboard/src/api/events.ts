@@ -72,7 +72,6 @@ export function connectStateStream(opts: {
 
   return {
     close: () => {
-      opts.onStatus?.("closed");
       es.close();
       es.removeEventListener("state", onState as EventListener);
       es.removeEventListener("open", onOpen as EventListener);
@@ -80,4 +79,3 @@ export function connectStateStream(opts: {
     },
   };
 }
-

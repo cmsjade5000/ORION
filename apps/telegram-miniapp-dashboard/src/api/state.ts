@@ -60,9 +60,14 @@ export async function fetchLiveState(opts: { initData: string }): Promise<LiveSt
     },
   });
 
+  const data = (await res.json().catch(() => null)) as any;
   if (!res.ok) {
-    throw new Error(`state fetch failed: ${res.status}`);
+    const msg =
+      data && data.error && typeof data.error.message === "string"
+        ? `${data.error.code || "ERROR"}: ${data.error.message}`
+        : `HTTP ${res.status}`;
+    throw new Error(`state fetch failed: ${msg}`);
   }
 
-  return (await res.json()) as LiveState;
+  return data as LiveState;
 }

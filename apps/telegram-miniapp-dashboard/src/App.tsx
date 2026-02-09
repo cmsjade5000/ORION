@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import NetworkDashboard from "./components/NetworkDashboard";
 import CommandBar from "./components/CommandBar";
 import { initTelegram } from "./telegram/init";
@@ -13,7 +13,10 @@ export default function App() {
   const [platform, setPlatform] = useState<string>("web");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("closed");
   const [polling, setPolling] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string>("");
   const [commandError, setCommandError] = useState<string>("");
+  const tgRef = useRef<any>(null);
+  const lastStateAtRef = useRef<number>(Date.now());
   const [state, setState] = useState<LiveState>({
     ts: Date.now(),
     activeAgentId: null,
@@ -24,23 +27,40 @@ export default function App() {
   useEffect(() => {
     const tg = initTelegram();
     if (tg) {
+      setAuthError("");
       setInitData(tg.initData);
       setPlatform(`${tg.platform} (tg v${tg.version})`);
+      tgRef.current = tg.webApp as any;
     }
   }, []);
 
-  // Prefer push updates via SSE. Fall back to polling if SSE is unavailable or fails.
+  // Prefer push updates via SSE. If the stream isn't open, enable polling as a safety net.
   useEffect(() => {
     let cancelled = false;
     let conn: { close: () => void } | null = null;
+    let retry = 0;
+    let retryTimer: number | null = null;
+
+    const backoffMs = (n: number) => {
+      const base = Math.min(15_000, 600 * Math.pow(1.7, Math.min(10, n)));
+      const jitter = Math.floor(Math.random() * 250);
+      return Math.max(450, Math.floor(base + jitter));
+    };
 
     const start = async () => {
+      if (!initData) {
+        setStreamStatus("closed");
+        setPolling(false);
+        return;
+      }
+
       if (typeof EventSource === "undefined") {
         setPolling(true);
         return;
       }
 
-      setPolling(false);
+      // While connecting/reconnecting SSE, keep state fresh via polling.
+      setPolling(true);
       setStreamStatus("connecting");
 
       try {
@@ -49,20 +69,47 @@ export default function App() {
 
         conn = connectStateStream({
           token: auth.token,
-          onState: (s) => setState(s),
+          onState: (s) => {
+            lastStateAtRef.current = Date.now();
+            setState(s);
+          },
           onStatus: (st) => {
             setStreamStatus(st);
+            // When the stream is open, turn off polling. If it errors, polling will kick in.
+            if (st === "open") {
+              retry = 0;
+              if (retryTimer) {
+                window.clearTimeout(retryTimer);
+                retryTimer = null;
+              }
+              setPolling(false);
+              return;
+            }
             if (st === "error") {
-              // Degrade to polling if the stream drops (tunnels/proxies can do this).
+              retry += 1;
               setPolling(true);
               if (conn) conn.close();
+              conn = null;
+              const ms = backoffMs(retry);
+              if (retryTimer) window.clearTimeout(retryTimer);
+              retryTimer = window.setTimeout(() => start(), ms);
             }
           },
         });
-      } catch {
-        // Any failure should degrade to polling.
-        setPolling(true);
+      } catch (e) {
+        retry += 1;
         setStreamStatus("error");
+        setPolling(true);
+        const msg = e instanceof Error ? e.message : String(e);
+        // If server rejects initData, don't spin reconnect loops.
+        if (msg.toLowerCase().includes("unauthorized")) {
+          setAuthError(msg);
+          setPolling(false);
+          return;
+        }
+        const ms = backoffMs(retry);
+        if (retryTimer) window.clearTimeout(retryTimer);
+        retryTimer = window.setTimeout(() => start(), ms);
       }
     };
 
@@ -70,29 +117,48 @@ export default function App() {
     return () => {
       cancelled = true;
       if (conn) conn.close();
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, [initData]);
 
   useEffect(() => {
     if (!polling) return;
+    if (!initData) return;
+    if (authError) return;
     let cancelled = false;
+    let intervalMs = 2000;
+    let failures = 0;
+    let timer: number | null = null;
 
     const tick = async () => {
       try {
         const next = await fetchLiveState({ initData });
+        failures = 0;
+        intervalMs = 2000;
+        lastStateAtRef.current = Date.now();
         if (!cancelled) setState(next);
-      } catch {
-        // Keep UI up even if API is offline.
+      } catch (e) {
+        failures += 1;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("401")) {
+          setAuthError(msg);
+          setPolling(false);
+          return;
+        }
+        // Back off on repeated failures.
+        intervalMs = Math.min(15_000, Math.floor(2000 * Math.pow(1.7, Math.min(6, failures))));
       }
+
+      if (cancelled) return;
+      timer = window.setTimeout(() => tick(), intervalMs);
     };
 
     tick();
-    const t = window.setInterval(tick, 1000);
     return () => {
       cancelled = true;
-      window.clearInterval(t);
+      if (timer) window.clearTimeout(timer);
     };
-  }, [polling, initData]);
+  }, [polling, initData, authError]);
 
   const pill = useMemo(() => {
     if (!initData) return "No Telegram initData (running outside Telegram)";
@@ -131,21 +197,34 @@ export default function App() {
 
       <footer className="card" style={{ padding: 12 }}>
         <CommandBar
-          disabled={!initData}
-          placeholder={initData ? "Ask ORION (placeholder)" : "Open via bot Web App button to enable commands"}
+          disabled={!initData || Boolean(authError)}
+          placeholder={
+            authError
+              ? "Unauthorized (open from Telegram / configure initData verification)"
+              : (initData ? "Ask ORION" : "Open via bot Web App button to enable commands")
+          }
           onSubmit={async (text) => {
             setCommandError("");
             try {
+              // Light haptic on send, if available in this Telegram version.
+              tgRef.current?.HapticFeedback?.impactOccurred?.("light");
               // Send to backend so ORION can later route this into task packets/sessions.
               const res = await submitCommand({ initData, text });
               // eslint-disable-next-line no-console
               console.log("command.accepted", res);
+              return true;
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
               setCommandError(msg);
+              return false;
             }
           }}
         />
+        {authError ? (
+          <div style={{ marginTop: 8, fontSize: 12, color: "#ffb4a2" }}>
+            {authError}
+          </div>
+        ) : null}
         {commandError ? (
           <div style={{ marginTop: 8, fontSize: 12, color: "#ffb4a2" }}>
             {commandError}

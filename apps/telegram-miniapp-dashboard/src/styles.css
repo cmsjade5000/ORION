@@ -421,8 +421,9 @@ html {
 }
 
 .input {
-  height: 42px;
-  padding: 0 12px;
+  min-height: 42px;
+  height: auto;
+  padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   outline: none;
@@ -430,7 +431,9 @@ html {
   color: var(--text);
   /* iOS zooms the viewport when focusing inputs with font-size < 16px. */
   font-size: 16px;
-  line-height: 1.2;
+  line-height: 1.25;
+  resize: none;
+  overflow: hidden;
 }
 
 .button {
@@ -442,6 +445,7 @@ html {
   color: var(--text);
   font-weight: 700;
   font-size: 16px;
+  align-self: end;
 }
 
 .button:active {

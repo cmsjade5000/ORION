@@ -41,7 +41,7 @@ Auth:
 
 Environment:
 - `INGEST_TOKEN`: shared secret for service-to-service auth (set as a Fly secret)
-- `MOCK_STATE`: default `1`. When `0`, the server stops generating mock motion and relies on ORION events.
+- `MOCK_STATE`: default `0` (off). Set to `1` to enable mock motion when ORION ingest isn't wired yet.
 
 Example payloads:
 
@@ -86,6 +86,7 @@ Environment:
 - `TELEGRAM_BOT_TOKEN`: bot token used to verify `initData` (preferred for local dev)
 - `TELEGRAM_BOT_TOKEN_FILE` (or `TELEGRAM_TOKEN_FILE`): path to a token file
 - `TELEGRAM_INITDATA_MAX_AGE_SEC`: default `86400` (24h)
+- `TELEGRAM_INITDATA_CLOCK_SKEW_SEC`: default `60` (tolerate minor clock skew)
 - `ALLOW_UNVERIFIED_INITDATA=1`: dev escape hatch (allows `/api/command` without verification)
 
 ## Optional: Route Commands Into ORION (OpenClaw)
