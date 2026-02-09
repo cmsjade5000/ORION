@@ -1,6 +1,6 @@
 # SOUL.md — ORION
 
-**Generated:** 2026-02-09T20:07:42Z
+**Generated:** 1e7446c+dirty
 **Source:** src/core/shared + USER.md + src/agents/ORION.md
 
 ---

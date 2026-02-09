@@ -17,7 +17,24 @@ SHARED_LAYERS=(
   "ROUTING.md"
 )
 
-timestamp() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+# Keep SOUL outputs deterministic so "make soul" doesn't create churn.
+#
+# Note: we use the current git revision (and a +dirty marker) instead of a wall-clock timestamp.
+build_id() {
+  if command -v git >/dev/null 2>&1 && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local sha dirty
+    sha="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+    if [[ -n "$sha" ]]; then
+      dirty=""
+      if ! git -C "$ROOT_DIR" diff --quiet --no-ext-diff || ! git -C "$ROOT_DIR" diff --cached --quiet --no-ext-diff; then
+        dirty="+dirty"
+      fi
+      echo "${sha}${dirty}"
+      return 0
+    fi
+  fi
+  echo "unknown"
+}
 
 require_file() {
   local path="$1"
@@ -47,7 +64,7 @@ build_agent() {
   {
     echo "# SOUL.md — ${agent}"
     echo
-    echo "**Generated:** $(timestamp)"
+    echo "**Generated:** $(build_id)"
     echo "**Source:** src/core/shared + USER.md + src/agents/${agent}.md"
     echo
     echo "---"
