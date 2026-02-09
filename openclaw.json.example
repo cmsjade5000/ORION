@@ -31,6 +31,9 @@
   "channels": {
     "telegram": {
       "enabled": true,
+      "capabilities": {
+        "inlineButtons": "allowlist"
+      },
       "tokenFile": "~/.openclaw/secrets/telegram.token",
       "dmPolicy": "allowlist",
       "allowFrom": ["<CORY_TELEGRAM_USER_ID>"],
@@ -45,6 +48,11 @@
       },
       "reactionLevel": "ack",
       "streamMode": "partial"
+    }
+  },
+  "env": {
+    "vars": {
+      "ORION_MINIAPP_URL": "https://<your-miniapp-host>"
     }
   },
   "models": {

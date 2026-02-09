@@ -13,6 +13,7 @@ export default function App() {
   const [platform, setPlatform] = useState<string>("web");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("closed");
   const [polling, setPolling] = useState<boolean>(false);
+  const [commandError, setCommandError] = useState<string>("");
   const [state, setState] = useState<LiveState>({
     ts: Date.now(),
     activeAgentId: null,
@@ -130,14 +131,26 @@ export default function App() {
 
       <footer className="card" style={{ padding: 12 }}>
         <CommandBar
-          placeholder="Ask ORION (placeholder)"
+          disabled={!initData}
+          placeholder={initData ? "Ask ORION (placeholder)" : "Open via bot Web App button to enable commands"}
           onSubmit={async (text) => {
-            // Stub: send to backend so ORION can later route this into task packets/sessions.
-            const res = await submitCommand({ initData, text });
-            // eslint-disable-next-line no-console
-            console.log("command.accepted", res);
+            setCommandError("");
+            try {
+              // Send to backend so ORION can later route this into task packets/sessions.
+              const res = await submitCommand({ initData, text });
+              // eslint-disable-next-line no-console
+              console.log("command.accepted", res);
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              setCommandError(msg);
+            }
           }}
         />
+        {commandError ? (
+          <div style={{ marginTop: 8, fontSize: 12, color: "#ffb4a2" }}>
+            {commandError}
+          </div>
+        ) : null}
       </footer>
     </div>
   );

@@ -54,9 +54,55 @@ export default function NetworkDashboard(props: { state: LiveState }) {
     };
   }, []);
 
+  const layout = useMemo(() => {
+    const w = size.w || 520;
+    const h = size.h || 520;
+
+    // On iPhone portrait the orbit container can be tall and narrow. A circular orbit wastes
+    // vertical space, so switch to an ellipse with independent X/Y radii.
+    const portrait = h > w * 1.12;
+
+    // Approximate padding needed to keep nodes + badge + shadow inside the stage.
+    // (Orbit container already has its own inset via CSS.)
+    const isNarrow = w < 400;
+    const agentDiameter = isNarrow ? 68 : 74;
+    const agentRadius = agentDiameter / 2;
+    const badgeOverhang = 22; // badge + offset beyond the node circle
+    const shadowOverhang = 14;
+    const agentExtent = agentRadius + badgeOverhang + shadowOverhang;
+    const safePadX = Math.max(72, agentExtent + 6);
+    const safePadY = Math.max(72, agentExtent + 10);
+
+    const cx = w / 2;
+    const cy = h / 2;
+
+    const rXMax = Math.max(96, w / 2 - safePadX);
+    const rYMax = Math.max(96, h / 2 - safePadY);
+
+    const rXMin = Math.min(portrait ? 118 : 140, rXMax);
+    const rYMin = Math.min(portrait ? 146 : 140, rYMax);
+
+    const rX = clamp(w * (portrait ? 0.34 : 0.36), rXMin, rXMax);
+    const rY = clamp(h * (portrait ? 0.40 : 0.36), rYMin, rYMax);
+
+    // Make the ring roughly follow the orbit while staying within the container.
+    // Nodes should sit just inside the dashed ring, not on top of it.
+    const ringPad = 18;
+    const ringW = clamp(2 * (rX + agentRadius + ringPad), 220, w);
+    const ringH = clamp(2 * (rY + agentRadius + ringPad), 220, h);
+
+    return { w, h, cx, cy, rX, rY, ringW, ringH };
+  }, [size.w, size.h]);
+
   return (
     <div className="orbit" ref={containerRef}>
-      <div className="ring" />
+      <div
+        className="ring"
+        style={{
+          width: `${layout.ringW}px`,
+          height: `${layout.ringH}px`,
+        }}
+      />
 
       {/* Connections (ORION -> active agent) */}
       <ConnectionLayer activeAgentId={active} containerRef={containerRef} />
@@ -83,19 +129,8 @@ export default function NetworkDashboard(props: { state: LiveState }) {
       {agents.map((a, idx) => {
         // Fixed positions (readable + stable): evenly spaced around ORION.
         const theta = (idx / Math.max(1, agents.length)) * Math.PI * 2 - Math.PI / 2;
-        const w = size.w || 520;
-        const h = size.h || 520;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // Keep nodes fully inside the canvas:
-        // node radius ~37px + badge overflow + shadow -> budget ~80px.
-        // iOS Telegram WebView is strict about clipping, so we pad more than we "need".
-        const safePad = 104;
-        const rMax = Math.max(110, Math.min(w, h) / 2 - safePad);
-        const r = clamp(Math.min(w, h) * 0.36, 140, rMax);
-        const x = cx + Math.cos(theta) * r;
-        const y = cy + Math.sin(theta) * r;
+        const x = layout.cx + Math.cos(theta) * layout.rX;
+        const y = layout.cy + Math.sin(theta) * layout.rY;
 
         return (
           <Node

@@ -16,7 +16,7 @@ This is a starter scaffold for a **Telegram Mini App** that opens from ORION’s
   - `GET /api/state` mock live state
   - `POST /api/sse-auth` + `GET /api/events` SSE stream (push updates)
   - `POST /api/ingest` ORION -> Mini App event ingest (rebroadcasts over SSE)
-  - `POST /api/command` stub command ingestion (`202 accepted`)
+  - `POST /api/command` command ingestion (`202 accepted`, optional OpenClaw routing)
   - Serves `dist/` in production
 
 ## SSE Event Types (v0)
@@ -77,6 +77,25 @@ npm run dev
 - SSE: `http://127.0.0.1:8787/api/events` (EventSource uses a short-lived token from `/api/sse-auth`)
 
 Note: opening the app in a normal browser will show `No Telegram initData` (expected). In Telegram it will populate.
+
+## Security: Telegram `initData` Verification
+
+The backend verifies `x-telegram-init-data` (signature + age) when present.
+
+Environment:
+- `TELEGRAM_BOT_TOKEN`: bot token used to verify `initData` (preferred for local dev)
+- `TELEGRAM_BOT_TOKEN_FILE` (or `TELEGRAM_TOKEN_FILE`): path to a token file
+- `TELEGRAM_INITDATA_MAX_AGE_SEC`: default `86400` (24h)
+- `ALLOW_UNVERIFIED_INITDATA=1`: dev escape hatch (allows `/api/command` without verification)
+
+## Optional: Route Commands Into ORION (OpenClaw)
+
+If this server runs on the same machine as OpenClaw, you can have `/api/command` invoke ORION:
+
+- `OPENCLAW_ROUTE_COMMANDS=1`
+- `OPENCLAW_AGENT_ID=main` (default `main`)
+
+When enabled, the server will call `openclaw agent ... --deliver --reply-channel telegram` targeting the originating Telegram chat/user (from verified `initData`).
 
 ## Production Deployment Options
 
@@ -152,8 +171,16 @@ This scaffold includes a suggested `/miniapp` command you can add to ORION’s T
 
 The bot responds with a button that opens the Mini App.
 
+### OpenClaw CLI Helper (No Bot Code Changes)
+
+If you have OpenClaw configured with your Telegram bot, you can send a `web_app` inline button with:
+
+```bash
+ORION_MINIAPP_URL="https://miniapp.example.com" \
+  scripts/telegram_send_miniapp_button.sh <chat_id>
+```
+
 ## Next Hooks (What ORION Will Provide Later)
 
-- Backend signature verification for `initData` (bind requests to Telegram user)
-- Real agent runtime mapping to `GET /api/events` (push) and/or `GET /api/state` (fallback)
-- Command endpoint (POST) that routes to ORION task packets / sessions
+- Real agent runtime mapping to `POST /api/ingest` (tools/tasks/session lifecycle -> SSE)
+- Stronger auth model for SSE consumers (beyond initData privacy + short-lived tokens)

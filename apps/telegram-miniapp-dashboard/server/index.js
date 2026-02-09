@@ -2,6 +2,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import os from "node:os";
+import { spawn } from "node:child_process";
 import express from "express";
 import cors from "cors";
 
@@ -27,15 +29,144 @@ app.use(express.json({ limit: "256kb" }));
 
 app.set("trust proxy", 1);
 
-/**
- * Placeholder: initData verification.
- *
- * Telegram sends a signed payload in `initData`. You should verify it server-side using
- * your bot token before trusting user identity. For now we just accept it as opaque.
- */
-function extractTelegramInitData(req) {
+function readFirstExistingFile(paths) {
+  for (const p of paths) {
+    try {
+      if (p && fs.existsSync(p)) return fs.readFileSync(p, "utf8");
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+function resolveTelegramBotToken() {
+  const fromEnv = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+
+  const tokenFile =
+    process.env.TELEGRAM_BOT_TOKEN_FILE?.trim() ||
+    process.env.TELEGRAM_TOKEN_FILE?.trim() ||
+    "";
+
+  const fromFile = readFirstExistingFile([
+    tokenFile,
+    path.join(os.homedir(), ".openclaw", "secrets", "telegram.token"),
+  ]);
+
+  return fromFile?.trim() || "";
+}
+
+function parseTelegramInitData(initData) {
+  const params = new URLSearchParams(String(initData || ""));
+  const out = {};
+  for (const [k, v] of params.entries()) out[k] = v;
+  return out;
+}
+
+function verifyTelegramInitData({ initData, botToken, maxAgeSec }) {
+  const params = parseTelegramInitData(initData);
+  const hashRaw = typeof params.hash === "string" ? params.hash : "";
+  const hash = hashRaw.trim().toLowerCase();
+  if (!hash) return { ok: false, error: "missing_hash", params };
+
+  const pairs = [];
+  for (const [k, v] of Object.entries(params)) {
+    if (k === "hash") continue;
+    pairs.push([k, String(v)]);
+  }
+  pairs.sort((a, b) => a[0].localeCompare(b[0]));
+  const dataCheckString = pairs.map(([k, v]) => `${k}=${v}`).join("\n");
+
+  // Telegram Mini App (WebApp) verification:
+  // secret_key = HMAC_SHA256(key="WebAppData", msg=bot_token)
+  // Ref: https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
+  const secretKey = crypto
+    .createHmac("sha256", "WebAppData")
+    .update(String(botToken))
+    .digest();
+  const computed = crypto
+    .createHmac("sha256", secretKey)
+    .update(dataCheckString)
+    .digest("hex");
+
+  const safeEq =
+    computed.length === hash.length &&
+    crypto.timingSafeEqual(Buffer.from(computed, "utf8"), Buffer.from(hash, "utf8"));
+  if (!safeEq) return { ok: false, error: "bad_sig", params };
+
+  const authDate = Number.parseInt(String(params.auth_date || ""), 10);
+  if (Number.isFinite(authDate) && authDate > 0 && Number.isFinite(maxAgeSec) && maxAgeSec > 0) {
+    const ageSec = Math.floor(Date.now() / 1000) - authDate;
+    if (ageSec > maxAgeSec) return { ok: false, error: "expired", params };
+  }
+
+  return { ok: true, params };
+}
+
+function extractTelegramContext(req) {
   const initData = req.header("x-telegram-init-data") || "";
-  return typeof initData === "string" ? initData : "";
+  const raw = typeof initData === "string" ? initData : "";
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {
+      initData: "",
+      verified: false,
+      params: null,
+      userId: null,
+      chatId: null,
+      error: "missing",
+    };
+  }
+
+  const botToken = resolveTelegramBotToken();
+  const maxAgeSec = Number(process.env.TELEGRAM_INITDATA_MAX_AGE_SEC || 24 * 60 * 60);
+  if (!botToken) {
+    return {
+      initData: trimmed,
+      verified: false,
+      params: parseTelegramInitData(trimmed),
+      userId: null,
+      chatId: null,
+      error: "no_bot_token",
+    };
+  }
+
+  const v = verifyTelegramInitData({ initData: trimmed, botToken, maxAgeSec });
+  const params = v.params ?? null;
+
+  let userId = null;
+  let chatId = null;
+  try {
+    const user = params?.user ? JSON.parse(params.user) : null;
+    if (user && typeof user.id === "number") userId = user.id;
+  } catch {
+    // ignore
+  }
+  try {
+    const chat = params?.chat ? JSON.parse(params.chat) : null;
+    if (chat && typeof chat.id === "number") chatId = chat.id;
+  } catch {
+    // ignore
+  }
+
+  return {
+    initData: trimmed,
+    verified: Boolean(v.ok),
+    params,
+    userId,
+    chatId,
+    error: v.ok ? null : v.error,
+  };
+}
+
+function canAcceptUnverifiedInitData() {
+  return process.env.ALLOW_UNVERIFIED_INITDATA === "1";
+}
+
+// Back-compat helper (some endpoints only care about the opaque string).
+function extractTelegramInitData(req) {
+  return extractTelegramContext(req).initData;
 }
 
 function createId(prefix) {
@@ -69,6 +200,25 @@ function inferActivity(text) {
     if (rule.match.test(raw)) return rule.activity;
   }
   return "thinking";
+}
+
+function activityToEmoji(activity) {
+  switch (activity) {
+    case "thinking":
+      return "🧠";
+    case "search":
+      return "🔎";
+    case "files":
+      return "📁";
+    case "tooling":
+      return "🛠️";
+    case "messaging":
+      return "✉️";
+    case "error":
+      return "⚠️";
+    default:
+      return null;
+  }
 }
 
 function parseAgent(text) {
@@ -130,6 +280,12 @@ function buildMockLiveState() {
 // Once ORION emits real `state` snapshots, clients will recover via SSE + polling.
 const STORE = createStore();
 let lastIngestAt = 0;
+let hasRealEvents = false;
+
+function markRealEvent() {
+  hasRealEvents = true;
+  lastIngestAt = Date.now();
+}
 
 // Keep mock motion by default until ORION begins pushing real events.
 // Set MOCK_STATE=0 in production once ORION is streaming.
@@ -216,7 +372,9 @@ function applyEventToStore(body) {
       }
       bumpActive(agentId);
     }
-    addOrionBadge("🧠", 5200);
+    // Mirror activity to the central node so the user can see what ORION is doing.
+    const em = activityToEmoji(activity);
+    if (em) addOrionBadge(em, 5200);
     return;
   }
 
@@ -281,6 +439,8 @@ function snapshotLiveState() {
 }
 
 function currentLiveState() {
+  // Once real events arrive, stick with real snapshots (avoid reverting to mock loops).
+  if (hasRealEvents) return snapshotLiveState();
   // If ORION has recently pushed events, prefer that.
   if (Date.now() - lastIngestAt < 30_000) return snapshotLiveState();
   // Otherwise keep the UI alive with mock motion until real wiring lands.
@@ -361,7 +521,8 @@ function sseBroadcast(event, data) {
 }
 
 app.post("/api/sse-auth", (req, res) => {
-  const initData = extractTelegramInitData(req);
+  const ctx = extractTelegramContext(req);
+  const initData = ctx.verified || canAcceptUnverifiedInitData() ? ctx.initData : "";
   const { token, expiresAt } = issueSseToken(initData);
   return res.json({ ok: true, token, expiresAt });
 });
@@ -420,15 +581,17 @@ setInterval(() => {
 }, 900);
 
 app.get("/api/state", (req, res) => {
-  const initData = extractTelegramInitData(req);
+  const ctx = extractTelegramContext(req);
   const live = currentLiveState();
 
   res.json({
     ...live,
     // Helpful for debugging; remove once verification is implemented.
     debug: {
-      initDataPresent: Boolean(initData),
-      initDataLen: initData.length,
+      initDataPresent: Boolean(ctx.initData),
+      initDataLen: ctx.initData.length,
+      initDataVerified: ctx.verified,
+      initDataError: ctx.error,
     },
   });
 });
@@ -455,7 +618,7 @@ app.post("/api/ingest", (req, res) => {
     return res.status(400).json({ ok: false, error: { code: "BAD_REQUEST", message: "Missing `type`" } });
   }
 
-  lastIngestAt = Date.now();
+  markRealEvent();
 
   const eventId = createId("evt");
   const eventTs = typeof req.body?.ts === "number" ? req.body.ts : Date.now();
@@ -492,7 +655,8 @@ app.post("/api/ingest", (req, res) => {
  * Later: this is where ORION will map user input -> task packets / sessions.
  */
 app.post("/api/command", (req, res) => {
-  const initData = extractTelegramInitData(req);
+  const ctx = extractTelegramContext(req);
+  const initData = ctx.initData;
   const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
   const clientTs = typeof req.body?.clientTs === "number" ? req.body.clientTs : null;
 
@@ -513,6 +677,25 @@ app.post("/api/command", (req, res) => {
   const requestId = createId("cmdreq");
   const acceptedId = createId("cmd");
 
+  if (!ctx.verified && !canAcceptUnverifiedInitData()) {
+    // eslint-disable-next-line no-console
+    console.log("[miniapp] /api/command rejected", {
+      requestId,
+      initDataPresent: Boolean(initData),
+      initDataLen: initData.length,
+      initDataError: ctx.error,
+    });
+    return res.status(401).json({
+      ok: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message:
+          "Telegram initData not verified. Configure TELEGRAM_BOT_TOKEN (or TELEGRAM_BOT_TOKEN_FILE) on the server and retry from inside Telegram.",
+      },
+      debug: { initDataPresent: Boolean(initData), initDataLen: initData.length, initDataError: ctx.error },
+    });
+  }
+
   // SECURITY NOTE:
   // `initData` contains signed Telegram context and user identifiers; treat it as sensitive.
   // We log only a short prefix + length for local correlation during development.
@@ -522,6 +705,7 @@ app.post("/api/command", (req, res) => {
     requestId,
     acceptedId,
     text,
+    initDataVerified: ctx.verified,
     initDataPrefix: initData ? initData.slice(0, 48) : "",
     initDataLen: initData.length,
     clientTs,
@@ -530,7 +714,7 @@ app.post("/api/command", (req, res) => {
   // Wire commands into the live state so nodes light up immediately.
   const targetAgent = parseAgent(text) ?? pickNextAgent();
   const activity = inferActivity(text);
-  lastIngestAt = Date.now();
+  markRealEvent();
 
   if (targetAgent === "LEDGER") {
     ledgerPulseIdx += 1;
@@ -553,6 +737,68 @@ app.post("/api/command", (req, res) => {
       textPreview: text.slice(0, 120),
     });
     scheduleStateBroadcast();
+  }
+
+  // Optional: route the command into ORION via OpenClaw (local-first).
+  // Best-effort; deployments without OpenClaw installed can leave this off.
+  const shouldRoute = process.env.OPENCLAW_ROUTE_COMMANDS === "1";
+  // Prefer DM replies (userId) to avoid spamming groups when a miniapp is opened from a group context.
+  const deliverTarget = String(ctx.userId ?? ctx.chatId ?? "").trim();
+  if (shouldRoute && deliverTarget) {
+    const agentId = process.env.OPENCLAW_AGENT_ID?.trim() || "main";
+    const args = [
+      "agent",
+      "--agent",
+      agentId,
+      "--message",
+      text,
+      "--deliver",
+      "--channel",
+      "telegram",
+      "--reply-channel",
+      "telegram",
+      "--reply-to",
+      deliverTarget,
+      "--json",
+    ];
+
+    try {
+      const child = spawn("openclaw", args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: process.env,
+      });
+
+      let out = "";
+      let err = "";
+      child.stdout.on("data", (d) => {
+        out += d.toString("utf8");
+      });
+      child.stderr.on("data", (d) => {
+        err += d.toString("utf8");
+      });
+      child.on("error", (e) => {
+        // eslint-disable-next-line no-console
+        console.log("[miniapp] openclaw spawn failed", { message: e?.message || String(e) });
+      });
+      child.on("close", (code) => {
+        const ok = code === 0;
+        const preview = (ok ? out : err).trim().slice(0, 600);
+        // eslint-disable-next-line no-console
+        console.log("[miniapp] openclaw route result", { ok, code, preview });
+        if (STREAM_CLIENTS.size > 0) {
+          sseBroadcast(ok ? "task.completed" : "task.failed", {
+            id: acceptedId,
+            ts: Date.now(),
+            type: ok ? "task.completed" : "task.failed",
+            data: { requestId, ok, code },
+          });
+          scheduleStateBroadcast();
+        }
+      });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log("[miniapp] openclaw route exception", { message: (e && e.message) || String(e) });
+    }
   }
 
   return res.status(202).json({

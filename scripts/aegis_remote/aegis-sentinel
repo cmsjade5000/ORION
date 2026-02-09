@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENV_FILE="/etc/aegis-monitor.env"
+LOG_DIR="/var/log/aegis-sentinel"
+LOG_FILE="$LOG_DIR/sentinel.log"
+STATE_DIR="/var/lib/aegis-sentinel"
+
+mkdir -p "$STATE_DIR" "$LOG_DIR"
+touch "$LOG_FILE"
+chmod 0640 "$LOG_FILE" || true
+
+log() {
+  local msg="$*"
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$msg" >>"$LOG_FILE"
+  logger -t aegis-sentinel -- "$msg" || true
+}
+
+mark_ok() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' >"$STATE_DIR/last_ok"
+}
+
+INCIDENT_LOG="$STATE_DIR/incidents.md"
+
+incident_append() {
+  # incident_append <id> <severity> <trigger> <summary> <actions> <closed>
+  local id="$1"
+  local severity="$2"
+  local trigger="$3"
+  local summary="$4"
+  local actions="$5"
+  local closed="$6"
+  local now
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  {
+    printf '\n'
+    printf 'INCIDENT v1\n'
+    printf 'Id: %s\n' "$id"
+    printf 'Opened: %s\n' "$now"
+    printf 'Opened By: AEGIS\n'
+    printf 'Severity: %s\n' "$severity"
+    printf 'Trigger: %s\n' "$trigger"
+    printf 'Summary: %s\n' "$summary"
+    printf 'Evidence:\n'
+    printf -- '- AEGIS sentinel detected a signal\n'
+    printf 'Actions:\n'
+    printf -- '- %s\n' "$actions"
+    printf 'Follow-up Owner: ORION\n'
+    printf 'Follow-up Tasks:\n'
+    printf -- '- Review AEGIS logs if unexpected.\n'
+    printf 'Closed: %s\n' "$closed"
+  } >>"$INCIDENT_LOG"
+
+  chmod 0640 "$INCIDENT_LOG" 2>/dev/null || true
+}
+
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+fi
+
+: "${SLACK_BOT_TOKEN:=}"
+: "${SLACK_CHANNEL_ID:=}"
+: "${AEGIS_TELEGRAM_TOKEN:=}"
+: "${AEGIS_TELEGRAM_CHAT_ID:=}"
+
+post_slack() {
+  local text="$1"
+  if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL_ID" ]; then
+    return 0
+  fi
+  curl -fsS https://slack.com/api/chat.postMessage \
+    -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+    -H 'Content-type: application/json; charset=utf-8' \
+    --data "{\"channel\":\"$SLACK_CHANNEL_ID\",\"text\":$(printf %s "$text" | jq -Rs .)}" \
+    >/dev/null || true
+}
+
+post_telegram() {
+  local text="$1"
+  if [ -z "$AEGIS_TELEGRAM_TOKEN" ] || [ -z "$AEGIS_TELEGRAM_CHAT_ID" ]; then
+    return 0
+  fi
+  curl -fsS "https://api.telegram.org/bot${AEGIS_TELEGRAM_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${AEGIS_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${text}" \
+    --data-urlencode "disable_web_page_preview=true" \
+    >/dev/null || true
+}
+
+notify() {
+  local text="$1"
+  post_slack "$text"
+  post_telegram "$text"
+}
+
+msg_security() {
+  # msg_security <headline> <what> [next]
+  local headline="$1"
+  local what="$2"
+  local next="${3:-}"
+
+  printf "AEGIS (Security Watch)\n🛡️ %s\n\nWhat I saw: %s" "$headline" "$what"
+  if [ -n "$next" ]; then
+    printf "\nNext: %s" "$next"
+  fi
+}
+
+msg_system() {
+  # msg_system <headline> <what> <did> [next]
+  local headline="$1"
+  local what="$2"
+  local did="$3"
+  local next="${4:-}"
+
+  printf "AEGIS (System Watch)\nℹ️ %s\n\nWhat happened: %s\nWhat I did: %s" "$headline" "$what" "$did"
+  if [ -n "$next" ]; then
+    printf "\nNext: %s" "$next"
+  fi
+}
+
+alert_throttled() {
+  # alert_throttled <key> <ttl_seconds> <text> <severity> <trigger> <summary> <actions>
+  local key="$1"
+  local ttl="$2"
+  local text="$3"
+  local severity="${4:-}"
+  local trigger="${5:-}"
+  local summary="${6:-}"
+  local actions="${7:-}"
+  local f="$STATE_DIR/alert_${key}"
+  local now
+  now=$(date +%s)
+  local last=0
+  [ -f "$f" ] && last=$(cat "$f" 2>/dev/null || echo 0)
+  if [ $((now - last)) -lt "$ttl" ]; then
+    return 0
+  fi
+  echo "$now" >"$f"
+  if [ -n "$severity" ]; then
+    incident_append "INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')" "$severity" "$trigger" "$summary" "$actions" "open"
+  fi
+  notify "$text"
+}
+
+# 1) OpenClaw service down (allowed action: restart AEGIS gateway)
+if ! systemctl is-active --quiet openclaw-aegis.service; then
+  log "WARN: openclaw-aegis.service inactive; restarting"
+  systemctl restart openclaw-aegis.service || true
+  sleep 2
+  if systemctl is-active --quiet openclaw-aegis.service; then
+    log "RECOVERED: openclaw-aegis.service restarted"
+    alert_throttled \
+      "openclaw_recovered" 1800 \
+      "$(msg_system "AEGIS service restarted." "My own OpenClaw service was not running." "Restarted it successfully." "No action needed.")" \
+      "P1" "AEGIS_GATEWAY_RESTART" "AEGIS OpenClaw service was down; restart succeeded." "Restarted openclaw-aegis.service."
+  else
+    log "ALERT: openclaw-aegis.service still down"
+    alert_throttled \
+      "openclaw_down" 600 \
+      "$(msg_system "AEGIS service is down." "My own OpenClaw service is not running." "Tried to restart it, but it still appears down." "Check systemd status on the AEGIS server.")" \
+      "P0" "AEGIS_GATEWAY_DOWN" "AEGIS OpenClaw service is down; restart failed." "Attempted systemd restart; still inactive."
+  fi
+fi
+
+# 2) SSH auth anomalies (signal only)
+ssh_lines=""
+if journalctl -u ssh --since '5 minutes ago' >/dev/null 2>&1; then
+  ssh_lines="$(journalctl -u ssh --since '5 minutes ago' --no-pager || true)"
+elif journalctl -u sshd --since '5 minutes ago' >/dev/null 2>&1; then
+  ssh_lines="$(journalctl -u sshd --since '5 minutes ago' --no-pager || true)"
+elif [ -f /var/log/auth.log ]; then
+  ssh_lines="$(tail -n 500 /var/log/auth.log || true)"
+fi
+
+if [ -n "$ssh_lines" ]; then
+  count=$(printf '%s\n' "$ssh_lines" | grep -Eci 'Failed (password|publickey)|Invalid user|authentication failure' || true)
+  if [ "$count" -ge 20 ]; then
+    top_ips=$(printf '%s\n' "$ssh_lines" | grep -E 'Failed (password|publickey)|Invalid user|authentication failure' \
+      | sed -nE 's/.*from ([0-9.]+).*/\\1/p' | sort | uniq -c | sort -nr | head -n 3 | awk '{print $2" ("$1")"}' | paste -sd', ' -)
+    [ -z "$top_ips" ] && top_ips="unknown"
+    log "ALERT: SSH anomaly count=$count top=$top_ips"
+    alert_throttled \
+      "ssh_anomaly" 900 \
+      "$(msg_security "Many failed SSH login attempts." "$count failed logins in the last ~5 minutes. Top sources: $top_ips" "No automatic action taken. If unexpected, review auth logs + firewall/fail2ban.")" \
+      "P1" "AEGIS_SECURITY_ALERT" "Many failed SSH login attempts." "Alerted only; no automatic defensive action."
+  fi
+fi
+
+# 3) fail2ban ban spikes (signal only)
+if command -v fail2ban-client >/dev/null 2>&1; then
+  if fail2ban-client status sshd >/dev/null 2>&1; then
+    total=$(fail2ban-client status sshd 2>/dev/null | sed -nE 's/^\\s*Total banned:\\s*([0-9]+)\\s*$/\\1/p' | tail -n 1)
+    total=${total:-0}
+    last_file="$STATE_DIR/f2b_total_banned"
+    last=0
+    [ -f "$last_file" ] && last=$(cat "$last_file" 2>/dev/null || echo 0)
+    if [ "$total" -gt "$last" ]; then
+      log "ALERT: fail2ban total banned increased $last->$total"
+      alert_throttled \
+        "f2b_spike" 600 \
+        "$(msg_security "Fail2ban bans increased." "Total banned increased from $last to $total." "This usually indicates brute-force attempts. Review fail2ban + auth logs if unexpected.")" \
+        "P1" "AEGIS_SECURITY_ALERT" "Fail2ban bans increased." "Alerted only; no automatic defensive action."
+    fi
+    echo "$total" >"$last_file"
+  fi
+fi
+
+# 4) UFW/sshd/systemd drift (signal only)
+files=(
+  /etc/ssh/sshd_config
+  /etc/ssh/sshd_config.d/99-aegis-hardening.conf
+  /etc/ufw/user.rules
+  /etc/ufw/user6.rules
+  /etc/systemd/system/openclaw-aegis.service
+  /etc/systemd/system/aegis-monitor-orion.service
+  /etc/systemd/system/aegis-monitor-orion.timer
+  /etc/systemd/system/aegis-sentinel.service
+  /etc/systemd/system/aegis-sentinel.timer
+)
+
+hash_file="$STATE_DIR/config_hashes.sha256"
+current_tmp="$STATE_DIR/config_hashes.current"
+: >"$current_tmp"
+for f in "${files[@]}"; do
+  [ -f "$f" ] || continue
+  sha256sum "$f" >>"$current_tmp"
+done
+
+if [ ! -f "$hash_file" ]; then
+  cp "$current_tmp" "$hash_file"
+  log "INFO: baseline initialized"
+else
+  if ! cmp -s "$hash_file" "$current_tmp"; then
+    log "ALERT: config drift detected"
+    alert_throttled \
+      "config_drift" 900 \
+      "$(msg_security "Security config changed on the AEGIS server." "One or more SSH/UFW/systemd config files changed." "Confirm this change was expected (update/maintenance). If not, investigate immediately.")" \
+      "P1" "AEGIS_SECURITY_ALERT" "Security config drift detected on AEGIS server." "Alerted only; requires review."
+    cp "$current_tmp" "$hash_file"
+  fi
+fi
+
+# 5) Tailscale peer changes (signal only)
+peer_tmp="$STATE_DIR/tailscale.current"
+peer_hash="$STATE_DIR/tailscale.hash"
+
+if command -v tailscale >/dev/null 2>&1; then
+  if tailscale status --json >/dev/null 2>&1; then
+    tailscale status --json \
+      | jq -S '{
+          self: {dnsName: .Self.DNSName, hostName: .Self.HostName, os: .Self.OS, tailscaleIPs: .Self.TailscaleIPs, online: .Self.Online, active: .Self.Active},
+          peers: (
+            .Peer
+            | to_entries
+            | map(.value)
+            | map({dnsName: .DNSName, hostName: .HostName, os: .OS, tailscaleIPs: .TailscaleIPs, online: .Online, active: .Active})
+            | sort_by(.dnsName)
+          )
+        }' >"$peer_tmp" 2>/dev/null || true
+
+    if [ -s "$peer_tmp" ]; then
+      current=$(sha256sum "$peer_tmp" | awk '{print $1}')
+      last=""
+      [ -f "$peer_hash" ] && last=$(cat "$peer_hash" 2>/dev/null || true)
+      if [ -n "$last" ] && [ "$current" != "$last" ]; then
+        log "ALERT: tailscale peer status changed"
+        alert_throttled \
+          "tailscale_peer_change" 3600 \
+          "$(msg_security "Tailscale peer status changed." "The peer list or peer online/active status changed." "Review tailscale status if unexpected (device added/removed, offline, or renamed).")" \
+          "P2" "AEGIS_SYSTEM_ALERT" "Tailscale peer status changed." "Alerted only; requires review."
+      fi
+      echo "$current" >"$peer_hash"
+    fi
+  fi
+fi
+
+mark_ok
+log "OK: sentinel cycle"
+

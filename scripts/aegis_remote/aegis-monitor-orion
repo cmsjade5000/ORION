@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENV_FILE="/etc/aegis-monitor.env"
+LOG_DIR="/var/log/aegis-monitor"
+LOG_FILE="$LOG_DIR/monitor.log"
+STATE_DIR="/var/lib/aegis-monitor"
+
+mkdir -p "$STATE_DIR" "$LOG_DIR"
+touch "$LOG_FILE"
+chmod 0640 "$LOG_FILE" || true
+
+log() {
+  local msg="$*"
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$msg" >>"$LOG_FILE"
+  logger -t aegis-monitor -- "$msg" || true
+}
+
+mark_ok() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' >"$STATE_DIR/last_ok"
+}
+
+INCIDENT_LOG="$STATE_DIR/incidents.md"
+
+incident_append() {
+  # incident_append <id> <severity> <trigger> <summary> <actions> <closed>
+  local id="$1"
+  local severity="$2"
+  local trigger="$3"
+  local summary="$4"
+  local actions="$5"
+  local closed="$6"
+  local now
+  now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+  {
+    printf '\n'
+    printf 'INCIDENT v1\n'
+    printf 'Id: %s\n' "$id"
+    printf 'Opened: %s\n' "$now"
+    printf 'Opened By: AEGIS\n'
+    printf 'Severity: %s\n' "$severity"
+    printf 'Trigger: %s\n' "$trigger"
+    printf 'Summary: %s\n' "$summary"
+    printf 'Evidence:\n'
+    printf -- '- ORION health check failed\n'
+    printf 'Actions:\n'
+    printf -- '- %s\n' "$actions"
+    printf 'Follow-up Owner: ORION\n'
+    printf 'Follow-up Tasks:\n'
+    printf -- '- Review ORION gateway logs if this repeats.\n'
+    printf 'Closed: %s\n' "$closed"
+  } >>"$INCIDENT_LOG"
+
+  chmod 0640 "$INCIDENT_LOG" 2>/dev/null || true
+}
+
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+fi
+
+: "${ORION_HOST:=}"
+: "${ORION_SSH_USER:=corystoner}"
+: "${SSH_IDENTITY:=/home/aegis/.ssh/aegis_orion_ed25519}"
+: "${ORION_OPENCLAW_HEALTH_CMD:=openclaw health}"
+: "${ORION_OPENCLAW_RESTART_CMD:=openclaw gateway restart}"
+: "${SLACK_BOT_TOKEN:=}"
+: "${SLACK_CHANNEL_ID:=}"
+: "${AEGIS_TELEGRAM_TOKEN:=}"
+: "${AEGIS_TELEGRAM_CHAT_ID:=}"
+
+# Restart-loop guard for ORION restarts.
+# If ORION keeps failing health checks, we cap restarts to avoid flapping
+# (bad config, model outage, etc.).
+: "${AEGIS_ORION_RESTART_MAX:=2}"               # max restarts in the window
+: "${AEGIS_ORION_RESTART_WINDOW_SEC:=900}"      # 15 minutes
+
+post_slack() {
+  local text="$1"
+  if [ -z "$SLACK_BOT_TOKEN" ] || [ -z "$SLACK_CHANNEL_ID" ]; then
+    return 0
+  fi
+  curl -fsS https://slack.com/api/chat.postMessage \
+    -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+    -H 'Content-type: application/json; charset=utf-8' \
+    --data "{\"channel\":\"$SLACK_CHANNEL_ID\",\"text\":$(printf %s "$text" | jq -Rs .)}" \
+    >/dev/null || true
+}
+
+post_telegram() {
+  local text="$1"
+  if [ -z "$AEGIS_TELEGRAM_TOKEN" ] || [ -z "$AEGIS_TELEGRAM_CHAT_ID" ]; then
+    return 0
+  fi
+  curl -fsS "https://api.telegram.org/bot${AEGIS_TELEGRAM_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${AEGIS_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${text}" \
+    --data-urlencode "disable_web_page_preview=true" \
+    >/dev/null || true
+}
+
+notify() {
+  local text="$1"
+  post_slack "$text"
+  post_telegram "$text"
+}
+
+msg_ok() {
+  # msg_ok <headline> [details] [next] [incident]
+  local headline="$1"
+  local details="${2:-}"
+  local next="${3:-}"
+  local incident="${4:-}"
+
+  printf "AEGIS (Remote Sentry)\n✅ %s" "$headline"
+  if [ -n "$details" ]; then
+    printf "\n\nWhat happened: %s" "$details"
+  fi
+  if [ -n "$next" ]; then
+    printf "\nNext: %s" "$next"
+  fi
+  if [ -n "$incident" ]; then
+    printf "\nIncident: %s" "$incident"
+  fi
+}
+
+msg_warn() {
+  # msg_warn <headline> <what> <did> [next] [incident]
+  local headline="$1"
+  local what="$2"
+  local did="$3"
+  local next="${4:-}"
+  local incident="${5:-}"
+
+  printf "AEGIS (Remote Sentry)\n🟠 %s\n\nWhat happened: %s\nWhat I did: %s" "$headline" "$what" "$did"
+  if [ -n "$next" ]; then
+    printf "\nNext: %s" "$next"
+  fi
+  if [ -n "$incident" ]; then
+    printf "\nIncident: %s" "$incident"
+  fi
+}
+
+msg_fail() {
+  # msg_fail <headline> <what> <did> <next> <incident>
+  local headline="$1"
+  local what="$2"
+  local did="$3"
+  local next="$4"
+  local incident="$5"
+
+  printf "AEGIS (Remote Sentry)\n🔴 %s\n\nWhat happened: %s\nWhat I tried: %s\nNext: %s\nIncident: %s" "$headline" "$what" "$did" "$next" "$incident"
+}
+
+throttle_ok() {
+  # throttle_ok <key> <seconds>
+  local key="$1"
+  local ttl="$2"
+  local f="$STATE_DIR/throttle_${key}"
+  local now
+  now=$(date +%s)
+  if [ -f "$f" ]; then
+    local last
+    last=$(cat "$f" 2>/dev/null || echo 0)
+    if [ $((now - last)) -lt "$ttl" ]; then
+      return 1
+    fi
+  fi
+  echo "$now" >"$f"
+  return 0
+}
+
+restart_guard_lock="$STATE_DIR/orion_restart_guard.lock"
+restart_attempts_file="$STATE_DIR/orion_restart_attempts.log"
+
+prune_restart_attempts() {
+  local now window start
+  now=$(date +%s)
+  window="$AEGIS_ORION_RESTART_WINDOW_SEC"
+  start=$((now - window))
+
+  [ -f "$restart_attempts_file" ] || return 0
+
+  awk -v start="$start" '($1+0) >= start {print $1}' "$restart_attempts_file" >"$restart_attempts_file.tmp" || true
+  mv "$restart_attempts_file.tmp" "$restart_attempts_file" || true
+}
+
+restart_attempt_count() {
+  prune_restart_attempts
+  [ -f "$restart_attempts_file" ] || { echo 0; return 0; }
+  wc -l <"$restart_attempts_file" | tr -d ' '
+}
+
+record_restart_attempt() {
+  local now
+  now=$(date +%s)
+  printf '%s\n' "$now" >>"$restart_attempts_file"
+  prune_restart_attempts
+}
+
+restart_allowed_or_lock() {
+  # returns 0 if allowed, 1 if blocked (guard active)
+  local count max
+  count=$(restart_attempt_count)
+  max="$AEGIS_ORION_RESTART_MAX"
+
+  # If a previous run tripped the guard, it should not block forever.
+  # Once the rolling window cools down (count drops below max), clear the lock.
+  if [ -f "$restart_guard_lock" ]; then
+    if [ "$count" -ge "$max" ]; then
+      return 1
+    fi
+    rm -f "$restart_guard_lock" 2>/dev/null || true
+  fi
+
+  if [ "$count" -ge "$max" ]; then
+    printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >"$restart_guard_lock"
+    return 1
+  fi
+
+  return 0
+}
+
+if [ -z "$ORION_HOST" ]; then
+  log "SKIP: ORION_HOST not set"
+  exit 0
+fi
+
+SSH_BASE=(
+  ssh
+  -o BatchMode=yes
+  -o ConnectTimeout=10
+  -o StrictHostKeyChecking=accept-new
+  -i "$SSH_IDENTITY"
+  "${ORION_SSH_USER}@${ORION_HOST}"
+)
+
+remote() {
+  local cmd="$1"
+  # Must match the Mac-side forced-command allowlist.
+  "${SSH_BASE[@]}" "bash -lc \"$cmd\""
+}
+
+outage_id_file="$STATE_DIR/orion_outage_id"
+
+if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
+  mark_ok
+  if [ -f "$outage_id_file" ]; then
+    incident="$(cat "$outage_id_file" 2>/dev/null || true)"
+    rm -f "$outage_id_file" || true
+    log "RECOVERED: ORION health restored"
+    # If ORION recovered without a successful AEGIS restart, still log the close.
+    if throttle_ok "orion_recovered_incident" 900; then
+      incident_append "$incident" "P1" "ORION_RECOVERED" "ORION recovered after failing health checks." "No action required." "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    fi
+    if throttle_ok "orion_recovered" 900; then
+      notify "$(msg_ok "ORION is back online." "ORION was failing health checks earlier." "No action needed." "$incident")"
+    fi
+  else
+    log "OK: ORION health"
+  fi
+  exit 0
+fi
+
+# Ensure we have an incident id as soon as we detect an outage.
+incident_id=""
+if [ -f "$outage_id_file" ]; then
+  incident_id="$(cat "$outage_id_file" 2>/dev/null || true)"
+fi
+if [ -z "$incident_id" ]; then
+  incident_id="INC-AEGIS-$(date -u '+%Y%m%dT%H%M%SZ')"
+  echo "$incident_id" >"$outage_id_file"
+fi
+
+# Restart loop guard.
+if ! restart_allowed_or_lock; then
+  log "ALERT: restart guard active; not restarting ORION ($incident_id)"
+  if throttle_ok "orion_restart_guard_incident" 900; then
+    incident_append \
+      "$incident_id" \
+      "P1" \
+      "ORION_RESTART_GUARD" \
+      "ORION is unhealthy, but restart guard blocked automatic restart." \
+      "Restart skipped (limit: ${AEGIS_ORION_RESTART_MAX} per ${AEGIS_ORION_RESTART_WINDOW_SEC}s)." \
+      "open"
+  fi
+  if throttle_ok "orion_restart_guard" 900; then
+    notify "$(msg_fail \
+      "ORION is offline (restart guard active)." \
+      "Health checks failed, but restart guard blocked automatic restarts." \
+      "Skipped restarting ORION to prevent flapping (limit: ${AEGIS_ORION_RESTART_MAX} per ${AEGIS_ORION_RESTART_WINDOW_SEC}s)." \
+      "AEGIS will resume automatic restarts after the rolling window cools down. Optional: on the AEGIS server, remove: $restart_guard_lock (and optionally clear $restart_attempts_file) to resume sooner. Then investigate ORION logs on the Mac mini if this repeats." \
+      "$incident_id")"
+  fi
+  exit 2
+fi
+
+log "WARN: ORION health failed, attempting restart ($incident_id)"
+record_restart_attempt
+remote "$ORION_OPENCLAW_RESTART_CMD" >/dev/null 2>&1 || true
+sleep 3
+
+if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
+  mark_ok
+  log "RECOVERED: ORION restart succeeded"
+  incident_append "$incident_id" "P1" "ORION_GATEWAY_RESTART" "ORION health failed; gateway restart succeeded." "Restarted ORION OpenClaw gateway." "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  if throttle_ok "orion_restart_succeeded" 900; then
+    notify "$(msg_warn "ORION was unresponsive (fixed)." "Health checks failed." "Restarted the ORION OpenClaw gateway." "No action needed unless this repeats." "$incident_id")"
+  fi
+  rm -f "$outage_id_file" || true
+  exit 0
+fi
+
+log "ALERT: ORION still unhealthy after restart ($incident_id)"
+incident_append "$incident_id" "P0" "ORION_GATEWAY_RESTART" "ORION health failed; gateway restart did not recover." "Restarted ORION OpenClaw gateway, but health still fails." "open"
+if throttle_ok "orion_down" 900; then
+  notify "$(msg_fail "ORION is still offline." "Health checks failed and ORION did not recover." "Restarted the ORION OpenClaw gateway, but the health check still fails." "Please check the Mac mini: OpenClaw gateway logs and system status." "$incident_id")"
+fi
+exit 2
+

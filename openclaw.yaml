@@ -40,6 +40,9 @@ agents:
 channels:
   telegram:
     enabled: true
+    capabilities:
+      # Needed for /miniapp (web_app inline keyboard button).
+      inlineButtons: allowlist
     commands:
       # Disable Telegram bot command registration to avoid "BOT_COMMANDS_TOO_MUCH"
       # while the repo is still iterating on skill naming.
@@ -59,6 +62,11 @@ channels:
       "<TELEGRAM_GROUP_ID>": {}
     reactionLevel: ack
     streamMode: partial
+
+# Optional non-secret vars (applied only when missing from the process env).
+# env:
+#   vars:
+#     ORION_MINIAPP_URL: "https://<your-miniapp-host>"
 
 # Delegation note:
 # ORION should delegate to specialists using OpenClaw isolated agents (preferred: sessions_spawn),

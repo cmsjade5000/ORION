@@ -116,7 +116,9 @@ export default function Node(props: {
       <div>
         <div className="nodeLabel">{props.id}</div>
         {props.kind === "central" ? (
-          <div className="nodeSub nodeSubCentral" aria-hidden="true">
+          <>
+            <div className="nodeSub">{props.status}</div>
+            <div className="nodeSub nodeSubCentral" aria-hidden="true">
             {prevProcEmoji ? (
               <span key={`${prevProcEmoji}-out`} className="nodeProcEmoji nodeProcEmojiOut">
                 {prevProcEmoji}
@@ -129,7 +131,8 @@ export default function Node(props: {
             ) : (
               <span className="nodeProcEmoji nodeProcEmojiIdle"> </span>
             )}
-          </div>
+            </div>
+          </>
         ) : (
           <div className="nodeSub">{props.status}</div>
         )}
