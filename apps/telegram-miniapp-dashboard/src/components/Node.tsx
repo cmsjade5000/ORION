@@ -31,6 +31,8 @@ export default function Node(props: {
   processes?: string[];
   // Central node only: IO phase (controls the status subline).
   io?: "receiving" | "dispatching" | null;
+  // Central node only: a floating badge emoji (non-face icons) like the sub-agents.
+  badgeEmoji?: string | null;
   kind: "central" | "agent";
   active?: boolean;
   className?: string;
@@ -47,7 +49,7 @@ export default function Node(props: {
     .filter(Boolean)
     .join(" ");
 
-  const emoji = activityEmoji(props.activity);
+  const emoji = props.kind === "agent" ? activityEmoji(props.activity) : (props.badgeEmoji ?? null);
   const [curEmoji, setCurEmoji] = useState<string | null>(emoji);
   const [prevEmoji, setPrevEmoji] = useState<string | null>(null);
   const curRef = useRef<string | null>(emoji);
@@ -106,10 +108,14 @@ export default function Node(props: {
   return (
     <div className={cls} style={props.style} data-node-id={props.id} data-status={props.status}>
       {props.active ? <div className="nodePulse" aria-hidden="true" /> : null}
-      {props.kind === "agent" && (curEmoji || prevEmoji) ? (
+      {(curEmoji || prevEmoji) ? (
         <div
           className={["nodeBadge", curEmoji ? "nodeBadgeOn" : "nodeBadgeOff"].join(" ")}
-          aria-label={props.activity ? `activity: ${props.activity}` : "activity: idle"}
+          aria-label={
+            props.kind === "agent"
+              ? (props.activity ? `activity: ${props.activity}` : "activity: idle")
+              : (props.badgeEmoji ? `orion: ${props.badgeEmoji}` : "orion: idle")
+          }
         >
           {prevEmoji ? (
             <span key={`${prevEmoji}-out`} className="nodeBadgeEmoji nodeBadgeEmojiOut" aria-hidden="true">

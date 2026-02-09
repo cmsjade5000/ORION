@@ -21,6 +21,9 @@ export type OrionState = {
   // High-level orchestration indicators (emojis) shown on the central ORION node.
   // Examples: routing 🧭, tooling 🛠️, synthesis ✨, thinking 🧠
   processes?: string[];
+  // A small floating badge (like the sub-agents) for "what ORION is doing" (non-face icons).
+  // Examples: 🔎, 📁, 🛠️, ✉️, ✅, ⚠️
+  badge?: string | null;
   // Optional IO phase for the central status line.
   io?: "receiving" | "dispatching" | null;
 };
