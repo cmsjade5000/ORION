@@ -140,6 +140,19 @@ export default function ConnectionLayer(props: {
     circlePath(holeB.c.x, holeB.c.y, holeB.r + 24),
   ].join(" ");
 
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  // More arrows on longer links. Keep a floor so it's always legible.
+  const step = 44;
+  const segments = Math.max(3, Math.min(12, Math.floor(len / step)));
+  const points = Array.from({ length: segments + 1 }, (_, i) => {
+    const t = segments === 0 ? 0 : i / segments;
+    const x = from.x + dx * t;
+    const y = from.y + dy * t;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+
   return (
     <svg
       className="connectionSvg"
@@ -154,14 +167,14 @@ export default function ConnectionLayer(props: {
           {/* evenodd: rect visible, circles removed */}
           <path d={punch} fillRule="evenodd" clipRule="evenodd" />
         </clipPath>
-        {/* Subtle arrow head. Direction is controlled by swapping endpoints based on `dir`. */}
+        {/* Repeated arrow heads. Direction is controlled by swapping endpoints based on `dir`. */}
         <marker
           id={markerId}
           viewBox="0 0 10 10"
           refX="8.5"
           refY="5"
-          markerWidth="4"
-          markerHeight="4"
+          markerWidth="6"
+          markerHeight="6"
           orient="auto"
           markerUnits="userSpaceOnUse"
         >
@@ -169,23 +182,11 @@ export default function ConnectionLayer(props: {
         </marker>
       </defs>
 
-      <line
-        className="connectionLine"
-        x1={from.x}
-        y1={from.y}
-        x2={to.x}
-        y2={to.y}
+      <polyline
+        className="connectionArrows"
+        points={points}
         clipPath={`url(#${maskId})`}
-      />
-
-      {/* "Packet" that travels along the link to make direction obvious. */}
-      <line
-        className="connectionPacket"
-        x1={from.x}
-        y1={from.y}
-        x2={to.x}
-        y2={to.y}
-        clipPath={`url(#${maskId})`}
+        markerMid={`url(#${markerId})`}
         markerEnd={`url(#${markerId})`}
       />
     </svg>

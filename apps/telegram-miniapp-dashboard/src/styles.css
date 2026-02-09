@@ -400,36 +400,12 @@ html {
   z-index: 5;
 }
 
-.connectionLine {
-  stroke: rgba(124, 247, 193, 0.88);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-dasharray: 6 12;
-  animation: dash 0.7s linear infinite;
-  filter: drop-shadow(0 0 6px rgba(124, 247, 193, 0.22));
-}
-
-@keyframes dash {
-  to {
-    stroke-dashoffset: -18;
-  }
-}
-
-/* A single moving "packet" dash to make direction obvious. */
-.connectionPacket {
-  stroke: rgba(124, 247, 193, 0.95);
-  stroke-width: 5;
-  stroke-linecap: round;
-  stroke-dasharray: 2 9999;
-  animation: packet 1.25s linear infinite;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 10px rgba(124, 247, 193, 0.18));
-}
-
-@keyframes packet {
-  to {
-    stroke-dashoffset: -1000;
-  }
+.connectionArrows {
+  /* Keep the underlying path effectively invisible; the link is made of arrow markers. */
+  stroke: rgba(124, 247, 193, 0.06);
+  stroke-width: 1;
+  fill: none;
+  filter: drop-shadow(0 0 8px rgba(124, 247, 193, 0.18));
 }
 
 /* Command bar */

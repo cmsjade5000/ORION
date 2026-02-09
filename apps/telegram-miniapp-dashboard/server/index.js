@@ -388,7 +388,7 @@ const MOCK_STATE = process.env.MOCK_STATE === "1";
 const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const STALE_MS = Number(process.env.STALE_MS || 20_000); // clear agent activity if no updates
 const ACTIVE_STALE_MS = Number(process.env.ACTIVE_STALE_MS || 8_000); // clear ORION->agent focus line
-const LINK_STALE_MS = Number(process.env.LINK_STALE_MS || 4_200); // how long to show directional flow
+const LINK_STALE_MS = Number(process.env.LINK_STALE_MS || 1_800); // how long to show directional flow
 const AEGIS_ALARM_MS = Number(process.env.AEGIS_ALARM_MS || 30_000);
 const AEGIS_WARN_MS = Number(process.env.AEGIS_WARN_MS || 0);
 
@@ -497,7 +497,7 @@ function applyEventToStore(body) {
         if (activity) setAgentActivity(agentId, activity);
       }
       bumpActive(agentId);
-      setLink(agentId, "out");
+      setLink(agentId, "out", LINK_STALE_MS);
     }
     // Mirror activity to the central node so the user can see what ORION is doing.
     const face = orionFaceForActivity(activity);
@@ -516,7 +516,7 @@ function applyEventToStore(body) {
       setAgentStatus(agentId, "busy");
       setAgentActivity(agentId, type === "tool.failed" ? "error" : "tooling");
       bumpActive(agentId);
-      setLink(agentId, "out");
+      setLink(agentId, "out", LINK_STALE_MS);
     }
 
     if (type === "tool.failed") {
@@ -539,10 +539,10 @@ function applyEventToStore(body) {
         setAgentStatus(agentId, "idle");
         // Show return-flow back into ORION.
         setOrionIo("receiving", 2200);
-        setLink(agentId, "in", LINK_STALE_MS);
+        setLink(agentId, "in", 1200);
       } else {
         setAgentStatus(agentId, "active");
-        setLink(agentId, "out");
+        setLink(agentId, "out", LINK_STALE_MS);
         setOrionIo("dispatching", 1600);
       }
       bumpActive(agentId);
@@ -970,6 +970,12 @@ app.post("/api/command", (req, res) => {
 
       setTimeout(() => {
         completeHop(agentId);
+        // The last hop shouldn't linger longer than earlier hops (which get overwritten
+        // by the next dispatch). Cap the final return-link duration.
+        if (i === sequence.length - 1) {
+          setLink(agentId, "in", gapMs + 200);
+          if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
+        }
         setTimeout(() => run(i + 1), gapMs);
       }, hopMs);
     };
