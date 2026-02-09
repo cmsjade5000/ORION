@@ -1,0 +1,418 @@
+:root {
+  --bg: #0b1020;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.09);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.66);
+  --accent: #7cf7c1;
+  --danger: #ff6b6b;
+
+  --radius: 16px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+    Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: var(--text);
+  background: radial-gradient(1000px 500px at 50% 0%, #1b2a57 0%, var(--bg) 60%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+#root {
+  height: 100%;
+}
+
+.appShell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  padding: 12px;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.topBarTitle {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.pill {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.card {
+  background: linear-gradient(180deg, var(--panel), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  min-height: 420px;
+}
+
+.stageInner {
+  position: relative;
+  height: 100%;
+  min-height: 420px;
+}
+
+.legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.dotOk {
+  background: var(--accent);
+}
+
+.dotWarn {
+  background: #ffd166;
+}
+
+.dotOff {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* Network */
+
+.orbit {
+  position: absolute;
+  /* Prevent nodes from being clipped by the stage border radius / overflow hidden. */
+  inset: 28px;
+  display: grid;
+  place-items: center;
+}
+
+.ring {
+  width: min(86vw, 520px);
+  aspect-ratio: 1 / 1;
+  border-radius: 999px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  position: relative;
+}
+
+.ring::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.orbitSpin {
+  position: absolute;
+  inset: 0;
+  animation: spin 18s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.node {
+  position: absolute;
+  width: 74px;
+  height: 74px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 10px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform, left, top;
+  background: radial-gradient(60px 60px at 30% 30%, rgba(255, 255, 255, 0.24), rgba(0, 0, 0, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.35);
+  transition: outline-color 220ms ease, box-shadow 220ms ease, filter 220ms ease;
+  z-index: 2;
+}
+
+.nodeLabel {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+.nodeSub {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.nodeSubCentral {
+  margin-top: 6px;
+  height: 22px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.nodeProcEmoji {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.55));
+}
+
+.nodeProcEmojiIn {
+  animation: badgeIn 260ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.nodeProcEmojiOut {
+  animation: badgeOut 260ms cubic-bezier(0.4, 0, 0.6, 1) both;
+}
+
+.nodeProcEmojiIdle {
+  opacity: 0;
+}
+
+.nodeCentral {
+  width: 92px;
+  height: 92px;
+  background: radial-gradient(90px 90px at 30% 30%, rgba(124, 247, 193, 0.35), rgba(0, 0, 0, 0.38));
+  border: 1px solid rgba(124, 247, 193, 0.30);
+}
+
+.nodeLit {
+  outline: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.06), 0 12px 22px rgba(0, 0, 0, 0.45);
+  filter: saturate(1.03);
+}
+
+/* Status-colored glow while lit */
+.nodeLit[data-status="active"] {
+  outline-color: rgba(124, 247, 193, 0.45);
+  box-shadow: 0 0 0 8px rgba(124, 247, 193, 0.10), 0 12px 22px rgba(0, 0, 0, 0.45);
+}
+
+.nodeLit[data-status="busy"] {
+  outline-color: rgba(255, 209, 102, 0.40);
+  box-shadow: 0 0 0 8px rgba(255, 209, 102, 0.10), 0 12px 22px rgba(0, 0, 0, 0.45);
+}
+
+.nodeLit[data-status="offline"] {
+  outline-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.04), 0 12px 22px rgba(0, 0, 0, 0.45);
+  filter: saturate(0.9);
+}
+
+.nodeActive {
+  outline: 2px solid rgba(124, 247, 193, 0.55);
+  box-shadow: 0 0 0 8px rgba(124, 247, 193, 0.10), 0 12px 22px rgba(0, 0, 0, 0.45);
+  filter: saturate(1.05);
+}
+
+.nodeBadge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+  font-size: 14px;
+  overflow: hidden;
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.nodeBadgeOn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.nodeBadgeOff {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.nodeBadgeEmoji {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.nodeBadgeEmojiIn {
+  animation: badgeIn 260ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.nodeBadgeEmojiOut {
+  animation: badgeOut 260ms cubic-bezier(0.4, 0, 0.6, 1) both;
+}
+
+@keyframes badgeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.65) translateY(2px);
+    filter: blur(0.8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+
+@keyframes badgeOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.82) translateY(-2px);
+    filter: blur(0.6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node,
+  .nodeBadge {
+    transition: none !important;
+  }
+  .nodeBadgeEmojiIn,
+  .nodeBadgeEmojiOut {
+    animation: none !important;
+  }
+}
+
+.nodePulse {
+  position: absolute;
+  inset: -10px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 247, 193, 0.35);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(0.92);
+    opacity: 0.25;
+  }
+}
+
+/* Connection layer */
+
+.connectionSvg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Above nodes so the dashed stroke can't show through semi-transparent fills. */
+  z-index: 5;
+}
+
+.connectionLine {
+  stroke: rgba(124, 247, 193, 0.88);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 6 12;
+  animation: dash 0.7s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(124, 247, 193, 0.22));
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+/* Command bar */
+
+.commandBar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.20);
+}
+
+.input {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  outline: none;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+}
+
+.button {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 247, 193, 0.26);
+  background: rgba(124, 247, 193, 0.16);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.button:active {
+  transform: translateY(1px);
+}

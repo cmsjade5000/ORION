@@ -47,6 +47,23 @@
       "streamMode": "partial"
     }
   },
+  "models": {
+    "_comment": "Optional: custom provider config for NVIDIA Build (OpenAI-compatible). Store NVIDIA_API_KEY in ~/.openclaw/.env (see KEEP.md).",
+    "mode": "merge",
+    "providers": {
+      "nvidia-build": {
+        "api": "openai-completions",
+        "baseUrl": "https://integrate.api.nvidia.com/v1",
+        "apiKey": "${NVIDIA_API_KEY}",
+        "models": [
+          {
+            "id": "moonshotai/kimi-k2-5",
+            "name": "Kimi K2.5 (NVIDIA Build)"
+          }
+        ]
+      }
+    }
+  },
   "plugins": {
     "entries": {
       "telegram": {

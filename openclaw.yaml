@@ -12,6 +12,31 @@ agents:
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/Desktop/ORION
 
+# Optional: Custom model provider for NVIDIA Build (OpenAI-compatible).
+# This is a template only; actual runtime config lives at ~/.openclaw/openclaw.json.
+# Store `NVIDIA_API_KEY` in ~/.openclaw/.env (see KEEP.md), not in Git.
+#
+# models:
+#   mode: merge
+#   providers:
+#     nvidia-build:
+#       api: openai-completions
+#       baseUrl: https://integrate.api.nvidia.com/v1
+#       apiKey: "${NVIDIA_API_KEY}"
+#       models:
+#         - id: moonshotai/kimi-k2-5
+#           name: Kimi K2.5 (NVIDIA Build)
+#
+# Example routing (OpenRouter primary, NVIDIA Build fallback):
+# agents:
+#   defaults:
+#     model:
+#       primary: openrouter/moonshotai/kimi-k2.5
+#       fallbacks:
+#         - nvidia-build/moonshotai/kimi-k2-5
+#         - openrouter/anthropic/claude-3.5-haiku
+#         - google/gemini-2.5-flash-lite
+
 channels:
   telegram:
     enabled: true

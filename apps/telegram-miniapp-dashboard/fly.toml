@@ -1,0 +1,27 @@
+# Fly.io app config for the Telegram Mini App dashboard.
+#
+# Create and deploy:
+#   fly launch --path apps/telegram-miniapp-dashboard
+#   fly deploy
+#
+# Telegram requires HTTPS; Fly provides it automatically.
+
+app = "orion-miniapp-cory-95ce0d"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  HOST = "0.0.0.0"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "stop"
+  min_machines_running = 0
+  processes = ["app"]
+
