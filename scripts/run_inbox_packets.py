@@ -6,11 +6,11 @@ Why this exists:
 - ORION can create Task Packets for specialists, but those packets may not get executed
   reliably without user "continue" prodding.
 - This runner executes an allowlisted subset of packets automatically and writes a
-  Result: block back into tasks/INBOX/*.md, which then triggers the notifier.
+  Result: block back into tasks/INBOX/*.md, which then triggers the Telegram notifier.
 
 Security posture:
 - Only runs packets that explicitly indicate read-only constraints.
-- Only runs packets with `Notify: telegram` or `Notify: discord` (opt-in).
+- Only runs packets with `Notify: telegram` (opt-in).
 - Only runs allowlisted commands mapped to repo-local scripts (no arbitrary shell).
 """
 
@@ -239,7 +239,7 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
     owner = (fields.get("Owner", "").strip() or pref.inbox_path.stem).upper()
     notify = fields.get("Notify", "").strip().lower()
 
-    if notify not in {"telegram", "discord"}:
+    if notify != "telegram":
         return False
     if not _packet_is_read_only(pref.raw_lines):
         return False
