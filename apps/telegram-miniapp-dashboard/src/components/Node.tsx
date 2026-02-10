@@ -34,6 +34,7 @@ function activityEmoji(a: AgentActivity | undefined): string | null {
 export default function Node(props: {
   id: string;
   label?: string;
+  hideLabel?: boolean;
   status: AgentStatus;
   activity?: AgentActivity;
   onClick?: () => void;
@@ -157,7 +158,7 @@ export default function Node(props: {
         </div>
       ) : null}
       <div>
-        <div className="nodeLabel">{props.label || props.id}</div>
+        {!props.hideLabel ? <div className="nodeLabel">{props.label || props.id}</div> : null}
         {props.kind === "central" ? (
           <>
             <div className="nodeSub nodeSubCentral" aria-hidden="true">

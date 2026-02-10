@@ -286,6 +286,7 @@ export default function NetworkDashboard(props: {
       <Node
         id="ORION"
         label="ORION"
+        hideLabel={true}
         status={orion?.status ?? (active ? "busy" : "idle")}
         processes={orion?.processes}
         badgeEmoji={orion?.badge ?? null}
@@ -294,6 +295,7 @@ export default function NetworkDashboard(props: {
         active={Boolean(active || linkAgentId)}
         onClick={() => props.onOrionClick?.()}
         size="large"
+        className="nodeCentralNoLabel"
         style={{
           position: "absolute",
           top: `${layout.orion.y}px`,
@@ -301,6 +303,19 @@ export default function NetworkDashboard(props: {
           transform: "translate(-50%, -50%)",
         }}
       />
+
+      <div
+        className="orionNameExternal"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: `${layout.orion.x}px`,
+          top: `${layout.orion.y + 74}px`,
+          transform: "translate(-50%, 0)",
+        }}
+      >
+        ORION
+      </div>
 
       <SideSilos
         // Positions are offsets from ORION to look like Cory's sketch.

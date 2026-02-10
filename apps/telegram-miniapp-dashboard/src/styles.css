@@ -849,19 +849,45 @@ html {
   filter: saturate(0.92) brightness(0.96);
 }
 
-/* Central node layout tuning: keep the face emoji visually centered while the label sits slightly higher. */
-.nodeCentral > div {
+/* Central node layout tuning. */
+.nodeCentral:not(.nodeCentralNoLabel) > div {
   transform: translateY(-6px);
 }
 
-.nodeCentral .nodeLabel {
+.nodeCentral:not(.nodeCentralNoLabel) .nodeLabel {
   transform: translateY(-3px);
 }
 
-.nodeCentral .nodeSubCentral {
+.nodeCentral:not(.nodeCentralNoLabel) .nodeSubCentral {
   margin-top: 0;
   /* Nudge the face/tool emoji slightly left to feel visually centered in the bubble. */
   transform: translateX(-3px);
+}
+
+/* ORION: no label inside; make the face emoji the focal point. */
+.nodeCentralNoLabel > div {
+  transform: translateY(0px);
+}
+
+.nodeCentralNoLabel .nodeSubCentral {
+  margin-top: 0;
+  height: 86px;
+  transform: translateX(-2px);
+}
+
+.nodeCentralNoLabel .nodeProcEmoji {
+  font-size: 72px;
+}
+
+.orionNameExternal {
+  z-index: 6;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.10em;
+  color: rgba(255, 255, 255, 0.90);
+  text-transform: uppercase;
+  text-shadow: 0 10px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 
 .nodeRemote {
@@ -1635,6 +1661,18 @@ html {
 
   .nodeSizeLarge .nodeProcEmoji {
     font-size: 50px;
+  }
+
+  .nodeCentralNoLabel .nodeSubCentral {
+    height: 80px;
+  }
+
+  .nodeCentralNoLabel .nodeProcEmoji {
+    font-size: 62px;
+  }
+
+  .orionNameExternal {
+    font-size: 10.5px;
   }
 
   .nodeBadge {
