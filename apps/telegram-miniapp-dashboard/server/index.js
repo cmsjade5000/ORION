@@ -1240,6 +1240,29 @@ function applyEventToStore(body) {
     const now = ts;
     STORE.orionHealth.lastCheckAt = now;
 
+    // Visual AEGIS heartbeat: on Fly, "openclaw health" is typically unavailable,
+    // so we treat each ingested health check as the heartbeat tick to drive the
+    // satellite pulse animation.
+    const aegis = STORE.agents.get("AEGIS");
+    if (aegis) {
+      const startedAt = now;
+      aegis.status = "active";
+      aegis.activity = "messaging";
+      aegis.updatedAt = startedAt;
+      scheduleStateBroadcast();
+      const holdMs = Math.max(250, Number(AEGIS_PING_MS) || 0);
+      setTimeout(() => {
+        const b = STORE.agents.get("AEGIS");
+        if (!b) return;
+        if (b.activity === "messaging" && b.updatedAt === startedAt) {
+          b.activity = "idle";
+          b.status = "idle";
+          b.updatedAt = Date.now();
+          scheduleStateBroadcast();
+        }
+      }, holdMs);
+    }
+
     if (ok) {
       const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
       STORE.orionHealth.lastOkAt = now;
