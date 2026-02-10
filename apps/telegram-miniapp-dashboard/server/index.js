@@ -1112,9 +1112,11 @@ function openclawHealthOnce(timeoutMs) {
 let orionHealthPingInFlight = false;
 let orionHealthcheckSupported = true;
 if (AEGIS_HEARTBEAT_MS > 0) {
-  setInterval(async () => {
+  const tickAegisHeartbeat = async () => {
     const a = STORE.agents.get("AEGIS");
     if (!a) return;
+    // Avoid overlapping pulses if the loop is delayed.
+    if (a.activity === "messaging") return;
 
     const startedAt = Date.now();
     // Always run a *visual* heartbeat pulse for AEGIS so the UI feels alive on Fly
@@ -1187,7 +1189,12 @@ if (AEGIS_HEARTBEAT_MS > 0) {
       b.updatedAt = now;
     }
     scheduleStateBroadcast();
-  }, Math.max(4_000, ORION_HEALTHCHECK_MS));
+  };
+
+  // Run quickly on boot so Cory sees the pulse immediately after opening the Mini App,
+  // not only after waiting a full interval.
+  setTimeout(() => tickAegisHeartbeat(), 650);
+  setInterval(tickAegisHeartbeat, Math.max(4_000, ORION_HEALTHCHECK_MS));
 }
 
 function bumpActive(id) {
