@@ -771,6 +771,253 @@ function simulatePdfArtifact({ text, agentId }) {
   return rec;
 }
 
+function crc32(buf) {
+  // Tiny CRC32 (IEEE) for zip containers used in local artifact simulation.
+  // (We keep this local to avoid adding heavy deps for a demo-only feature.)
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i += 1) {
+    c ^= buf[i];
+    for (let k = 0; k < 8; k += 1) {
+      const m = -(c & 1);
+      c = (c >>> 1) ^ (0xedb88320 & m);
+    }
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function toDosDateTime(tsMs) {
+  const d = new Date(Number(tsMs || Date.now()));
+  // DOS date/time uses local time.
+  const year = Math.max(1980, d.getFullYear());
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const hours = d.getHours();
+  const mins = d.getMinutes();
+  const secs = Math.floor(d.getSeconds() / 2);
+  const dosTime = (hours << 11) | (mins << 5) | secs;
+  const dosDate = ((year - 1980) << 9) | (month << 5) | day;
+  return { dosTime, dosDate };
+}
+
+function zipStore(entries) {
+  const now = Date.now();
+  const { dosTime, dosDate } = toDosDateTime(now);
+
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const e of entries) {
+    const name = String(e.name || "");
+    const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(e.data || "");
+    const nameBytes = Buffer.from(name, "utf8");
+    const crc = crc32(data);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); // local file header
+    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt16LE(0, 6); // flags
+    local.writeUInt16LE(0, 8); // compression (store)
+    local.writeUInt16LE(dosTime, 10);
+    local.writeUInt16LE(dosDate, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28); // extra len
+
+    localParts.push(local, nameBytes, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0); // central file header
+    central.writeUInt16LE(20, 4); // version made by
+    central.writeUInt16LE(20, 6); // version needed
+    central.writeUInt16LE(0, 8); // flags
+    central.writeUInt16LE(0, 10); // compression
+    central.writeUInt16LE(dosTime, 12);
+    central.writeUInt16LE(dosDate, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt16LE(0, 30); // extra len
+    central.writeUInt16LE(0, 32); // comment len
+    central.writeUInt16LE(0, 34); // disk start
+    central.writeUInt16LE(0, 36); // int attrs
+    central.writeUInt32LE(0, 38); // ext attrs
+    central.writeUInt32LE(offset, 42); // local header offset
+    centralParts.push(central, nameBytes);
+
+    offset += local.length + nameBytes.length + data.length;
+  }
+
+  const centralStart = offset;
+  const centralBuf = Buffer.concat(centralParts);
+  offset += centralBuf.length;
+
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); // end of central dir
+  end.writeUInt16LE(0, 4); // disk
+  end.writeUInt16LE(0, 6); // disk start
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralBuf.length, 12);
+  end.writeUInt32LE(centralStart, 16);
+  end.writeUInt16LE(0, 20); // comment len
+
+  return Buffer.concat([...localParts, centralBuf, end]);
+}
+
+function buildXlsxBytes() {
+  // Minimal XLSX (Office Open XML). Enough for Excel/Numbers to open.
+  const xml = (s) => Buffer.from(String(s).trim() + "\n", "utf8");
+  return zipStore([
+    {
+      name: "[Content_Types].xml",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n  <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n  <Default Extension=\"xml\" ContentType=\"application/xml\"/>\n  <Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>\n  <Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>\n</Types>`),
+    },
+    {
+      name: "_rels/.rels",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n  <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>\n</Relationships>`),
+    },
+    {
+      name: "xl/workbook.xml",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">\n  <sheets>\n    <sheet name=\"Sheet1\" sheetId=\"1\" r:id=\"rId1\"/>\n  </sheets>\n</workbook>`),
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n  <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>\n</Relationships>`),
+    },
+    {
+      name: "xl/worksheets/sheet1.xml",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\n  <sheetData>\n    <row r=\"1\">\n      <c r=\"A1\" t=\"inlineStr\"><is><t>ORION Miniapp XLSX</t></is></c>\n    </row>\n  </sheetData>\n</worksheet>`),
+    },
+  ]);
+}
+
+function buildDocxBytes() {
+  // Minimal DOCX (Office Open XML). Enough for Word/Pages to open.
+  const xml = (s) => Buffer.from(String(s).trim() + "\n", "utf8");
+  return zipStore([
+    {
+      name: "[Content_Types].xml",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n  <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n  <Default Extension=\"xml\" ContentType=\"application/xml\"/>\n  <Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>\n</Types>`),
+    },
+    {
+      name: "_rels/.rels",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n  <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>\n</Relationships>`),
+    },
+    {
+      name: "word/document.xml",
+      data: xml(`<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">\n  <w:body>\n    <w:p><w:r><w:t>ORION Miniapp DOCX</w:t></w:r></w:p>\n    <w:p><w:r><w:t>Generated by ORION (simulated).</w:t></w:r></w:p>\n    <w:sectPr/>\n  </w:body>\n</w:document>`),
+    },
+  ]);
+}
+
+function simulateArtifactBytes({ name, mime, bytes, agentId }) {
+  const id = createId("art");
+  const safeName = String(name || "artifact.bin");
+  const safeMime = String(mime || "application/octet-stream");
+  const data = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes || "");
+
+  let filePath;
+  try {
+    const ext = extFor(safeMime, safeName);
+    const fallbackExt = ext || (path.extname(safeName) ? "" : ".bin");
+    filePath = path.join(ARTIFACTS_DIR, `${id}${fallbackExt}`);
+    fs.writeFileSync(filePath, data);
+  } catch {
+    return null;
+  }
+
+  const createdAt = Date.now();
+  const rec = addArtifactRecord({
+    id,
+    kind: "file",
+    name: safeName,
+    mime: safeMime,
+    url: `/api/artifacts/${id}`,
+    createdAt,
+    expiresAt: createdAt + Math.max(10_000, ARTIFACT_TTL_MS),
+    sizeBytes: data.length,
+    agentId: agentId || null,
+    filePath,
+  });
+
+  applyEventToStore({ type: "artifact.created", agentId: agentId || null, artifact: rec });
+  scheduleStateBroadcast();
+  return rec;
+}
+
+function simulateArtifactsFromText({ text, agentId }) {
+  const raw = normalizeText(text).toLowerCase();
+  if (!raw) return [];
+
+  const out = [];
+
+  // PDF
+  if (/\bpdf\b/i.test(raw)) {
+    const rec = simulatePdfArtifact({ text, agentId });
+    if (rec) out.push(rec);
+  }
+
+  // CSV
+  if (/\bcsv\b/i.test(raw)) {
+    const bytes = Buffer.from("col_a,col_b\none,two\nthree,four\n", "utf8");
+    const rec = simulateArtifactBytes({ name: "export.csv", mime: "text/csv", bytes, agentId });
+    if (rec) out.push(rec);
+  }
+
+  // Images
+  if (/\b(png|jpg|jpeg|image|photo)\b/i.test(raw)) {
+    // 1x1 transparent PNG
+    const png1x1 = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2c8h8AAAAASUVORK5CYII=",
+      "base64"
+    );
+    const rec = simulateArtifactBytes({ name: "image.png", mime: "image/png", bytes: png1x1, agentId });
+    if (rec) out.push(rec);
+  }
+
+  // XLSX
+  if (/\b(xlsx|excel|spreadsheet)\b/i.test(raw)) {
+    const rec = simulateArtifactBytes({
+      name: "sheet.xlsx",
+      mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      bytes: buildXlsxBytes(),
+      agentId,
+    });
+    if (rec) out.push(rec);
+  }
+
+  // DOCX
+  if (/\b(docx|word|doc)\b/i.test(raw)) {
+    const rec = simulateArtifactBytes({
+      name: "doc.docx",
+      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      bytes: buildDocxBytes(),
+      agentId,
+    });
+    if (rec) out.push(rec);
+  }
+
+  // ZIP
+  if (/\b(zip|archive)\b/i.test(raw)) {
+    const rec = simulateArtifactBytes({
+      name: "bundle.zip",
+      mime: "application/zip",
+      bytes: zipStore([
+        { name: "readme.txt", data: Buffer.from("ORION zip (simulated)\n", "utf8") },
+        { name: "notes/demo.txt", data: Buffer.from("hello from inside the zip\n", "utf8") },
+      ]),
+      agentId,
+    });
+    if (rec) out.push(rec);
+  }
+
+  return out;
+}
+
 function setAgentStatus(id, status) {
   const a = STORE.agents.get(id);
   if (!a) return;
@@ -1645,9 +1892,9 @@ app.post("/api/command", (req, res) => {
           const focusId = ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
           setLink(focusId, "in", gapMs + 200);
           if (shouldSimulateReply) {
-            // Demo behavior: if the user asked for a PDF, produce a small simulated PDF
-            // and surface it as a floating artifact bubble in the Mini App.
-            simulatePdfArtifact({ text, agentId: focusId });
+            // Demo behavior: if the user asked for files, generate small valid artifacts
+            // and surface them as floating bubbles in the Mini App.
+            simulateArtifactsFromText({ text, agentId: focusId });
             // Demo behavior: surface a short simulated response in the in-app feed so
             // live Telegram testing is useful even before ORION routing is wired.
             const flat = String(text || "").replace(/\s+/g, " ").trim();
