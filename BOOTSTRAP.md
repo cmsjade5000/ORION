@@ -14,16 +14,15 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
    ```bash
    openclaw agents list
    ```
-3. Verify model routing (OpenRouter primary, Gemini fallback):
+3. Verify model routing (Gemini primary):
    ```bash
    openclaw models status
    ```
    - If you still need provider keys:
-     - OpenRouter key (recommended): see `docs/LLM_ACCESS.md`
-     - Gemini key (needed for image generation + optional fallback): see `docs/LLM_ACCESS.md`
+     - Gemini key (needed for chat + image generation): see `docs/LLM_ACCESS.md`
+     - Optional: NVIDIA Build key (only if you enable Kimi 2.5 fallback): see `docs/NVIDIA_BUILD_KIMI.md`
    - Recommended auth setup (best for LaunchAgent reliability):
      ```bash
-     openclaw models auth paste-token --provider openrouter
      openclaw models auth paste-token --provider google
      openclaw models status --probe
      ```

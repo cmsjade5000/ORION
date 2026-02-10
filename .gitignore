@@ -19,3 +19,6 @@ tasks/PR/PR-*.md
 # python cache
 __pycache__/
 *.pyc
+
+# macOS finder
+.DS_Store

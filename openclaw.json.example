@@ -4,10 +4,10 @@
     "defaults": {
       "workspace": "/Users/corystoner/Desktop/ORION",
       "model": {
-        "_comment_model": "Pin a stable model for chat hygiene. openrouter/auto can pick models that ignore system rules.",
-        "primary": "openrouter/openai/gpt-4o-mini",
+        "_comment_model": "Default posture: use Google Gemini directly (no OpenRouter/OpenAI). Pin a specific model for stable agent hygiene.",
+        "_comment_fallbacks": "Keep fallbacks provider-restricted. Optional: add nvidia-build/moonshotai/kimi-k2-5 after you configure NVIDIA Build (see docs/NVIDIA_BUILD_KIMI.md).",
+        "primary": "google/gemini-2.5-flash-lite",
         "fallbacks": [
-          "openrouter/anthropic/claude-3.5-haiku",
           "google/gemini-2.5-flash-lite"
         ]
       },

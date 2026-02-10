@@ -21,10 +21,10 @@ openclaw config set --json 'models.providers["nvidia-build"]' '{
   ]
 }'
 
-# Optional: add NVIDIA Build as a fallback for when you *do* pick an OpenRouter Kimi primary.
+# Optional: add NVIDIA Build as a fallback.
 # openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2-5
-
-# Optional: switch primary model to OpenRouter Kimi K2.5.
-# openclaw models set openrouter/moonshotai/kimi-k2.5
+#
+# Optional: ensure Gemini stays primary (recommended).
+# openclaw models set google/gemini-2.5-flash-lite
 
 openclaw models status --probe

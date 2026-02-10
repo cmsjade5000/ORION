@@ -15,29 +15,19 @@ This doc is a practical checklist for the next ~3-6 months.
 - **Retrieval summaries:** fast, cheap summarization for RSS/news/email workflows.
 - **Multimodal (images):** ORION image generation uses the `nano-banana-pro` skill (Gemini API).
 
-## Recommended “Easy Mode” Provider Setup
+## Recommended Provider Setup (Restricted)
 
-1. **OpenRouter** (one API key, many models) for primary chat + most fallbacks.
-2. **Google Gemini API key** for:
-   - `nano-banana-pro` image generation
-   - optional Gemini fallback routing (if you choose to use it)
+This repo is currently configured to use only:
 
-This keeps setup simple while preserving redundancy.
+1. **Google Gemini** for primary chat routing (preferred: Gemini 2.5 Flash Lite).
+2. Optional: **NVIDIA Build** (nvapi-...) for **Kimi 2.5** fallback routing.
 
 ## Where To Get Keys (You Do This Part)
 
-- OpenRouter API key: https://openrouter.ai/keys
 - Google Gemini API key: https://aistudio.google.com/app/apikey
 
-Optional (only if you want direct-provider keys instead of OpenRouter):
-- OpenAI API key: https://platform.openai.com/api-keys
-- Anthropic API key: https://console.anthropic.com/
-- AWS Bedrock credentials: https://console.aws.amazon.com/bedrock/
-
-Other “easy access” inference providers (optional):
-- Groq: https://console.groq.com/keys
-- Mistral: https://console.mistral.ai/
-- Fireworks: https://fireworks.ai/
+Optional (only if you enable Kimi 2.5 fallback):
+- NVIDIA Build API key (nvapi-...) from NVIDIA Build
 
 ## Wire It Into Gateway (No Secrets In Git)
 
@@ -46,9 +36,6 @@ Other “easy access” inference providers (optional):
 Prefer `openclaw models auth paste-token` so the LaunchAgent gateway service can use it reliably.
 
 ```bash
-# OpenRouter (recommended primary)
-openclaw models auth paste-token --provider openrouter
-
 # Google (Gemini)
 openclaw models auth paste-token --provider google
 ```
@@ -76,17 +63,12 @@ chmod 600 ~/.openclaw/secrets/gemini.api_key
 
 ### 3) Model routing choices (optional)
 
-If you want OpenRouter as the default chat model:
+Default (recommended) routing:
 
 ```bash
-openclaw models set openrouter/openai/gpt-4o-mini
-openclaw models fallbacks set openrouter/anthropic/claude-3.5-haiku,google/gemini-2.5-flash-lite
-```
-
-If you want a “single key” posture (OpenRouter only), remove Google from fallbacks:
-
-```bash
-openclaw models fallbacks set openrouter/anthropic/claude-3.5-haiku
+openclaw models set google/gemini-2.5-flash-lite
+openclaw models fallbacks clear
+openclaw models fallbacks add google/gemini-2.5-flash-lite
 ```
 
 ## Notes

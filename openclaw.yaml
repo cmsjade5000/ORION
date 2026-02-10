@@ -3,12 +3,13 @@
 agents:
   defaults:
     model:
-      # Note: openrouter/auto can pick models that are less strict about
-      # instruction-following. For stable agent hygiene in chat, pin a model.
-      primary: openrouter/openai/gpt-4o-mini
+      # Default posture: use Google Gemini directly (no OpenRouter/OpenAI).
+      # Pin a specific Gemini model for predictable instruction-following.
+      primary: google/gemini-2.5-flash-lite
       fallbacks:
-        - openrouter/anthropic/claude-3.5-haiku
         - google/gemini-2.5-flash-lite
+        # Optional (if configured): NVIDIA Build Kimi 2.5 as a secondary fallback.
+        # - nvidia-build/moonshotai/kimi-k2-5
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/Desktop/ORION
 
@@ -27,15 +28,13 @@ agents:
 #         - id: moonshotai/kimi-k2-5
 #           name: Kimi K2.5 (NVIDIA Build)
 #
-# Example routing (OpenRouter primary, NVIDIA Build fallback):
+# Example routing (Gemini primary, NVIDIA Build fallback):
 # agents:
 #   defaults:
 #     model:
-#       primary: openrouter/moonshotai/kimi-k2.5
+#       primary: google/gemini-2.5-flash-lite
 #       fallbacks:
 #         - nvidia-build/moonshotai/kimi-k2-5
-#         - openrouter/anthropic/claude-3.5-haiku
-#         - google/gemini-2.5-flash-lite
 
 channels:
   telegram:

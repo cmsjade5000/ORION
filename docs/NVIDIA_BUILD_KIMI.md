@@ -1,6 +1,6 @@
 # NVIDIA Build API (nvapi-...) + Kimi K2.5 (OpenClaw wiring)
 
-Goal: let ORION use **OpenRouter** for Kimi K2.5 when available, and fall back to **NVIDIA Build** when OpenRouter is missing/unavailable.
+Goal: let ORION use **Google Gemini** as the primary chat model, and fall back to **NVIDIA Build** for Kimi K2.5 when Gemini is missing/unavailable.
 
 This repo does **not** store secrets. Do not paste API keys into Git.
 
@@ -43,16 +43,17 @@ Notes:
 - The NVIDIA docs commonly spell this model id as `moonshotai/kimi-k2-5`.
 - This config only references `${NVIDIA_API_KEY}`; it does not store the key itself.
 
-## 3) Set routing: OpenRouter primary, NVIDIA Build fallback
+## 3) Set routing: Gemini primary, NVIDIA Build fallback
 
-If OpenRouter has Kimi K2.5 configured:
+Set routing: Gemini primary, NVIDIA Build fallback:
 
 ```bash
-openclaw models set openrouter/moonshotai/kimi-k2.5
+openclaw models set google/gemini-2.5-flash-lite
+openclaw models fallbacks add google/gemini-2.5-flash-lite
 openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2-5
 ```
 
-(Keep any other fallbacks you already rely on, e.g. Claude/Gemini.)
+(Keep the fallback list provider-restricted. Avoid OpenRouter/OpenAI/Anthropic for now.)
 
 ## 4) Verify
 

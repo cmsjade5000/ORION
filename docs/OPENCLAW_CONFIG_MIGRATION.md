@@ -12,8 +12,8 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 
 ## Migrated To Runtime
 
-- `agents.defaults.model.primary = "openrouter/openai/gpt-4o-mini"` (pinned; avoid `openrouter/auto`)
-- `agents.defaults.model.fallbacks = ["openrouter/anthropic/claude-3.5-haiku", "google/gemini-2.5-flash-lite"]`
+- `agents.defaults.model.primary = "google/gemini-2.5-flash-lite"` (pinned)
+- `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
 - `agents.list[0].subagents.allowAgents = ["*"]` (so ORION can target specialists via `sessions_spawn`)
 - `channels.telegram.enabled = true`
@@ -37,13 +37,12 @@ All secrets and provider auth live outside the repo. Do not commit them.
 ## Auth Required For Model Routing
 
 Current runtime model routing requires auth for:
-- `openrouter` (for `openrouter/openai/gpt-4o-mini` + Claude fallback)
-- `google` (for `google/gemini-2.5-flash-lite` fallback)
+- `google` (for `google/gemini-2.5-flash-lite`)
 
 Set auth with either:
 - `openclaw models auth login --provider <provider>`
 - `openclaw models auth paste-token --provider <provider>`
-Or via environment variables (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`) if your gateway service is configured to inherit them.
+Or via environment variables (`GEMINI_API_KEY`) if your gateway service is configured to inherit them.
 
 ## Verification Commands
 
