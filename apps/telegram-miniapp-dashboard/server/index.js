@@ -1113,15 +1113,16 @@ let orionHealthPingInFlight = false;
 let orionHealthcheckSupported = true;
 if (AEGIS_HEARTBEAT_MS > 0) {
   setInterval(async () => {
-    if (!ORION_HEALTHCHECK_ENABLED) return;
-    if (!orionHealthcheckSupported) return;
-    if (orionHealthPingInFlight) return;
-
     const a = STORE.agents.get("AEGIS");
     if (!a) return;
 
     const startedAt = Date.now();
-    STORE.orionHealth.lastCheckAt = startedAt;
+    // Always run a *visual* heartbeat pulse for AEGIS so the UI feels alive on Fly
+    // (where `openclaw health` is typically unavailable).
+    //
+    // Only perform a real healthcheck when explicitly enabled *and* supported.
+    const doRealHealthcheck = ORION_HEALTHCHECK_ENABLED && orionHealthcheckSupported;
+    if (doRealHealthcheck) STORE.orionHealth.lastCheckAt = startedAt;
 
     // "Ping sent": animate AEGIS.
     a.status = "active";
@@ -1129,28 +1130,23 @@ if (AEGIS_HEARTBEAT_MS > 0) {
     a.updatedAt = startedAt;
     scheduleStateBroadcast();
 
-    orionHealthPingInFlight = true;
-    let ok = false;
-    try {
-      ok = await openclawHealthOnce(ORION_HEALTHCHECK_TIMEOUT_MS);
-    } catch {
-      ok = false;
-    } finally {
-      orionHealthPingInFlight = false;
-    }
-
-    if (ok === null) {
-      // openclaw not present on this host. Disable this loop to avoid false outages.
-      orionHealthcheckSupported = false;
-      // Reset AEGIS out of "messaging" if we set it above.
-      const b = STORE.agents.get("AEGIS");
-      if (b && b.activity === "messaging") {
-        b.activity = "idle";
-        b.status = "idle";
-        b.updatedAt = Date.now();
-        scheduleStateBroadcast();
+    let ok = null;
+    if (doRealHealthcheck) {
+      if (orionHealthPingInFlight) return;
+      orionHealthPingInFlight = true;
+      try {
+        ok = await openclawHealthOnce(ORION_HEALTHCHECK_TIMEOUT_MS);
+      } catch {
+        ok = false;
+      } finally {
+        orionHealthPingInFlight = false;
       }
-      return;
+
+      if (ok === null) {
+        // openclaw not present on this host. Stop attempting health checks,
+        // but keep the visual pulse.
+        orionHealthcheckSupported = false;
+      }
     }
 
     const finishedAt = Date.now();
@@ -1161,23 +1157,25 @@ if (AEGIS_HEARTBEAT_MS > 0) {
     }
 
     const now = Date.now();
-    if (ok) {
-      const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
-      STORE.orionHealth.lastOkAt = now;
-      STORE.orionHealth.lastFailAt = 0;
-      STORE.orionHealth.consecutiveFails = 0;
-      STORE.orionHealth.noAckWarnUntil = 0;
-      STORE.orionHealth.downSince = 0;
-      if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
-    } else {
-      STORE.orionHealth.lastFailAt = now;
-      STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
-      // First few misses are "no response"; only flip to confirmed outage after N consecutive fails.
-      if (STORE.orionHealth.consecutiveFails >= Math.max(1, ORION_OUTAGE_FAILS)) {
-        if (!STORE.orionHealth.downSince) STORE.orionHealth.downSince = now;
-        STORE.orionHealth.restartingUntil = 0;
+    if (ok !== null) {
+      if (ok) {
+        const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
+        STORE.orionHealth.lastOkAt = now;
+        STORE.orionHealth.lastFailAt = 0;
+        STORE.orionHealth.consecutiveFails = 0;
+        STORE.orionHealth.noAckWarnUntil = 0;
+        STORE.orionHealth.downSince = 0;
+        if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
       } else {
-        STORE.orionHealth.noAckWarnUntil = Math.max(STORE.orionHealth.noAckWarnUntil || 0, now + Math.max(1_500, ORION_NOACK_WARN_MS));
+        STORE.orionHealth.lastFailAt = now;
+        STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
+        // First few misses are "no response"; only flip to confirmed outage after N consecutive fails.
+        if (STORE.orionHealth.consecutiveFails >= Math.max(1, ORION_OUTAGE_FAILS)) {
+          if (!STORE.orionHealth.downSince) STORE.orionHealth.downSince = now;
+          STORE.orionHealth.restartingUntil = 0;
+        } else {
+          STORE.orionHealth.noAckWarnUntil = Math.max(STORE.orionHealth.noAckWarnUntil || 0, now + Math.max(1_500, ORION_NOACK_WARN_MS));
+        }
       }
     }
 
