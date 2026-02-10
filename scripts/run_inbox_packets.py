@@ -35,6 +35,16 @@ ALLOWLIST_COMMANDS: dict[str, list[str]] = {
     "diagnose_gateway.sh": ["bash", "-lc", "scripts/diagnose_gateway.sh"],
     "./scripts/diagnose_gateway.sh": ["bash", "-lc", "scripts/diagnose_gateway.sh"],
     "scripts/diagnose_gateway.sh": ["bash", "-lc", "scripts/diagnose_gateway.sh"],
+
+    # Multi-agent sanity checks (all read-only).
+    "ember_sanity_check.sh": ["bash", "-lc", "scripts/ember_sanity_check.sh"],
+    "scripts/ember_sanity_check.sh": ["bash", "-lc", "scripts/ember_sanity_check.sh"],
+    "pixel_sanity_check.sh": ["bash", "-lc", "scripts/pixel_sanity_check.sh"],
+    "scripts/pixel_sanity_check.sh": ["bash", "-lc", "scripts/pixel_sanity_check.sh"],
+    "node_sanity_check.sh": ["bash", "-lc", "scripts/node_sanity_check.sh"],
+    "scripts/node_sanity_check.sh": ["bash", "-lc", "scripts/node_sanity_check.sh"],
+    "ledger_snapshot.sh": ["bash", "-lc", "scripts/ledger_snapshot.sh"],
+    "scripts/ledger_snapshot.sh": ["bash", "-lc", "scripts/ledger_snapshot.sh"],
 }
 
 
@@ -84,7 +94,19 @@ def _parse_fields(packet_lines: list[str]) -> dict[str, str]:
 
 
 def _packet_has_result(packet_lines: list[str]) -> bool:
-    return any(l.strip() == "Result:" for l in packet_lines)
+    """
+    Consider a packet "done" only if there is a non-empty Result section.
+
+    ORION sometimes pre-creates an empty `Result:` placeholder; we treat that as pending.
+    """
+    start = None
+    for i, ln in enumerate(packet_lines):
+        if ln.strip() == "Result:":
+            start = i
+            break
+    if start is None:
+        return False
+    return any(ln.strip() for ln in packet_lines[start + 1 :])
 
 
 def _packet_is_read_only(packet_lines: list[str]) -> bool:
@@ -100,7 +122,15 @@ def _extract_commands(packet_lines: list[str]) -> list[str]:
     for raw in packet_lines:
         line = raw.rstrip("\n")
         if not in_section:
-            if line.strip() == "Commands to run:":
+            s = line.strip()
+            if s.startswith("Commands to run:"):
+                # Support both:
+                # - "Commands to run:" + bullet list
+                # - "Commands to run: diagnose_gateway.sh" (single-line)
+                tail = s[len("Commands to run:") :].strip()
+                if tail:
+                    cmds.append(tail)
+                    break
                 in_section = True
             continue
 
@@ -237,10 +267,20 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
     artifact_rel = str(artifact.relative_to(repo_root))
     result_block = _format_result_block(ok=ok, findings=findings, artifact_rel=artifact_rel)
 
-    # Insert the Result block at the end of this packet.
+    # Insert/replace the Result block.
     file_lines = _read_lines(pref.inbox_path)
-    insert_at = pref.packet_end_line
-    new_lines = file_lines[:insert_at] + result_block + file_lines[insert_at:]
+    # If the packet already contains a `Result:` placeholder, replace it to avoid duplicate Result sections.
+    result_idx = None
+    for i in range(pref.packet_start_line - 1, pref.packet_end_line):
+        if file_lines[i].strip() == "Result:":
+            result_idx = i
+            break
+
+    if result_idx is None:
+        insert_at = pref.packet_end_line
+        new_lines = file_lines[:insert_at] + result_block + file_lines[insert_at:]
+    else:
+        new_lines = file_lines[:result_idx] + result_block + file_lines[pref.packet_end_line :]
     pref.inbox_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
     return True
 
