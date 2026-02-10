@@ -255,7 +255,12 @@ export default function NetworkDashboard(props: {
         const badge = String((a as any).badge || "");
         const isAlarm = badge === "🚨" || a.status === "offline" || a.activity === "error";
         const isWarn = !isAlarm && badge === "⚠️";
-        const dotCls = isAlarm ? "aegisDot aegisDotAlarm" : isWarn ? "aegisDot aegisDotWarn" : "aegisDot aegisDotOk";
+        const isHighAlert = isAlarm && badge === "🚨";
+        const dotCls = [
+          "aegisDot",
+          isAlarm ? "aegisDotAlarm" : isWarn ? "aegisDotWarn" : "aegisDotOk",
+          isHighAlert ? "aegisDotHighAlert" : "",
+        ].filter(Boolean).join(" ");
         const pinging = a.activity === "messaging";
         const title = isAlarm ? "AEGIS: alarm" : isWarn ? "AEGIS: warn" : pinging ? "AEGIS: heartbeat" : "AEGIS: ok";
         const pulseColor = isAlarm
@@ -265,7 +270,12 @@ export default function NetworkDashboard(props: {
             : "rgba(124, 247, 193, 0.80)";
         return (
           <div
-            className={["aegisIndicator", pinging ? "aegisIndicatorPinging" : ""].filter(Boolean).join(" ")}
+            className={[
+              "aegisIndicator",
+              pinging ? "aegisIndicatorPinging" : "",
+              (pinging && isWarn) ? "aegisIndicatorNoAck" : "",
+              isHighAlert ? "aegisIndicatorHighAlert" : "",
+            ].filter(Boolean).join(" ")}
             title={title}
             aria-label={title}
             style={{

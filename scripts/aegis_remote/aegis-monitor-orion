@@ -88,6 +88,47 @@ fi
 : "${SLACK_CHANNEL_ID:=}"
 : "${AEGIS_TELEGRAM_TOKEN:=}"
 : "${AEGIS_TELEGRAM_CHAT_ID:=}"
+#
+# Optional: Mini App dashboard visibility (best-effort).
+# Configure these on the AEGIS host (for example in /etc/aegis-monitor.env):
+#   MINIAPP_INGEST_URL=https://<your-miniapp-host>
+#   MINIAPP_INGEST_TOKEN=...
+: "${MINIAPP_INGEST_URL:=}"
+: "${MINIAPP_INGEST_TOKEN:=}"
+
+miniapp_emit() {
+  # miniapp_emit <json>
+  local json="$1"
+  [ -n "$MINIAPP_INGEST_URL" ] || return 0
+  local url="${MINIAPP_INGEST_URL%/}/api/ingest"
+  if [ -n "$MINIAPP_INGEST_TOKEN" ]; then
+    curl -fsS "$url" -H "content-type: application/json" -H "authorization: Bearer $MINIAPP_INGEST_TOKEN" --data "$json" >/dev/null || true
+  else
+    curl -fsS "$url" -H "content-type: application/json" --data "$json" >/dev/null || true
+  fi
+}
+
+miniapp_activity() {
+  # miniapp_activity <activity>
+  local a="$1"
+  local ts
+  ts="$(date +%s%3N 2>/dev/null || python3 - <<'PY'\nimport time\nprint(int(time.time()*1000))\nPY)"
+  miniapp_emit "{\"type\":\"agent.activity\",\"agentId\":\"AEGIS\",\"activity\":\"${a}\",\"ts\":${ts}}"
+}
+
+miniapp_orion_health() {
+  # miniapp_orion_health <ok:true|false> <kind> [incident]
+  local ok="$1"
+  local kind="$2"
+  local incident="${3:-}"
+  local ts
+  ts="$(date +%s%3N 2>/dev/null || python3 - <<'PY'\nimport time\nprint(int(time.time()*1000))\nPY)"
+  if [ -n "$incident" ]; then
+    miniapp_emit "{\"type\":\"orion.health\",\"ok\":${ok},\"kind\":\"${kind}\",\"incident\":\"${incident}\",\"source\":\"AEGIS\",\"ts\":${ts}}"
+  else
+    miniapp_emit "{\"type\":\"orion.health\",\"ok\":${ok},\"kind\":\"${kind}\",\"source\":\"AEGIS\",\"ts\":${ts}}"
+  fi
+}
 
 # Restart-loop guard for ORION restarts.
 # If ORION keeps failing health checks, we cap restarts to avoid flapping
@@ -231,6 +272,8 @@ if [ -z "$ORION_HOST" ]; then
   exit 0
 fi
 
+miniapp_activity "messaging"
+
 SSH_BASE=(
   ssh
   -o BatchMode=yes
@@ -255,6 +298,8 @@ outage_id_file="$STATE_DIR/orion_outage_id"
 # fails, ssh will typically exit non-255; those are actionable and may warrant a restart attempt.
 if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
   mark_ok
+  miniapp_orion_health true "ok"
+  miniapp_activity "idle"
   if [ -f "$outage_id_file" ]; then
     incident="$(cat "$outage_id_file" 2>/dev/null || true)"
     rm -f "$outage_id_file" || true
@@ -288,6 +333,8 @@ fi
 # If ORION is unreachable over SSH, restarting cannot work. Avoid burning restart attempts.
 if [ "$health_rc" -eq 255 ]; then
   log "ALERT: ORION unreachable via SSH ($incident_id)"
+  miniapp_orion_health false "unreachable" "$incident_id"
+  miniapp_activity "idle"
   if throttle_ok "orion_unreachable_incident" 900; then
     incident_append \
       "$incident_id" \
@@ -311,6 +358,8 @@ fi
 # Restart loop guard.
 if ! restart_allowed_or_lock; then
   log "ALERT: restart guard active; not restarting ORION ($incident_id)"
+  miniapp_orion_health false "unhealthy" "$incident_id"
+  miniapp_activity "idle"
   if throttle_ok "orion_restart_guard_incident" 900; then
     incident_append \
       "$incident_id" \
@@ -338,6 +387,8 @@ if ! remote "$ORION_OPENCLAW_RESTART_CMD" >/dev/null 2>&1; then
 fi
 if [ "$restart_rc" -eq 255 ]; then
   log "ALERT: ORION became unreachable during restart attempt ($incident_id)"
+  miniapp_orion_health false "unreachable" "$incident_id"
+  miniapp_activity "idle"
   if throttle_ok "orion_restart_unreachable_incident" 900; then
     incident_append \
       "$incident_id" \
@@ -363,6 +414,8 @@ sleep 3
 if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
   mark_ok
   log "RECOVERED: ORION restart succeeded"
+  miniapp_orion_health true "ok" "$incident_id"
+  miniapp_activity "idle"
   incident_append "$incident_id" "P1" "ORION_GATEWAY_RESTART" "ORION health failed; gateway restart succeeded." "Restarted ORION OpenClaw gateway." "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   if throttle_ok "orion_restart_succeeded" 900; then
     notify "$(msg_warn "ORION was unresponsive (fixed)." "Health checks failed." "Restarted the ORION OpenClaw gateway." "No action needed unless this repeats." "$incident_id")"
@@ -372,6 +425,8 @@ if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
 fi
 
 log "ALERT: ORION still unhealthy after restart ($incident_id)"
+miniapp_orion_health false "unhealthy" "$incident_id"
+miniapp_activity "idle"
 incident_append "$incident_id" "P0" "ORION_GATEWAY_RESTART" "ORION health failed; gateway restart did not recover." "Restarted ORION OpenClaw gateway, but health still fails." "open"
 if throttle_ok "orion_down" 900; then
   notify "$(msg_fail "ORION is still offline." "Health checks failed and ORION did not recover." "Restarted the ORION OpenClaw gateway, but the health check still fails." "Please check the Mac mini: OpenClaw gateway logs and system status." "$incident_id")"

@@ -456,6 +456,25 @@ const AEGIS_ALARM_MS = Number(process.env.AEGIS_ALARM_MS || 30_000);
 const AEGIS_WARN_MS = Number(process.env.AEGIS_WARN_MS || 0);
 const AEGIS_HEARTBEAT_MS = Number(process.env.AEGIS_HEARTBEAT_MS || 15_000);
 const AEGIS_PING_MS = Number(process.env.AEGIS_PING_MS || 1_100);
+// ORION health pinging is "AEGIS flavored" and drives the AEGIS indicator + ORION down/restarting UX.
+// This is intentionally simple and local: it pings the gateway via `openclaw health` when available.
+// NOTE: In production this server commonly runs on Fly and does not sit on the ORION host.
+// Default to disabled in production unless explicitly enabled. In development (co-located),
+// default to enabled so you get the AEGIS ping/outage UX without extra wiring.
+const ORION_HEALTHCHECK_ENABLED =
+  process.env.ORION_HEALTHCHECK_ENABLED === "1"
+    ? true
+    : process.env.ORION_HEALTHCHECK_ENABLED === "0"
+      ? false
+      : !IS_PROD;
+const ORION_HEALTHCHECK_MS = Number(process.env.ORION_HEALTHCHECK_MS || AEGIS_HEARTBEAT_MS || 15_000);
+const ORION_HEALTHCHECK_TIMEOUT_MS = Number(process.env.ORION_HEALTHCHECK_TIMEOUT_MS || 3_500);
+// "Confirmed outage" threshold: how many consecutive failed health checks before we flip to down/high-alert.
+const ORION_OUTAGE_FAILS = Number(process.env.ORION_OUTAGE_FAILS || 3);
+// How long to keep the "no response" warning visible after a failed ping (pre-confirmation).
+const ORION_NOACK_WARN_MS = Number(process.env.ORION_NOACK_WARN_MS || 12_000);
+// How long to show ORION as "restarting" after recovery from a down/suspect run.
+const ORION_RESTARTING_MS = Number(process.env.ORION_RESTARTING_MS || 12_000);
 
 const ARTIFACT_TTL_MS = Number(process.env.ARTIFACT_TTL_MS || 60 * 60_000);
 const MAX_ARTIFACTS = Number(process.env.MAX_ARTIFACTS || 24);
@@ -501,6 +520,20 @@ function createStore() {
     orionIo: { mode: null, until: 0 },
     orionBadge: { emoji: null, until: 0 },
     system: { alarmUntil: 0, warnUntil: 0 },
+    // ORION health as observed by AEGIS pings.
+    // This is UI-focused state and does not attempt to be a full incident system.
+    orionHealth: {
+      lastCheckAt: 0,
+      lastOkAt: 0,
+      lastFailAt: 0,
+      consecutiveFails: 0,
+      // Pre-confirmation "no response" indicator for AEGIS.
+      noAckWarnUntil: 0,
+      // Confirmed outage window.
+      downSince: 0,
+      // Short recovery window (down -> ok).
+      restartingUntil: 0,
+    },
     artifacts: [], // newest-first
     artifactsById: new Map(), // id -> record
     feed: [], // newest-first
@@ -1034,30 +1067,129 @@ function setAgentActivity(id, activity) {
 
 // AEGIS heartbeat: periodically "pings" ORION health. This is purely visual for the miniapp.
 // It should not steal ORION focus lines (no bumpActive, no link).
+function openclawHealthOnce(timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let child;
+    try {
+      child = spawn("openclaw", ["health"], {
+        stdio: ["ignore", "ignore", "ignore"],
+        env: process.env,
+      });
+    } catch {
+      return resolve(null);
+    }
+
+    const killTimer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // ignore
+      }
+    }, Math.max(600, Number(timeoutMs) || 0));
+
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(killTimer);
+      resolve(Boolean(ok));
+    };
+
+    child.on("error", (e) => {
+      // If openclaw isn't installed on this host (common in production), treat as unsupported.
+      if (e && (e.code === "ENOENT" || e.errno === -2)) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(killTimer);
+        return resolve(null);
+      }
+      finish(false);
+    });
+    child.on("close", (code) => finish(code === 0));
+  });
+}
+
+let orionHealthPingInFlight = false;
+let orionHealthcheckSupported = true;
 if (AEGIS_HEARTBEAT_MS > 0) {
-  setInterval(() => {
+  setInterval(async () => {
+    if (!ORION_HEALTHCHECK_ENABLED) return;
+    if (!orionHealthcheckSupported) return;
+    if (orionHealthPingInFlight) return;
+
     const a = STORE.agents.get("AEGIS");
     if (!a) return;
 
-    // If AEGIS is currently alarming, skip the heartbeat pulse to avoid mixed signals.
-    if (a.activity === "error") return;
+    const startedAt = Date.now();
+    STORE.orionHealth.lastCheckAt = startedAt;
 
+    // "Ping sent": animate AEGIS.
     a.status = "active";
     a.activity = "messaging";
-    a.updatedAt = Date.now();
+    a.updatedAt = startedAt;
     scheduleStateBroadcast();
 
-    setTimeout(() => {
+    orionHealthPingInFlight = true;
+    let ok = false;
+    try {
+      ok = await openclawHealthOnce(ORION_HEALTHCHECK_TIMEOUT_MS);
+    } catch {
+      ok = false;
+    } finally {
+      orionHealthPingInFlight = false;
+    }
+
+    if (ok === null) {
+      // openclaw not present on this host. Disable this loop to avoid false outages.
+      orionHealthcheckSupported = false;
+      // Reset AEGIS out of "messaging" if we set it above.
       const b = STORE.agents.get("AEGIS");
-      if (!b) return;
-      // Only reset if we haven't been overwritten by a real event.
-      if (b.activity !== "messaging") return;
+      if (b && b.activity === "messaging") {
+        b.activity = "idle";
+        b.status = "idle";
+        b.updatedAt = Date.now();
+        scheduleStateBroadcast();
+      }
+      return;
+    }
+
+    const finishedAt = Date.now();
+    const holdMs = Math.max(250, AEGIS_PING_MS);
+    const elapsed = finishedAt - startedAt;
+    if (elapsed < holdMs) {
+      await new Promise((r) => setTimeout(r, holdMs - elapsed));
+    }
+
+    const now = Date.now();
+    if (ok) {
+      const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
+      STORE.orionHealth.lastOkAt = now;
+      STORE.orionHealth.lastFailAt = 0;
+      STORE.orionHealth.consecutiveFails = 0;
+      STORE.orionHealth.noAckWarnUntil = 0;
+      STORE.orionHealth.downSince = 0;
+      if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
+    } else {
+      STORE.orionHealth.lastFailAt = now;
+      STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
+      // First few misses are "no response"; only flip to confirmed outage after N consecutive fails.
+      if (STORE.orionHealth.consecutiveFails >= Math.max(1, ORION_OUTAGE_FAILS)) {
+        if (!STORE.orionHealth.downSince) STORE.orionHealth.downSince = now;
+        STORE.orionHealth.restartingUntil = 0;
+      } else {
+        STORE.orionHealth.noAckWarnUntil = Math.max(STORE.orionHealth.noAckWarnUntil || 0, now + Math.max(1_500, ORION_NOACK_WARN_MS));
+      }
+    }
+
+    // Reset the AEGIS "pinging" animation if nothing overwrote it.
+    const b = STORE.agents.get("AEGIS");
+    if (b && b.activity === "messaging") {
       b.activity = "idle";
       b.status = "idle";
-      b.updatedAt = Date.now();
-      scheduleStateBroadcast();
-    }, Math.max(250, AEGIS_PING_MS));
-  }, Math.max(4_000, AEGIS_HEARTBEAT_MS));
+      b.updatedAt = now;
+    }
+    scheduleStateBroadcast();
+  }, Math.max(4_000, ORION_HEALTHCHECK_MS));
 }
 
 function bumpActive(id) {
@@ -1097,11 +1229,45 @@ function applyEventToStore(body) {
   const type = typeof body?.type === "string" ? body.type : "";
   const agentId = typeof body?.agentId === "string" ? body.agentId : null;
   const activity = typeof body?.activity === "string" ? body.activity : null;
+  const ts = typeof body?.ts === "number" ? body.ts : Date.now();
+
+  // ORION health as observed by AEGIS (or any trusted bridge) via /api/ingest.
+  // Payload:
+  //   { type:"orion.health", ok:boolean, kind?: "unreachable"|"unhealthy"|"ok", ts?: number, incident?: string }
+  if (type === "orion.health") {
+    const ok = Boolean(body?.ok);
+    const kind = typeof body?.kind === "string" ? body.kind : (ok ? "ok" : "unhealthy");
+    const now = ts;
+    STORE.orionHealth.lastCheckAt = now;
+
+    if (ok) {
+      const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
+      STORE.orionHealth.lastOkAt = now;
+      STORE.orionHealth.lastFailAt = 0;
+      STORE.orionHealth.consecutiveFails = 0;
+      STORE.orionHealth.noAckWarnUntil = 0;
+      STORE.orionHealth.downSince = 0;
+      if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
+    } else {
+      STORE.orionHealth.lastFailAt = now;
+      STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
+      // Treat "unreachable" as a stronger no-ack signal, but still require confirmation threshold.
+      const warnHold = kind === "unreachable" ? Math.max(4_000, ORION_NOACK_WARN_MS) : Math.max(1_500, ORION_NOACK_WARN_MS);
+      if (STORE.orionHealth.consecutiveFails >= Math.max(1, ORION_OUTAGE_FAILS)) {
+        if (!STORE.orionHealth.downSince) STORE.orionHealth.downSince = now;
+        STORE.orionHealth.restartingUntil = 0;
+      } else {
+        STORE.orionHealth.noAckWarnUntil = Math.max(STORE.orionHealth.noAckWarnUntil || 0, now + warnHold);
+      }
+    }
+
+    scheduleStateBroadcast();
+    return;
+  }
 
   if (type === "response.created") {
     const text = String(body?.text || body?.response?.text || "").trim();
     if (!text) return;
-    const ts = typeof body?.ts === "number" ? body.ts : Date.now();
     const id = typeof body?.id === "string" ? body.id : createId("feed");
     addFeedItem({
       id,
@@ -1269,6 +1435,10 @@ function snapshotLiveState() {
   pruneArtifacts(now);
   pruneFeed(now);
   if (STORE.workflow?.until && STORE.workflow.until <= now) STORE.workflow = null;
+
+  const orionDown = Boolean(STORE.orionHealth?.downSince && STORE.orionHealth.downSince > 0);
+  const orionRestarting = Boolean(STORE.orionHealth?.restartingUntil && STORE.orionHealth.restartingUntil > now);
+  const orionNoAck = Boolean(STORE.orionHealth?.noAckWarnUntil && STORE.orionHealth.noAckWarnUntil > now);
   const agents = AGENTS.map((id) => {
     const a = STORE.agents.get(id);
     if (!a) return { id, status: "idle", activity: "idle" };
@@ -1281,8 +1451,8 @@ function snapshotLiveState() {
     // Prefer alarming icons for recent failures.
     let badge = null;
     if (id === "AEGIS") {
-      const alarm = STORE.system?.alarmUntil && STORE.system.alarmUntil > now;
-      const warn = (STORE.system?.warnUntil && STORE.system.warnUntil > now) || CONFIG_WARN;
+      const alarm = orionDown || (STORE.system?.alarmUntil && STORE.system.alarmUntil > now);
+      const warn = orionNoAck || (STORE.system?.warnUntil && STORE.system.warnUntil > now) || CONFIG_WARN;
       badge = alarm ? "🚨" : warn ? "⚠️" : "🛰️";
     }
 
@@ -1319,10 +1489,12 @@ function snapshotLiveState() {
     link,
     agents,
     orion: {
-      status: activeAgentId || badges.length ? "busy" : "idle",
-      processes: orionProcesses,
-      badge,
-      io,
+      status: orionDown ? "offline" : orionRestarting ? "busy" : (activeAgentId || badges.length ? "busy" : "idle"),
+      // While down/restarting, force a stable "recovery" face emoji to avoid confusing activity rotations.
+      processes: (orionDown || orionRestarting) ? ["🤕"] : orionProcesses,
+      // Attach an emergency symbol while down/restarting.
+      badge: (orionDown || orionRestarting) ? "❗" : badge,
+      io: (orionDown || orionRestarting) ? null : io,
     },
     artifacts: STORE.artifacts
       .filter((a) => a && a.expiresAt && a.expiresAt > now)
