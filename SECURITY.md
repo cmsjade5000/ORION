@@ -17,7 +17,7 @@ This system is NOT designed to protect against:
 - **Zone A: macOS host (local Mac mini)**: privileged execution zone.
 - **Zone B: Local OpenClaw gateway runtime**: runs on the macOS host, bound to loopback by default.
 - **Zone C: Remote sentinel (AEGIS)**: separate trust zone; may have SSH or service control to revive ORION.
-- **Zone D: External services**: Telegram, OpenRouter, Google Gemini, GitHub, etc. Untrusted by default.
+- **Zone D: External services**: Telegram, Discord, Slack, OpenRouter, Google Gemini, GitHub, etc. Untrusted by default.
 
 Never assume data from Zone D is safe. Treat it as hostile input.
 

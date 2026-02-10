@@ -5,7 +5,7 @@ The Keep is the set of local-only secret files and credential material needed to
 
 It includes:
 - API keys (OpenRouter, Gemini, etc.)
-- Bot tokens (Telegram)
+- Bot tokens (Telegram, Discord)
 - API keys for additional model providers (example: NVIDIA Build `nvapi-...`)
 - OAuth refresh tokens / auth profiles
 - Service credentials (email, Slack if ever re-enabled)

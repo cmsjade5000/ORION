@@ -11,7 +11,7 @@ Design goals:
 
 ## Runtime Model
 
-- **ORION** (`agentId: main`) is the only Telegram-facing bot.
+- **ORION** (`agentId: main`) is the only user-facing bot (Telegram/Discord/Slack when configured).
 - Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **EMBER**, **LEDGER**.
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
@@ -49,6 +49,13 @@ This repo includes an optional Telegram Mini App dashboard:
 Config:
 - Set `ORION_MINIAPP_URL` to your deployed HTTPS URL (see `openclaw.json.example` / `openclaw.yaml`).
 - Security note: do not enable command routing from the Mini App into ORION unless you explicitly accept the risk (see `SECURITY.md` and the Mini App README).
+
+## Discord (Optional)
+
+OpenClaw includes a bundled Discord channel plugin (disabled by default). This workspace supports Discord as a first-class request + thread routing surface.
+
+Setup:
+- `docs/DISCORD_SETUP.md`
 
 ## Workspace Contract (OpenClaw)
 
