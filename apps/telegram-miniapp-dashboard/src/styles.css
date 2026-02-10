@@ -682,6 +682,12 @@ html {
   border: 1px solid rgba(124, 247, 193, 0.30);
 }
 
+.nodeCentral[data-status="busy"] {
+  background: radial-gradient(90px 90px at 30% 30%, rgba(255, 209, 102, 0.22), rgba(0, 0, 0, 0.42));
+  border-color: rgba(255, 209, 102, 0.22);
+  filter: saturate(0.98) brightness(0.98);
+}
+
 .nodeCentral[data-status="offline"] {
   background: radial-gradient(90px 90px at 30% 30%, rgba(255, 107, 107, 0.20), rgba(0, 0, 0, 0.44));
   border-color: rgba(255, 107, 107, 0.28);

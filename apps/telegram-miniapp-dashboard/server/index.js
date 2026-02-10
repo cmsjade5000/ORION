@@ -1466,7 +1466,14 @@ function snapshotLiveState() {
 
   const orionDown = Boolean(STORE.orionHealth?.downSince && STORE.orionHealth.downSince > 0);
   const orionRestarting = Boolean(STORE.orionHealth?.restartingUntil && STORE.orionHealth.restartingUntil > now);
-  const orionNoAck = Boolean(STORE.orionHealth?.noAckWarnUntil && STORE.orionHealth.noAckWarnUntil > now);
+  // "Yellow" suspicion state: between first missed heartbeat and confirmed outage.
+  // This must persist between heartbeats (AEGIS checks are often ~60s), so we treat any
+  // nonzero consecutiveFails as suspect until an OK resets it (or we enter red outage).
+  const orionSuspect =
+    !orionDown &&
+    (Boolean(STORE.orionHealth?.noAckWarnUntil && STORE.orionHealth.noAckWarnUntil > now) ||
+      (Number(STORE.orionHealth?.consecutiveFails) || 0) > 0);
+  const orionNoAck = orionSuspect;
   const agents = AGENTS.map((id) => {
     const a = STORE.agents.get(id);
     if (!a) return { id, status: "idle", activity: "idle" };
@@ -1517,11 +1524,23 @@ function snapshotLiveState() {
     link,
     agents,
     orion: {
-      status: orionDown ? "offline" : orionRestarting ? "busy" : (activeAgentId || badges.length ? "busy" : "idle"),
+      status: orionDown
+        ? "offline"
+        : (orionRestarting || orionSuspect)
+          ? "busy"
+          : (activeAgentId || badges.length ? "busy" : "idle"),
       // While down/restarting, force a stable "recovery" face emoji to avoid confusing activity rotations.
-      processes: (orionDown || orionRestarting) ? ["🤕"] : orionProcesses,
+      processes: (orionDown || orionRestarting)
+        ? ["🤕"]
+        : orionSuspect
+          ? ["😬"]
+          : orionProcesses,
       // Attach an emergency symbol while down/restarting.
-      badge: (orionDown || orionRestarting) ? "❗" : badge,
+      badge: (orionDown || orionRestarting)
+        ? "❗"
+        : orionSuspect
+          ? "⚠️"
+          : badge,
       io: (orionDown || orionRestarting) ? null : io,
     },
     artifacts: STORE.artifacts
