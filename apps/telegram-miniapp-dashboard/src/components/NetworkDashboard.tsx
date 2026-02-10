@@ -153,7 +153,8 @@ export default function NetworkDashboard(props: {
     const pad = 18;
 
     const yOrion = clamp(h * 0.44, R_LG + pad, h - (R_MED + R_SM + 120));
-    const yTop = clamp(yOrion - (R_LG + R_MED + 22), R_MED + pad, yOrion - 110);
+    // Top row: nudge a bit higher so it breathes.
+    const yTop = clamp(yOrion - (R_LG + R_MED + 42), R_MED + pad, yOrion - 130);
     // Pull ATLAS and its child nodes closer to the bottom, while keeping a safe gap from ORION.
     const yAtlas = clamp(yOrion + (R_LG + R_MED + 54), yOrion + 130, h - (R_SM + pad + 48));
     const ySmall = clamp(yAtlas + (R_MED + R_SM + 24), yAtlas + 90, h - (R_SM + pad));
@@ -210,11 +211,19 @@ export default function NetworkDashboard(props: {
 
         const showOrionTo = (id: string) => {
           if (id === "AEGIS") return false;
-          if (linkAgentId === id) return true;
           if (active === id) return true;
           if (activeStepId === id) return true;
           const a = byId.get(id);
           if (!a) return false;
+          // Hide "return trip" connectors (dir=in). Users found this reads like ORION is still
+          // "sending back info" after everything visually completed.
+          if (linkAgentId === id) {
+            if (linkDir === "out") return true;
+            return a.status === "active" || a.status === "busy" || (a.activity && a.activity !== "idle");
+          }
+          // Important: do NOT use smoothed activity for connection lines. Smoothing intentionally lingers
+          // a bit to avoid flicker, but that makes it look like ORION is "sending back info" after the
+          // real exchange is over.
           return a.status === "active" || a.status === "busy" || (a.activity && a.activity !== "idle");
         };
 
@@ -224,13 +233,12 @@ export default function NetworkDashboard(props: {
           <>
             {(["PIXEL", "EMBER", "LEDGER", "ATLAS"] as const).map((id) => {
               if (!showOrionTo(id)) return null;
-              const dir = linkAgentId === id ? linkDir : "out";
               return (
                 <ConnectionLayer
                   key={`orion:${id}`}
                   fromNodeId="ORION"
                   toNodeId={id}
-                  dir={dir}
+                  dir="out"
                   containerRef={containerRef}
                 />
               );
