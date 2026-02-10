@@ -705,6 +705,8 @@ html {
 
 .nodeCentral .nodeSubCentral {
   margin-top: 0;
+  /* Nudge the face/tool emoji slightly left to feel visually centered in the bubble. */
+  transform: translateX(-3px);
 }
 
 .nodeRemote {
