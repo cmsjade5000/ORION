@@ -101,10 +101,30 @@ miniapp_emit() {
   local json="$1"
   [ -n "$MINIAPP_INGEST_URL" ] || return 0
   local url="${MINIAPP_INGEST_URL%/}/api/ingest"
+  # Best-effort and non-fatal, but log failures so we can diagnose "AEGIS alerts but dashboard stays green".
+  local code="000"
   if [ -n "$MINIAPP_INGEST_TOKEN" ]; then
-    curl -fsS "$url" -H "content-type: application/json" -H "authorization: Bearer $MINIAPP_INGEST_TOKEN" --data "$json" >/dev/null || true
+    code="$(
+      curl -sS -o /dev/null -w "%{http_code}" \
+        --connect-timeout 3 --max-time 6 \
+        "$url" \
+        -H "content-type: application/json" \
+        -H "authorization: Bearer $MINIAPP_INGEST_TOKEN" \
+        --data "$json" \
+        || echo "000"
+    )"
   else
-    curl -fsS "$url" -H "content-type: application/json" --data "$json" >/dev/null || true
+    code="$(
+      curl -sS -o /dev/null -w "%{http_code}" \
+        --connect-timeout 3 --max-time 6 \
+        "$url" \
+        -H "content-type: application/json" \
+        --data "$json" \
+        || echo "000"
+    )"
+  fi
+  if [[ ! "$code" =~ ^2[0-9][0-9]$ ]]; then
+    log "WARN: miniapp_emit failed http=$code (check MINIAPP_INGEST_URL/TOKEN)"
   fi
 }
 
