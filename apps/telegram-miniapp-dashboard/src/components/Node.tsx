@@ -3,6 +3,14 @@ import type { AgentActivity } from "../api/state";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
+function fallbackCentralEmoji(status: AgentStatus): string {
+  // Ensures the central ORION node never shows an "empty" emoji state.
+  // These are only used if the backend doesn't provide a process emoji.
+  if (status === "offline") return "🤕";
+  if (status === "busy") return "😬";
+  return "🙂";
+}
+
 function activityEmoji(a: AgentActivity | undefined): string | null {
   if (!a || a === "idle") return null;
   switch (a) {
@@ -66,7 +74,7 @@ export default function Node(props: {
     setPrevEmoji(curRef.current);
     setCurEmoji(emoji);
     curRef.current = emoji;
-    const t = window.setTimeout(() => setPrevEmoji(null), 260);
+    const t = window.setTimeout(() => setPrevEmoji(null), 320);
     return () => window.clearTimeout(t);
   }, [emoji]);
 
@@ -74,9 +82,10 @@ export default function Node(props: {
   const processes = props.kind === "central" ? (props.processes ?? []) : [];
   const [procIdx, setProcIdx] = useState(0);
   const curProc = processes.length ? processes[procIdx % processes.length] : null;
-  const [curProcEmoji, setCurProcEmoji] = useState<string | null>(curProc);
+  const curProcResolved = props.kind === "central" ? (curProc ?? fallbackCentralEmoji(props.status)) : curProc;
+  const [curProcEmoji, setCurProcEmoji] = useState<string | null>(curProcResolved);
   const [prevProcEmoji, setPrevProcEmoji] = useState<string | null>(null);
-  const procRef = useRef<string | null>(curProc);
+  const procRef = useRef<string | null>(curProcResolved);
 
   useEffect(() => {
     if (props.kind !== "central") return;
@@ -86,7 +95,8 @@ export default function Node(props: {
 
   useEffect(() => {
     if (props.kind !== "central") return;
-    if (!processes.length) return;
+    // Only rotate when there is more than one process emoji to show.
+    if (processes.length <= 1) return;
     if (typeof window === "undefined") return;
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
@@ -97,13 +107,14 @@ export default function Node(props: {
 
   useEffect(() => {
     if (props.kind !== "central") return;
-    if (curProc === procRef.current) return;
+    const next = curProc ?? fallbackCentralEmoji(props.status);
+    if (next === procRef.current) return;
     setPrevProcEmoji(procRef.current);
-    setCurProcEmoji(curProc);
-    procRef.current = curProc;
-    const t = window.setTimeout(() => setPrevProcEmoji(null), 260);
+    setCurProcEmoji(next);
+    procRef.current = next;
+    const t = window.setTimeout(() => setPrevProcEmoji(null), 320);
     return () => window.clearTimeout(t);
-  }, [props.kind, curProc]);
+  }, [props.kind, curProc, props.status]);
 
   return (
     <div
