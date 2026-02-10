@@ -43,6 +43,32 @@ else
   openclaw channels status --probe 2>/dev/null || true
 fi
 
+hr "Models (Auth + Routing)"
+# Avoid leaking key material: use JSON output + jq redaction when available.
+if have jq; then
+  openclaw models status --json --probe --probe-max-tokens 16 2>/dev/null \
+    | jq 'walk(
+        if type=="object" then
+          with_entries(
+            if (
+              (.key|test("(token|secret|apikey|apiKey|privateKey|key)$"; "i"))
+              and (.key|test("File$"; "i")|not)
+            ) then
+              .value = "<redacted>"
+            else
+              .
+            end
+          )
+        elif type=="string" and test("(sk-or-v1|sk-|AIza|nvapi-)"; "i") then
+          "<redacted>"
+        else
+          .
+        end
+      )' \
+    | jq -r '.' || true
+else
+  echo "jq not found; skipping model auth details (avoid leaking key material)."
+fi
+
 hr "Recent Gateway Logs (tail 80)"
 openclaw logs --tail 80 2>/dev/null || true
-

@@ -27,6 +27,7 @@ This document outlines the recommended workflow for developing and maintaining t
    - Create a Telegram token file at `~/.openclaw/secrets/telegram.token` (plain token value).
    - The active OpenClaw config is `~/.openclaw/openclaw.json`. Use it for runtime settings.
    - Keep `openclaw.yaml` in this repo as a project reference template.
+   - For model provider setup (where to get keys + how to wire them into OpenClaw), see `docs/LLM_ACCESS.md`.
    - See `docs/OPENCLAW_CONFIG_MIGRATION.md` for mapping details.
    - For single-bot delegation behavior, follow `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`.
    - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.

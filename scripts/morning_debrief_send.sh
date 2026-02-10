@@ -19,6 +19,9 @@ set -euo pipefail
 # - BRIEF_TZ (default: America/New_York)
 # - AGENTMAIL_FROM (default: orion_gatewaybot@agentmail.to)
 # - AGENTMAIL_TO (default: boughs.gophers-2t@icloud.com)
+#
+# Flags:
+# - --dry-run   Render the email body to stdout and do not send.
 
 have() { command -v "$1" >/dev/null 2>&1; }
 for bin in curl jq node; do
@@ -27,6 +30,11 @@ for bin in curl jq node; do
     exit 1
   fi
 done
+
+DRY_RUN=0
+if [[ "${1:-}" == "--dry-run" ]]; then
+  DRY_RUN=1
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -91,6 +99,24 @@ def itemLine($it; $label):
 + ("Today: High " + safe(.weather.today.maxF) + "F / Low " + safe(.weather.today.minF) + "F"
     + " • Sunrise " + safe(.weather.today.sunrise) + " • Sunset " + safe(.weather.today.sunset) + "\n")
 
++ hr("Upcoming (Next 24h)")
++ (
+  if (.calendar.enabled != true) then "(calendar not configured)\n"
+  elif (.calendar.events|length)==0 then "(no events)\n"
+  else (
+    .calendar.events[0:10]
+    | map(
+        bullet(
+          (if (.allDay==true) then "All day" else (.startLocalTime|tostring) end)
+          + ": " + (.title|tostring)
+          + " (" + (.calendar|tostring) + ")"
+        )
+      )
+    | join("\n")
+    ) + "\n"
+  end
+)
+
 + hr("AI / LLM News (Last ~24h)")
 + (if (.news.ai|length)==0 then "(no items)\n"
     else (.news.ai | to_entries | map(itemLine(.value; ("AI-" + ((.key+1)|tostring)))) | join("\n")) + "\n" end)
@@ -116,6 +142,11 @@ def itemLine($it; $label):
 + hr("Notes")
 + "If you want this to include a short ORION-written summary/commentary section, we can add an agent step later.\n"
 ' "$inputs" >"$body"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  cat "$body"
+  exit 0
+fi
 
 AGENTMAIL_FROM="$FROM_INBOX" "$ROOT/scripts/agentmail_send.sh" \
   --to "$TO_EMAIL" \

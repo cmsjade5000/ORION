@@ -27,8 +27,8 @@ Risks:
 Stop Gates:
 - Crisis/self-harm intent: do not produce "soothing audio" as a substitute for safety steps.
 Output Format:
-- TTS_PRESET:
-- TTS_VOICE_HINT:
+- TTS_PRESET: (calm|narration|energetic|urgent)
+- TTS_VOICE_HINT: (default: none; only set if Cory asked for a specific voice)
 - DURATION_SEC_TARGET:
 - SCRIPT:
 - SAFETY_NOTE:

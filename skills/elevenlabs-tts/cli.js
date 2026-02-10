@@ -68,17 +68,13 @@ async function main() {
       throw new Error("No voices available for this ElevenLabs account.");
     }
 
-    // Prefer a common default voice name if present, otherwise fallback to first voice.
-    const preferredNames = ["Rachel", "Bella", "Adam", "Antoni", "Sarah", "Laura"];
-    const preferred = voices.find((v) =>
-      preferredNames.some((n) => String(v?.name || "").trim().toLowerCase() === n.toLowerCase()),
-    );
-    const voiceId = String((preferred?.voice_id || first.voice_id));
-
+    // Intentionally do NOT choose a voice here.
+    // This check should validate the configured defaults (OpenClaw env.vars or env),
+    // and only fall back to the first available voice if nothing is configured.
     await textToSpeechToFile({
       text: "This is a test of ORION's audio output.",
-      voiceId,
-      voiceSettingsPreset: "narration",
+      // No explicit voiceId/voiceName: allow defaults to apply.
+      // No explicit preset: allow defaults to apply.
       filenamePrefix: "audio_check",
     });
     return;

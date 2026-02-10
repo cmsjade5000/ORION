@@ -15,6 +15,12 @@ AI_MAX_ITEMS="${AI_MAX_ITEMS:-}"
 TECH_MAX_ITEMS="${TECH_MAX_ITEMS:-}"
 PGH_MAX_ITEMS="${PGH_MAX_ITEMS:-}"
 
+BRIEF_CALENDAR_NAMES="${BRIEF_CALENDAR_NAMES:-}"
+BRIEF_CALENDAR_WINDOW_HOURS="${BRIEF_CALENDAR_WINDOW_HOURS:-24}"
+BRIEF_CALENDAR_INCLUDE_ALLDAY="${BRIEF_CALENDAR_INCLUDE_ALLDAY:-1}"
+BRIEF_TZ="${BRIEF_TZ:-}"
+BRIEF_AT_ISO="${BRIEF_AT_ISO:-}"
+
 # Default to a small total link count (2-5 total) unless explicitly overridden.
 # If MAX_ITEMS is set, it acts as a fallback cap.
 if [ -z "${AI_MAX_ITEMS}" ]; then AI_MAX_ITEMS="2"; fi
@@ -42,6 +48,20 @@ if [ ! -f "$RSS_EXTRACT" ]; then
   exit 1
 fi
 
+# Optional: load calendar prefs from OpenClaw config env.vars (non-secret) so
+# manual runs match the gateway service defaults.
+if [[ -z "${BRIEF_CALENDAR_NAMES// /}" ]]; then
+  CFG="${OPENCLAW_CONFIG_PATH:-$HOME/.openclaw/openclaw.json}"
+  if [[ -f "$CFG" ]]; then
+    v="$(jq -r '.env.vars.BRIEF_CALENDAR_NAMES // empty' "$CFG" 2>/dev/null || true)"
+    if [[ -n "${v// /}" && "$v" != "null" ]]; then BRIEF_CALENDAR_NAMES="$v"; fi
+    v="$(jq -r '.env.vars.BRIEF_CALENDAR_WINDOW_HOURS // empty' "$CFG" 2>/dev/null || true)"
+    if [[ -n "${v// /}" && "$v" != "null" ]]; then BRIEF_CALENDAR_WINDOW_HOURS="$v"; fi
+    v="$(jq -r '.env.vars.BRIEF_CALENDAR_INCLUDE_ALLDAY // empty' "$CFG" 2>/dev/null || true)"
+    if [[ -n "${v// /}" && "$v" != "null" ]]; then BRIEF_CALENDAR_INCLUDE_ALLDAY="$v"; fi
+  fi
+fi
+
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -49,7 +69,16 @@ trap 'rm -rf "$tmpdir"' EXIT
 weather_json="$tmpdir/weather.json"
 curl -fsSL "https://wttr.in/${CITY}?format=j1" -o "$weather_json"
 
-weather="$(jq -c '{
+target_date=""
+if [[ -n "${BRIEF_AT_ISO}" && -n "${BRIEF_TZ}" ]]; then
+  # Convert BRIEF_AT_ISO (UTC) to an epoch, then compute the local date string in BRIEF_TZ.
+  epoch="$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "${BRIEF_AT_ISO}" "+%s" 2>/dev/null || true)"
+  if [[ -n "${epoch}" ]]; then
+    target_date="$(TZ="${BRIEF_TZ}" date -r "${epoch}" "+%Y-%m-%d" 2>/dev/null || true)"
+  fi
+fi
+
+weather="$(jq -c --arg targetDate "${target_date}" '{
   area: (.nearest_area[0].areaName[0].value // null),
   region: (.nearest_area[0].region[0].value // null),
   country: (.nearest_area[0].country[0].value // null),
@@ -63,14 +92,20 @@ weather="$(jq -c '{
     precipIn: (.current_condition[0].precipInches // null),
     uv: (.current_condition[0].uvIndex // null)
   },
-  today: {
-    date: (.weather[0].date // null),
-    maxF: (.weather[0].maxtempF // null),
-    minF: (.weather[0].mintempF // null),
-    sunrise: (.weather[0].astronomy[0].sunrise // null),
-    sunset: (.weather[0].astronomy[0].sunset // null),
+  today: (
+    if ($targetDate|length)>0 then
+      (.weather | map(select(.date == $targetDate)) | .[0] // .weather[0])
+    else
+      .weather[0]
+    end
+  ) | {
+    date: (.date // null),
+    maxF: (.maxtempF // null),
+    minF: (.mintempF // null),
+    sunrise: (.astronomy[0].sunrise // null),
+    sunset: (.astronomy[0].sunset // null),
     hourly: (
-      .weather[0].hourly
+      .hourly
       | map({
         time: (.time // null),
         tempF: (.tempF // null),
@@ -103,6 +138,14 @@ pgh_items="$(node "$RSS_EXTRACT" --max "$PGH_MAX_ITEMS" <"$pgh_rss")"
 
 now_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
+calendar_json="$(
+  CAL_NAMES="$BRIEF_CALENDAR_NAMES" \
+  CAL_WINDOW_HOURS="$BRIEF_CALENDAR_WINDOW_HOURS" \
+  CAL_INCLUDE_ALLDAY="$BRIEF_CALENDAR_INCLUDE_ALLDAY" \
+  CAL_START_ISO="$BRIEF_AT_ISO" \
+  "$ROOT/scripts/calendar_events_fetch.sh" || echo '{"enabled":true,"error":"calendar_events_fetch failed","events":[]}'
+)"
+
 jq -n \
   --arg now "$now_iso" \
   --arg city "$CITY" \
@@ -110,10 +153,12 @@ jq -n \
   --argjson ai "$ai_items" \
   --argjson tech "$tech_items" \
   --argjson pgh "$pgh_items" \
+  --argjson calendar "$calendar_json" \
   '{
     generatedAt: $now,
     city: $city,
     weather: $weather,
+    calendar: $calendar,
     news: {
       ai: $ai,
       tech: $tech,

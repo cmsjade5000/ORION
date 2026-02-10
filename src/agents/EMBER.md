@@ -44,8 +44,8 @@ Constraints:
 ### Output Format (for ORION)
 Return exactly this structure so ORION can run TTS without guessing:
 
-- `TTS_PRESET:` `calm` | `narration` | `energetic`
-- `TTS_VOICE_HINT:` a human-friendly voice name suggestion (example: `Rachel`) or `none`
+- `TTS_PRESET:` `calm` | `narration` | `energetic` | `urgent`
+- `TTS_VOICE_HINT:` `none` (default). Only suggest a voice name if Cory explicitly asks for a different voice.
 - `DURATION_SEC_TARGET:` integer (20-90)
 - `SCRIPT:` plain text, 1-3 short paragraphs
 - `SAFETY_NOTE:` one sentence or `none`

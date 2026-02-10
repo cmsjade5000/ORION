@@ -89,3 +89,8 @@ When Cory asks to *hear ORION speak* in a calming/supportive/grounding way:
 
 Safety gate:
 - If crisis/self-harm intent is present, prioritize safety guidance. Do not treat “soothing audio” as a substitute for safety steps.
+
+## Morning Brief Voice
+
+Daily voice recap via Telegram:
+- `docs/MORNING_DEBRIEF_VOICE.md`

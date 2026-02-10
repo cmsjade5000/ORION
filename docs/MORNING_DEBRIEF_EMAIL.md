@@ -19,6 +19,12 @@ Inputs:
 Sender:
 - `scripts/morning_debrief_send.sh`
 
+Voice variant (Telegram):
+- See `docs/MORNING_DEBRIEF_VOICE.md`
+
+Calendar:
+- See `docs/CALENDAR.md`
+
 Manual run:
 ```bash
 AGENTMAIL_FROM=orion_gatewaybot@agentmail.to \\
@@ -47,6 +53,7 @@ openclaw cron add \\
 
 Include:
 - Pittsburgh weather for today (high/low, conditions, precipitation, wind, any alerts).
+- Calendar events (next 24h) when configured.
 - Tech and AI news highlights (last ~24h).
 - Pittsburgh-local news highlights (last ~24h).
 - Any critical system items (AEGIS/ORION health, incidents, failures) if relevant.

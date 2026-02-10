@@ -4,6 +4,33 @@ const path = require("path");
 
 const fetchFn = globalThis.fetch ?? require("node-fetch");
 
+let _openclawEnvVarsCache = null;
+function getOpenClawEnvVars() {
+  // Non-secret defaults can live in ~/.openclaw/openclaw.json under env.vars.
+  // This allows the LaunchAgent gateway to provide stable defaults, and also
+  // makes local CLI usage consistent with ORION's runtime.
+  if (_openclawEnvVarsCache) return _openclawEnvVarsCache;
+
+  const cfg =
+    process.env.OPENCLAW_CONFIG_PATH?.trim() ||
+    path.join(os.homedir(), ".openclaw", "openclaw.json");
+
+  try {
+    if (!fs.existsSync(cfg)) {
+      _openclawEnvVarsCache = {};
+      return _openclawEnvVarsCache;
+    }
+    const raw = fs.readFileSync(cfg, "utf8");
+    const json = JSON.parse(raw);
+    const vars = json?.env?.vars;
+    _openclawEnvVarsCache = (vars && typeof vars === "object") ? vars : {};
+    return _openclawEnvVarsCache;
+  } catch {
+    _openclawEnvVarsCache = {};
+    return _openclawEnvVarsCache;
+  }
+}
+
 function readFirstExistingFile(paths) {
   for (const p of paths) {
     try {
@@ -178,7 +205,11 @@ function resolvePresetName(preset) {
     process.env.ELEVENLABS_DEFAULT_PRESET?.trim() ||
     process.env.ELEVENLABS_PRESET?.trim() ||
     "";
-  return envPreset || "";
+  if (envPreset) return envPreset;
+
+  const oc = getOpenClawEnvVars();
+  const ocPreset = String(oc?.ELEVENLABS_DEFAULT_PRESET || oc?.ELEVENLABS_PRESET || "").trim();
+  return ocPreset || "";
 }
 
 async function resolveVoiceId({ voiceId, voiceName } = {}) {
@@ -206,6 +237,18 @@ async function resolveVoiceId({ voiceId, voiceName } = {}) {
   if (envVoiceName) {
     vid = await findVoiceIdByName(envVoiceName);
     if (!vid) throw new Error(`No ElevenLabs voice matched name from env: ${envVoiceName}`);
+    return vid;
+  }
+
+  // Next: OpenClaw config env.vars (stable across LaunchAgent runs).
+  const oc = getOpenClawEnvVars();
+  const ocVoiceId = String(oc?.ELEVENLABS_DEFAULT_VOICE_ID || oc?.ELEVENLABS_VOICE_ID || "").trim();
+  if (ocVoiceId) return ocVoiceId;
+
+  const ocVoiceName = String(oc?.ELEVENLABS_DEFAULT_VOICE_NAME || oc?.ELEVENLABS_VOICE_NAME || "").trim();
+  if (ocVoiceName) {
+    vid = await findVoiceIdByName(ocVoiceName);
+    if (!vid) throw new Error(`No ElevenLabs voice matched name from OpenClaw config: ${ocVoiceName}`);
     return vid;
   }
 
@@ -237,6 +280,11 @@ async function textToSpeechToFile({
   const presetName = resolvePresetName(voiceSettingsPreset);
   const preset = presetVoiceSettings(presetName);
   const vs = voiceSettings && typeof voiceSettings === "object" ? voiceSettings : preset;
+
+  if (process.env.ELEVENLABS_TTS_DEBUG === "1") {
+    // Stderr only, so stdout stays a single MEDIA: line for OpenClaw attachments.
+    console.error(`[elevenlabs-tts] voiceId=${vid} preset=${presetName || "(none)"}`);
+  }
 
   ensureDir(outDir);
 
