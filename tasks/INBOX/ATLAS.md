@@ -9,4 +9,15 @@ Commands to run:
 - openclaw cron list
 Constraints:
 - Do not make any changes to the cron jobs.
+Inputs:
+- Command: openclaw cron list
+Risks:
+- low
+Stop Gates:
+- Any change to cron jobs or gateway configuration.
+Output Format:
+- Result:
+  - Status: OK | FAILED | BLOCKED
+  - Findings: 3-10 bullets
+  - Recommendations: keep/disable list with rationale
 Notify: telegram
