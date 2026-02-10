@@ -1765,8 +1765,28 @@ const shouldServeStatic =
   process.env.NODE_ENV === "production" && fs.existsSync(distIndex);
 
 if (shouldServeStatic) {
-  app.use(express.static(distDir));
+  // Avoid Telegram/WebView caching a stale index.html (which would pin an old JS bundle).
+  // Hashed assets can be cached aggressively; index.html should be no-store.
+  app.use(
+    express.static(distDir, {
+      setHeaders: (res, filePath) => {
+        const p = String(filePath || "");
+        if (p.endsWith(`${path.sep}index.html`)) {
+          res.setHeader("Cache-Control", "no-store");
+          return;
+        }
+        // Vite fingerprints assets (content hash in filename), so long caching is safe.
+        if (p.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          return;
+        }
+        // Conservative default for other static files.
+        res.setHeader("Cache-Control", "no-cache");
+      },
+    })
+  );
   app.get("*", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.sendFile(distIndex);
   });
 }
