@@ -93,13 +93,14 @@ if [[ "$check_channels" -eq 1 ]]; then
   if [[ -z "$channels" ]]; then
     printf -- '- channels: UNKNOWN\n'
   else
+    norm_line() { printf '%s' "$1" | sed -E 's/^- +//'; }
     # Keep parsing intentionally loose; we just want a quick "is it running?" signal.
     telegram_state="$(printf '%s\n' "$channels" | grep -E '^- Telegram' | head -n 1 || true)"
     slack_state="$(printf '%s\n' "$channels" | grep -E '^- Slack' | head -n 1 || true)"
     mochat_state="$(printf '%s\n' "$channels" | grep -E '^- Mochat' | head -n 1 || true)"
-    [[ -n "$telegram_state" ]] && printf -- '- %s\n' "$telegram_state"
-    [[ -n "$slack_state" ]] && printf -- '- %s\n' "$slack_state"
-    [[ -n "$mochat_state" ]] && printf -- '- %s\n' "$mochat_state"
+    [[ -n "$telegram_state" ]] && printf -- '- %s\n' "$(norm_line "$telegram_state")"
+    [[ -n "$slack_state" ]] && printf -- '- %s\n' "$(norm_line "$slack_state")"
+    [[ -n "$mochat_state" ]] && printf -- '- %s\n' "$(norm_line "$mochat_state")"
   fi
 fi
 
