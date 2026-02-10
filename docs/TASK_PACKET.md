@@ -46,6 +46,9 @@ Output Format:
 - `Checkpoints:` interim status points
 - `Notify:` `telegram` | `none`
   - Use `Notify: telegram` when a delegated packet is user-initiated and Cory expects a follow-up message when the specialist posts a `Result:`.
+  - If the packet will execute via the inbox runner, use `Notify: telegram` so Cory gets:
+    - a one-time "Queued" update, and
+    - a follow-up "Results" update when `Result:` is written.
 - `Severity:` `P0` (emergency) | `P1` (urgent) | `P2` (normal) | `P3` (backlog)
 - `Emergency:` use only for explicit emergency modes (example: `ATLAS_UNAVAILABLE`)
 - `Incident:` incident id when an emergency bypass is used (see `tasks/INCIDENTS.md`)
@@ -97,7 +100,12 @@ Inbox files are append-only queues of Task Packets.
 
 - ORION assigns by appending a new Task Packet to `tasks/INBOX/<AGENT>.md`.
 - Specialist marks completion by adding a short `Result:` block under the packet.
+- Do not pre-create an empty `Result:` placeholder. Leave the `Result:` block for the specialist/runner.
 - If the packet included `Notify: telegram`, ORION may notify Cory automatically (see `scripts/notify_inbox_results.py` + `HEARTBEAT.md`).
+- For allowlisted read-only packets, `scripts/run_inbox_packets.py` can execute the `Commands to run:` section and write the `Result:` block.
+  - Formatting requirement for `Commands to run:`:
+    - Preferred: header line `Commands to run:` followed by bullet lines (example `- diagnose_gateway.sh`).
+    - Supported: single-line form `Commands to run: diagnose_gateway.sh`.
 - Requester field policy:
   - Most specialist inboxes: `Requester: ORION`.
   - ATLAS-directed sub-agents (`NODE`, `PULSE`, `STRATUS`): `Requester: ATLAS` (or `Requester: ORION` only with `Emergency: ATLAS_UNAVAILABLE`).

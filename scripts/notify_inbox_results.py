@@ -42,6 +42,17 @@ class PacketResult:
     result_preview_lines: list[str]
 
 
+@dataclasses.dataclass(frozen=True)
+class PacketQueued:
+    inbox_path: Path
+    display_path: str
+    packet_start_line: int
+    owner: str
+    objective: str
+    notify: str  # "telegram" | "none" | ""
+    queued_hash: str
+
+
 def _read_text(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
@@ -103,7 +114,26 @@ def _extract_result_block(packet_lines: list[str]) -> list[str] | None:
             break
     if start is None:
         return None
-    return packet_lines[start:]
+    block = packet_lines[start:]
+    # Treat an empty placeholder Result as "no result yet" so we don't spam or misclassify queued packets.
+    has_content = any(ln.strip() for ln in block[1:])
+    if not has_content:
+        return None
+    return block
+
+
+def _extract_packet_before_result(packet_lines: list[str]) -> list[str]:
+    """
+    Return packet lines excluding the `Result:` section, if present.
+
+    Important: This hash is used to dedupe "queued" notifications even after a Result is appended.
+    """
+    out: list[str] = []
+    for ln in packet_lines:
+        if ln.strip() == "Result:":
+            break
+        out.append(ln)
+    return out
 
 
 def _preview_result_lines(result_block: list[str], *, max_lines: int = 12, max_chars: int = 900) -> list[str]:
@@ -232,11 +262,12 @@ def _telegram_send_message(*, chat_id: str, token: str, text: str) -> None:
         resp.read()
 
 
-def _find_new_results(repo_root: Path) -> list[PacketResult]:
+def _find_packets(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResult]]:
     inbox_dir = repo_root / "tasks" / "INBOX"
-    out: list[PacketResult] = []
+    queued: list[PacketQueued] = []
+    results: list[PacketResult] = []
     if not inbox_dir.exists():
-        return out
+        return queued, results
 
     for inbox in sorted(inbox_dir.glob("*.md")):
         if inbox.name.upper() == "README.MD":
@@ -256,14 +287,12 @@ def _find_new_results(repo_root: Path) -> list[PacketResult]:
         for start_line, pkt_lines in packets:
             fields = _parse_top_level_fields(pkt_lines)
             result_block = _extract_result_block(pkt_lines)
-            if not result_block:
-                continue
 
             notify = fields.get("Notify", "").strip().lower()
             owner = fields.get("Owner", "").strip() or inbox.stem.upper()
             objective = fields.get("Objective", "").strip() or "(no objective)"
-            rh = _sha256_text(result_block)
-            preview = _preview_result_lines(result_block)
+            before = _extract_packet_before_result(pkt_lines)
+            qh = _sha256_text(before)
 
             try:
                 disp = str(inbox.relative_to(repo_root))
@@ -271,34 +300,59 @@ def _find_new_results(repo_root: Path) -> list[PacketResult]:
                 # Fall back to a resolved absolute path for clarity when cwd is a symlinked workspace.
                 disp = inbox.resolve().as_posix()
 
-            out.append(
-                PacketResult(
-                    inbox_path=inbox,
-                    display_path=disp,
-                    packet_start_line=start_line,
-                    owner=owner,
-                    objective=objective,
-                    notify=notify,
-                    result_hash=rh,
-                    result_preview_lines=preview,
+            if result_block:
+                rh = _sha256_text(result_block)
+                preview = _preview_result_lines(result_block)
+                results.append(
+                    PacketResult(
+                        inbox_path=inbox,
+                        display_path=disp,
+                        packet_start_line=start_line,
+                        owner=owner,
+                        objective=objective,
+                        notify=notify,
+                        result_hash=rh,
+                        result_preview_lines=preview,
+                    )
                 )
-            )
+            else:
+                queued.append(
+                    PacketQueued(
+                        inbox_path=inbox,
+                        display_path=disp,
+                        packet_start_line=start_line,
+                        owner=owner,
+                        objective=objective,
+                        notify=notify,
+                        queued_hash=qh,
+                    )
+                )
 
-    return out
+    return queued, results
 
 
-def _format_message(items: list[PacketResult]) -> str:
+def _format_message(*, queued: list[PacketQueued], results: list[PacketResult]) -> str:
     lines: list[str] = []
-    lines.append("Inbox results:")
+    lines.append("Inbox update:")
     lines.append("")
 
-    for i, it in enumerate(items, start=1):
-        head = f"{i}. [{it.owner}] {it.objective}"
-        lines.append(head)
-        for pl in it.result_preview_lines:
-            lines.append(pl)
-        lines.append(f"file: {it.display_path}:{it.packet_start_line}")
+    if queued:
+        lines.append("Queued:")
+        for i, it in enumerate(queued, start=1):
+            lines.append(f"{i}. [{it.owner}] {it.objective}")
+            lines.append(f"file: {it.display_path}:{it.packet_start_line}")
         lines.append("")
+
+    if results:
+        lines.append("Results:")
+        lines.append("")
+        for i, it in enumerate(results, start=1):
+            head = f"{i}. [{it.owner}] {it.objective}"
+            lines.append(head)
+            for pl in it.result_preview_lines:
+                lines.append(pl)
+            lines.append(f"file: {it.display_path}:{it.packet_start_line}")
+            lines.append("")
 
     msg = "\n".join(lines).rstrip() + "\n"
     # Telegram practical limit is 4096 chars; keep margin.
@@ -330,28 +384,49 @@ def main() -> int:
         action="store_true",
         help="Only notify packets with `Notify: telegram` (recommended for non-lab use).",
     )
+    ap.add_argument(
+        "--notify-queued",
+        action="store_true",
+        help="Also send one-time notifications when new packets are queued (Notify: telegram, but no Result yet).",
+    )
     args = ap.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
     state_path = (repo_root / args.state_path).resolve()
     state = _load_state(state_path)
 
-    candidates = _find_new_results(repo_root)
+    queued, results = _find_packets(repo_root)
 
     # Only allow user-facing notifications when explicitly opted in, unless overridden.
     if args.require_notify_telegram:
-        candidates = [c for c in candidates if c.notify == "telegram"]
+        queued = [c for c in queued if c.notify == "telegram"]
+        results = [c for c in results if c.notify == "telegram"]
 
-    new_items: list[PacketResult] = [c for c in candidates if c.result_hash not in state]
-    if not new_items:
+    new_queued: list[PacketQueued] = []
+    if args.notify_queued:
+        for q in queued:
+            if f"queued:{q.queued_hash}" not in state:
+                new_queued.append(q)
+
+    new_results: list[PacketResult] = [r for r in results if r.result_hash not in state]
+
+    if not new_queued and not new_results:
         print("NOTIFY_IDLE")
         return 0
 
-    new_items = new_items[: max(1, int(args.max_per_run))]
+    # Cap total items per run.
+    cap = max(1, int(args.max_per_run))
+    if len(new_queued) + len(new_results) > cap:
+        # Prefer results over queued if we have to choose.
+        new_results = new_results[:cap]
+        if len(new_results) < cap:
+            new_queued = new_queued[: (cap - len(new_results))]
+        else:
+            new_queued = []
 
     dry = os.environ.get("NOTIFY_DRY_RUN", "").strip() == "1"
     if dry:
-        print(_format_message(new_items))
+        print(_format_message(queued=new_queued, results=new_results))
     else:
         chat_id = _get_telegram_chat_id()
         token = _get_telegram_bot_token()
@@ -359,7 +434,7 @@ def main() -> int:
             print("ERROR: Missing Telegram bot token (~/.openclaw/secrets/telegram.token or TELEGRAM_BOT_TOKEN).", file=sys.stderr)
             return 2
 
-        msg = _format_message(new_items)
+        msg = _format_message(queued=new_queued, results=new_results)
         try:
             _telegram_send_message(chat_id=chat_id, token=token, text=msg)
         except urllib.error.HTTPError as e:
@@ -370,8 +445,10 @@ def main() -> int:
             return 2
 
     now = time.time()
-    for it in new_items:
+    for it in new_results:
         state[it.result_hash] = now
+    for it in new_queued:
+        state[f"queued:{it.queued_hash}"] = now
 
     # Bound state size to avoid unbounded growth.
     if len(state) > 5000:
