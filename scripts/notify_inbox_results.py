@@ -25,6 +25,18 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+try:
+    # Optional dependency: Mini App dashboard progress visibility.
+    # When executed as `python3 scripts/notify_inbox_results.py`, sys.path[0] is `scripts/`,
+    # so `miniapp_ingest` is importable as a sibling module.
+    from miniapp_ingest import emit as miniapp_emit
+except Exception:  # pragma: no cover
+    try:  # pragma: no cover
+        from scripts.miniapp_ingest import emit as miniapp_emit  # type: ignore
+    except Exception:  # pragma: no cover
+        def miniapp_emit(*args, **kwargs):  # type: ignore[no-redef]
+            return False
+
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
@@ -370,6 +382,54 @@ def _format_message(*, queued: list[PacketQueued], results: list[PacketResult]) 
     return "\n".join(clipped).rstrip() + "\n"
 
 
+def _infer_result_ok(preview_lines: list[str]) -> bool | None:
+    for ln in preview_lines:
+        s = ln.strip()
+        if not s.lower().startswith("status:"):
+            continue
+        tail = s.split(":", 1)[1].strip().upper()
+        if tail.startswith("OK"):
+            return True
+        if tail.startswith("FAILED") or tail.startswith("FAIL"):
+            return False
+    return None
+
+
+def _miniapp_emit_queued(items: list[PacketQueued]) -> None:
+    for it in items:
+        # Feed-only: queued is not a first-class state, but this provides "after the fact" visibility.
+        key = f"{it.inbox_path.resolve().as_posix()}:{it.packet_start_line}"
+        qid = f"pktq_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
+        miniapp_emit(
+            "response.created",
+            agentId=it.owner.upper(),
+            id=qid,
+            text=f"[{it.owner.upper()}] queued: {it.objective}",
+            extra={"source": "inbox_notifier", "kind": "queued"},
+        )
+
+
+def _miniapp_emit_results(items: list[PacketResult]) -> None:
+    for it in items:
+        owner = it.owner.upper()
+        ok = _infer_result_ok(it.result_preview_lines)
+        if ok is True:
+            miniapp_emit("task.completed", agentId=owner, extra={"source": "inbox_notifier"})
+        elif ok is False:
+            miniapp_emit("task.failed", agentId=owner, extra={"source": "inbox_notifier"})
+
+        key = f"{it.inbox_path.resolve().as_posix()}:{it.packet_start_line}"
+        rid = f"pktres_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
+        status_txt = "OK" if ok is True else ("FAILED" if ok is False else "DONE")
+        miniapp_emit(
+            "response.created",
+            agentId=owner,
+            id=rid,
+            text=f"[{owner}] {it.objective} -> {status_txt}",
+            extra={"source": "inbox_notifier", "kind": "result"},
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Notify Cory on Telegram when new Task Packet Result blocks appear.")
     ap.add_argument("--repo-root", default=".", help="Repo root (default: .)")
@@ -443,6 +503,11 @@ def main() -> int:
         except Exception as e:
             print(f"ERROR: Telegram send failed: {e}", file=sys.stderr)
             return 2
+
+    # Always emit Mini App events best-effort (even in dry-run mode).
+    # This enables local loop testing without spamming Telegram.
+    _miniapp_emit_queued(new_queued)
+    _miniapp_emit_results(new_results)
 
     now = time.time()
     for it in new_results:

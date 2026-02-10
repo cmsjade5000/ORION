@@ -216,7 +216,9 @@ if (IS_PROD) {
   }
 }
 
-const AGENTS = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"];
+// Keep this list in sync with the gateway agent roster (agents/INDEX.md).
+// ORION is central and rendered separately; this list is the orbiting specialists.
+const AGENTS = ["ATLAS", "EMBER", "PIXEL", "NODE", "LEDGER", "AEGIS"];
 let tick = 0;
 let commandIdx = 0;
 let ledgerPulseIdx = 0;

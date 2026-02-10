@@ -211,7 +211,7 @@ export default function NetworkDashboard(props: {
         const framePos = layout.frameMode ? layout.positions[a.id] : null;
         // Stable placement: use a fixed agent order so node positions don't change if
         // upstream state arrays reorder.
-        const ORDER = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"];
+        const ORDER = ["ATLAS", "EMBER", "PIXEL", "NODE", "LEDGER", "AEGIS"];
         const stableIdx = ORDER.includes(a.id) ? ORDER.indexOf(a.id) : idx;
         const theta = (stableIdx / Math.max(1, agents.length)) * Math.PI * 2 - Math.PI / 2;
         const x = framePos ? framePos.x : layout.cx + Math.cos(theta) * layout.rX;

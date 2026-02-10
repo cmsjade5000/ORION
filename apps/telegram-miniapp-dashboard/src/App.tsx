@@ -10,7 +10,7 @@ import FilesPanel from "./components/FilesPanel";
 import WorkflowPanel from "./components/WorkflowPanel";
 import OverlaySheet from "./components/OverlaySheet";
 
-const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"] as const;
+const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "NODE", "LEDGER", "AEGIS"] as const;
 
 export default function App() {
   const [initData, setInitData] = useState<string>("");

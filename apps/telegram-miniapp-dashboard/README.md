@@ -8,7 +8,7 @@ This is a starter scaffold for a **Telegram Mini App** that opens from ORION’s
 - Telegram WebApp SDK integration (reads `Telegram.WebApp.initData` when available)
 - Network UI
   - Central `ORION` node
-  - Orbiting sub-agent nodes: `ATLAS`, `EMBER`, `PIXEL`, `AEGIS`, `LEDGER`
+  - Orbiting sub-agent nodes: `ATLAS`, `EMBER`, `PIXEL`, `NODE`, `LEDGER`, `AEGIS`
   - Animated connection line `ORION -> active agent` (placeholder)
   - Placeholder node pulse animation
   - Command bar UI (placeholder)
@@ -44,6 +44,18 @@ Auth:
 Environment:
 - `INGEST_TOKEN`: shared secret for service-to-service auth (set as a Fly secret)
 - `MOCK_STATE`: default `0` (off). Set to `1` to enable mock motion when ORION ingest isn't wired yet.
+
+### Wiring From The Gateway Packet Runner / Notifier
+
+This repo includes two helper scripts that can emit real `task.*`, `tool.*`, and `response.created` events:
+
+- `/Users/corystoner/src/ORION/scripts/run_inbox_packets.py`
+- `/Users/corystoner/src/ORION/scripts/notify_inbox_results.py`
+
+Configure either environment variables or `~/.openclaw/openclaw.json` `env.vars`:
+
+- `MINIAPP_INGEST_URL`: base URL (example `https://<your-miniapp-host>` or `http://127.0.0.1:8787`)
+- `MINIAPP_INGEST_TOKEN`: token (should match the server’s `INGEST_TOKEN`)
 
 Example payloads:
 

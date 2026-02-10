@@ -25,6 +25,19 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    # Optional dependency: Mini App dashboard progress visibility.
+    # When executed as `python3 scripts/run_inbox_packets.py`, sys.path[0] is `scripts/`,
+    # so `miniapp_ingest` is importable as a sibling module.
+    from miniapp_ingest import emit as miniapp_emit
+except Exception:  # pragma: no cover
+    try:  # pragma: no cover
+        # When executed in other ways (e.g. `python3 -c ...` from repo root).
+        from scripts.miniapp_ingest import emit as miniapp_emit  # type: ignore
+    except Exception:  # pragma: no cover
+        def miniapp_emit(*args, **kwargs):  # type: ignore[no-redef]
+            return False
+
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
@@ -242,11 +255,20 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
             return False
         argv_list.append(argv)
 
+    # Mini App progress visibility: mark the specialist as starting work.
+    # Best-effort only; failures should not affect execution.
+    miniapp_emit("task.started", agentId=owner, extra={"source": "inbox_runner"})
+
     combined_out: list[str] = []
     combined_err: list[str] = []
     ok = True
 
     for argv in argv_list:
+        miniapp_emit(
+            "tool.started",
+            agentId=owner,
+            extra={"source": "inbox_runner", "tool": " ".join(argv[:4])},
+        )
         proc = subprocess.run(
             argv,
             cwd=str(repo_root),
@@ -258,6 +280,13 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
         combined_err.append(proc.stderr or "")
         if proc.returncode != 0:
             ok = False
+            miniapp_emit(
+                "tool.failed",
+                agentId=owner,
+                extra={"source": "inbox_runner", "code": int(proc.returncode)},
+            )
+        else:
+            miniapp_emit("tool.finished", agentId=owner, extra={"source": "inbox_runner", "code": 0})
 
     stdout = "\n".join([s for s in combined_out if s]).strip() + ("\n" if any(combined_out) else "")
     stderr = "\n".join([s for s in combined_err if s]).strip() + ("\n" if any(combined_err) else "")
@@ -282,6 +311,20 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
     else:
         new_lines = file_lines[:result_idx] + result_block + file_lines[pref.packet_end_line :]
     pref.inbox_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+
+    # Final Mini App state + a short feed item so opening the Mini App after completion
+    # still shows something meaningful even if the agent node has gone idle.
+    miniapp_emit("task.completed" if ok else "task.failed", agentId=owner, extra={"source": "inbox_runner"})
+    # Stable id to avoid duplicates if multiple components emit the same completion.
+    key = f"{pref.inbox_path.resolve().as_posix()}:{pref.packet_start_line}"
+    rid = f"pktres_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
+    miniapp_emit(
+        "response.created",
+        agentId=owner,
+        id=rid,
+        text=f"[{owner}] {fields.get('Objective','(no objective)') or '(no objective)'} -> {'OK' if ok else 'FAILED'}",
+        extra={"source": "inbox_runner"},
+    )
     return True
 
 
