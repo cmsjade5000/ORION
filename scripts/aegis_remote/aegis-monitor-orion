@@ -105,7 +105,7 @@ miniapp_emit() {
   local code="000"
   if [ -n "$MINIAPP_INGEST_TOKEN" ]; then
     code="$(
-      curl -sS -o /dev/null -w "%{http_code}" \
+      curl -sS -o /dev/null -w '%{http_code}' \
         --connect-timeout 3 --max-time 6 \
         "$url" \
         -H "content-type: application/json" \
@@ -115,7 +115,7 @@ miniapp_emit() {
     )"
   else
     code="$(
-      curl -sS -o /dev/null -w "%{http_code}" \
+      curl -sS -o /dev/null -w '%{http_code}' \
         --connect-timeout 3 --max-time 6 \
         "$url" \
         -H "content-type: application/json" \
