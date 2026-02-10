@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scan tasks/INBOX/*.md for newly-added `Result:` blocks under TASK_PACKET v1 entries,
-and send a concise Telegram DM to Cory (single-bot mode) when new results appear.
+and send a concise notification to Cory (Telegram and/or Discord) when new results appear.
 
 Design goals:
 - Cheap: markdown scan + small state file under tmp/
@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -49,7 +50,7 @@ class PacketResult:
     packet_start_line: int
     owner: str
     objective: str
-    notify: str  # "telegram" | "none" | ""
+    notify: str  # "telegram" | "discord" | "none" | "" | "telegram,discord"
     result_hash: str
     result_preview_lines: list[str]
 
@@ -61,7 +62,7 @@ class PacketQueued:
     packet_start_line: int
     owner: str
     objective: str
-    notify: str  # "telegram" | "none" | ""
+    notify: str  # "telegram" | "discord" | "none" | "" | "telegram,discord"
     queued_hash: str
 
 
@@ -71,6 +72,23 @@ def _read_text(p: Path) -> str:
 def _env_truthy(name: str) -> bool:
     v = os.environ.get(name, "").strip().lower()
     return v in {"1", "true", "yes", "y", "on"}
+
+def _parse_notify_channels(raw: str) -> set[str]:
+    """
+    Parse `Notify:` values.
+
+    Supported:
+    - "telegram"
+    - "discord"
+    - "telegram,discord" (comma/space/plus separated)
+    - "none" / empty -> no notifications
+    """
+    s = (raw or "").strip().lower()
+    if not s or s == "none":
+        return set()
+    parts = [p.strip() for p in re.split(r"[,+\\s]+", s) if p.strip()]
+    # Keep only known channels (future-proof: ignore unknown tokens).
+    return {p for p in parts if p in {"telegram", "discord"}}
 
 
 def _split_packets(lines: list[str], start_line_offset: int) -> list[tuple[int, list[str]]]:
@@ -228,6 +246,15 @@ def _get_openclaw_cfg_path() -> Path:
         return Path(os.path.expanduser(raw))
     return Path.home() / ".openclaw" / "openclaw.json"
 
+def _get_openclaw_cmd(repo_root: Path) -> list[str]:
+    """
+    Prefer repo-local wrapper so automation environments with a minimal PATH still work.
+    """
+    wrapper = (repo_root / "scripts" / "openclaww.sh").resolve()
+    if wrapper.exists():
+        return [str(wrapper)]
+    return ["openclaw"]
+
 
 def _get_telegram_chat_id() -> str:
     chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
@@ -262,6 +289,38 @@ def _get_telegram_bot_token() -> str:
     except Exception:
         return ""
 
+def _get_discord_default_target(repo_root: Path) -> str:
+    """
+    Resolve the Discord target used for notifier sends.
+
+    Priority:
+    1) env DISCORD_DEFAULT_POST_TARGET (examples: "user:123", "channel:456")
+    2) channels.discord.dm.allowFrom[0] -> "user:<id>" (best-effort)
+    """
+    t = os.environ.get("DISCORD_DEFAULT_POST_TARGET", "").strip()
+    if t:
+        return t
+
+    cfg_path = _get_openclaw_cfg_path()
+    try:
+        cfg = json.loads(_read_text(cfg_path))
+        allow_from = (
+            (cfg.get("channels", {}) or {})
+            .get("discord", {})
+            .get("dm", {})
+            .get("allowFrom", [])
+        )
+        if isinstance(allow_from, list) and allow_from:
+            first = str(allow_from[0]).strip()
+            if first:
+                return f"user:{first}"
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "Could not determine Discord target (set env DISCORD_DEFAULT_POST_TARGET or configure channels.discord.dm.allowFrom[0])."
+    )
+
 
 def _telegram_send_message(*, chat_id: str, token: str, text: str) -> None:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -276,6 +335,16 @@ def _telegram_send_message(*, chat_id: str, token: str, text: str) -> None:
     with urllib.request.urlopen(req, timeout=20) as resp:
         # Drain for keep-alive correctness; ignore body.
         resp.read()
+
+def _discord_send_message(*, repo_root: Path, target: str, text: str) -> None:
+    """
+    Send via OpenClaw's Discord channel plugin so we never touch raw Discord credentials here.
+    """
+    cmd = _get_openclaw_cmd(repo_root)
+    argv = cmd + ["message", "send", "--channel", "discord", "--target", target, "--message", text]
+    r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "discord send failed").strip())
 
 
 def _find_packets(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResult]]:
@@ -350,7 +419,7 @@ def _find_packets(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResul
     return queued, results
 
 
-def _format_message(*, queued: list[PacketQueued], results: list[PacketResult]) -> str:
+def _format_message(*, queued: list[PacketQueued], results: list[PacketResult], max_len: int | None = None) -> str:
     lines: list[str] = []
     lines.append("Inbox update:")
     lines.append("")
@@ -374,14 +443,13 @@ def _format_message(*, queued: list[PacketQueued], results: list[PacketResult]) 
             lines.append("")
 
     msg = "\n".join(lines).rstrip() + "\n"
-    # Telegram practical limit is 4096 chars; keep margin.
-    if len(msg) <= 3800:
+    if max_len is None or len(msg) <= max_len:
         return msg
 
     clipped: list[str] = []
     chars = 0
     for ln in msg.splitlines():
-        if chars + len(ln) + 1 > 3750:
+        if chars + len(ln) + 1 > max_len - 50:
             clipped.append("…")
             break
         clipped.append(ln)
@@ -438,7 +506,9 @@ def _miniapp_emit_results(items: list[PacketResult]) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Notify Cory on Telegram when new Task Packet Result blocks appear.")
+    ap = argparse.ArgumentParser(
+        description="Notify Cory on Telegram and/or Discord when new Task Packet Result blocks appear."
+    )
     ap.add_argument("--repo-root", default=".", help="Repo root (default: .)")
     ap.add_argument(
         "--state-path",
@@ -452,9 +522,14 @@ def main() -> int:
         help="Only notify packets with `Notify: telegram` (recommended for non-lab use).",
     )
     ap.add_argument(
+        "--require-notify-discord",
+        action="store_true",
+        help="Only notify packets with `Notify: discord` (recommended for non-lab use).",
+    )
+    ap.add_argument(
         "--notify-queued",
         action="store_true",
-        help="Also send one-time notifications when new packets are queued (Notify: telegram, but no Result yet).",
+        help="Also send one-time notifications when new packets are queued (Notify: <channel>, but no Result yet).",
     )
     args = ap.parse_args()
 
@@ -466,62 +541,129 @@ def main() -> int:
 
     # Only allow user-facing notifications when explicitly opted in, unless overridden.
     if args.require_notify_telegram:
-        queued = [c for c in queued if c.notify == "telegram"]
-        results = [c for c in results if c.notify == "telegram"]
+        queued = [c for c in queued if "telegram" in _parse_notify_channels(c.notify)]
+        results = [c for c in results if "telegram" in _parse_notify_channels(c.notify)]
+    if args.require_notify_discord:
+        queued = [c for c in queued if "discord" in _parse_notify_channels(c.notify)]
+        results = [c for c in results if "discord" in _parse_notify_channels(c.notify)]
 
-    new_queued: list[PacketQueued] = []
+    def _state_has_result(channel: str, h: str) -> bool:
+        if f"{channel}:{h}" in state:
+            return True
+        # Back-compat: older versions stored Telegram result hashes without a prefix.
+        if channel == "telegram" and h in state:
+            return True
+        return False
+
+    def _state_has_queued(channel: str, h: str) -> bool:
+        if f"queued:{channel}:{h}" in state:
+            return True
+        # Back-compat: queued notifications were historically Telegram-only and channel-agnostic.
+        if channel == "telegram" and f"queued:{h}" in state:
+            return True
+        return False
+
+    queued_tg = [q for q in queued if "telegram" in _parse_notify_channels(q.notify)]
+    queued_dc = [q for q in queued if "discord" in _parse_notify_channels(q.notify)]
+    results_tg = [r for r in results if "telegram" in _parse_notify_channels(r.notify)]
+    results_dc = [r for r in results if "discord" in _parse_notify_channels(r.notify)]
+
+    new_queued_tg: list[PacketQueued] = []
+    new_queued_dc: list[PacketQueued] = []
     if args.notify_queued:
-        for q in queued:
-            if f"queued:{q.queued_hash}" not in state:
-                new_queued.append(q)
+        for q in queued_tg:
+            if not _state_has_queued("telegram", q.queued_hash):
+                new_queued_tg.append(q)
+        for q in queued_dc:
+            if not _state_has_queued("discord", q.queued_hash):
+                new_queued_dc.append(q)
 
-    new_results: list[PacketResult] = [r for r in results if r.result_hash not in state]
+    new_results_tg: list[PacketResult] = [r for r in results_tg if not _state_has_result("telegram", r.result_hash)]
+    new_results_dc: list[PacketResult] = [r for r in results_dc if not _state_has_result("discord", r.result_hash)]
 
-    if not new_queued and not new_results:
+    if not new_queued_tg and not new_results_tg and not new_queued_dc and not new_results_dc:
         print("NOTIFY_IDLE")
         return 0
 
-    # Cap total items per run.
+    # Cap items per channel per run.
     cap = max(1, int(args.max_per_run))
-    if len(new_queued) + len(new_results) > cap:
-        # Prefer results over queued if we have to choose.
-        new_results = new_results[:cap]
-        if len(new_results) < cap:
-            new_queued = new_queued[: (cap - len(new_results))]
+    def _cap_lists(qs: list[PacketQueued], rs: list[PacketResult]) -> tuple[list[PacketQueued], list[PacketResult]]:
+        if len(qs) + len(rs) <= cap:
+            return qs, rs
+        rs2 = rs[:cap]
+        if len(rs2) < cap:
+            qs2 = qs[: (cap - len(rs2))]
         else:
-            new_queued = []
+            qs2 = []
+        return qs2, rs2
 
-    # Suppress Telegram sends during internal loop testing.
-    dry = os.environ.get("NOTIFY_DRY_RUN", "").strip() == "1" or _env_truthy("ORION_SUPPRESS_TELEGRAM") or _env_truthy("TELEGRAM_SUPPRESS")
-    if dry:
-        print(_format_message(queued=new_queued, results=new_results))
+    new_queued_tg, new_results_tg = _cap_lists(new_queued_tg, new_results_tg)
+    new_queued_dc, new_results_dc = _cap_lists(new_queued_dc, new_results_dc)
+
+    dry_all = os.environ.get("NOTIFY_DRY_RUN", "").strip() == "1"
+    suppress_tg = dry_all or _env_truthy("ORION_SUPPRESS_TELEGRAM") or _env_truthy("TELEGRAM_SUPPRESS")
+    suppress_dc = dry_all or _env_truthy("ORION_SUPPRESS_DISCORD") or _env_truthy("DISCORD_SUPPRESS")
+
+    if dry_all:
+        if new_queued_tg or new_results_tg:
+            print("TELEGRAM:")
+            print(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
+        if new_queued_dc or new_results_dc:
+            print("DISCORD:")
+            print(_format_message(queued=new_queued_dc, results=new_results_dc))
     else:
-        chat_id = _get_telegram_chat_id()
-        token = _get_telegram_bot_token()
-        if not token:
-            print("ERROR: Missing Telegram bot token (~/.openclaw/secrets/telegram.token or TELEGRAM_BOT_TOKEN).", file=sys.stderr)
-            return 2
+        if (new_queued_tg or new_results_tg) and not suppress_tg:
+            chat_id = _get_telegram_chat_id()
+            token = _get_telegram_bot_token()
+            if not token:
+                print(
+                    "ERROR: Missing Telegram bot token (~/.openclaw/secrets/telegram.token or TELEGRAM_BOT_TOKEN).",
+                    file=sys.stderr,
+                )
+                return 2
 
-        msg = _format_message(queued=new_queued, results=new_results)
-        try:
-            _telegram_send_message(chat_id=chat_id, token=token, text=msg)
-        except urllib.error.HTTPError as e:
-            print(f"ERROR: Telegram HTTP error: {e.code}", file=sys.stderr)
-            return 2
-        except Exception as e:
-            print(f"ERROR: Telegram send failed: {e}", file=sys.stderr)
-            return 2
+            msg = _format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800)
+            try:
+                _telegram_send_message(chat_id=chat_id, token=token, text=msg)
+            except urllib.error.HTTPError as e:
+                print(f"ERROR: Telegram HTTP error: {e.code}", file=sys.stderr)
+                return 2
+            except Exception as e:
+                print(f"ERROR: Telegram send failed: {e}", file=sys.stderr)
+                return 2
+
+        if (new_queued_dc or new_results_dc) and not suppress_dc:
+            try:
+                target = _get_discord_default_target(repo_root)
+                msg = _format_message(queued=new_queued_dc, results=new_results_dc)
+                _discord_send_message(repo_root=repo_root, target=target, text=msg)
+            except Exception as e:
+                print(f"ERROR: Discord send failed: {e}", file=sys.stderr)
+                return 2
 
     # Always emit Mini App events best-effort (even in dry-run mode).
     # This enables local loop testing without spamming Telegram.
-    _miniapp_emit_queued(new_queued)
-    _miniapp_emit_results(new_results)
+    all_new_queued = new_queued_tg + [q for q in new_queued_dc if q not in new_queued_tg]
+    all_new_results = new_results_tg + [r for r in new_results_dc if r not in new_results_tg]
+    _miniapp_emit_queued(all_new_queued)
+    _miniapp_emit_results(all_new_results)
 
     now = time.time()
-    for it in new_results:
-        state[it.result_hash] = now
-    for it in new_queued:
-        state[f"queued:{it.queued_hash}"] = now
+    # In dry-run / suppression mode, we still advance state to avoid spamming during local loop testing.
+    if new_results_tg or new_queued_tg:
+        for it in new_results_tg:
+            state[f"telegram:{it.result_hash}"] = now
+            # Back-compat: keep the legacy Telegram key so older runs remain quiet.
+            state[it.result_hash] = now
+        for it in new_queued_tg:
+            state[f"queued:telegram:{it.queued_hash}"] = now
+            state[f"queued:{it.queued_hash}"] = now
+
+    if new_results_dc or new_queued_dc:
+        for it in new_results_dc:
+            state[f"discord:{it.result_hash}"] = now
+        for it in new_queued_dc:
+            state[f"queued:discord:{it.queued_hash}"] = now
 
     # Bound state size to avoid unbounded growth.
     if len(state) > 5000:

@@ -12,6 +12,65 @@ Nothing in this directory should modify secrets directly.
 
 ---
 
+## discord_selfcheck.sh
+
+### Purpose
+Verifies that OpenClaw's Discord plugin is enabled and `channels.discord` is configured safely (best-effort probe; does not print tokens).
+
+### Usage
+
+```bash
+./scripts/discord_selfcheck.sh
+```
+
+---
+
+## discord_send_message.sh
+
+### Purpose
+Send a Discord message via OpenClaw's Discord channel plugin.
+
+### Usage
+
+```bash
+./scripts/discord_send_message.sh user:<DISCORD_USER_ID> "hi"
+./scripts/discord_send_message.sh channel:<DISCORD_CHANNEL_ID> "update"
+```
+
+Read message from stdin:
+
+```bash
+printf '%s\n' "multi-line\nmessage" | ./scripts/discord_send_message.sh channel:<DISCORD_CHANNEL_ID> -
+```
+
+---
+
+## discord_thread_create.sh
+
+### Purpose
+Create a task thread in a Discord channel via OpenClaw.
+
+### Usage
+
+```bash
+./scripts/discord_thread_create.sh channel:<DISCORD_CHANNEL_ID> "task: triage" "starting thread"
+```
+
+---
+
+## discord_thread_reply.sh
+
+### Purpose
+Reply in an existing Discord thread via OpenClaw.
+
+### Usage
+
+```bash
+./scripts/discord_thread_reply.sh channel:<DISCORD_THREAD_ID> "progress update"
+```
+
+---
+
 ## miniapp_upload_artifact.sh
 
 ### Purpose
