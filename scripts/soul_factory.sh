@@ -20,7 +20,9 @@ SHARED_LAYERS=(
 # Keep SOUL outputs deterministic so "make soul" doesn't create churn.
 #
 # Note: we use the current git revision (and a +dirty marker) instead of a wall-clock timestamp.
-build_id() {
+BUILD_ID=""
+
+init_build_id() {
   if command -v git >/dev/null 2>&1 && git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     local sha dirty
     sha="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
@@ -29,12 +31,14 @@ build_id() {
       if ! git -C "$ROOT_DIR" diff --quiet --no-ext-diff || ! git -C "$ROOT_DIR" diff --cached --quiet --no-ext-diff; then
         dirty="+dirty"
       fi
-      echo "${sha}${dirty}"
+      BUILD_ID="${sha}${dirty}"
       return 0
     fi
   fi
-  echo "unknown"
+  BUILD_ID="unknown"
 }
+
+build_id() { echo "$BUILD_ID"; }
 
 require_file() {
   local path="$1"
@@ -95,6 +99,8 @@ build_agent() {
 }
 
 main() {
+  init_build_id
+
   local agents=()
   if [[ "${1-}" == "--all" || "${#}" -eq 0 ]]; then
     # Build for every role file present

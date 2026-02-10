@@ -36,7 +36,7 @@ Related docs:
 6. If health still fails:
    - `openclaw doctor --repair`
    - `openclaw channels status --probe`
-   - `openclaw logs --tail 200` (or re-run `scripts/diagnose_gateway.sh`)
+   - `openclaw logs --plain --limit 200` (or re-run `scripts/diagnose_gateway.sh`)
 
 Notes:
 - If the Mac mini is up but no user session is logged in, launchd user agents may not run. In that case you may need to log in locally once, or intentionally migrate the gateway to a boot-level service (explicit decision; see `SECURITY.md`).

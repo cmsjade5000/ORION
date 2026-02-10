@@ -8,20 +8,21 @@ set -euo pipefail
 hr() { printf '\n== %s ==\n' "$1"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-if ! have openclaw; then
-  echo "openclaw not found in PATH"
-  exit 1
+OPENCLAW="${OPENCLAW_BIN:-}"
+if [[ -z "${OPENCLAW}" ]]; then
+  # Prefer wrapper so agent tool environments without user PATH still work.
+  OPENCLAW="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openclaww.sh"
 fi
 
 hr "Gateway Health"
-openclaw health || true
+"$OPENCLAW" health || true
 
 hr "Gateway Service Status"
-openclaw gateway status || true
+"$OPENCLAW" gateway status || true
 
 hr "Channels (Probed)"
 if have jq; then
-  openclaw channels status --probe --json 2>/dev/null \
+  "$OPENCLAW" channels status --probe --json 2>/dev/null \
     | jq 'walk(
         if type=="object" then
           with_entries(
@@ -40,13 +41,13 @@ if have jq; then
       )' \
     | jq -r '.' || true
 else
-  openclaw channels status --probe 2>/dev/null || true
+  "$OPENCLAW" channels status --probe 2>/dev/null || true
 fi
 
 hr "Models (Auth + Routing)"
 # Avoid leaking key material: use JSON output + jq redaction when available.
 if have jq; then
-  openclaw models status --json --probe --probe-max-tokens 16 2>/dev/null \
+  "$OPENCLAW" models status --json --probe --probe-max-tokens 16 2>/dev/null \
     | jq 'walk(
         if type=="object" then
           with_entries(
@@ -71,4 +72,5 @@ else
 fi
 
 hr "Recent Gateway Logs (tail 80)"
-openclaw logs --tail 80 2>/dev/null || true
+hr "Recent Gateway Logs (limit 80)"
+"$OPENCLAW" logs --plain --limit 80 2>/dev/null || true

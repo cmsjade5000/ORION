@@ -33,6 +33,7 @@ RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
 @dataclasses.dataclass(frozen=True)
 class PacketResult:
     inbox_path: Path
+    display_path: str
     packet_start_line: int
     owner: str
     objective: str
@@ -105,22 +106,42 @@ def _extract_result_block(packet_lines: list[str]) -> list[str] | None:
     return packet_lines[start:]
 
 
-def _preview_result_lines(result_block: list[str], *, max_lines: int = 10, max_chars: int = 900) -> list[str]:
-    out: list[str] = []
-    chars = 0
+def _preview_result_lines(result_block: list[str], *, max_lines: int = 12, max_chars: int = 900) -> list[str]:
+    """
+    Produce a compact preview for Telegram.
 
-    # Skip the "Result:" header itself.
-    for raw in result_block[1:]:
+    Note: we bias toward including the "Next step" content if present, since truncating
+    right after the "Next step:" header is confusing.
+    """
+    non_empty: list[tuple[int, str]] = []
+    for idx, raw in enumerate(result_block[1:], start=1):  # skip "Result:" header itself
         line = raw.rstrip()
         if not line.strip():
             continue
+        non_empty.append((idx, line))
+
+    if not non_empty:
+        return ["(Result present, but empty.)"]
+
+    out: list[str] = []
+    chars = 0
+    cut = 0
+    for _, line in non_empty:
         out.append(line)
         chars += len(line) + 1
-        if len(out) >= max_lines or chars >= max_chars:
+        cut += 1
+        if cut >= max_lines or chars >= max_chars:
             break
 
-    if not out:
-        return ["(Result present, but empty.)"]
+    # If we ended on a "Next step" header, try to include the next non-empty line too.
+    if out:
+        last = out[-1].strip().lower()
+        if last in {"next step:", "next step (if any):"}:
+            if cut < len(non_empty):
+                nxt = non_empty[cut][1]
+                if chars + len(nxt) + 1 <= max_chars:
+                    out.append(nxt)
+
     return out
 
 
@@ -244,9 +265,16 @@ def _find_new_results(repo_root: Path) -> list[PacketResult]:
             rh = _sha256_text(result_block)
             preview = _preview_result_lines(result_block)
 
+            try:
+                disp = str(inbox.relative_to(repo_root))
+            except Exception:
+                # Fall back to a resolved absolute path for clarity when cwd is a symlinked workspace.
+                disp = inbox.resolve().as_posix()
+
             out.append(
                 PacketResult(
                     inbox_path=inbox,
+                    display_path=disp,
                     packet_start_line=start_line,
                     owner=owner,
                     objective=objective,
@@ -269,7 +297,7 @@ def _format_message(items: list[PacketResult]) -> str:
         lines.append(head)
         for pl in it.result_preview_lines:
             lines.append(pl)
-        lines.append(f"file: {it.inbox_path.as_posix()}:{it.packet_start_line}")
+        lines.append(f"file: {it.display_path}:{it.packet_start_line}")
         lines.append("")
 
     msg = "\n".join(lines).rstrip() + "\n"
@@ -357,4 +385,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

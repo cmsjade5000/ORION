@@ -15,20 +15,26 @@ set -euo pipefail
 have() { command -v "$1" >/dev/null 2>&1; }
 
 skip_host=0
+check_channels=0
 if [[ "${STRATUS_SKIP_HOST:-}" == "1" ]]; then
   skip_host=1
+fi
+if [[ "${STRATUS_CHECK_CHANNELS:-}" == "1" ]]; then
+  check_channels=1
 fi
 
 for arg in "$@"; do
   case "$arg" in
     --no-host) skip_host=1 ;;
+    --channels) check_channels=1 ;;
     -h|--help)
       cat <<'TXT'
 Usage:
-  scripts/stratus_healthcheck.sh [--no-host]
+  scripts/stratus_healthcheck.sh [--no-host] [--channels]
 
 Options:
   --no-host   Skip host resource checks (useful for tests/CI).
+  --channels  Probe channel status (slow; includes Slack/Telegram/Mochat).
 TXT
       exit 2
       ;;
@@ -36,7 +42,26 @@ TXT
   esac
 done
 
-if ! have openclaw; then
+OPENCLAW="${OPENCLAW_BIN:-}"
+if [[ -z "${OPENCLAW}" ]]; then
+  OPENCLAW="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openclaww.sh"
+fi
+
+if [[ ! -x "$OPENCLAW" ]]; then
+  if have openclaw; then
+    OPENCLAW="openclaw"
+  fi
+fi
+
+if [[ "$OPENCLAW" == "openclaw" ]]; then
+  if ! have openclaw; then
+    printf 'CHECKS:\n'
+    printf -- '- openclaw: MISSING\n'
+    printf 'NEXT:\n'
+    printf -- '- Install/open PATH to openclaw.\n'
+    exit 2
+  fi
+elif [[ ! -x "$OPENCLAW" ]]; then
   printf 'CHECKS:\n'
   printf -- '- openclaw: MISSING\n'
   printf 'NEXT:\n'
@@ -48,12 +73,12 @@ tmp="${TMPDIR:-/tmp}/stratus_health.$$.$RANDOM.out"
 trap 'rm -f "$tmp" 2>/dev/null || true' EXIT
 
 health="FAIL"
-if openclaw health >"$tmp" 2>&1; then
+if "$OPENCLAW" health >"$tmp" 2>&1; then
   health="OK"
 fi
 
 gateway_status="unknown"
-if openclaw gateway status >/dev/null 2>&1; then
+if "$OPENCLAW" gateway status >/dev/null 2>&1; then
   gateway_status="OK"
 else
   gateway_status="FAIL"
@@ -62,6 +87,21 @@ fi
 printf 'CHECKS:\n'
 printf -- '- gateway health: %s\n' "$health"
 printf -- '- gateway service: %s\n' "$gateway_status"
+
+if [[ "$check_channels" -eq 1 ]]; then
+  channels="$("$OPENCLAW" channels status --probe 2>/dev/null || true)"
+  if [[ -z "$channels" ]]; then
+    printf -- '- channels: UNKNOWN\n'
+  else
+    # Keep parsing intentionally loose; we just want a quick "is it running?" signal.
+    telegram_state="$(printf '%s\n' "$channels" | grep -E '^- Telegram' | head -n 1 || true)"
+    slack_state="$(printf '%s\n' "$channels" | grep -E '^- Slack' | head -n 1 || true)"
+    mochat_state="$(printf '%s\n' "$channels" | grep -E '^- Mochat' | head -n 1 || true)"
+    [[ -n "$telegram_state" ]] && printf -- '- %s\n' "$telegram_state"
+    [[ -n "$slack_state" ]] && printf -- '- %s\n' "$slack_state"
+    [[ -n "$mochat_state" ]] && printf -- '- %s\n' "$mochat_state"
+  fi
+fi
 
 if [[ "$skip_host" -eq 0 ]]; then
   # Keep these intentionally lightweight and OS-agnostic.
@@ -82,4 +122,3 @@ printf -- '- health output: %s\n' "$(sed -n '1p' "$tmp" 2>/dev/null | tr -d '\r'
 printf 'NEXT:\n'
 printf -- '- Run scripts/diagnose_gateway.sh, then consider: openclaw gateway restart\n'
 exit 1
-
