@@ -21,7 +21,7 @@ Use this exact header + list format:
 ```text
 TASK_PACKET v1
 Owner: <AGENT>          # who executes (ATLAS/NODE/etc)
-Requester: ORION
+Requester: <ORION|ATLAS>
 Objective: <one sentence outcome>
 Success Criteria:
 - <verifiable check 1>
@@ -44,6 +44,8 @@ Output Format:
 - `Timebox:` e.g., `30m` or `2h`
 - `Dependencies:` other tasks/agents needed first
 - `Checkpoints:` interim status points
+- `Notify:` `telegram` | `none`
+  - Use `Notify: telegram` when a delegated packet is user-initiated and Cory expects a follow-up message when the specialist posts a `Result:`.
 - `Severity:` `P0` (emergency) | `P1` (urgent) | `P2` (normal) | `P3` (backlog)
 - `Emergency:` use only for explicit emergency modes (example: `ATLAS_UNAVAILABLE`)
 - `Incident:` incident id when an emergency bypass is used (see `tasks/INCIDENTS.md`)
@@ -95,6 +97,10 @@ Inbox files are append-only queues of Task Packets.
 
 - ORION assigns by appending a new Task Packet to `tasks/INBOX/<AGENT>.md`.
 - Specialist marks completion by adding a short `Result:` block under the packet.
+- If the packet included `Notify: telegram`, ORION may notify Cory automatically (see `scripts/notify_inbox_results.py` + `HEARTBEAT.md`).
+- Requester field policy:
+  - Most specialist inboxes: `Requester: ORION`.
+  - ATLAS-directed sub-agents (`NODE`, `PULSE`, `STRATUS`): `Requester: ATLAS` (or `Requester: ORION` only with `Emergency: ATLAS_UNAVAILABLE`).
 
 ## Validation (Recommended)
 

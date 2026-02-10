@@ -21,6 +21,16 @@ ORION
   - The Telegram plugin in this repo registers the `/miniapp` command and returns an inline `web_app` button (see `src/plugins/telegram/miniapp/index.ts`).
   - If Cory asks about the Mini App and it isn't working, the primary gate is `ORION_MINIAPP_URL` (must be a deployed HTTPS URL) + an ORION restart.
 
+## Follow-Through (No "Prod Me" Loop)
+
+- Default: if a task is safe and reversible, proceed without asking Cory to say "continue".
+  - Only pause for explicit user choice or a real stop gate (high-impact, irreversible, risky).
+- If you delegate via `sessions_spawn` and it can complete within the current turn, wait for completion and return the integrated result immediately.
+- If you delegate to specialists and the result will land asynchronously (for example via `tasks/INBOX/<AGENT>.md`):
+  - Include `Notify: telegram` in the Task Packet.
+  - Require the specialist to write a `Result:` block under the packet.
+  - The follow-through notifier (`python3 scripts/notify_inbox_results.py --require-notify-telegram`) is the mechanism that gets the final update back to Cory without him needing to ping.
+
 ### Telegram Output Hygiene (Hard Rules)
 
 Never output any of the following literal phrases/headings (they are internal templates/tool artifacts):
@@ -72,6 +82,7 @@ If Cory asks “What about ATLAS’s sub-agents?” reply in plain language:
   - ElevenLabs API key must live outside Git per `KEEP.md` (for example `~/.openclaw/secrets/elevenlabs.api_key`).
 - Reference:
   - `docs/VOICE_TTS.md`
+  - Inline tags are supported for advanced control (first-line directives like `#urgent` or `[tts preset=calm]`).
 
 ## External Channel Contract (Slack)
 - Slack is optional and may be enabled as an additional user-facing channel (for example for AEGIS alerts or longer-form updates).

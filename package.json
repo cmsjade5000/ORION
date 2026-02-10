@@ -2,7 +2,7 @@
   "name": "gateway",
   "version": "0.1.0",
   "scripts": {
-    "test": "echo \"No JS/TS tests to run\""
+    "test": "python3 -m unittest discover -s tests -p 'test_*.py' && python3 scripts/validate_task_packets.py"
   },
   "dependencies": {
     "dotenv": "^17.2.4",

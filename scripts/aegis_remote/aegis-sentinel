@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SELF_DIR/lib_alert_format.sh" ]; then
+  # shellcheck source=./lib_alert_format.sh
+  . "$SELF_DIR/lib_alert_format.sh"
+else
+  # Fallback: keep running even if the helper wasn't deployed alongside this script.
+  format_alert() {
+    local title="${1-}" what_saw="${2-}" what_did="${3-}" next="${4-}" incident="${5-}"
+    printf '%s' "$title"
+    if [ -n "$what_saw" ] || [ -n "$what_did" ] || [ -n "$next" ] || [ -n "$incident" ]; then
+      printf '\n\n'
+    fi
+    [ -n "$what_saw" ] && printf 'What I saw: %s\n' "$what_saw"
+    [ -n "$what_did" ] && printf 'What I did: %s\n' "$what_did"
+    [ -n "$next" ] && printf 'Next: %s\n' "$next"
+    [ -n "$incident" ] && printf 'Incident: %s\n' "$incident"
+  }
+fi
+
 ENV_FILE="/etc/aegis-monitor.env"
 LOG_DIR="/var/log/aegis-sentinel"
 LOG_FILE="$LOG_DIR/sentinel.log"
@@ -104,10 +123,7 @@ msg_security() {
   local what="$2"
   local next="${3:-}"
 
-  printf "AEGIS (Security Watch)\n🛡️ %s\n\nWhat I saw: %s" "$headline" "$what"
-  if [ -n "$next" ]; then
-    printf "\nNext: %s" "$next"
-  fi
+  format_alert "AEGIS (Security Watch): $headline" "$what" "" "$next" ""
 }
 
 msg_system() {
@@ -117,10 +133,7 @@ msg_system() {
   local did="$3"
   local next="${4:-}"
 
-  printf "AEGIS (System Watch)\nℹ️ %s\n\nWhat happened: %s\nWhat I did: %s" "$headline" "$what" "$did"
-  if [ -n "$next" ]; then
-    printf "\nNext: %s" "$next"
-  fi
+  format_alert "AEGIS (System Watch): $headline" "$what" "$did" "$next" ""
 }
 
 alert_throttled() {
@@ -149,6 +162,11 @@ alert_throttled() {
       incident_id="INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')"
     fi
     incident_append "$incident_id" "$severity" "$trigger" "$summary" "$actions" "open"
+  fi
+  if [ -n "$incident_id" ]; then
+    if ! printf '%s\n' "$text" | grep -Eq '^Incident:[[:space:]]+'; then
+      text="${text}"$'\n'"Incident: $incident_id"
+    fi
   fi
   notify "$text"
   ALERT_SENT=1

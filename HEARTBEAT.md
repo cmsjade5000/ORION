@@ -7,11 +7,15 @@ This file is intended to be used by OpenClaw's heartbeat runner. Keep it cheap.
 - Human messages first.
 - Do not burn tokens "just to be busy".
 - In current single-bot mode, only ORION may message Cory via Telegram.
-- Heartbeats are **silent**: do not post to Slack/Telegram/email during heartbeat runs.
-  - If something needs attention, log it (see below) and wait for Cory to ask.
-- Always output exactly `NO_REPLY` so OpenClaw does not post a heartbeat message to Slack.
+- Heartbeat *outputs* are silent: do not post to Slack/Telegram/email via the agent reply during heartbeat runs.
+  - Exception (follow-through): it is allowed to send a targeted Telegram DM **via script** when a delegated Task Packet explicitly opted into it with `Notify: telegram`.
+- Always output exactly `NO_REPLY` so OpenClaw does not post a heartbeat message.
 
 ## Step 1: Triage (fast)
+
+0. Follow-through (cheap):
+   - Run `python3 scripts/notify_inbox_results.py --require-notify-telegram`.
+   - If it sends anything, it will still print `NOTIFY_OK` but you must continue and then output `NO_REPLY`.
 
 1. Check `tasks/QUEUE.md`.
 2. Check the per-agent inbox *files* for any newly completed Task Packets (look for `Result:` blocks):

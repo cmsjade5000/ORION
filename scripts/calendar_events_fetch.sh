@@ -35,10 +35,17 @@ osascript -l JavaScript -e '
 ObjC.import("stdlib");
 
 function getenv(name, fallback) {
-  const v = ObjC.unwrap($.getenv(name));
-  if (v === undefined || v === null) return fallback;
-  const s = String(v).trim();
-  return s.length ? s : fallback;
+  // Avoid ObjC.unwrap($.getenv(...)) pitfalls when vars are unset.
+  // Use doShellScript for robust string retrieval.
+  const app = Application.currentApplication();
+  app.includeStandardAdditions = true;
+  try {
+    const out = app.doShellScript(`printenv ${name} 2>/dev/null || true`);
+    const s = String(out || "").trim();
+    return s.length ? s : fallback;
+  } catch (e) {
+    return fallback;
+  }
 }
 
 function uniq(arr) {
@@ -135,5 +142,5 @@ try {
   out.events = [];
 }
 
-console.log(JSON.stringify(out));
-' 2>&1 || echo '{"enabled":true,"error":"Calendar access failed (automation permission or scripting error).","events":[]}'
+JSON.stringify(out);
+' 2>/dev/null || echo '{"enabled":true,"error":"Calendar access failed (automation permission or scripting error).","events":[]}'

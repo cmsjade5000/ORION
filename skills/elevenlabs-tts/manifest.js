@@ -83,6 +83,145 @@ function nowStamp() {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
+function parseKvList(s) {
+  // Accept "k=v k2=v2" or "k:v;k2:v2" etc.
+  const out = {};
+  const raw = String(s || "").trim();
+  if (!raw) return out;
+
+  const parts = raw
+    .split(/[;]+/g)
+    .flatMap((p) => p.split(/\s+/g))
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  for (const p of parts) {
+    const m = p.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*[:=]\s*(.+)$/);
+    if (!m) continue;
+    const k = String(m[1] || "").trim().toLowerCase();
+    const v = String(m[2] || "").trim();
+    if (!k || !v) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function normalizePresetName(preset) {
+  const p = String(preset || "").trim().toLowerCase();
+  if (!p) return "";
+  // Aliases so Cory can use casual tags while we keep only 4 real presets.
+  const alias = {
+    normal: "", // defer to configured defaults
+    default: "", // defer to configured defaults
+    warm: "calm",
+    supportive: "calm",
+    soothe: "calm",
+    narrative: "narration",
+    story: "narration",
+    focus: "narration",
+    brief: "narration",
+    update: "narration",
+    hype: "energetic",
+    excited: "energetic",
+    alert: "urgent",
+    critical: "urgent",
+  };
+  return alias[p] || p;
+}
+
+function parseDirectiveLine(line) {
+  // Returns { isDirective, preset, voiceId, voiceName }
+  const first = String(line || "").trim();
+  if (!first) return { isDirective: false, preset: "", voiceId: "", voiceName: "" };
+
+  // Shorthand preset (and aliases).
+  const presetShorthand = first.match(
+    /^(?:#|\[)\s*(calm|narration|energetic|urgent|normal|default|warm|supportive|soothe|narrative|story|focus|brief|update|hype|excited|alert|critical)\s*(?:\]|$)/i,
+  );
+  if (presetShorthand && presetShorthand[1]) {
+    return { isDirective: true, preset: normalizePresetName(presetShorthand[1]), voiceId: "", voiceName: "" };
+  }
+
+  // Key/value forms.
+  const bracket = first.match(/^\[(?:tts|orion)\s+([^\]]+)\]$/i);
+  const hash = first.match(/^#(?:tts|orion)\s*:?\s*(.+)$/i);
+  const kv = bracket ? parseKvList(bracket[1]) : hash ? parseKvList(hash[1]) : null;
+  if (!kv) return { isDirective: false, preset: "", voiceId: "", voiceName: "" };
+
+  const preset = normalizePresetName(String(kv.preset || kv.style || "").trim());
+  const voiceId = String(kv.voice_id || kv.voiceid || "").trim();
+  const voiceName = String(kv.voice || kv.voice_name || kv.voicename || "").trim();
+  return { isDirective: true, preset, voiceId, voiceName };
+}
+
+function extractInlineDirectives(text) {
+  // Optional directives in the first non-empty line.
+  //
+  // Supported forms (first line only):
+  // - "[urgent]" / "#urgent" (shorthand preset)
+  // - "[tts preset=urgent]" / "[orion preset=calm voice_id=...]" (key/value)
+  // - "#tts preset=urgent" / "#tts: preset=urgent"
+  //
+  // Returns: { text, preset, voiceId, voiceName }
+  const raw = String(text ?? "");
+  const lines = raw.split(/\r?\n/);
+  const idx = lines.findIndex((ln) => String(ln).trim().length > 0);
+  if (idx === -1) return { text: raw, preset: "", voiceId: "", voiceName: "" };
+
+  const first = String(lines[idx]).trim();
+  const parsed = parseDirectiveLine(first);
+  if (!parsed.isDirective) return { text: raw, preset: "", voiceId: "", voiceName: "" };
+
+  lines.splice(idx, 1);
+  return { text: lines.join("\n"), preset: parsed.preset, voiceId: parsed.voiceId, voiceName: parsed.voiceName };
+}
+
+function splitTextByDirectives(text) {
+  // Support multiple directive lines throughout the script to create multi-style segments.
+  // Returns [{ preset, voiceId, voiceName, text }]
+  const raw = String(text ?? "");
+  const lines = raw.split(/\r?\n/);
+
+  const segments = [];
+  let curPreset = "";
+  let curVoiceId = "";
+  let curVoiceName = "";
+  let curLines = [];
+
+  function flush() {
+    const body = curLines.join("\n").trim();
+    if (!body) return;
+    segments.push({
+      preset: curPreset,
+      voiceId: curVoiceId,
+      voiceName: curVoiceName,
+      text: body,
+    });
+    curLines = [];
+  }
+
+  for (const ln of lines) {
+    const parsed = parseDirectiveLine(ln);
+    if (parsed.isDirective) {
+      const same =
+        parsed.preset === curPreset &&
+        parsed.voiceId === curVoiceId &&
+        parsed.voiceName === curVoiceName;
+      if (same) continue;
+
+      if (curLines.join("").trim().length) flush();
+      curPreset = parsed.preset;
+      curVoiceId = parsed.voiceId;
+      curVoiceName = parsed.voiceName;
+      continue;
+    }
+    curLines.push(ln);
+  }
+  flush();
+
+  return segments;
+}
+
 function acceptForOutputFormat(outputFormat) {
   const f = String(outputFormat || "").toLowerCase();
   if (f.startsWith("wav")) return "audio/wav";
@@ -188,7 +327,7 @@ async function getDefaultVoiceSettings() {
 }
 
 function presetVoiceSettings(preset) {
-  const p = String(preset || "").trim().toLowerCase();
+  const p = normalizePresetName(preset);
   if (!p) return null;
   if (p === "calm") return { stability: 0.65, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true };
   if (p === "energetic") return { stability: 0.35, similarity_boost: 0.8, style: 0.6, use_speaker_boost: true };
@@ -271,13 +410,18 @@ async function textToSpeechToFile({
   voiceSettingsPreset,
   filenamePrefix = "orion_tts",
   outDir = path.resolve("tmp", "elevenlabs-tts"),
+  emitMediaLine = true,
 } = {}) {
-  const t = String(text || "").trim();
+  const extracted = extractInlineDirectives(text);
+  const t = String(extracted.text || "").trim();
   if (!t) throw new Error("textToSpeechToFile requires non-empty text");
 
-  const vid = await resolveVoiceId({ voiceId, voiceName });
+  const vid = await resolveVoiceId({
+    voiceId: voiceId || extracted.voiceId || undefined,
+    voiceName: voiceName || extracted.voiceName || undefined,
+  });
 
-  const presetName = resolvePresetName(voiceSettingsPreset);
+  const presetName = resolvePresetName(voiceSettingsPreset || extracted.preset || undefined);
   const preset = presetVoiceSettings(presetName);
   const vs = voiceSettings && typeof voiceSettings === "object" ? voiceSettings : preset;
 
@@ -314,8 +458,134 @@ async function textToSpeechToFile({
   const abs = path.resolve(outPath);
   const mediaLine = `MEDIA:${abs}`;
   // OpenClaw attachment contract: MEDIA: line with a local path.
-  console.log(mediaLine);
+  if (emitMediaLine) console.log(mediaLine);
   return { mediaLine, path: abs, voiceId: vid };
+}
+
+async function textToSpeechToFileMulti({
+  text,
+  voiceId,
+  voiceName,
+  modelId = "eleven_multilingual_v2",
+  outputFormat = "mp3_44100_128",
+  optimizeStreamingLatency,
+  voiceSettings,
+  voiceSettingsPreset,
+  filenamePrefix = "orion_tts",
+  outDir = path.resolve("tmp", "elevenlabs-tts"),
+  emitMediaLine = true,
+  // If ffmpeg is present, we prefer it. If not, we fall back to naive MP3 concat.
+  preferFfmpeg = true,
+} = {}) {
+  const { spawnSync } = require("child_process");
+
+  const segments = splitTextByDirectives(text);
+  if (!segments.length) throw new Error("textToSpeechToFileMulti requires non-empty text");
+
+  // Single segment: behave like normal, but preserve segment metadata.
+  if (segments.length === 1) {
+    const seg = segments[0];
+    const preset = seg.preset || voiceSettingsPreset || "";
+    return textToSpeechToFile({
+      text: seg.text,
+      voiceId: voiceId || seg.voiceId || undefined,
+      voiceName: voiceName || seg.voiceName || undefined,
+      modelId,
+      outputFormat,
+      optimizeStreamingLatency,
+      voiceSettings,
+      voiceSettingsPreset: preset ? preset : undefined,
+      filenamePrefix,
+      outDir,
+      emitMediaLine,
+    });
+  }
+
+  ensureDir(outDir);
+
+  const segPaths = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const preset = seg.preset || voiceSettingsPreset || "";
+    const r = await textToSpeechToFile({
+      text: seg.text,
+      voiceId: voiceId || seg.voiceId || undefined,
+      voiceName: voiceName || seg.voiceName || undefined,
+      modelId,
+      outputFormat,
+      optimizeStreamingLatency,
+      voiceSettings,
+      voiceSettingsPreset: preset ? preset : undefined,
+      filenamePrefix: `${filenamePrefix}_seg${i + 1}`,
+      outDir,
+      emitMediaLine: false,
+    });
+    segPaths.push(r.path);
+  }
+
+  const ext = extForOutputFormat(outputFormat);
+  const outPath = path.join(outDir, `${safeSlug(filenamePrefix)}_${nowStamp()}.${ext}`);
+  const absOut = path.resolve(outPath);
+
+  const haveFfmpeg =
+    preferFfmpeg &&
+    (() => {
+      try {
+        const r = spawnSync("ffmpeg", ["-version"], { stdio: "ignore" });
+        return r && r.status === 0;
+      } catch {
+        return false;
+      }
+    })();
+
+  if (haveFfmpeg) {
+    const listPath = path.join(outDir, `${safeSlug(filenamePrefix)}_${nowStamp()}_concat.txt`);
+    const listBody = segPaths.map((p) => `file '${String(p).replace(/'/g, "'\\''")}'`).join("\n") + "\n";
+    fs.writeFileSync(listPath, listBody, "utf8");
+
+    const r = spawnSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        listPath,
+        // Re-encode to avoid timestamp/dts issues that can happen with MP3 stream copy.
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "4",
+        absOut,
+      ],
+      { stdio: "inherit" },
+    );
+    if (!r || r.status !== 0) {
+      // Fall back if ffmpeg concat failed for any reason (codec mismatch, etc).
+      fs.unlinkSync(listPath);
+    } else {
+      fs.unlinkSync(listPath);
+    }
+  }
+
+  // If ffmpeg didn't produce the file, fall back to naive MP3 concat.
+  if (!fs.existsSync(absOut) || fs.statSync(absOut).size === 0) {
+    const out = fs.createWriteStream(absOut);
+    for (const p of segPaths) {
+      out.write(fs.readFileSync(p));
+    }
+    out.end();
+    await new Promise((resolve) => out.on("close", resolve));
+  }
+
+  const mediaLine = `MEDIA:${absOut}`;
+  if (emitMediaLine) console.log(mediaLine);
+  return { mediaLine, path: absOut };
 }
 
 module.exports = {
@@ -324,5 +594,8 @@ module.exports = {
   getDefaultVoiceSettings,
   resolveVoiceId,
   resolvePresetName,
+  splitTextByDirectives,
+  extractInlineDirectives,
   textToSpeechToFile,
+  textToSpeechToFileMulti,
 };

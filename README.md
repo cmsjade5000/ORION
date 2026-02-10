@@ -94,3 +94,15 @@ Do not hand-edit `agents/*/SOUL.md`. Change sources in `src/core/shared/` or `sr
 Do not commit secrets. See `KEEP.md`.
 
 OpenClaw runtime config and credentials live under `~/.openclaw/` and must remain local.
+
+## CI / Reliability Gate
+
+Local must-pass gate:
+
+```bash
+make ci
+```
+
+What it checks:
+- Python unit tests + Task Packet validation (`npm test`)
+- ShellCheck over bash scripts (`scripts/ci_shellcheck.sh`)

@@ -81,7 +81,7 @@ for id in "${new_ids[@]}"; do
     cat <<EOF
 AEGIS prepared a Defense Plan: ${id}
 
-Reply “review ${id}” and I’ll walk you through it, or run:
+Reply "review ${id}" and I'll walk you through it, or run:
 scripts/aegis_defense.sh show ${id}
 EOF
   )
@@ -91,4 +91,3 @@ EOF
   fi
   "${repo_root}/scripts/telegram_send_message.sh" "${chat_id}" "${msg}"
 done
-

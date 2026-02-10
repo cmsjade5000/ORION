@@ -18,6 +18,7 @@ Related docs:
 1. Run the repo snapshot:
    - `./status.sh`
 2. If ORION is unhealthy, get safe diagnostics (no secrets):
+   - `scripts/stratus_healthcheck.sh`
    - `scripts/diagnose_gateway.sh`
 3. If you take any recovery action (restart, repair, bypass), append an incident:
    - Prefer: `scripts/incident_append.sh ...`

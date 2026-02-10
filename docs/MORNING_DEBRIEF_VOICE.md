@@ -27,7 +27,6 @@ BRIEF_TZ=America/New_York \
 BRIEF_AI_MAX_ITEMS=2 \
 BRIEF_TECH_MAX_ITEMS=2 \
 BRIEF_PGH_MAX_ITEMS=1 \
-BRIEF_TTS_PRESET=narration \
 ./scripts/morning_debrief_voice_send.sh
 ```
 
@@ -39,9 +38,12 @@ BRIEF_TZ=America/New_York \
 BRIEF_AI_MAX_ITEMS=2 \
 BRIEF_TECH_MAX_ITEMS=2 \
 BRIEF_PGH_MAX_ITEMS=1 \
-BRIEF_TTS_PRESET=narration \
 ./scripts/morning_debrief_voice_send.sh --send
 ```
+
+Preset behavior:
+- If `BRIEF_TTS_PRESET` is set, it overrides style for the brief.
+- If unset, the brief defers to the ORION default (`ELEVENLABS_DEFAULT_PRESET` in OpenClaw `env.vars`).
 
 OpenClaw cron (recommended):
 

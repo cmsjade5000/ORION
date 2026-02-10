@@ -29,6 +29,8 @@ REQUIRED_SECTIONS = (
     "Output Format",
 )
 
+ATLAS_DIRECTED_SUBAGENTS = {"NODE", "PULSE", "STRATUS"}
+
 
 @dataclass
 class Packet:
@@ -75,6 +77,7 @@ def _split_packets(lines: list[str], start_line_offset: int) -> list[Packet]:
 
 
 def _parse_packet(packet: Packet) -> tuple[dict[str, str], dict[str, list[str]]]:
+    # "fields" includes required and optional top-level fields (Owner/Requester/Objective/Emergency/etc).
     fields: dict[str, str] = {}
     sections: dict[str, list[str]] = {s: [] for s in REQUIRED_SECTIONS}
     current_section: str | None = None
@@ -86,9 +89,12 @@ def _parse_packet(packet: Packet) -> tuple[dict[str, str], dict[str, list[str]]]
             key = m.group("key").strip()
             value = m.group("value").strip()
 
-            if key in REQUIRED_FIELDS:
+            # Store all top-level KV pairs so we can validate policy fields like Emergency/Incident.
+            # Section headers (Success Criteria, etc.) are handled below.
+            if key not in REQUIRED_SECTIONS:
                 fields[key] = value
-                current_section = None
+                if key in REQUIRED_FIELDS:
+                    current_section = None
                 continue
 
             if key in REQUIRED_SECTIONS:
@@ -151,8 +157,26 @@ def validate_inbox_file(path: str) -> list[str]:
                 )
 
         requester = fields.get("Requester", "").strip()
-        if requester and requester.upper() != "ORION":
-            errors.append(f"{path}:{pkt.start_line}: packet {n}: Requester should be 'ORION' (got {requester!r})")
+        if expected_owner:
+            allowed_requesters = {"ORION"}
+            if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
+                allowed_requesters = {"ATLAS"}
+
+                # Emergency bypass: ORION may request directly only when ATLAS is unavailable,
+                # and only for reversible diagnostic/recovery work (see docs/AGENT_HIERARCHY.md).
+                emergency = fields.get("Emergency", "").strip().upper()
+                if emergency == "ATLAS_UNAVAILABLE":
+                    allowed_requesters = {"ATLAS", "ORION"}
+
+            if requester:
+                if requester.upper() not in allowed_requesters:
+                    extra = ""
+                    if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
+                        extra = " (use 'Requester: ATLAS' unless Emergency: ATLAS_UNAVAILABLE)"
+                    errors.append(
+                        f"{path}:{pkt.start_line}: packet {n}: Requester must be one of {sorted(allowed_requesters)!r} "
+                        f"(got {requester!r}){extra}"
+                    )
 
     return errors
 
@@ -186,4 +210,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

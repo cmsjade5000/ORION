@@ -65,6 +65,11 @@ Human-in-the-loop defender (allowlisted executor):
   - Repo source: `scripts/aegis_remote/aegis-defend` (copy to `/usr/local/bin/aegis-defend` on Hetzner)
 - Purpose: execute a *tight allowlist* of defensive actions only when ORION (and Cory) explicitly approve.
 - Local wrapper (Mac mini / ORION workspace): `scripts/aegis_defense.sh`
+Shared alert formatting helper (recommended):
+- Script: `/usr/local/bin/lib_alert_format.sh`
+  - Repo source: `scripts/aegis_remote/lib_alert_format.sh` (copy next to the AEGIS scripts)
+
+Note: the AEGIS scripts include a small fallback formatter if the helper is missing, but you should deploy the helper to keep alert formatting consistent.
 
 Tailscale:
 - Unit: `tailscaled`
@@ -135,6 +140,49 @@ Throttling:
 - Alerts are throttled to prevent spam loops.
 - Typical windows are 10–30 minutes per alert type.
 - The Tailscale peer-change alert is intentionally more conservative (currently 60 minutes) to avoid noise from normal device flapping.
+
+## Deploy / Update AEGIS Scripts (Hetzner)
+
+When you change any of the repo files under `scripts/aegis_remote/`, redeploy them to the Hetzner host.
+
+From your local machine (this repo), copy the scripts:
+
+```bash
+# Copy scripts (add/remove as needed)
+scp scripts/aegis_remote/aegis-monitor-orion \
+    scripts/aegis_remote/aegis-sentinel \
+    scripts/aegis_remote/aegis-defend \
+    scripts/aegis_remote/lib_alert_format.sh \
+    root@100.75.104.54:/usr/local/bin/
+
+# Ensure executable bits (remote)
+ssh root@100.75.104.54 'chmod 0755 /usr/local/bin/aegis-monitor-orion /usr/local/bin/aegis-sentinel /usr/local/bin/aegis-defend; chmod 0644 /usr/local/bin/lib_alert_format.sh'
+```
+
+Restart timers/services (remote):
+
+```bash
+ssh root@100.75.104.54 'systemctl restart aegis-monitor-orion.service aegis-sentinel.service'
+```
+
+Quick verification (remote):
+
+```bash
+ssh root@100.75.104.54 'systemctl --no-pager --full status aegis-monitor-orion.service aegis-sentinel.service | sed -n "1,80p"'
+ssh root@100.75.104.54 'tail -n 40 /var/log/aegis-monitor/monitor.log; echo "---"; tail -n 40 /var/log/aegis-sentinel/sentinel.log'
+```
+
+Before deploying, run the local reliability gate:
+
+```bash
+make ci
+```
+
+Optional helper (does the same steps):
+
+```bash
+scripts/deploy_aegis_remote.sh
+```
 
 ## Incident Logging (Auditable History)
 

@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SELF_DIR/lib_alert_format.sh" ]; then
+  # shellcheck source=./lib_alert_format.sh
+  . "$SELF_DIR/lib_alert_format.sh"
+else
+  # Fallback: keep running even if the helper wasn't deployed alongside this script.
+  format_alert() {
+    local title="${1-}" what_saw="${2-}" what_did="${3-}" next="${4-}" incident="${5-}"
+    printf '%s' "$title"
+    if [ -n "$what_saw" ] || [ -n "$what_did" ] || [ -n "$next" ] || [ -n "$incident" ]; then
+      printf '\n\n'
+    fi
+    [ -n "$what_saw" ] && printf 'What I saw: %s\n' "$what_saw"
+    [ -n "$what_did" ] && printf 'What I did: %s\n' "$what_did"
+    [ -n "$next" ] && printf 'Next: %s\n' "$next"
+    [ -n "$incident" ] && printf 'Incident: %s\n' "$incident"
+  }
+fi
+
 ENV_FILE="/etc/aegis-monitor.env"
 LOG_DIR="/var/log/aegis-monitor"
 LOG_FILE="$LOG_DIR/monitor.log"
@@ -113,16 +132,7 @@ msg_ok() {
   local next="${3:-}"
   local incident="${4:-}"
 
-  printf "AEGIS (Remote Sentry)\n✅ %s" "$headline"
-  if [ -n "$details" ]; then
-    printf "\n\nWhat happened: %s" "$details"
-  fi
-  if [ -n "$next" ]; then
-    printf "\nNext: %s" "$next"
-  fi
-  if [ -n "$incident" ]; then
-    printf "\nIncident: %s" "$incident"
-  fi
+  format_alert "AEGIS (System Watch): $headline" "$details" "" "$next" "$incident"
 }
 
 msg_warn() {
@@ -133,13 +143,7 @@ msg_warn() {
   local next="${4:-}"
   local incident="${5:-}"
 
-  printf "AEGIS (Remote Sentry)\n🟠 %s\n\nWhat happened: %s\nWhat I did: %s" "$headline" "$what" "$did"
-  if [ -n "$next" ]; then
-    printf "\nNext: %s" "$next"
-  fi
-  if [ -n "$incident" ]; then
-    printf "\nIncident: %s" "$incident"
-  fi
+  format_alert "AEGIS (System Watch): $headline" "$what" "$did" "$next" "$incident"
 }
 
 msg_fail() {
@@ -150,7 +154,7 @@ msg_fail() {
   local next="$4"
   local incident="$5"
 
-  printf "AEGIS (Remote Sentry)\n🔴 %s\n\nWhat happened: %s\nWhat I tried: %s\nNext: %s\nIncident: %s" "$headline" "$what" "$did" "$next" "$incident"
+  format_alert "AEGIS (System Watch): $headline" "$what" "$did" "$next" "$incident"
 }
 
 throttle_ok() {

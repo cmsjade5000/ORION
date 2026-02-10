@@ -31,7 +31,7 @@ STRATUS manages and monitors underlying infrastructure, deployment pipelines, an
 
 ## Diagnostics Toolkit
 For OpenClaw health and host resource checks:
-- Use `skills/system-metrics/SKILL.md` (and `status.sh`, `scripts/diagnose_gateway.sh`, `scripts/fs_audit.sh`).
+- Use `skills/system-metrics/SKILL.md` (and `status.sh`, `scripts/diagnose_gateway.sh`, `scripts/fs_audit.sh`, `scripts/stratus_healthcheck.sh`).
 
 ## Chain Of Command
 STRATUS is internal-only and is directed by ATLAS.

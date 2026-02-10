@@ -22,6 +22,7 @@ Use this skill when you need:
   - `status.sh`
   - `scripts/diagnose_gateway.sh`
   - `scripts/fs_audit.sh`
+  - `scripts/stratus_healthcheck.sh` (stable checklist + exit code)
 
 ## Local (Mac Mini) Quick Triage
 
@@ -29,6 +30,7 @@ Use this skill when you need:
 ./status.sh
 ./scripts/diagnose_gateway.sh
 ./scripts/fs_audit.sh
+./scripts/stratus_healthcheck.sh
 ```
 
 If you need more detail:
@@ -61,4 +63,3 @@ CHECKS:
 NEXT:
 - <1 recommended next step>
 ```
-

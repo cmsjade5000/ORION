@@ -56,8 +56,6 @@ fi
 
 prs_json="$(gh pr list --repo "$REPO" --state open --limit 50 --json number,title,author,updatedAt,url,headRefName,baseRefName,isDraft,labels)"
 
-seen="$(jq -r '.seen' "$STATE_FILE" 2>/dev/null || echo '{}')"
-
 new_count=0
 changed_count=0
 

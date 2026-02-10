@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-const { listVoices, textToSpeechToFile } = require("./manifest");
+const { listVoices, splitTextByDirectives, textToSpeechToFile, textToSpeechToFileMulti } = require("./manifest");
 
 function usage(code = 2) {
   console.error(
@@ -50,12 +50,29 @@ async function main() {
 
     if (!text) usage(2);
 
-    // textToSpeechToFile prints MEDIA: on success.
+    const segments = splitTextByDirectives(text);
+    if (!segments.length) usage(2);
+
+    // Multi-segment: one directive per section. We stitch into a single output when possible.
+    if (segments.length > 1) {
+      await textToSpeechToFileMulti({
+        text,
+        voiceId: voiceId || undefined,
+        voiceName: voiceName || undefined,
+        voiceSettingsPreset: preset || undefined,
+        filenamePrefix: "orion_tts",
+      });
+      return;
+    }
+
+    // Single segment (may still contain a single top directive line).
+    const seg = segments[0];
+    const effPreset = (seg.preset || preset || "").trim();
     await textToSpeechToFile({
-      text,
-      voiceId: voiceId || undefined,
-      voiceName: voiceName || undefined,
-      voiceSettingsPreset: preset || undefined,
+      text: seg.text,
+      voiceId: voiceId || seg.voiceId || undefined,
+      voiceName: voiceName || seg.voiceName || undefined,
+      voiceSettingsPreset: effPreset ? effPreset : undefined,
       filenamePrefix: "orion_tts",
     });
     return;

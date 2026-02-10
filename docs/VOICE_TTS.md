@@ -80,6 +80,56 @@ Example:
 node skills/elevenlabs-tts/cli.js speak --text "Take one slow breath." --preset calm
 ```
 
+## Optional Control Tags (Inline Directives)
+
+If you want to control the voice memo style without CLI flags, you can:
+- Put a single directive on the **first non-empty line**, or
+- Use **multiple directives throughout** the script to change style by section (each directive starts a new segment).
+
+Shorthand preset:
+
+```text
+#urgent
+AEGIS alert. Simulated. Please check status.
+```
+
+Extra shorthand aliases (mapped onto the same 4 presets):
+- `#normal` / `#default` -> defer to configured defaults
+- `#narrative` / `#story` -> `narration`
+- `#warm`, `#supportive`, `#soothe` -> `calm`
+- `#brief`, `#update`, `#focus` -> `narration`
+- `#hype`, `#excited` -> `energetic`
+- `#alert`, `#critical` -> `urgent`
+
+Multi-part example (single MP3 output):
+
+```text
+#normal
+Good morning Cory. Quick update.
+
+#urgent
+Weather: severe winds expected this afternoon. Please be cautious.
+
+#narrative
+Top news: ...
+```
+
+Bracket shorthand:
+
+```text
+[calm]
+Let’s take one slow breath, then pick one next step.
+```
+
+Key/value form:
+
+```text
+[tts preset=urgent]
+AEGIS alert. Simulated. Please check status.
+```
+
+Supported keys: `preset`, `voice_id`, `voice_name` (also accepts `voice` as alias for `voice_name`).
+
 ## Supportive / Calming Audio: Intended Flow
 
 When Cory asks to *hear ORION speak* in a calming/supportive/grounding way:
