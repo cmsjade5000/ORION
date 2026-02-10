@@ -340,15 +340,25 @@ def run(repo_root: Path, *, max_packets: int) -> int:
             continue
 
         lines = _read_lines(inbox)
-        packets = _split_packets(lines)
+
+        # Only scan packets appended under "## Packets" to avoid examples/notes.
+        packets_header_idx = None
+        for i, line in enumerate(lines):
+            if line.strip() == "## Packets":
+                packets_header_idx = i
+                break
+        if packets_header_idx is None:
+            continue
+
+        packets = _split_packets(lines[packets_header_idx + 1 :])
         for start_idx, end_idx, pkt_lines in packets:
             if _packet_has_result(pkt_lines):
                 continue
 
             pref = PacketRef(
                 inbox_path=inbox,
-                packet_start_line=start_idx + 1,
-                packet_end_line=end_idx,
+                packet_start_line=(packets_header_idx + 1) + start_idx + 1,
+                packet_end_line=(packets_header_idx + 1) + end_idx,
                 fields=_parse_fields(pkt_lines),
                 raw_lines=pkt_lines,
             )

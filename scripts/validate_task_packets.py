@@ -127,12 +127,20 @@ def validate_inbox_file(path: str) -> list[str]:
     with open(path, "r", encoding="utf-8") as f:
         all_lines = f.readlines()
 
-    # Only validate packets appended under "## Packets" to avoid flagging examples.
-    start_idx = 0
+    # Packets must be appended under "## Packets" to avoid scanning examples/notes.
+    packets_header_idx = None
     for i, line in enumerate(all_lines):
         if line.strip() == "## Packets":
-            start_idx = i + 1
+            packets_header_idx = i
             break
+
+    if packets_header_idx is None:
+        # If there are any packets in this file, it's misformatted.
+        if any(RE_PACKET_HEADER.match(ln.rstrip("\n")) for ln in all_lines):
+            errors.append(f"{path}: missing required '## Packets' header (TASK_PACKET blocks must be under it)")
+        return errors
+
+    start_idx = packets_header_idx + 1
 
     packets = _split_packets(all_lines[start_idx:], start_line_offset=start_idx)
 

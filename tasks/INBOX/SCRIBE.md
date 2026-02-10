@@ -2,7 +2,6 @@
 
 SCRIBE is internal-only. ORION assigns writing + organization tasks here when `sessions_spawn` is unavailable.
 
-## New Tasks
+Append new Task Packets below. Spec: `docs/TASK_PACKET.md`.
 
-<!-- Append Task Packets below this line -->
-
+## Packets

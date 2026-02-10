@@ -1,8 +1,7 @@
 # LEDGER Inbox
 
-Append new Task Packets below. Spec: `docs/TASK_PACKET.md`.
+LEDGER is internal-only. ORION assigns cost/value tradeoff snapshots here.
 
-Constraints reminder:
-- Not financial advice; frameworks + tradeoffs only.
+Append new Task Packets below. Spec: `docs/TASK_PACKET.md`.
 
 ## Packets

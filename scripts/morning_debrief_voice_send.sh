@@ -283,6 +283,13 @@ if [[ "$TEXT_ONLY" -eq 1 ]]; then
     exit 2
   fi
 
+  SUPPRESS_RAW="${ORION_SUPPRESS_TELEGRAM:-${TELEGRAM_SUPPRESS:-}}"
+  SUPPRESS="$(printf '%s' "${SUPPRESS_RAW}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${SUPPRESS}" == "1" || "${SUPPRESS}" == "true" || "${SUPPRESS}" == "yes" || "${SUPPRESS}" == "y" || "${SUPPRESS}" == "on" ]]; then
+    echo "TELEGRAM_SUPPRESSED"
+    exit 0
+  fi
+
   LINKS="$(
     node -e '
       const fs=require("fs");
@@ -350,6 +357,13 @@ TOKEN="$(tr -d '\r\n' < "$HOME/.openclaw/secrets/telegram.token" 2>/dev/null || 
 if [[ -z "$TOKEN" ]]; then
   echo "ERROR: Missing ~/.openclaw/secrets/telegram.token" >&2
   exit 2
+fi
+
+SUPPRESS_RAW="${ORION_SUPPRESS_TELEGRAM:-${TELEGRAM_SUPPRESS:-}}"
+SUPPRESS="$(printf '%s' "${SUPPRESS_RAW}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${SUPPRESS}" == "1" || "${SUPPRESS}" == "true" || "${SUPPRESS}" == "yes" || "${SUPPRESS}" == "y" || "${SUPPRESS}" == "on" ]]; then
+  echo "TELEGRAM_SUPPRESSED"
+  exit 0
 fi
 
 # If TTS failed (e.g., quota), fall back to sending the links/text message only.

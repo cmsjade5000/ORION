@@ -68,6 +68,10 @@ class PacketQueued:
 def _read_text(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
+def _env_truthy(name: str) -> bool:
+    v = os.environ.get(name, "").strip().lower()
+    return v in {"1", "true", "yes", "y", "on"}
+
 
 def _split_packets(lines: list[str], start_line_offset: int) -> list[tuple[int, list[str]]]:
     """
@@ -288,12 +292,15 @@ def _find_packets(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResul
         txt = _read_text(inbox)
         all_lines = txt.splitlines()
 
-        # Only scan packets appended under "## Packets" to avoid examples.
-        start_idx = 0
+        # Only scan packets appended under "## Packets" to avoid examples/notes.
+        packets_header_idx = None
         for i, line in enumerate(all_lines):
             if line.strip() == "## Packets":
-                start_idx = i + 1
+                packets_header_idx = i
                 break
+        if packets_header_idx is None:
+            continue
+        start_idx = packets_header_idx + 1
 
         packets = _split_packets(all_lines[start_idx:], start_line_offset=start_idx)
         for start_line, pkt_lines in packets:
@@ -484,7 +491,8 @@ def main() -> int:
         else:
             new_queued = []
 
-    dry = os.environ.get("NOTIFY_DRY_RUN", "").strip() == "1"
+    # Suppress Telegram sends during internal loop testing.
+    dry = os.environ.get("NOTIFY_DRY_RUN", "").strip() == "1" or _env_truthy("ORION_SUPPRESS_TELEGRAM") or _env_truthy("TELEGRAM_SUPPRESS")
     if dry:
         print(_format_message(queued=new_queued, results=new_results))
     else:

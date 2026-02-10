@@ -53,3 +53,8 @@ This prints what it would send and does not require Telegram credentials:
 NOTIFY_DRY_RUN=1 python3 scripts/notify_inbox_results.py --require-notify-telegram
 ```
 
+You can also suppress Telegram sends (while still writing notifier state and emitting Mini App events):
+
+```bash
+ORION_SUPPRESS_TELEGRAM=1 python3 scripts/notify_inbox_results.py --require-notify-telegram
+```

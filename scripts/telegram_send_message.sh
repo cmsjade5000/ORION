@@ -8,6 +8,8 @@ set -euo pipefail
 #
 # Env:
 #   TELEGRAM_BOT_TOKEN Optional. If unset, falls back to ~/.openclaw/secrets/telegram.token.
+#   ORION_SUPPRESS_TELEGRAM If set truthy (1/true/yes/on), do not send (exit 0).
+#   TELEGRAM_SUPPRESS       Alias for ORION_SUPPRESS_TELEGRAM.
 
 CHAT_ID="${1:-}"
 shift || true
@@ -16,6 +18,13 @@ TEXT="${*:-}"
 if [[ -z "${CHAT_ID}" ]] || [[ -z "${TEXT}" ]]; then
   echo "Usage: scripts/telegram_send_message.sh <chat_id> <text...>" >&2
   exit 2
+fi
+
+SUPPRESS_RAW="${ORION_SUPPRESS_TELEGRAM:-${TELEGRAM_SUPPRESS:-}}"
+SUPPRESS="$(printf '%s' "${SUPPRESS_RAW}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${SUPPRESS}" == "1" || "${SUPPRESS}" == "true" || "${SUPPRESS}" == "yes" || "${SUPPRESS}" == "y" || "${SUPPRESS}" == "on" ]]; then
+  echo "TELEGRAM_SUPPRESSED"
+  exit 0
 fi
 
 TOKEN="${TELEGRAM_BOT_TOKEN:-}"
