@@ -168,10 +168,9 @@ export default function NetworkDashboard(props: {
     const xNode = clamp(cx, R_SM + pad, w - (R_SM + pad));
     const xStratus = clamp(cx + spreadSmall, R_SM + pad, w - (R_SM + pad));
 
-    // AEGIS indicator: centered above EMBER.
-    const aegisX = xEmber;
-    // Push it closer to the top edge while staying visible on small screens.
-    const aegisY = clamp(yTop - (R_MED + 56), 12, yTop - 42);
+    // AEGIS indicator: pin to top-left (inset), not centered.
+    const aegisX = pad;
+    const aegisY = pad;
 
     const yPulse = ySmall;
     const yNode = clamp(ySmall + 14, ySmall, h - (R_SM + pad));
@@ -282,7 +281,6 @@ export default function NetworkDashboard(props: {
             style={{
               left: `${layout.aegisIndicator.x}px`,
               top: `${layout.aegisIndicator.y}px`,
-              transform: "translate(-50%, -50%)",
               ...(pinging ? ({ ["--aegis-pulse" as any]: pulseColor } as any) : {}),
             }}
           >

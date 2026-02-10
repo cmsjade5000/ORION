@@ -21,7 +21,15 @@ export default function App() {
   const dlTokenExpiresAtRef = useRef<number>(0);
   const [authError, setAuthError] = useState<string>("");
   const [commandError, setCommandError] = useState<string>("");
-  const [activeOverlay, setActiveOverlay] = useState<null | "workflow" | "files" | "responses" | "about">(null);
+  const [activeOverlay, setActiveOverlay] = useState<null | "activity" | "files" | "about">(null);
+  const [activityTab, setActivityTab] = useState<"workflow" | "responses">("responses");
+  const [activitySplit, setActivitySplit] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem("orion.activitySplit") === "1";
+    } catch {
+      return false;
+    }
+  });
   const lastReadAtRef = useRef<number>(Date.now());
   const [hiddenOrbitArtifacts, setHiddenOrbitArtifacts] = useState<Set<string>>(() => new Set());
   const [deletedArtifacts, setDeletedArtifacts] = useState<Set<string>>(() => new Set());
@@ -120,7 +128,7 @@ export default function App() {
     return (state.feed || []).filter((it) => it && it.kind === "response" && (it.agentId || "") === "ORION");
   }, [state.feed]);
 
-  const responsesOpen = activeOverlay === "responses";
+  const responsesOpen = activeOverlay === "activity" && (activitySplit || activityTab === "responses");
 
   // Mark feed read when opened (so notifications only show when something new arrives).
   useEffect(() => {
@@ -322,7 +330,10 @@ export default function App() {
             state={stateForNetwork}
             token={dlToken}
             telegramWebApp={tgRef.current}
-            onOpenFeed={() => setActiveOverlay("responses")}
+            onOpenFeed={() => {
+              setActivityTab("responses");
+              setActiveOverlay("activity");
+            }}
             onOpenFiles={() => setActiveOverlay("files")}
             unreadCount={unreadCount}
             onOrionClick={() => setActiveOverlay(null)}
@@ -330,52 +341,52 @@ export default function App() {
             onHideOrbitArtifact={hideOrbitArtifact}
           />
         </div>
-        <div className="edgeButtons edgeButtonsBottomLeft" aria-label="Panels">
-          <button
-            type="button"
-            className="edgeButton"
-            onClick={() => setActiveOverlay("workflow")}
-            title="Workflow"
-            aria-label="Workflow"
-          >
-            🧭
-            {state.workflow && state.workflow.status === "running" ? <span className="edgeDot" aria-hidden="true" /> : null}
-          </button>
-          <button
-            type="button"
-            className="edgeButton"
-            onClick={() => setActiveOverlay("files")}
-            title="Files"
-            aria-label="Files"
-          >
-            📁
-            {(state.artifacts || []).filter((a) => a && !deletedArtifacts.has(a.id)).length > 0 ? (
-              <span className="edgeDot" aria-hidden="true" />
-            ) : null}
-          </button>
-          <button
-            type="button"
-            className="edgeButton"
-            onClick={() => setActiveOverlay("responses")}
-            title="Responses"
-            aria-label="Responses"
-          >
-            💬
-            {unreadCount > 0 ? (
-              <span className="edgeBadge" aria-label={`${unreadCount} new`}>
-                {unreadCount > 9 ? "9+" : String(unreadCount)}
-              </span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            className="edgeButton"
-            onClick={() => setActiveOverlay("about")}
-            title="Info"
-            aria-label="Info"
-          >
-            ℹ️
-          </button>
+        <div className="bottomBar" aria-label="Panels">
+          <div className="bottomBarInner">
+            <button
+              type="button"
+              className="bottomBarButton"
+              onClick={() => {
+                const wfRunning = Boolean(state.workflow && state.workflow.status === "running");
+                setActivityTab(wfRunning ? "workflow" : "responses");
+                setActiveOverlay("activity");
+              }}
+              title="Activity"
+              aria-label="Activity"
+            >
+              🧭
+              {unreadCount > 0 ? (
+                <span className="edgeBadge" aria-label={`${unreadCount} new`}>
+                  {unreadCount > 9 ? "9+" : String(unreadCount)}
+                </span>
+              ) : (state.workflow && state.workflow.status === "running") ? (
+                <span className="edgeDot" aria-hidden="true" />
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              className="bottomBarButton"
+              onClick={() => setActiveOverlay("files")}
+              title="Files"
+              aria-label="Files"
+            >
+              📁
+              {(state.artifacts || []).filter((a) => a && !deletedArtifacts.has(a.id)).length > 0 ? (
+                <span className="edgeDot" aria-hidden="true" />
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              className="bottomBarButton"
+              onClick={() => setActiveOverlay("about")}
+              title="Info"
+              aria-label="Info"
+            >
+              ℹ️
+            </button>
+          </div>
         </div>
       </main>
 
@@ -419,12 +430,68 @@ export default function App() {
       </footer>
 
       <OverlaySheet
-        open={activeOverlay === "workflow"}
-        title="Workflow"
-        subtitle={state.workflow?.steps?.length ? `${state.workflow.steps.map((s) => s.agentId).join(" → ")}` : "Idle"}
+        open={activeOverlay === "activity"}
+        title="Activity"
+        subtitle={
+          activitySplit
+            ? "Workflow + Responses"
+            : (activityTab === "workflow"
+              ? "Workflow"
+              : (unreadCount > 0 ? `${unreadCount} new` : "ORION only"))
+        }
         onClose={() => setActiveOverlay(null)}
       >
-        <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className={activitySplit ? "button buttonGhost" : (activityTab === "workflow" ? "button" : "button buttonGhost")}
+                onClick={() => setActivityTab("workflow")}
+                disabled={activitySplit}
+                aria-label="Workflow tab"
+              >
+                🧭 Workflow
+              </button>
+              <button
+                type="button"
+                className={activitySplit ? "button buttonGhost" : (activityTab === "responses" ? "button" : "button buttonGhost")}
+                onClick={() => setActivityTab("responses")}
+                disabled={activitySplit}
+                aria-label="Responses tab"
+              >
+                💬 Responses
+              </button>
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "rgba(255,255,255,0.72)" }}>
+              <input
+                type="checkbox"
+                checked={activitySplit}
+                onChange={(e) => {
+                  const v = Boolean(e.target.checked);
+                  setActivitySplit(v);
+                  try {
+                    window.localStorage.setItem("orion.activitySplit", v ? "1" : "0");
+                  } catch {
+                    // ignore
+                  }
+                }}
+              />
+              Split
+            </label>
+          </div>
+
+          {activitySplit ? (
+            <>
+              <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
+              <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
+            </>
+          ) : activityTab === "workflow" ? (
+            <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
+          ) : (
+            <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
+          )}
+        </div>
       </OverlaySheet>
 
       <OverlaySheet
@@ -444,15 +511,6 @@ export default function App() {
           onDeleteFromView={deleteArtifactFromView}
           variant="overlay"
         />
-      </OverlaySheet>
-
-      <OverlaySheet
-        open={activeOverlay === "responses"}
-        title="Responses"
-        subtitle={unreadCount > 0 ? `${unreadCount} new` : "ORION only"}
-        onClose={() => setActiveOverlay(null)}
-      >
-        <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
       </OverlaySheet>
 
       <OverlaySheet
