@@ -132,7 +132,7 @@ miniapp_activity() {
   # miniapp_activity <activity>
   local a="$1"
   local ts
-  ts="$(date +%s%3N 2>/dev/null || python3 - <<'PY'\nimport time\nprint(int(time.time()*1000))\nPY)"
+  ts="$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')"
   miniapp_emit "{\"type\":\"agent.activity\",\"agentId\":\"AEGIS\",\"activity\":\"${a}\",\"ts\":${ts}}"
 }
 
@@ -142,7 +142,7 @@ miniapp_orion_health() {
   local kind="$2"
   local incident="${3:-}"
   local ts
-  ts="$(date +%s%3N 2>/dev/null || python3 - <<'PY'\nimport time\nprint(int(time.time()*1000))\nPY)"
+  ts="$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')"
   if [ -n "$incident" ]; then
     miniapp_emit "{\"type\":\"orion.health\",\"ok\":${ok},\"kind\":\"${kind}\",\"incident\":\"${incident}\",\"source\":\"AEGIS\",\"ts\":${ts}}"
   else
