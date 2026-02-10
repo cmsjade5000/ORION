@@ -263,11 +263,11 @@ function orionFaceForActivity(activity) {
     case "files":
       return "😎";
     case "tooling":
-      return "😬";
+      return "🤓";
     case "messaging":
       return "🙂";
     case "error":
-      return "😵‍💫";
+      return "😫";
     default:
       return null;
   }
@@ -276,11 +276,11 @@ function orionFaceForActivity(activity) {
 function orionFaceForTool(type) {
   switch (type) {
     case "tool.started":
-      return "😬";
+      return "🤓";
     case "tool.finished":
       return "😌";
     case "tool.failed":
-      return "😵‍💫";
+      return "😫";
     default:
       return null;
   }
@@ -289,11 +289,11 @@ function orionFaceForTool(type) {
 function orionFaceForTask(type) {
   switch (type) {
     case "task.started":
-      return "😤";
+      return "😄";
     case "task.completed":
-      return "😌";
+      return "🥳";
     case "task.failed":
-      return "😵‍💫";
+      return "😫";
     default:
       return null;
   }
@@ -333,6 +333,8 @@ function orionBadgeForTool(type) {
 
 function orionBadgeForTask(type) {
   switch (type) {
+    case "task.started":
+      return "🗂️";
     case "task.completed":
       return "✅";
     case "task.failed":
@@ -2023,7 +2025,7 @@ app.post("/api/command", (req, res) => {
   markRealEvent();
 
   // Visual: ORION is dispatching work outwards (faces only).
-  addOrionBadge("😤", 2600);
+  addOrionBadge("😉", 2600);
   setOrionIo("dispatching", 2000);
   setOrionBadge(orionBadgeForActivity(activity) || "💭", 2000);
 
@@ -2098,7 +2100,7 @@ app.post("/api/command", (req, res) => {
       // We already started hop 0 above.
       if (i > 0) {
         // Visual: ORION dispatches each hop.
-        addOrionBadge("😤", 1800);
+        addOrionBadge("😉", 1800);
         setOrionIo("dispatching", 1400);
         setOrionBadge(orionBadgeForActivity(activity) || "💭", 1400);
         startHop(agentId);
