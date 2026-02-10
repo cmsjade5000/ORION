@@ -48,6 +48,32 @@
       },
       "reactionLevel": "ack",
       "streamMode": "partial"
+    },
+    "discord": {
+      "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md).",
+      "enabled": false,
+      "token": "${DISCORD_BOT_TOKEN}",
+      "commands": {
+        "native": "auto",
+        "nativeSkills": "auto"
+      },
+      "replyToMode": "first",
+      "dm": {
+        "policy": "allowlist",
+        "allowFrom": ["<CORY_DISCORD_USER_ID>"]
+      },
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "<DISCORD_GUILD_ID>": {
+          "requireMention": true,
+          "channels": {
+            "<DISCORD_CHANNEL_ID>": {
+              "allow": true,
+              "autoThread": true
+            }
+          }
+        }
+      }
     }
   },
   "env": {
@@ -76,6 +102,9 @@
     "entries": {
       "telegram": {
         "enabled": true
+      },
+      "discord": {
+        "enabled": false
       }
     }
   }
