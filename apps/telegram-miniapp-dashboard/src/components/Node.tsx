@@ -1,6 +1,5 @@
 import type { AgentStatus } from "../api/state";
 import type { AgentActivity } from "../api/state";
-import type { WorkflowStepStatus } from "../api/state";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -26,11 +25,11 @@ function activityEmoji(a: AgentActivity | undefined): string | null {
 
 export default function Node(props: {
   id: string;
+  label?: string;
   status: AgentStatus;
   activity?: AgentActivity;
-  // Optional: show a numbered workflow step badge on agent nodes.
-  workflowStep?: { index: number; status: WorkflowStepStatus } | null;
   onClick?: () => void;
+  size?: "large" | "medium";
   // Central node only: orchestration indicators (emojis) shown instead of status words.
   processes?: string[];
   // Central node only: IO phase (controls the status subline).
@@ -48,7 +47,8 @@ export default function Node(props: {
       props.status === "busy" ||
       (props.activity && props.activity !== "idle"));
 
-  const cls = ["node", props.kind === "central" ? "nodeCentral" : "", props.active ? "nodeActive" : "", props.className || ""]
+  const sizeCls = props.size === "large" ? "nodeSizeLarge" : "nodeSizeMedium";
+  const cls = ["node", sizeCls, props.kind === "central" ? "nodeCentral" : "", props.active ? "nodeActive" : "", props.className || ""]
     .concat(lit ? ["nodeLit"] : [])
     .filter(Boolean)
     .join(" ");
@@ -72,13 +72,6 @@ export default function Node(props: {
 
   // ORION central process emoji rotation (smooth, not flickery).
   const processes = props.kind === "central" ? (props.processes ?? []) : [];
-  const centralSub = (() => {
-    if (props.kind !== "central") return props.status;
-    if (props.io === "receiving") return "receiving";
-    if (props.io === "dispatching") return "dispatching";
-    // Fall back to the raw status string.
-    return props.status;
-  })();
   const [procIdx, setProcIdx] = useState(0);
   const curProc = processes.length ? processes[procIdx % processes.length] : null;
   const [curProcEmoji, setCurProcEmoji] = useState<string | null>(curProc);
@@ -118,6 +111,7 @@ export default function Node(props: {
       style={props.style}
       data-node-id={props.id}
       data-status={props.status}
+      data-activity={props.kind === "agent" ? (props.activity ?? "idle") : undefined}
       onClick={() => props.onClick?.()}
       role={props.onClick ? "button" : undefined}
       tabIndex={props.onClick ? 0 : undefined}
@@ -130,19 +124,6 @@ export default function Node(props: {
       }}
     >
       {props.active ? <div className="nodePulse" aria-hidden="true" /> : null}
-      {props.kind === "agent" && props.workflowStep ? (
-        <div
-          className={[
-            "nodeStepBadge",
-            props.workflowStep.status === "active" ? "nodeStepBadgeActive" : "",
-            props.workflowStep.status === "done" ? "nodeStepBadgeDone" : "",
-            props.workflowStep.status === "failed" ? "nodeStepBadgeFailed" : "",
-          ].filter(Boolean).join(" ")}
-          aria-label={`workflow step ${props.workflowStep.index + 1}: ${props.workflowStep.status}`}
-        >
-          {props.workflowStep.index + 1}
-        </div>
-      ) : null}
       {(curEmoji || prevEmoji) ? (
         <div
           className={["nodeBadge", curEmoji ? "nodeBadgeOn" : "nodeBadgeOff"].join(" ")}
@@ -165,10 +146,9 @@ export default function Node(props: {
         </div>
       ) : null}
       <div>
-        <div className="nodeLabel">{props.id}</div>
+        <div className="nodeLabel">{props.label || props.id}</div>
         {props.kind === "central" ? (
           <>
-            <div className="nodeSub">{centralSub}</div>
             <div className="nodeSub nodeSubCentral" aria-hidden="true">
             {prevProcEmoji ? (
               <span key={`${prevProcEmoji}-out`} className="nodeProcEmoji nodeProcEmojiOut">

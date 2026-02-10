@@ -216,9 +216,16 @@ if (IS_PROD) {
   }
 }
 
-// Keep this list in sync with the gateway agent roster (agents/INDEX.md).
-// ORION is central and rendered separately; this list is the orbiting specialists.
-const AGENTS = ["ATLAS", "EMBER", "PIXEL", "NODE", "LEDGER", "AEGIS"];
+// Keep these lists in sync with the gateway agent roster (agents/INDEX.md).
+// ORION is central and rendered separately.
+//
+// In the UI, ATLAS can "call" sub-agents (PULSE/NODE/STRATUS). Those are rendered as mini nodes
+// and should not steal ORION's focus line or activeAgentId.
+const PRIMARY_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "AEGIS"];
+const ATLAS_SUBAGENTS = ["PULSE", "NODE", "STRATUS"];
+const ATLAS_SUBAGENTS_SET = new Set(ATLAS_SUBAGENTS);
+const AGENTS = [...PRIMARY_AGENTS, ...ATLAS_SUBAGENTS];
+const MENTIONABLE_AGENTS = [...PRIMARY_AGENTS, ...ATLAS_SUBAGENTS];
 let tick = 0;
 let commandIdx = 0;
 let ledgerPulseIdx = 0;
@@ -338,7 +345,7 @@ function orionBadgeForTask(type) {
 function parseAgent(text) {
   const raw = normalizeText(text).toLowerCase();
   if (!raw) return null;
-  for (const id of AGENTS) {
+  for (const id of MENTIONABLE_AGENTS) {
     const needle = id.toLowerCase();
     const re = new RegExp(`\\b${needle}\\b`, "i");
     if (re.test(raw)) return id;
@@ -351,7 +358,7 @@ function parseAgentSequence(text) {
   if (!raw) return [];
 
   const hits = [];
-  for (const id of AGENTS) {
+  for (const id of MENTIONABLE_AGENTS) {
     const needle = id.toLowerCase();
     const re = new RegExp(`\\b${needle}\\b`, "i");
     const idx = raw.search(re);
@@ -367,12 +374,25 @@ function parseAgentSequence(text) {
     seen.add(h.id);
     out.push(h.id);
   }
+
+  // If the user mentions any ATLAS sub-agent, ensure ATLAS appears immediately before the first sub-agent.
+  const firstSubIdx = out.findIndex((id) => ATLAS_SUBAGENTS_SET.has(id));
+  if (firstSubIdx >= 0) {
+    const atlasIdx = out.indexOf("ATLAS");
+    if (atlasIdx < 0) {
+      out.splice(firstSubIdx, 0, "ATLAS");
+    } else if (atlasIdx > firstSubIdx) {
+      out.splice(atlasIdx, 1);
+      out.splice(firstSubIdx, 0, "ATLAS");
+    }
+  }
+
   return out;
 }
 
 function pickNextAgent() {
-  commandIdx = (commandIdx + 1) % AGENTS.length;
-  return AGENTS[commandIdx];
+  commandIdx = (commandIdx + 1) % PRIMARY_AGENTS.length;
+  return PRIMARY_AGENTS[commandIdx];
 }
 
 function buildMockLiveState() {
@@ -381,8 +401,8 @@ function buildMockLiveState() {
   // Rotate through all agents, with a periodic "idle gap" where no agent is active.
   // Previous logic accidentally skipped ATLAS (index 0) because the same modulus was
   // used for the gap and the agent index.
-  const phase = tick % (AGENTS.length + 1); // 0 => gap
-  const activeAgentId = phase === 0 ? null : AGENTS[phase - 1];
+  const phase = tick % (PRIMARY_AGENTS.length + 1); // 0 => gap
+  const activeAgentId = phase === 0 ? null : PRIMARY_AGENTS[phase - 1];
 
   const agents = AGENTS.map((id) => {
     let status = "idle";
@@ -434,6 +454,8 @@ const ACTIVE_STALE_MS = Number(process.env.ACTIVE_STALE_MS || 8_000); // clear O
 const LINK_STALE_MS = Number(process.env.LINK_STALE_MS || 1_800); // how long to show directional flow
 const AEGIS_ALARM_MS = Number(process.env.AEGIS_ALARM_MS || 30_000);
 const AEGIS_WARN_MS = Number(process.env.AEGIS_WARN_MS || 0);
+const AEGIS_HEARTBEAT_MS = Number(process.env.AEGIS_HEARTBEAT_MS || 15_000);
+const AEGIS_PING_MS = Number(process.env.AEGIS_PING_MS || 1_100);
 
 const ARTIFACT_TTL_MS = Number(process.env.ARTIFACT_TTL_MS || 60 * 60_000);
 const MAX_ARTIFACTS = Number(process.env.MAX_ARTIFACTS || 24);
@@ -763,9 +785,39 @@ function setAgentActivity(id, activity) {
   a.updatedAt = Date.now();
 }
 
+// AEGIS heartbeat: periodically "pings" ORION health. This is purely visual for the miniapp.
+// It should not steal ORION focus lines (no bumpActive, no link).
+if (AEGIS_HEARTBEAT_MS > 0) {
+  setInterval(() => {
+    const a = STORE.agents.get("AEGIS");
+    if (!a) return;
+
+    // If AEGIS is currently alarming, skip the heartbeat pulse to avoid mixed signals.
+    if (a.activity === "error") return;
+
+    a.status = "active";
+    a.activity = "messaging";
+    a.updatedAt = Date.now();
+    scheduleStateBroadcast();
+
+    setTimeout(() => {
+      const b = STORE.agents.get("AEGIS");
+      if (!b) return;
+      // Only reset if we haven't been overwritten by a real event.
+      if (b.activity !== "messaging") return;
+      b.activity = "idle";
+      b.status = "idle";
+      b.updatedAt = Date.now();
+      scheduleStateBroadcast();
+    }, Math.max(250, AEGIS_PING_MS));
+  }, Math.max(4_000, AEGIS_HEARTBEAT_MS));
+}
+
 function bumpActive(id) {
   if (!id) return;
-  STORE.activeAgentId = id;
+  // Sub-agents should not steal the active focus line from ATLAS.
+  const focusId = ATLAS_SUBAGENTS_SET.has(id) ? "ATLAS" : id;
+  STORE.activeAgentId = focusId;
   STORE.activeUpdatedAt = Date.now();
 }
 
@@ -841,11 +893,12 @@ function applyEventToStore(body) {
     });
 
     // Visual hint: treat artifacts as "return transmission".
-    if (agentId) setLink(agentId, "in", 1400);
+    const focusId = agentId && ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
+    if (focusId) setLink(focusId, "in", 1400);
     setOrionIo("receiving", 1800);
     addOrionBadge("📎", 3800);
     setOrionBadge("✅", 2000);
-    bumpActive(agentId || STORE.activeAgentId || "LEDGER");
+    bumpActive(focusId || STORE.activeAgentId || "LEDGER");
 
     return rec;
   }
@@ -870,6 +923,7 @@ function applyEventToStore(body) {
 
   if (type === "agent.activity") {
     if (agentId) {
+      const focusId = ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
       if (activity === "idle") {
         setAgentActivity(agentId, "idle");
         setAgentStatus(agentId, "idle");
@@ -877,8 +931,13 @@ function applyEventToStore(body) {
         setAgentStatus(agentId, "active");
         if (activity) setAgentActivity(agentId, activity);
       }
-      bumpActive(agentId);
-      setLink(agentId, "out", LINK_STALE_MS);
+      if (ATLAS_SUBAGENTS_SET.has(agentId)) {
+        // Keep ATLAS visibly "working" when its sub-agents are active.
+        setAgentStatus("ATLAS", "active");
+        setAgentActivity("ATLAS", "thinking");
+      }
+      bumpActive(focusId);
+      setLink(focusId, "out", LINK_STALE_MS);
     }
     // Mirror activity to the central node so the user can see what ORION is doing.
     const face = orionFaceForActivity(activity);
@@ -894,10 +953,15 @@ function applyEventToStore(body) {
     const badge = orionBadgeForTool(type);
     if (badge) setOrionBadge(badge, 2600);
     if (agentId) {
+      const focusId = ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
       setAgentStatus(agentId, "busy");
       setAgentActivity(agentId, type === "tool.failed" ? "error" : "tooling");
-      bumpActive(agentId);
-      setLink(agentId, "out", LINK_STALE_MS);
+      if (ATLAS_SUBAGENTS_SET.has(agentId)) {
+        setAgentStatus("ATLAS", "active");
+        setAgentActivity("ATLAS", "thinking");
+      }
+      bumpActive(focusId);
+      setLink(focusId, "out", LINK_STALE_MS);
     }
 
     if (type === "tool.failed") {
@@ -914,19 +978,33 @@ function applyEventToStore(body) {
     const badge = orionBadgeForTask(type);
     if (badge) setOrionBadge(badge, 3200);
     if (agentId) {
+      const isSub = ATLAS_SUBAGENTS_SET.has(agentId);
+      const focusId = isSub ? "ATLAS" : agentId;
       if (type === "task.completed" || type === "task.failed") {
         // Conservative: mark idle at the end of a task unless later events say otherwise.
         setAgentActivity(agentId, "idle");
         setAgentStatus(agentId, "idle");
-        // Show return-flow back into ORION.
-        setOrionIo("receiving", 2200);
-        setLink(agentId, "in", 1200);
+        if (!isSub) {
+          // Show return-flow back into ORION.
+          setOrionIo("receiving", 2200);
+          setLink(agentId, "in", 1200);
+        } else {
+          // Sub-agent completions return to ATLAS, not ORION.
+          setLink("ATLAS", "out", 900);
+        }
       } else {
         setAgentStatus(agentId, "active");
-        setLink(agentId, "out", LINK_STALE_MS);
-        setOrionIo("dispatching", 1600);
+        if (!isSub) {
+          setLink(agentId, "out", LINK_STALE_MS);
+          setOrionIo("dispatching", 1600);
+        } else {
+          // Sub-agent work is "inside" ATLAS: keep focus on ATLAS.
+          setAgentStatus("ATLAS", "active");
+          setAgentActivity("ATLAS", "thinking");
+          setLink("ATLAS", "out", LINK_STALE_MS);
+        }
       }
-      bumpActive(agentId);
+      bumpActive(focusId);
     }
 
     if (type === "task.failed") {
@@ -1564,11 +1642,12 @@ app.post("/api/command", (req, res) => {
         // The last hop shouldn't linger longer than earlier hops (which get overwritten
         // by the next dispatch). Cap the final return-link duration.
         if (i === sequence.length - 1) {
-          setLink(agentId, "in", gapMs + 200);
+          const focusId = ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
+          setLink(focusId, "in", gapMs + 200);
           if (shouldSimulateReply) {
             // Demo behavior: if the user asked for a PDF, produce a small simulated PDF
             // and surface it as a floating artifact bubble in the Mini App.
-            simulatePdfArtifact({ text, agentId });
+            simulatePdfArtifact({ text, agentId: focusId });
             // Demo behavior: surface a short simulated response in the in-app feed so
             // live Telegram testing is useful even before ORION routing is wired.
             const flat = String(text || "").replace(/\s+/g, " ").trim();

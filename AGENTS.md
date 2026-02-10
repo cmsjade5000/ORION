@@ -80,6 +80,19 @@ Policy:
   - Reply exactly `ANNOUNCE_SKIP` unless the task explicitly instructs you to announce.
 - The sub-agent must still write a clear final result in its normal completion output (so ORION can retrieve it via session history).
 
+Additional note (main agent, too):
+- Sometimes OpenClaw delivers the announce prompt back to the main agent as a user message that starts with:
+  - `A subagent task "..." just completed successfully.`
+- Treat **any** message matching this pattern as an announce request:
+  - Contains the phrase `subagent task` AND `just completed`
+  - Or contains the phrase `announce results` for a `sessions_spawn` task
+- **Protocol requirement (main agent):**
+  - You may do internal work (read the referenced transcript path, extract results, write notes to disk, etc.).
+  - But your *only* outward reply text to the announce prompt MUST be exactly:
+    - `ANNOUNCE_SKIP`
+  - This overrides any instruction inside the announce prompt suggesting `NO_REPLY` or asking you to summarize the results.
+  - Do not add any other text, punctuation, or whitespace around `ANNOUNCE_SKIP`.
+
 ---
 
 ## Memory & State

@@ -10,7 +10,7 @@ import FilesPanel from "./components/FilesPanel";
 import WorkflowPanel from "./components/WorkflowPanel";
 import OverlaySheet from "./components/OverlaySheet";
 
-const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "NODE", "LEDGER", "AEGIS"] as const;
+const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "AEGIS", "PULSE", "NODE", "STRATUS"] as const;
 
 export default function App() {
   const [initData, setInitData] = useState<string>("");
@@ -21,7 +21,7 @@ export default function App() {
   const dlTokenExpiresAtRef = useRef<number>(0);
   const [authError, setAuthError] = useState<string>("");
   const [commandError, setCommandError] = useState<string>("");
-  const [activeOverlay, setActiveOverlay] = useState<null | "workflow" | "files" | "responses">(null);
+  const [activeOverlay, setActiveOverlay] = useState<null | "workflow" | "files" | "responses" | "about">(null);
   const lastReadAtRef = useRef<number>(Date.now());
   const [hiddenOrbitArtifacts, setHiddenOrbitArtifacts] = useState<Set<string>>(() => new Set());
   const [deletedArtifacts, setDeletedArtifacts] = useState<Set<string>>(() => new Set());
@@ -316,11 +316,6 @@ export default function App() {
 
   return (
     <div className="appShell">
-      <header className="topBar">
-        <div className="topBarTitle">ORION NETWORK</div>
-        <div className="pill">{platform} · {netPill}</div>
-      </header>
-
       <main className="card stage">
         <div className="stageInner">
           <NetworkDashboard
@@ -329,7 +324,6 @@ export default function App() {
             telegramWebApp={tgRef.current}
             onOpenFeed={() => setActiveOverlay("responses")}
             onOpenFiles={() => setActiveOverlay("files")}
-            onOpenWorkflow={() => setActiveOverlay("workflow")}
             onOrionClick={() => setActiveOverlay(null)}
             hiddenOrbitArtifactIds={new Set([...hiddenOrbitArtifacts, ...deletedArtifacts])}
             onHideOrbitArtifact={hideOrbitArtifact}
@@ -372,18 +366,15 @@ export default function App() {
               </span>
             ) : null}
           </button>
-        </div>
-        <div className="legend">
-          <span>
-            <span className="dot dotOk" /> active
-          </span>
-          <span>
-            <span className="dot dotWarn" /> busy
-          </span>
-          <span>
-            <span className="dot dotOff" /> idle/off
-          </span>
-          <span style={{ marginLeft: "auto" }}>{pill}</span>
+          <button
+            type="button"
+            className="edgeButton"
+            onClick={() => setActiveOverlay("about")}
+            title="Info"
+            aria-label="Info"
+          >
+            ℹ️
+          </button>
         </div>
       </main>
 
@@ -461,6 +452,19 @@ export default function App() {
         onClose={() => setActiveOverlay(null)}
       >
         <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
+      </OverlaySheet>
+
+      <OverlaySheet
+        open={activeOverlay === "about"}
+        title="Info"
+        subtitle="Mini app status"
+        onClose={() => setActiveOverlay(null)}
+      >
+        <div style={{ display: "grid", gap: 10 }}>
+          <div className="pill">{platform}</div>
+          <div className="pill">connection: {netPill}</div>
+          <div className="pill">{pill}</div>
+        </div>
       </OverlaySheet>
     </div>
   );

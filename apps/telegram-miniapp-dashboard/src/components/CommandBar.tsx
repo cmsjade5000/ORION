@@ -15,7 +15,7 @@ export default function CommandBar(props: {
     const el = taRef.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(180, Math.max(44, el.scrollHeight))}px`;
+    el.style.height = `${Math.min(140, Math.max(36, el.scrollHeight))}px`;
   }, [value]);
 
   return (

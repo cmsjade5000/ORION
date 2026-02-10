@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { ActiveLink } from "../api/state";
+import type { ActiveLink, LinkDir } from "../api/state";
 
 type Point = { x: number; y: number };
 type NodeGeom = { c: Point; r: number };
@@ -17,41 +17,34 @@ function geomOf(el: HTMLElement, relativeTo: DOMRect): NodeGeom {
 }
 
 /**
- * Placeholder: connection animation.
+ * Connection animation (WebView-safe).
  *
- * Draws a dashed animated line from ORION to the active agent.
- * Later you can extend this to show event bursts, message labels, and per-agent streams.
+ * SVG markers + clipPaths are flaky in Telegram iOS WebViews, so we render a rotated div "track"
+ * and animate small chevrons along it to indicate direction.
  */
 export default function ConnectionLayer(props: {
-  activeAgentId: string | null;
+  // Back-compat: if `toNodeId` not provided, this uses `link?.agentId ?? activeAgentId`.
+  activeAgentId?: string | null;
   link?: ActiveLink | null;
   containerRef: RefObject<HTMLDivElement>;
+  fromNodeId?: string;
+  toNodeId?: string | null;
+  dir?: LinkDir;
+  suppressToNodeIds?: Set<string>;
 }) {
-  const rid = useId();
-  const [from, setFrom] = useState<Point | null>(null);
-  const [to, setTo] = useState<Point | null>(null);
-  const [holeA, setHoleA] = useState<NodeGeom | null>(null);
-  const [holeB, setHoleB] = useState<NodeGeom | null>(null);
-  const [vb, setVb] = useState<{ w: number; h: number } | null>(null);
-
-  const agentId = props.link?.agentId ?? props.activeAgentId;
-  const dir = props.link?.dir ?? "out";
+  const fromNodeId = props.fromNodeId || "ORION";
+  const toNodeId = props.toNodeId ?? (props.link?.agentId ?? props.activeAgentId ?? null);
+  const dir = props.dir ?? (props.link?.dir ?? "out");
+  const suppressed = props.suppressToNodeIds?.has(String(toNodeId || "")) ?? false;
 
   const key = useMemo(() => {
-    return agentId ? `${dir}:${agentId}` : "none";
-  }, [agentId, dir]);
+    return toNodeId ? `${fromNodeId}:${dir}:${toNodeId}` : "none";
+  }, [fromNodeId, dir, toNodeId]);
 
-  const maskId = useMemo(() => {
-    // Stable-ish per-connection id so Safari doesn't reuse masks incorrectly.
-    // include useId() so multiple ConnectionLayer instances never collide.
-    const safeRid = rid.replace(/[^a-zA-Z0-9_\\-]/g, "_");
-    return `clip_${safeRid}_${key.replace(/[^a-zA-Z0-9_\\-]/g, "_")}`;
-  }, [key, rid]);
-
-  const markerId = useMemo(() => {
-    const safeRid = rid.replace(/[^a-zA-Z0-9_\\-]/g, "_");
-    return `arrow_${safeRid}_${key.replace(/[^a-zA-Z0-9_\\-]/g, "_")}`;
-  }, [key, rid]);
+  const [from, setFrom] = useState<Point | null>(null);
+  const [to, setTo] = useState<Point | null>(null);
+  const [visible, setVisible] = useState(false);
+  const unmountTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const container = props.containerRef.current;
@@ -59,23 +52,19 @@ export default function ConnectionLayer(props: {
 
     const update = () => {
       const stageRect = container.getBoundingClientRect();
-      const orion = container.querySelector<HTMLElement>("[data-node-id='ORION']");
-      const target = agentId
-        ? container.querySelector<HTMLElement>(`[data-node-id='${agentId}']`)
+      const fromEl = container.querySelector<HTMLElement>(`[data-node-id='${fromNodeId}']`);
+      const target = toNodeId
+        ? container.querySelector<HTMLElement>(`[data-node-id='${toNodeId}']`)
         : null;
 
-      if (!orion || !target) {
-        setFrom(null);
-        setTo(null);
-        setHoleA(null);
-        setHoleB(null);
-        setVb(null);
+      if (!fromEl || !target || suppressed) {
+        setVisible(false);
         return;
       }
 
-      const a = geomOf(orion, stageRect);
+      const a = geomOf(fromEl, stageRect);
       const b = geomOf(target, stageRect);
-      // Directionality: out means ORION -> agent, in means agent -> ORION.
+      // Directionality: out means from -> to, in means to -> from.
       const start = dir === "in" ? b : a;
       const end = dir === "in" ? a : b;
       const dx = end.c.x - start.c.x;
@@ -84,34 +73,23 @@ export default function ConnectionLayer(props: {
       if (!len) {
         setFrom(start.c);
         setTo(end.c);
-        setHoleA(a);
-        setHoleB(b);
-        setVb({ w: stageRect.width, h: stageRect.height });
         return;
       }
 
-      // Shorten the line so it ends at each node edge. This prevents the dashed
-      // line from showing through semi-transparent node fills in iOS WebViews.
       const ux = dx / len;
       const uy = dy / len;
-
-      // Extra padding keeps the line outside outlines/pulse/glow.
-      // (Bounding rect does not include the pulse child, so we budget for it.)
-      const padFrom = 28;
-      const padTo = 32;
+      // Keep the line very close to node edges (Cory prefers longer connectors).
+      // Use small, radius-scaled padding so it doesn't visually cut into the node fill.
+      const padFrom = Math.max(10, Math.min(18, start.r * 0.18));
+      const padTo = Math.max(12, Math.min(20, end.r * 0.20));
 
       setFrom({ x: start.c.x + ux * (start.r + padFrom), y: start.c.y + uy * (start.r + padFrom) });
       setTo({ x: end.c.x - ux * (end.r + padTo), y: end.c.y - uy * (end.r + padTo) });
-      setHoleA(a);
-      setHoleB(b);
-      setVb({ w: stageRect.width, h: stageRect.height });
+      setVisible(true);
     };
 
-    // Nodes are fixed-position now; update on resize + a light interval while active
-    // to handle Telegram WebView layout shifts.
     update();
-    const t = agentId ? window.setInterval(update, 250) : null;
-
+    const t = toNodeId ? window.setInterval(update, 250) : null;
     const onResize = () => update();
     window.addEventListener("resize", onResize);
 
@@ -119,76 +97,61 @@ export default function ConnectionLayer(props: {
       window.removeEventListener("resize", onResize);
       if (t) window.clearInterval(t);
     };
-  }, [agentId, dir, props.containerRef, key]);
+  }, [props.containerRef, fromNodeId, toNodeId, dir, suppressed, key]);
 
-  if (!from || !to || !holeA || !holeB || !vb) return null;
+  // When the link is removed, fade out first, then unmount.
+  useEffect(() => {
+    if (unmountTimerRef.current) {
+      window.clearTimeout(unmountTimerRef.current);
+      unmountTimerRef.current = null;
+    }
+    if (visible) return;
+    // If we don't have geometry yet, just stay unmounted.
+    if (!from || !to) return;
+    unmountTimerRef.current = window.setTimeout(() => {
+      setFrom(null);
+      setTo(null);
+    }, 240);
+    return () => {
+      if (unmountTimerRef.current) window.clearTimeout(unmountTimerRef.current);
+      unmountTimerRef.current = null;
+    };
+  }, [visible, from, to]);
 
-  // iOS Telegram WebViews have flaky SVG masking; use a clipPath with even-odd fill
-  // to "punch holes" where nodes are, so the line cannot appear *inside* nodes.
-  const w = Math.max(1, vb.w);
-  const h = Math.max(1, vb.h);
-
-  const circlePath = (cx: number, cy: number, r: number) => {
-    const rr = Math.max(0, r);
-    // Two arcs make a circle; works well across browsers.
-    return `M ${cx - rr} ${cy} a ${rr} ${rr} 0 1 0 ${rr * 2} 0 a ${rr} ${rr} 0 1 0 ${-rr * 2} 0`;
-  };
-
-  const punch = [
-    `M 0 0 H ${w} V ${h} H 0 Z`,
-    circlePath(holeA.c.x, holeA.c.y, holeA.r + 22),
-    circlePath(holeB.c.x, holeB.c.y, holeB.r + 24),
-  ].join(" ");
+  if (!from || !to) return null;
 
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  const len = Math.hypot(dx, dy);
-  // More arrows on longer links. Keep a floor so it's always legible.
-  const step = 44;
-  const segments = Math.max(3, Math.min(12, Math.floor(len / step)));
-  const points = Array.from({ length: segments + 1 }, (_, i) => {
-    const t = segments === 0 ? 0 : i / segments;
-    const x = from.x + dx * t;
-    const y = from.y + dy * t;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(" ");
+  const len = Math.max(1, Math.hypot(dx, dy));
+  const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const chevrons = Math.max(3, Math.min(7, Math.floor(len / 58)));
 
   return (
-    <svg
-      className="connectionSvg"
-      aria-hidden="true"
-      width="100%"
-      height="100%"
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-    >
-      <defs>
-        <clipPath id={maskId} clipPathUnits="userSpaceOnUse">
-          {/* evenodd: rect visible, circles removed */}
-          <path d={punch} fillRule="evenodd" clipRule="evenodd" />
-        </clipPath>
-        {/* Repeated arrow heads. Direction is controlled by swapping endpoints based on `dir`. */}
-        <marker
-          id={markerId}
-          viewBox="0 0 10 10"
-          refX="8.5"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto"
-          markerUnits="userSpaceOnUse"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(124, 247, 193, 0.95)" />
-        </marker>
-      </defs>
-
-      <polyline
-        className="connectionArrows"
-        points={points}
-        clipPath={`url(#${maskId})`}
-        markerMid={`url(#${markerId})`}
-        markerEnd={`url(#${markerId})`}
-      />
-    </svg>
+    <div className="connLayer" aria-hidden="true">
+      <div
+        className={visible ? "connTrack" : "connTrack connTrackHidden"}
+        style={{
+          left: `${from.x}px`,
+          top: `${from.y}px`,
+          width: `${len}px`,
+          transform: `rotate(${deg}deg)`,
+          ["--conn-len" as any]: `${len}px`,
+        }}
+        data-conn={key}
+      >
+        <div className="connStroke" />
+        {visible ? (
+          Array.from({ length: chevrons }).map((_, i) => (
+            <span
+              key={i}
+              className="connChevron"
+              style={{
+                ["--conn-delay" as any]: `${-i * 180}ms`,
+              }}
+            />
+          ))
+        ) : null}
+      </div>
+    </div>
   );
 }
