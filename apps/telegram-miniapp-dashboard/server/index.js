@@ -1368,17 +1368,19 @@ function applyEventToStore(body) {
       if (activity === "idle") {
         setAgentActivity(agentId, "idle");
         setAgentStatus(agentId, "idle");
+        // Do not set a directional link or bump focus when an agent is going idle.
+        // Otherwise the UI can show a fake "ORION -> agent" transmission after a real return-flow.
       } else {
         setAgentStatus(agentId, "active");
         if (activity) setAgentActivity(agentId, activity);
+        bumpActive(focusId);
+        setLink(focusId, "out", LINK_STALE_MS);
       }
       if (ATLAS_SUBAGENTS_SET.has(agentId)) {
         // Keep ATLAS visibly "working" when its sub-agents are active.
         setAgentStatus("ATLAS", "active");
         setAgentActivity("ATLAS", "thinking");
       }
-      bumpActive(focusId);
-      setLink(focusId, "out", LINK_STALE_MS);
     }
     // Mirror activity to the central node so the user can see what ORION is doing.
     const face = orionFaceForActivity(activity);

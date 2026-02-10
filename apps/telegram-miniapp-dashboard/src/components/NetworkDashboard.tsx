@@ -205,44 +205,25 @@ export default function NetworkDashboard(props: {
   return (
     <div className="orbit" ref={containerRef}>
       {(() => {
-        const byId = new Map(agents.map((a) => [a.id, a]));
-        const wf = workflow;
         const activeStepId = activeStepAgentId;
-
-        const showOrionTo = (id: string) => {
-          if (id === "AEGIS") return false;
-          if (active === id) return true;
-          if (activeStepId === id) return true;
-          const a = byId.get(id);
-          if (!a) return false;
-          // Hide "return trip" connectors (dir=in). Users found this reads like ORION is still
-          // "sending back info" after everything visually completed.
-          if (linkAgentId === id) {
-            if (linkDir === "out") return true;
-            return a.status === "active" || a.status === "busy" || (a.activity && a.activity !== "idle");
-          }
-          // Important: do NOT use smoothed activity for connection lines. Smoothing intentionally lingers
-          // a bit to avoid flicker, but that makes it look like ORION is "sending back info" after the
-          // real exchange is over.
-          return a.status === "active" || a.status === "busy" || (a.activity && a.activity !== "idle");
-        };
-
         const atlasActive = active === "ATLAS" || linkAgentId === "ATLAS" || activeStepId === "ATLAS";
+        const linkTo =
+          linkAgentId && (["PIXEL", "EMBER", "LEDGER", "ATLAS"] as const).includes(linkAgentId as any)
+            ? linkAgentId
+            : null;
 
         return (
           <>
-            {(["PIXEL", "EMBER", "LEDGER", "ATLAS"] as const).map((id) => {
-              if (!showOrionTo(id)) return null;
-              return (
-                <ConnectionLayer
-                  key={`orion:${id}`}
-                  fromNodeId="ORION"
-                  toNodeId={id}
-                  dir="out"
-                  containerRef={containerRef}
-                />
-              );
-            })}
+            {/* Directional connectors should only represent actual "in-flight" communication. */}
+            {linkTo ? (
+              <ConnectionLayer
+                key={`orion:link:${linkTo}:${linkDir}`}
+                fromNodeId="ORION"
+                toNodeId={linkTo}
+                dir={linkDir}
+                containerRef={containerRef}
+              />
+            ) : null}
 
             {/* ATLAS -> minis only when ATLAS is active in the current moment */}
             {atlasActive ? (
