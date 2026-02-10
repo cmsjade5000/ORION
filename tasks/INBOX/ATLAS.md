@@ -1,23 +1,37 @@
 TASK_PACKET v1
 Owner: ATLAS
 Requester: ORION
-Objective: List scheduled jobs and identify redundancies, then provide recommendations on what to keep/disable without making changes.
+Objective: Run gateway diagnosis script and write results to ATLAS.md.
 Success Criteria:
-- A summary of currently running scheduled jobs.
-- Recommendations for keeping or disabling redundant jobs.
+- Output of diagnose_gateway.sh is written to tasks/INBOX/ATLAS.md.
 Commands to run:
-- openclaw cron list
+- diagnose_gateway.sh
 Constraints:
-- Do not make any changes to the cron jobs.
+- Only perform read-only operations.
 Inputs:
-- Command: openclaw cron list
+- scripts/diagnose_gateway.sh
 Risks:
 - low
 Stop Gates:
-- Any change to cron jobs or gateway configuration.
+- Any destructive command.
 Output Format:
-- Result:
-  - Status: OK | FAILED | BLOCKED
-  - Findings: 3-10 bullets
-  - Recommendations: keep/disable list with rationale
+- Append a `Result:` block with `Status`, `Findings`, and any `Artifacts`.
 Notify: telegram
+
+Result:
+Status: OK
+Findings:
+  - Telegram: ok (@Orion_GatewayBot) (778ms)
+  - Slack: ok (102ms)
+  - Mochat: configured
+  - Agents: main (default), atlas, node, pulse, stratus, pixel, ember, ledger, scribe, wire
+  - Heartbeat interval: 15m (main)
+  - Session store (main): /Users/corystoner/.openclaw/agents/main/sessions/sessions.json (57 entries)
+  - "lastError": null,
+  - "error": null,
+  - "error": "⚠️ API provider returned a billing error — your API key has run out of credits or has an insufficient balance. Check your provider's billing dashboard and top up or switch to a different API key.",
+  - 2026-02-10T10:24:51.997Z error Other gateway-like services detected (best effort):
+Artifacts:
+  - tmp/inbox_runner/ATLAS/20260210-052457-1-df1d8b90b6.log
+Next step (if any):
+  - None.
