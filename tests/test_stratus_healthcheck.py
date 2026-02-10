@@ -82,6 +82,9 @@ exit 2
         env = dict(os.environ)
         # Force a PATH that typically excludes user-installed `openclaw` (often in ~/.npm-global/bin).
         env["PATH"] = "/usr/bin:/bin"
+        # Ensure the script doesn't fall back to the repo wrapper, which can locate
+        # ~/.npm-global/bin/openclaw even when PATH is minimal.
+        env["OPENCLAW_BIN"] = "openclaw"
         env["STRATUS_SKIP_HOST"] = "1"
         r = subprocess.run(
             [str(self._script_path()), "--no-host"],
