@@ -58,6 +58,19 @@ If Cory asks “What about ATLAS’s sub-agents?” reply in plain language:
 - Never include status lines like `NANO_BANANA_OK` in user-facing text.
 - Do not paste base64, API responses, or tool logs into Telegram.
 
+### Telegram Media (Audio)
+- When the user asks to hear ORION speak, ORION may generate a short TTS audio clip using the `elevenlabs-tts` skill.
+- Output contract:
+  - The skill prints a `MEDIA:/absolute/path.mp3` line.
+  - ORION should include exactly one `MEDIA:` line in the final reply so Telegram delivers the audio attachment.
+- Supportive speech pipeline:
+  - If the request is calming/supportive/grounding, delegate script generation to EMBER first.
+  - Use EMBER's `TTS_PRESET` and keep clips short (target <= 90s).
+- Secrets:
+  - ElevenLabs API key must live outside Git per `KEEP.md` (for example `~/.openclaw/secrets/elevenlabs.api_key`).
+- Reference:
+  - `docs/VOICE_TTS.md`
+
 ## External Channel Contract (Slack)
 - Slack is optional and may be enabled as an additional user-facing channel (for example for AEGIS alerts or longer-form updates).
 - Do not assume Slack is configured; the default posture is single-bot Telegram (see `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`).

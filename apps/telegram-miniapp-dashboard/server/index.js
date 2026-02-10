@@ -1519,9 +1519,14 @@ app.post("/api/command", (req, res) => {
   const deliverTargetRaw = ctx.verified ? String(ctx.userId ?? ctx.chatId ?? "").trim() : "";
   const deliverTarget = /^[0-9]+$/.test(deliverTargetRaw) ? deliverTargetRaw : "";
 
-  // If we're not actually routing into ORION, simulate a quick round-trip so the UI can
-  // show a "return transmission" and ORION "receiving" behavior as a control.
-  if (!shouldRoute || !deliverTarget) {
+  const shouldSimulateReply = !shouldRoute || !deliverTarget;
+  const shouldSimulateWorkflow = shouldSimulateReply || sequence.length > 1;
+
+  // Simulated hop progression:
+  // - When not routing, this is the primary demo behavior (including a fake reply/artifact).
+  // - When routing, this is *visual only* for multi-hop commands so the user can see the intended workflow
+  //   even before ORION emits real task events back into /api/ingest.
+  if (shouldSimulateWorkflow) {
     // Theatric pacing (human-observable). Override with env if desired.
     const hopMs = Number(process.env.SIM_HOP_MS || 1800);
     const gapMs = Number(process.env.SIM_GAP_MS || 800);
@@ -1558,19 +1563,21 @@ app.post("/api/command", (req, res) => {
         // by the next dispatch). Cap the final return-link duration.
         if (i === sequence.length - 1) {
           setLink(agentId, "in", gapMs + 200);
-          // Demo behavior: if the user asked for a PDF, produce a small simulated PDF
-          // and surface it as a floating artifact bubble in the Mini App.
-          simulatePdfArtifact({ text, agentId });
-          // Demo behavior: surface a short simulated response in the in-app feed so
-          // live Telegram testing is useful even before ORION routing is wired.
-          const flat = String(text || "").replace(/\s+/g, " ").trim();
-          const preview = flat.length > 220 ? `${flat.slice(0, 220)}…` : flat;
-          applyEventToStore({
-            type: "response.created",
-            agentId: "ORION",
-            text: preview ? `Simulated reply: received "${preview}"` : "Simulated reply: received.",
-          });
-          if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
+          if (shouldSimulateReply) {
+            // Demo behavior: if the user asked for a PDF, produce a small simulated PDF
+            // and surface it as a floating artifact bubble in the Mini App.
+            simulatePdfArtifact({ text, agentId });
+            // Demo behavior: surface a short simulated response in the in-app feed so
+            // live Telegram testing is useful even before ORION routing is wired.
+            const flat = String(text || "").replace(/\s+/g, " ").trim();
+            const preview = flat.length > 220 ? `${flat.slice(0, 220)}…` : flat;
+            applyEventToStore({
+              type: "response.created",
+              agentId: "ORION",
+              text: preview ? `Simulated reply: received "${preview}"` : "Simulated reply: received.",
+            });
+            if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
+          }
         }
         setTimeout(() => run(i + 1), gapMs);
       }, hopMs);

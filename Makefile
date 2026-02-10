@@ -20,9 +20,8 @@ avatar:
 
 ## Test audio output (TTS)
 audio-check:
-	@echo "Testing audio output..."
-	@echo "This is a test of the audio system"
-	@# Replace this with your preferred TTS or audio test command
+	@echo "Testing audio output (ElevenLabs)..."
+	@node skills/elevenlabs-tts/cli.js audio-check
 
 ## Run lint checks (pre-commit hooks)
 lint:

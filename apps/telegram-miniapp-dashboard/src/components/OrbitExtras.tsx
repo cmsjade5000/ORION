@@ -1,10 +1,19 @@
 import { useMemo, useRef, useState } from "react";
-import type { Artifact, FeedItem } from "../api/state";
+import type { Artifact, FeedItem, WorkflowState, WorkflowStepStatus } from "../api/state";
 import { emojiForArtifact } from "../lib/artifact_icon";
 
 type ExtraItem = {
   key: string;
   emoji: string;
+  title: string;
+  onClick: () => void;
+};
+
+type WorkflowItem = {
+  key: string;
+  index: number;
+  agentId: string;
+  status: WorkflowStepStatus;
   title: string;
   onClick: () => void;
 };
@@ -22,10 +31,12 @@ export default function OrbitExtras(props: {
   radius: number;
   artifacts: Artifact[];
   feed: FeedItem[];
+  workflow?: WorkflowState | null;
   token: string;
   telegramWebApp?: any;
   onOpenFeed?: () => void;
   onOpenFiles?: () => void;
+  onOpenWorkflow?: () => void;
   hiddenOrbitArtifactIds?: Set<string>;
   onHideOrbitArtifact?: (id: string) => void;
 }) {
@@ -50,6 +61,41 @@ export default function OrbitExtras(props: {
   };
 
   const items: ExtraItem[] = [];
+  const wfItems: WorkflowItem[] = [];
+
+  const wfSteps = useMemo(() => {
+    const wf = props.workflow || null;
+    const steps = (wf?.steps || []).filter((s) => s && typeof s.agentId === "string");
+    return steps.slice(0, 8);
+  }, [props.workflow?.id, props.workflow?.updatedAt]);
+
+  for (let i = 0; i < wfSteps.length; i += 1) {
+    const s: any = wfSteps[i];
+    const agentId = String(s.agentId || "").trim();
+    const status = (String(s.status || "pending") as WorkflowStepStatus);
+    if (!agentId) continue;
+    wfItems.push({
+      key: `wf:${i}:${agentId}`,
+      index: i,
+      agentId,
+      status,
+      title: `${i + 1}. ${agentId} (${status})`,
+      onClick: () => props.onOpenWorkflow?.(),
+    });
+  }
+
+  // If too many steps to show cleanly, add an overflow item.
+  if (wfSteps.length > 6 && typeof props.onOpenWorkflow === "function") {
+    wfItems.splice(6);
+    wfItems.push({
+      key: "wf:more",
+      index: 999,
+      agentId: "MORE",
+      status: "pending",
+      title: "Open workflow",
+      onClick: () => props.onOpenWorkflow?.(),
+    });
+  }
 
   const arts = useMemo(() => {
     return (props.artifacts || [])
@@ -96,9 +142,43 @@ export default function OrbitExtras(props: {
   if (items.length === 0) return null;
 
   const r = Math.max(72, Math.min(132, props.radius));
+  const wfR = Math.max(50, Math.min(76, r * 0.64));
 
   return (
     <div className="extrasLayer">
+      {wfItems.map((it, idx) => {
+        const count = wfItems.length;
+        const theta = (idx / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
+        const x = props.cx + Math.cos(theta) * wfR;
+        const y = props.cy + Math.sin(theta) * wfR;
+        const cls = [
+          "wfNode",
+          it.status === "active" ? "wfNodeActive" : "",
+          it.status === "done" ? "wfNodeDone" : "",
+          it.status === "failed" ? "wfNodeFailed" : "",
+        ].filter(Boolean).join(" ");
+        const label = it.agentId === "MORE" ? "…" : String(it.index + 1);
+
+        return (
+          <button
+            key={it.key}
+            type="button"
+            className={cls}
+            onClick={() => it.onClick()}
+            onContextMenu={(e) => e.preventDefault()}
+            title={it.title}
+            style={{
+              left: `${x}px`,
+              top: `${y}px`,
+              transform: "translate(-50%, -50%)",
+              animationDelay: `${idx * 120}ms`,
+            }}
+          >
+            <span className="wfNum" aria-hidden="true">{label}</span>
+          </button>
+        );
+      })}
+
       {items.map((it, idx) => {
         const theta = (idx / Math.max(1, items.length)) * Math.PI * 2 - Math.PI / 2;
         const x = props.cx + Math.cos(theta) * r;

@@ -1,5 +1,6 @@
 import type { AgentStatus } from "../api/state";
 import type { AgentActivity } from "../api/state";
+import type { WorkflowStepStatus } from "../api/state";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -27,6 +28,9 @@ export default function Node(props: {
   id: string;
   status: AgentStatus;
   activity?: AgentActivity;
+  // Optional: show a numbered workflow step badge on agent nodes.
+  workflowStep?: { index: number; status: WorkflowStepStatus } | null;
+  onClick?: () => void;
   // Central node only: orchestration indicators (emojis) shown instead of status words.
   processes?: string[];
   // Central node only: IO phase (controls the status subline).
@@ -109,8 +113,36 @@ export default function Node(props: {
   }, [props.kind, curProc]);
 
   return (
-    <div className={cls} style={props.style} data-node-id={props.id} data-status={props.status}>
+    <div
+      className={cls}
+      style={props.style}
+      data-node-id={props.id}
+      data-status={props.status}
+      onClick={() => props.onClick?.()}
+      role={props.onClick ? "button" : undefined}
+      tabIndex={props.onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!props.onClick) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          props.onClick();
+        }
+      }}
+    >
       {props.active ? <div className="nodePulse" aria-hidden="true" /> : null}
+      {props.kind === "agent" && props.workflowStep ? (
+        <div
+          className={[
+            "nodeStepBadge",
+            props.workflowStep.status === "active" ? "nodeStepBadgeActive" : "",
+            props.workflowStep.status === "done" ? "nodeStepBadgeDone" : "",
+            props.workflowStep.status === "failed" ? "nodeStepBadgeFailed" : "",
+          ].filter(Boolean).join(" ")}
+          aria-label={`workflow step ${props.workflowStep.index + 1}: ${props.workflowStep.status}`}
+        >
+          {props.workflowStep.index + 1}
+        </div>
+      ) : null}
       {(curEmoji || prevEmoji) ? (
         <div
           className={["nodeBadge", curEmoji ? "nodeBadgeOn" : "nodeBadgeOff"].join(" ")}

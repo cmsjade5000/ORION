@@ -11,6 +11,8 @@ export default function NetworkDashboard(props: {
   telegramWebApp?: any;
   onOpenFeed?: () => void;
   onOpenFiles?: () => void;
+  onOpenWorkflow?: () => void;
+  onOrionClick?: () => void;
   hiddenOrbitArtifactIds?: Set<string>;
   onHideOrbitArtifact?: (id: string) => void;
 }) {
@@ -28,6 +30,18 @@ export default function NetworkDashboard(props: {
   const orion = props.state.orion;
   const artifacts = props.state.artifacts || [];
   const feed = props.state.feed || [];
+  const workflow = props.state.workflow || null;
+
+  const workflowMap = useMemo(() => {
+    const steps = workflow?.steps || [];
+    const m = new Map<string, { index: number; status: any }>();
+    for (let i = 0; i < steps.length; i += 1) {
+      const s = steps[i];
+      if (!s || typeof s.agentId !== "string") continue;
+      m.set(s.agentId, { index: i, status: s.status });
+    }
+    return m;
+  }, [workflow?.id, workflow?.updatedAt]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -164,6 +178,7 @@ export default function NetworkDashboard(props: {
         io={orion?.io ?? null}
         kind="central"
         active={Boolean(active || linkAgentId)}
+        onClick={() => props.onOrionClick?.()}
         style={{
           position: "absolute",
           top: "50%",
@@ -178,10 +193,12 @@ export default function NetworkDashboard(props: {
         radius={Math.min(layout.rX, layout.rY) * 0.42}
         artifacts={artifacts}
         feed={feed}
+        workflow={workflow}
         token={props.token}
         telegramWebApp={props.telegramWebApp}
         onOpenFeed={props.onOpenFeed}
         onOpenFiles={props.onOpenFiles}
+        onOpenWorkflow={props.onOpenWorkflow}
         hiddenOrbitArtifactIds={props.hiddenOrbitArtifactIds}
         onHideOrbitArtifact={props.onHideOrbitArtifact}
       />
@@ -200,6 +217,8 @@ export default function NetworkDashboard(props: {
         const x = framePos ? framePos.x : layout.cx + Math.cos(theta) * layout.rX;
         const y = framePos ? framePos.y : layout.cy + Math.sin(theta) * layout.rY;
         const remote = framePos?.variant === "remote";
+        const wfStep = workflowMap.get(a.id) || null;
+        const wfActive = wfStep && wfStep.status === "active";
 
         return (
           <Node
@@ -209,7 +228,8 @@ export default function NetworkDashboard(props: {
             activity={smoothed[a.id] ?? a.activity}
             badgeEmoji={a.badge ?? null}
             kind="agent"
-            active={active === a.id}
+            workflowStep={wfStep ? { index: wfStep.index, status: wfStep.status } : null}
+            active={active === a.id || Boolean(wfActive)}
             className={remote ? "nodeRemote" : undefined}
             style={{
               left: `${x}px`,

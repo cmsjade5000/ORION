@@ -28,7 +28,10 @@ export default function FilesPanel(props: {
   hiddenOrbitIds?: Set<string>;
   onUnhideOrbit?: (id: string) => void;
   onDeleteFromView?: (id: string) => void;
+  variant?: "drawer" | "overlay";
 }) {
+  const variant = props.variant || "drawer";
+  const isOpen = variant === "overlay" ? true : props.open;
   const items = (props.artifacts || [])
     .slice()
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -49,20 +52,31 @@ export default function FilesPanel(props: {
   };
 
   return (
-    <div className={props.open ? "filesPanel filesPanelOpen" : "filesPanel filesPanelClosed"} aria-label="Files">
-      <button
-        type="button"
-        className="filesHeader filesHeaderButton"
-        onClick={props.onToggle}
-        aria-expanded={props.open}
-      >
-        <div className="filesTitle">Files</div>
-        <div className="filesHint">
-          {hint} {props.open ? "\u25B4" : "\u25BE"}
-        </div>
-      </button>
+    <div
+      className={[
+        "filesPanel",
+        isOpen ? "filesPanelOpen" : "filesPanelClosed",
+        variant === "overlay" ? "filesPanelOverlay" : "",
+      ].filter(Boolean).join(" ")}
+      aria-label="Files"
+    >
+      {variant === "drawer" ? (
+        <button
+          type="button"
+          className="filesHeader filesHeaderButton"
+          onClick={props.onToggle}
+          aria-expanded={props.open}
+        >
+          <div className="filesTitle">Files</div>
+          <div className="filesHint">
+            {hint} {props.open ? "\u25B4" : "\u25BE"}
+          </div>
+        </button>
+      ) : (
+        <div className="filesOverlayHint" aria-hidden="true">{hint}</div>
+      )}
 
-      {props.open ? (
+      {isOpen ? (
         <div className="filesList" role="list">
           {items.map((a) => {
             const url = withToken(String(a.url || ""), props.token);

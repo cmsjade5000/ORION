@@ -16,33 +16,50 @@ export default function FeedPanel(props: {
   open: boolean;
   onToggle: () => void;
   unreadCount?: number;
+  variant?: "drawer" | "overlay";
+  maxItems?: number;
 }) {
-  const items = (props.items || []).slice(0, 10);
+  const variant = props.variant || "drawer";
+  const isOpen = variant === "overlay" ? true : props.open;
+  const limit = Math.max(1, Math.min(60, Number(props.maxItems || (variant === "overlay" ? 30 : 10))));
+  const items = (props.items || []).slice(0, limit);
   const now = Date.now();
 
   const hint = items.length === 0 ? "Waiting" : `${items.length} recent`;
   const unread = Math.max(0, Number(props.unreadCount || 0));
 
   return (
-    <div className={props.open ? "feedPanel feedPanelOpen" : "feedPanel feedPanelClosed"} aria-label="Responses">
-      <button
-        type="button"
-        className="feedHeader feedHeaderButton"
-        onClick={props.onToggle}
-        aria-expanded={props.open}
-      >
-        <div className="feedTitle">Responses</div>
-        <div className="feedHint">
-          {!props.open && unread > 0 ? (
-            <span className="feedNotify feedNotifyPulse" aria-label={`${unread} new`}>
-              <span className="feedNotifyIcon" aria-hidden="true">🔔</span>
-              <span className="feedNotifyCount" aria-hidden="true">{unread > 9 ? "9+" : String(unread)}</span>
-            </span>
-          ) : null}
-          {hint} {props.open ? "\u25B4" : "\u25BE"}
-        </div>
-      </button>
-      {props.open ? (
+    <div
+      className={[
+        "feedPanel",
+        isOpen ? "feedPanelOpen" : "feedPanelClosed",
+        variant === "overlay" ? "feedPanelOverlay" : "",
+      ].filter(Boolean).join(" ")}
+      aria-label="Responses"
+    >
+      {variant === "drawer" ? (
+        <button
+          type="button"
+          className="feedHeader feedHeaderButton"
+          onClick={props.onToggle}
+          aria-expanded={props.open}
+        >
+          <div className="feedTitle">Responses</div>
+          <div className="feedHint">
+            {!props.open && unread > 0 ? (
+              <span className="feedNotify feedNotifyPulse" aria-label={`${unread} new`}>
+                <span className="feedNotifyIcon" aria-hidden="true">🔔</span>
+                <span className="feedNotifyCount" aria-hidden="true">{unread > 9 ? "9+" : String(unread)}</span>
+              </span>
+            ) : null}
+            {hint} {props.open ? "\u25B4" : "\u25BE"}
+          </div>
+        </button>
+      ) : (
+        <div className="feedOverlayHint" aria-hidden="true">{hint}</div>
+      )}
+
+      {isOpen ? (
         <div className="feedList" role="log" aria-live="polite">
           {items.map((it) => (
             <div key={it.id} className="feedItem">

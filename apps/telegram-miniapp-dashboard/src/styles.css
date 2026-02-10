@@ -44,6 +44,7 @@ html {
   gap: 12px;
   padding: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  position: relative;
 }
 
 .topBar {
@@ -82,18 +83,11 @@ html {
   padding: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-rows: 1fr auto;
   gap: 10px;
-  /* Keep the network stage stable; drawers scroll inside the footer instead. */
-  height: clamp(190px, 34dvh, 330px);
-  overflow: hidden;
 }
 
-.footerDrawers {
-  overflow: auto;
-  display: grid;
-  gap: 10px;
-  padding-right: 4px; /* leave room for iOS overlay scrollbars */
+.footerPanelCompact {
+  /* No nested scroll containers; overlays handle scrolling. */
 }
 
 .footerComposer {
@@ -109,6 +103,183 @@ html {
 .stageInner {
   position: relative;
   height: 100%;
+}
+
+.edgeButtons {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 10px;
+  z-index: 20;
+}
+
+.edgeButtonsBottomLeft {
+  right: auto;
+  top: auto;
+  transform: none;
+  left: 10px;
+  bottom: 10px;
+}
+
+.edgeButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.20);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.edgeButton:active {
+  transform: translateY(1px);
+}
+
+.edgeDot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(124, 247, 193, 0.95);
+  box-shadow: 0 0 0 6px rgba(124, 247, 193, 0.12);
+}
+
+.edgeBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 247, 193, 0.26);
+  background: rgba(124, 247, 193, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 900;
+  display: inline-grid;
+  place-items: center;
+}
+
+.overlayRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  align-items: end;
+}
+
+.overlayScrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.overlaySheet {
+  position: relative;
+  width: 100%;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(180deg, rgba(10, 14, 26, 0.96), rgba(8, 10, 18, 0.92));
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.55);
+  max-height: min(76dvh, 640px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  animation: sheetIn 240ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@keyframes sheetIn {
+  from {
+    transform: translateY(18px);
+    opacity: 0.95;
+  }
+  to {
+    transform: translateY(0px);
+    opacity: 1;
+  }
+}
+
+.overlayHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.overlayHeadText {
+  min-width: 0;
+}
+
+.overlayTitle {
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.overlaySubtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 78vw;
+}
+
+.overlayClose {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+}
+
+.overlayClose:active {
+  transform: translateY(1px);
+}
+
+.overlayBody {
+  overflow: auto;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+.filesPanelOverlay,
+.feedPanelOverlay,
+.workflowPanelOverlay {
+  border: 0;
+  background: transparent;
+  margin: 0;
+}
+
+.filesOverlayHint,
+.feedOverlayHint,
+.workflowOverlayHint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
 }
 
 .extrasLayer {
@@ -139,6 +310,44 @@ html {
   font-size: 18px;
   line-height: 1;
   filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.55));
+}
+
+.wfNode {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: radial-gradient(26px 26px at 30% 30%, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.44));
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.30);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: extraFloat 3.2s ease-in-out infinite;
+}
+
+.wfNum {
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.wfNodeActive {
+  border-color: rgba(124, 247, 193, 0.40);
+  box-shadow: 0 0 0 7px rgba(124, 247, 193, 0.10), 0 12px 20px rgba(0, 0, 0, 0.32);
+}
+
+.wfNodeDone {
+  border-color: rgba(124, 247, 193, 0.22);
+  background: radial-gradient(26px 26px at 30% 30%, rgba(124, 247, 193, 0.18), rgba(0, 0, 0, 0.44));
+}
+
+.wfNodeFailed {
+  border-color: rgba(255, 107, 107, 0.30);
+  background: radial-gradient(26px 26px at 30% 30%, rgba(255, 107, 107, 0.16), rgba(0, 0, 0, 0.44));
 }
 
 .extraHold {
@@ -435,6 +644,47 @@ html {
   animation: badgeOut 260ms cubic-bezier(0.4, 0, 0.6, 1) both;
 }
 
+.nodeStepBadge {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.nodeStepBadgeActive {
+  border-color: rgba(124, 247, 193, 0.35);
+  box-shadow: 0 0 0 6px rgba(124, 247, 193, 0.10), 0 8px 16px rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.nodeStepBadgeDone {
+  border-color: rgba(124, 247, 193, 0.22);
+  background: rgba(124, 247, 193, 0.12);
+}
+
+.nodeStepBadgeFailed {
+  border-color: rgba(255, 107, 107, 0.30);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.nodeRemote .nodeStepBadge {
+  top: auto;
+  bottom: 10px;
+  left: -6px;
+}
+
 @keyframes badgeIn {
   from {
     opacity: 0;
@@ -721,6 +971,19 @@ html {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.workflowNotify {
+  width: 22px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, 0.26);
+  background: rgba(255, 209, 102, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+  flex: 0 0 auto;
+  font-size: 12px;
 }
 
 .workflowList {

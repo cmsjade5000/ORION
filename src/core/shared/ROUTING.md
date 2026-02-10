@@ -34,6 +34,19 @@ If sources are unavailable:
 - Do not invent items.
 - Ask Cory whether to retry later or narrow sources/time window.
 
+## Supportive / Calming Audio (TTS)
+If Cory asks to *hear ORION speak* for calming, grounding, or emotional support:
+
+- Content first: ORION delegates script generation to EMBER (internal-only).
+- Audio second: ORION converts EMBER's `SCRIPT` to a Telegram audio attachment using the `elevenlabs-tts` skill (MP3 via a `MEDIA:` line).
+- Delivery: ORION sends the audio in Telegram DM, and optionally includes the same script as text if Cory requests.
+
+Stop gate:
+- If crisis/self-harm intent is present, prioritize safety guidance and avoid using “soothing audio” as a substitute for safety steps.
+
+Reference:
+- `docs/VOICE_TTS.md`
+
 ## Escalation Triggers (Ask Cory First)
 - Secrets/credentials.
 - Opening ports / exposing services.

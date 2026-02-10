@@ -8,6 +8,7 @@ import { connectStateStream, getStreamToken, type StreamStatus } from "./api/eve
 import FeedPanel from "./components/FeedPanel";
 import FilesPanel from "./components/FilesPanel";
 import WorkflowPanel from "./components/WorkflowPanel";
+import OverlaySheet from "./components/OverlaySheet";
 
 const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "AEGIS", "LEDGER"] as const;
 
@@ -20,12 +21,10 @@ export default function App() {
   const dlTokenExpiresAtRef = useRef<number>(0);
   const [authError, setAuthError] = useState<string>("");
   const [commandError, setCommandError] = useState<string>("");
-  const [feedOpen, setFeedOpen] = useState<boolean>(false);
+  const [activeOverlay, setActiveOverlay] = useState<null | "workflow" | "files" | "responses">(null);
   const lastReadAtRef = useRef<number>(Date.now());
-  const [filesOpen, setFilesOpen] = useState<boolean>(false);
   const [hiddenOrbitArtifacts, setHiddenOrbitArtifacts] = useState<Set<string>>(() => new Set());
   const [deletedArtifacts, setDeletedArtifacts] = useState<Set<string>>(() => new Set());
-  const [workflowOpen, setWorkflowOpen] = useState<boolean>(false);
   const tgRef = useRef<any>(null);
   const lastStateAtRef = useRef<number>(Date.now());
   const [state, setState] = useState<LiveState>({
@@ -121,18 +120,20 @@ export default function App() {
     return (state.feed || []).filter((it) => it && it.kind === "response" && (it.agentId || "") === "ORION");
   }, [state.feed]);
 
+  const responsesOpen = activeOverlay === "responses";
+
   // Mark feed read when opened (so notifications only show when something new arrives).
   useEffect(() => {
-    if (!feedOpen) return;
+    if (!responsesOpen) return;
     const maxTs = Math.max(0, ...orionFeed.map((it) => (typeof it.ts === "number" ? it.ts : 0)));
     lastReadAtRef.current = Math.max(Date.now(), maxTs);
-  }, [feedOpen, orionFeed]);
+  }, [responsesOpen, orionFeed]);
 
   const unreadCount = useMemo(() => {
-    if (feedOpen) return 0;
+    if (responsesOpen) return 0;
     const since = lastReadAtRef.current || 0;
     return orionFeed.filter((it) => it && it.ts > since).length;
-  }, [feedOpen, orionFeed]);
+  }, [responsesOpen, orionFeed]);
   const stateForNetwork = useMemo(() => ({ ...state, feed: orionFeed }), [state, orionFeed]);
 
   // Keep a short-lived signed token refreshed for artifact downloads.
@@ -326,11 +327,51 @@ export default function App() {
             state={stateForNetwork}
             token={dlToken}
             telegramWebApp={tgRef.current}
-            onOpenFeed={() => setFeedOpen(true)}
-            onOpenFiles={() => setFilesOpen(true)}
+            onOpenFeed={() => setActiveOverlay("responses")}
+            onOpenFiles={() => setActiveOverlay("files")}
+            onOpenWorkflow={() => setActiveOverlay("workflow")}
+            onOrionClick={() => setActiveOverlay(null)}
             hiddenOrbitArtifactIds={new Set([...hiddenOrbitArtifacts, ...deletedArtifacts])}
             onHideOrbitArtifact={hideOrbitArtifact}
           />
+        </div>
+        <div className="edgeButtons edgeButtonsBottomLeft" aria-label="Panels">
+          <button
+            type="button"
+            className="edgeButton"
+            onClick={() => setActiveOverlay("workflow")}
+            title="Workflow"
+            aria-label="Workflow"
+          >
+            🧭
+            {state.workflow && state.workflow.status === "running" ? <span className="edgeDot" aria-hidden="true" /> : null}
+          </button>
+          <button
+            type="button"
+            className="edgeButton"
+            onClick={() => setActiveOverlay("files")}
+            title="Files"
+            aria-label="Files"
+          >
+            📁
+            {(state.artifacts || []).filter((a) => a && !deletedArtifacts.has(a.id)).length > 0 ? (
+              <span className="edgeDot" aria-hidden="true" />
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="edgeButton"
+            onClick={() => setActiveOverlay("responses")}
+            title="Responses"
+            aria-label="Responses"
+          >
+            💬
+            {unreadCount > 0 ? (
+              <span className="edgeBadge" aria-label={`${unreadCount} new`}>
+                {unreadCount > 9 ? "9+" : String(unreadCount)}
+              </span>
+            ) : null}
+          </button>
         </div>
         <div className="legend">
           <span>
@@ -346,30 +387,7 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="card footerPanel">
-        <div className="footerDrawers">
-          <WorkflowPanel
-            workflow={state.workflow || null}
-            open={workflowOpen}
-            onToggle={() => setWorkflowOpen((v) => !v)}
-          />
-          <FilesPanel
-            artifacts={(state.artifacts || []).filter((a) => a && !deletedArtifacts.has(a.id))}
-            open={filesOpen}
-            onToggle={() => setFilesOpen((v) => !v)}
-            token={dlToken}
-            telegramWebApp={tgRef.current}
-            hiddenOrbitIds={hiddenOrbitArtifacts}
-            onUnhideOrbit={unhideOrbitArtifact}
-            onDeleteFromView={deleteArtifactFromView}
-          />
-          <FeedPanel
-            items={orionFeed}
-            open={feedOpen}
-            onToggle={() => setFeedOpen((v) => !v)}
-            unreadCount={unreadCount}
-          />
-        </div>
+      <footer className="card footerPanel footerPanelCompact">
         <div className="footerComposer">
           <CommandBar
             disabled={!initData || Boolean(authError)}
@@ -407,6 +425,43 @@ export default function App() {
           ) : null}
         </div>
       </footer>
+
+      <OverlaySheet
+        open={activeOverlay === "workflow"}
+        title="Workflow"
+        subtitle={state.workflow?.steps?.length ? `${state.workflow.steps.map((s) => s.agentId).join(" → ")}` : "Idle"}
+        onClose={() => setActiveOverlay(null)}
+      >
+        <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
+      </OverlaySheet>
+
+      <OverlaySheet
+        open={activeOverlay === "files"}
+        title="Files"
+        subtitle={`${(state.artifacts || []).filter((a) => a && !deletedArtifacts.has(a.id)).length} available`}
+        onClose={() => setActiveOverlay(null)}
+      >
+        <FilesPanel
+          artifacts={(state.artifacts || []).filter((a) => a && !deletedArtifacts.has(a.id))}
+          open={true}
+          onToggle={() => null}
+          token={dlToken}
+          telegramWebApp={tgRef.current}
+          hiddenOrbitIds={hiddenOrbitArtifacts}
+          onUnhideOrbit={unhideOrbitArtifact}
+          onDeleteFromView={deleteArtifactFromView}
+          variant="overlay"
+        />
+      </OverlaySheet>
+
+      <OverlaySheet
+        open={activeOverlay === "responses"}
+        title="Responses"
+        subtitle={unreadCount > 0 ? `${unreadCount} new` : "ORION only"}
+        onClose={() => setActiveOverlay(null)}
+      >
+        <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
+      </OverlaySheet>
     </div>
   );
 }

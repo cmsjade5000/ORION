@@ -31,6 +31,11 @@ User-specific preferences are defined in `USER.md` and included in each generate
 - Otherwise, make reasonable default choices and proceed.
 - Keep the system consistent: shared terms, shared file formats, shared conventions.
 
+## Voice / TTS (Audio Attachments)
+- Voice/TTS documentation: `docs/VOICE_TTS.md`
+- Skill: `skills/elevenlabs-tts/` (prints a `MEDIA:/absolute/path.mp3` line for Telegram attachments)
+- Supportive audio routing: ORION delegates script generation to EMBER first (see `src/core/shared/ROUTING.md`).
+
 ## Default Formatting
 - Prefer markdown headings and lists.
 - When drafting system docs, keep them crisp and scannable.

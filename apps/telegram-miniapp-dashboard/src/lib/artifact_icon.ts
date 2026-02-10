@@ -26,6 +26,15 @@ export function emojiForArtifact(a: Pick<Artifact, "mime" | "name" | "url">): st
   // Images
   if (mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "avif", "heic"].includes(e)) return "🖼️";
 
+  // Docs (Word, etc.)
+  if (
+    mime === "application/msword" ||
+    mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    ["doc", "docx", "rtf"].includes(e)
+  ) {
+    return "📄";
+  }
+
   // Spreadsheets
   if (
     mime === "text/csv" ||
@@ -34,6 +43,15 @@ export function emojiForArtifact(a: Pick<Artifact, "mime" | "name" | "url">): st
     ["csv", "xls", "xlsx", "ods"].includes(e)
   ) {
     return "📊";
+  }
+
+  // Slides
+  if (
+    mime === "application/vnd.ms-powerpoint" ||
+    mime === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    ["ppt", "pptx", "key"].includes(e)
+  ) {
+    return "📽️";
   }
 
   // Archives
@@ -52,6 +70,22 @@ export function emojiForArtifact(a: Pick<Artifact, "mime" | "name" | "url">): st
 
   // JSON
   if (mime === "application/json" || e === "json") return "🧩";
+
+  // Code
+  if (
+    ["js", "ts", "tsx", "jsx", "py", "go", "rs", "java", "kt", "swift", "cpp", "c", "h", "cs", "rb", "php", "sh"].includes(e)
+  ) {
+    return "💻";
+  }
+
+  // Web docs
+  if (mime === "text/html" || ["html", "htm"].includes(e)) return "🌐";
+
+  // Data / DB
+  if (["sqlite", "db", "duckdb", "parquet", "feather"].includes(e)) return "🗄️";
+
+  // Calendar
+  if (mime === "text/calendar" || e === "ics") return "📅";
 
   // Text
   if (

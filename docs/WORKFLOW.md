@@ -58,7 +58,7 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make soul`         | Regenerate all agent `SOUL.md` identity files.     |
 | `make routingsim`   | View and run the routing simulation exercise.      |
 | `make avatar`       | Preview or update your agent's avatar.             |
-| `make audio-check`  | Test the audio (TTS) setup.                        |
+| `make audio-check`  | Test the audio (TTS) setup (ElevenLabs skill).     |
 | `make lint`         | Run all lint and formatting checks (pre-commit).   |
 
 ## Pre-commit Checks
