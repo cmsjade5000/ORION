@@ -3,8 +3,8 @@ import type { LiveState } from "../api/state";
 import Node from "./Node";
 import ConnectionLayer from "./ConnectionLayer";
 import { useSmoothedActivities } from "../hooks/useSmoothedActivities";
-import OrbitExtras from "./OrbitExtras";
 import MiniNode from "./MiniNode";
+import SideSilos from "./SideSilos";
 
 export default function NetworkDashboard(props: {
   state: LiveState;
@@ -12,6 +12,7 @@ export default function NetworkDashboard(props: {
   telegramWebApp?: any;
   onOpenFeed?: () => void;
   onOpenFiles?: () => void;
+  unreadCount?: number;
   onOrionClick?: () => void;
   hiddenOrbitArtifactIds?: Set<string>;
   onHideOrbitArtifact?: (id: string) => void;
@@ -314,17 +315,17 @@ export default function NetworkDashboard(props: {
         }}
       />
 
-      <OrbitExtras
-        cx={layout.extras.cx}
-        cy={layout.extras.cy}
-        radius={layout.extras.radius}
-        arc={layout.extras.arc}
+      <SideSilos
+        // Positions are offsets from ORION to look like Cory's sketch.
+        cx={layout.orion.x}
+        cy={layout.orion.y}
         artifacts={artifacts}
         feed={feed}
         token={props.token}
         telegramWebApp={props.telegramWebApp}
         onOpenFeed={props.onOpenFeed}
         onOpenFiles={props.onOpenFiles}
+        unreadCount={props.unreadCount}
         hiddenOrbitArtifactIds={props.hiddenOrbitArtifactIds}
         onHideOrbitArtifact={props.onHideOrbitArtifact}
       />

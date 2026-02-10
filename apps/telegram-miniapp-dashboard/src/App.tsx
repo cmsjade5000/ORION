@@ -324,6 +324,7 @@ export default function App() {
             telegramWebApp={tgRef.current}
             onOpenFeed={() => setActiveOverlay("responses")}
             onOpenFiles={() => setActiveOverlay("files")}
+            unreadCount={unreadCount}
             onOrionClick={() => setActiveOverlay(null)}
             hiddenOrbitArtifactIds={new Set([...hiddenOrbitArtifacts, ...deletedArtifacts])}
             onHideOrbitArtifact={hideOrbitArtifact}
