@@ -517,6 +517,9 @@ function createStore() {
     agents,
     activeAgentId: null,
     activeUpdatedAt: 0,
+    // "Last meaningful ORION action" used to gate idle/dream animations.
+    // Health pings should not touch this (otherwise idle never happens).
+    orionLastActionAt: 0,
     orionBadges: new Map(), // emoji -> until
     link: { agentId: null, dir: "out", until: 0 },
     orionIo: { mode: null, until: 0 },
@@ -1205,6 +1208,7 @@ function bumpActive(id) {
   const focusId = ATLAS_SUBAGENTS_SET.has(id) ? "ATLAS" : id;
   STORE.activeAgentId = focusId;
   STORE.activeUpdatedAt = Date.now();
+  STORE.orionLastActionAt = Date.now();
 }
 
 function setLink(agentId, dir, holdMs = LINK_STALE_MS) {
@@ -1218,18 +1222,21 @@ function setLink(agentId, dir, holdMs = LINK_STALE_MS) {
 function addOrionBadge(emoji, holdMs = 5200) {
   if (!emoji) return;
   STORE.orionBadges.set(emoji, Math.max(STORE.orionBadges.get(emoji) || 0, Date.now() + holdMs));
+  STORE.orionLastActionAt = Date.now();
 }
 
 function setOrionIo(mode, holdMs = 2400) {
   if (mode !== "receiving" && mode !== "dispatching") return;
   STORE.orionIo.mode = mode;
   STORE.orionIo.until = Math.max(STORE.orionIo.until || 0, Date.now() + Math.max(300, holdMs));
+  STORE.orionLastActionAt = Date.now();
 }
 
 function setOrionBadge(emoji, holdMs = 2400) {
   if (!emoji) return;
   STORE.orionBadge.emoji = emoji;
   STORE.orionBadge.until = Math.max(STORE.orionBadge.until || 0, Date.now() + Math.max(350, holdMs));
+  STORE.orionLastActionAt = Date.now();
 }
 
 function applyEventToStore(body) {
@@ -1516,11 +1523,20 @@ function snapshotLiveState() {
   badges.sort((a, b) => b.until - a.until);
 
   const io = STORE.orionIo?.until && STORE.orionIo.until > now ? STORE.orionIo.mode : null;
-  const badge = STORE.orionBadge?.until && STORE.orionBadge.until > now ? STORE.orionBadge.emoji : null;
+  const badgeReal = STORE.orionBadge?.until && STORE.orionBadge.until > now ? STORE.orionBadge.emoji : null;
   const orionProcesses =
-    badges.length === 0 && !activeAgentId && !io && !badge
+    badges.length === 0 && !activeAgentId && !io && !badgeReal
       ? ["😴"] // Stable idle indicator when nothing is happening.
       : badges.slice(0, 3).map((b) => b.emoji);
+
+  // Idle character: when ORION is truly idle (sleeping), cycle small "dream" icons
+  // in the corner badge so the UI feels alive. This must never override real badges.
+  const isVisuallyIdle = badges.length === 0 && !activeAgentId && !io && !badgeReal && !orionDown && !orionRestarting && !orionSuspect;
+  const idleForMs = Math.max(0, now - (Number(STORE.orionLastActionAt) || 0));
+  const dreamBadge =
+    isVisuallyIdle && idleForMs > 7_000
+      ? (["💭", "🌙", "✨", "📎", "🗺️", "📊", "🎧", "🧩"][Math.floor(now / 6500) % 8])
+      : null;
 
   return {
     ts: now,
@@ -1544,7 +1560,7 @@ function snapshotLiveState() {
         ? "❗"
         : orionSuspect
           ? "⚠️"
-          : badge,
+          : (badgeReal || dreamBadge),
       io: (orionDown || orionRestarting) ? null : io,
     },
     artifacts: STORE.artifacts
