@@ -164,12 +164,12 @@ export default function Node(props: {
             <div className="nodeSub nodeSubCentral" aria-hidden="true">
             {prevProcEmoji ? (
               <span key={`${prevProcEmoji}-out`} className="nodeProcEmoji nodeProcEmojiOut">
-                {prevProcEmoji}
+                <span className="nodeProcEmojiGlyph">{prevProcEmoji}</span>
               </span>
             ) : null}
             {curProcEmoji ? (
               <span key={`${curProcEmoji}-in`} className="nodeProcEmoji nodeProcEmojiIn">
-                {curProcEmoji}
+                <span className="nodeProcEmojiGlyph">{curProcEmoji}</span>
               </span>
             ) : (
               <span className="nodeProcEmoji nodeProcEmojiIdle"> </span>

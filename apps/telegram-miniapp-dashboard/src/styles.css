@@ -458,10 +458,30 @@ html {
   filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.40)) saturate(1.05);
 }
 
+.aegisIndicatorAmbient {
+  opacity: 0.92;
+}
+
 .aegisSatWrap {
   position: relative;
   display: inline-grid;
   place-items: center;
+}
+
+.aegisAmbient {
+  position: absolute;
+  inset: -10px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 247, 193, 0.22);
+  opacity: 0;
+  animation: aegisAmbient 3.8s cubic-bezier(0.2, 0.9, 0.2, 1) infinite;
+}
+
+@keyframes aegisAmbient {
+  0% { transform: scale(0.88); opacity: 0.00; }
+  18% { opacity: 0.26; }
+  70% { opacity: 0.10; }
+  100% { transform: scale(1.55); opacity: 0.00; }
 }
 
 .aegisSat {
@@ -879,6 +899,102 @@ html {
   font-size: 72px;
 }
 
+.nodeProcEmojiGlyph {
+  display: inline-block;
+  will-change: transform, filter;
+}
+
+.orionNode {
+  position: absolute;
+}
+
+/* ORION: subtle "breathing" ring so it feels alive even when idle. */
+.orionNode::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 247, 193, 0.22);
+  box-shadow: 0 0 0 8px rgba(124, 247, 193, 0.06);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.orionNode[data-status="idle"]::after {
+  opacity: 1;
+  animation: orionBreathe 4.6s ease-in-out infinite;
+}
+
+.orionNode.orionListening::after {
+  opacity: 1;
+  border-color: rgba(255, 209, 102, 0.28);
+  box-shadow: 0 0 0 10px rgba(255, 209, 102, 0.07);
+  animation: orionBreatheListen 2.2s ease-in-out infinite;
+}
+
+.orionNode.orionSuspect::after {
+  opacity: 1;
+  border-color: rgba(255, 209, 102, 0.22);
+  box-shadow: 0 0 0 8px rgba(255, 209, 102, 0.06);
+  animation: orionBreatheTight 2.6s ease-in-out infinite;
+}
+
+.orionNode[data-status="offline"]::after {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes orionBreathe {
+  0%   { transform: scale(0.970); opacity: 0.55; }
+  50%  { transform: scale(1.040); opacity: 0.82; }
+  100% { transform: scale(0.970); opacity: 0.55; }
+}
+
+@keyframes orionBreatheListen {
+  0%   { transform: scale(0.985); opacity: 0.72; }
+  50%  { transform: scale(1.035); opacity: 0.92; }
+  100% { transform: scale(0.985); opacity: 0.72; }
+}
+
+@keyframes orionBreatheTight {
+  0%   { transform: scale(0.990); opacity: 0.58; }
+  50%  { transform: scale(1.018); opacity: 0.78; }
+  100% { transform: scale(0.990); opacity: 0.58; }
+}
+
+/* ORION: occasional blink/micro-shift on the face (very subtle). */
+.orionNode[data-status="idle"] .nodeProcEmojiIn .nodeProcEmojiGlyph,
+.orionNode.orionListening .nodeProcEmojiIn .nodeProcEmojiGlyph {
+  animation: orionBlink 9.5s ease-in-out infinite;
+  transform-origin: 50% 55%;
+}
+
+@keyframes orionBlink {
+  0%, 92%, 100% { transform: translateY(0px) scale(1); filter: none; }
+  94% { transform: translateY(0.6px) scaleX(1.02) scaleY(0.90); filter: brightness(1.02); }
+  96% { transform: translateY(0px) scale(1); filter: none; }
+}
+
+.orionRingFlare {
+  width: 168px;
+  height: 168px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, 0.22);
+  box-shadow:
+    0 0 0 10px rgba(255, 209, 102, 0.06),
+    0 0 32px rgba(255, 209, 102, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+  animation: orionFlare 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@keyframes orionFlare {
+  0% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.0; }
+  28% { opacity: 0.78; }
+  100% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.0; }
+}
+
 .orionNameExternal {
   z-index: 6;
   font-size: 11px;
@@ -1065,6 +1181,9 @@ html {
   .aegisPulse {
     animation: none !important;
   }
+  .aegisAmbient {
+    animation: none !important;
+  }
   .aegisIndicatorNoAck .aegisSat {
     animation: none !important;
   }
@@ -1072,6 +1191,15 @@ html {
     animation: none !important;
   }
   .siloHoldRing {
+    animation: none !important;
+  }
+  .orionNode::after {
+    animation: none !important;
+  }
+  .orionRingFlare {
+    animation: none !important;
+  }
+  .orionNode .nodeProcEmojiIn .nodeProcEmojiGlyph {
     animation: none !important;
   }
 }

@@ -21,6 +21,8 @@ export default function App() {
   const dlTokenExpiresAtRef = useRef<number>(0);
   const [authError, setAuthError] = useState<string>("");
   const [commandError, setCommandError] = useState<string>("");
+  const [composerActive, setComposerActive] = useState<boolean>(false);
+  const [orionFlareAt, setOrionFlareAt] = useState<number>(0);
   const [activeOverlay, setActiveOverlay] = useState<null | "activity" | "files" | "about">(null);
   const [activityTab, setActivityTab] = useState<"workflow" | "responses">("responses");
   const [activitySplit, setActivitySplit] = useState<boolean>(() => {
@@ -330,6 +332,8 @@ export default function App() {
             state={stateForNetwork}
             token={dlToken}
             telegramWebApp={tgRef.current}
+            composerActive={composerActive}
+            orionFlareAt={orionFlareAt}
             onOpenFeed={() => {
               setActivityTab("responses");
               setActiveOverlay("activity");
@@ -399,9 +403,11 @@ export default function App() {
                 ? "Unauthorized (open from Telegram / configure initData verification)"
                 : (initData ? "Ask ORION" : "Open via bot Web App button to enable commands")
             }
+            onTypingChange={(t) => setComposerActive(Boolean(t))}
             onSubmit={async (text) => {
               setCommandError("");
               try {
+                setOrionFlareAt(Date.now());
                 // Light haptic on send, if available in this Telegram version.
                 tgRef.current?.HapticFeedback?.impactOccurred?.("light");
                 // Send to backend so ORION can later route this into task packets/sessions.

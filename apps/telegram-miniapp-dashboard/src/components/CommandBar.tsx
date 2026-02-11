@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from "react";
 export default function CommandBar(props: {
   placeholder?: string;
   disabled?: boolean;
+  onTypingChange?: (typing: boolean) => void;
   // Return true to clear the input (accepted), false to keep it (rejected/failed).
   onSubmit: (text: string) => Promise<boolean> | boolean;
 }) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
+  const [focused, setFocused] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Auto-grow textarea (helps on mobile; avoids cramped single-line input).
@@ -17,6 +19,11 @@ export default function CommandBar(props: {
     el.style.height = "0px";
     el.style.height = `${Math.min(140, Math.max(36, el.scrollHeight))}px`;
   }, [value]);
+
+  useEffect(() => {
+    const typing = focused || value.trim().length > 0;
+    props.onTypingChange?.(typing);
+  }, [focused, value, props.onTypingChange]);
 
   return (
     <form
@@ -45,6 +52,8 @@ export default function CommandBar(props: {
         autoCapitalize="sentences"
         autoCorrect="on"
         rows={1}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onKeyDown={(e) => {
           // Enter sends; Shift+Enter inserts newline.
           // Avoid interfering with IME composition.

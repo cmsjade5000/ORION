@@ -10,6 +10,8 @@ export default function NetworkDashboard(props: {
   state: LiveState;
   token: string;
   telegramWebApp?: any;
+  composerActive?: boolean;
+  orionFlareAt?: number;
   onOpenFeed?: () => void;
   onOpenFiles?: () => void;
   unreadCount?: number;
@@ -30,6 +32,7 @@ export default function NetworkDashboard(props: {
   const artifacts = props.state.artifacts || [];
   const feed = props.state.feed || [];
   const workflow = props.state.workflow || null;
+  const composerActive = Boolean(props.composerActive);
 
   // Keep workflow around for connection visibility decisions, but we no longer show hop numbers on nodes.
 
@@ -245,6 +248,7 @@ export default function NetworkDashboard(props: {
         const isAlarm = badge === "🚨" || a.status === "offline" || a.activity === "error";
         const isWarn = !isAlarm && badge === "⚠️";
         const isHighAlert = isAlarm && badge === "🚨";
+        const isHealthy = !isAlarm && !isWarn;
         const dotCls = [
           "aegisDot",
           isAlarm ? "aegisDotAlarm" : isWarn ? "aegisDotWarn" : "aegisDotOk",
@@ -264,6 +268,7 @@ export default function NetworkDashboard(props: {
               pinging ? "aegisIndicatorPinging" : "",
               (pinging && isWarn) ? "aegisIndicatorNoAck" : "",
               isHighAlert ? "aegisIndicatorHighAlert" : "",
+              isHealthy ? "aegisIndicatorAmbient" : "",
             ].filter(Boolean).join(" ")}
             title={title}
             aria-label={title}
@@ -274,6 +279,7 @@ export default function NetworkDashboard(props: {
             }}
           >
             <span className="aegisSatWrap" aria-hidden="true">
+              {isHealthy ? <span className="aegisAmbient" aria-hidden="true" /> : null}
               {pinging ? <span className="aegisPulse" aria-hidden="true" /> : null}
               <span className="aegisSat" aria-hidden="true">🛰️</span>
             </span>
@@ -283,26 +289,55 @@ export default function NetworkDashboard(props: {
       })()}
 
       {/* Central node */}
-      <Node
-        id="ORION"
-        label="ORION"
-        hideLabel={true}
-        status={orion?.status ?? (active ? "busy" : "idle")}
-        processes={orion?.processes}
-        badgeEmoji={orion?.badge ?? null}
-        io={orion?.io ?? null}
-        kind="central"
-        active={Boolean(active || linkAgentId)}
-        onClick={() => props.onOrionClick?.()}
-        size="large"
-        className="nodeCentralNoLabel"
-        style={{
-          position: "absolute",
-          top: `${layout.orion.y}px`,
-          left: `${layout.orion.x}px`,
-          transform: "translate(-50%, -50%)",
-        }}
-      />
+      {props.orionFlareAt ? (
+        <div
+          key={String(props.orionFlareAt)}
+          className="orionRingFlare"
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: `${layout.orion.y}px`,
+            left: `${layout.orion.x}px`,
+            transform: "translate(-50%, -50%)",
+          }}
+        />
+      ) : null}
+
+      {(() => {
+        const isDown = (orion?.status ?? "idle") === "offline" || orion?.badge === "❗";
+        const isSuspect = orion?.badge === "⚠️";
+        const isListening = composerActive && !isDown && !isSuspect && (orion?.status ?? "idle") === "idle";
+        const processes = isListening ? ["🙂"] : (orion?.processes ?? []);
+        const cls = [
+          "nodeCentralNoLabel",
+          "orionNode",
+          isListening ? "orionListening" : "",
+          isSuspect ? "orionSuspect" : "",
+        ].filter(Boolean).join(" ");
+
+        return (
+          <Node
+            id="ORION"
+            label="ORION"
+            hideLabel={true}
+            status={orion?.status ?? (active ? "busy" : "idle")}
+            processes={processes}
+            badgeEmoji={orion?.badge ?? null}
+            io={orion?.io ?? null}
+            kind="central"
+            active={Boolean(active || linkAgentId)}
+            onClick={() => props.onOrionClick?.()}
+            size="large"
+            className={cls}
+            style={{
+              position: "absolute",
+              top: `${layout.orion.y}px`,
+              left: `${layout.orion.x}px`,
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+        );
+      })()}
 
       <div
         className="orionNameExternal"
