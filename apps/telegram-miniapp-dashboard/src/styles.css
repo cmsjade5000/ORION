@@ -872,7 +872,7 @@ html {
 .nodeCentralNoLabel .nodeSubCentral {
   margin-top: 0;
   height: 86px;
-  transform: translateX(-30px);
+  transform: translate(-32px, 8px);
 }
 
 .nodeCentralNoLabel .nodeProcEmoji {
