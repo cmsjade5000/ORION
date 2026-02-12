@@ -62,6 +62,38 @@ channels:
     reactionLevel: ack
     streamMode: partial
 
+  # Discord channel (OpenClaw bundled plugin: `discord`, disabled by default).
+  # Notes:
+  # - Prefer storing DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md) and referencing it via ${...}.
+  # - Lock down access with dm.policy allowlist/pairing and guild/channel allowlists.
+  discord:
+    enabled: false
+    # Bot token (recommended via env var interpolation; do not commit secrets).
+    token: "${DISCORD_BOT_TOKEN}"
+    # Native commands (slash commands) support is available; "auto" lets OpenClaw decide.
+    commands:
+      native: auto
+      nativeSkills: auto
+    # Reply-to behavior inside Discord threads/channels.
+    # off = never reply-to a specific message, first = reply-to the first triggering message, all = reply-to every triggering message.
+    replyToMode: first
+    # DM policy (recommended: allowlist or pairing).
+    dm:
+      policy: allowlist
+      allowFrom:
+        - "<CORY_DISCORD_USER_ID>"
+    # Guild/channel policy. Recommended: allowlist + explicit guild/channel IDs.
+    groupPolicy: allowlist
+    guilds:
+      "<DISCORD_GUILD_ID>":
+        # When true, only respond if the bot is mentioned (safer when MESSAGE_CONTENT intent is disabled/limited).
+        requireMention: true
+        channels:
+          "<DISCORD_CHANNEL_ID>":
+            allow: true
+            # Auto-create a task thread for each new request in this channel.
+            autoThread: true
+
 # Optional non-secret vars (applied only when missing from the process env).
 # env:
 #   vars:
