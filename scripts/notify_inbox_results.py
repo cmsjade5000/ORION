@@ -304,6 +304,15 @@ def _get_discord_default_target(repo_root: Path) -> str:
     cfg_path = _get_openclaw_cfg_path()
     try:
         cfg = json.loads(_read_text(cfg_path))
+        # Prefer config-defined env vars when present (used by OpenClaw services/cron).
+        env_target = (
+            (cfg.get("env", {}) or {})
+            .get("vars", {})
+            .get("DISCORD_DEFAULT_POST_TARGET", "")
+        )
+        if isinstance(env_target, str) and env_target.strip():
+            return env_target.strip()
+
         allow_from = (
             (cfg.get("channels", {}) or {})
             .get("discord", {})
