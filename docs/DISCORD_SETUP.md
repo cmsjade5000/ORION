@@ -96,6 +96,9 @@ openclaw channels resolve --channel discord "<DISCORD_CHANNEL_ID>" --json
 - Plugin not enabled: `openclaw plugins list --json` shows `discord` disabled.
 - Invite shows “Integration requires code grant”:
   - Discord Developer Portal → your application → **Bot** → disable **Requires OAuth2 Code Grant**, then regenerate the invite URL.
+- Invite shows “Invalid scope: account.global_name.update” (or similar):
+  - Regenerate the invite using **OAuth2 → URL Generator** with scopes limited to: `bot` and `applications.commands`.
+  - Do not include any `account.*` scopes in the authorize URL.
 - Missing token / wrong token: channel shows configured=false or probe fails.
 - Bot can DM but won’t respond in channels:
   - Channel/guild not allowlisted, or `groupPolicy` is `disabled`.
