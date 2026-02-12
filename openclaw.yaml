@@ -82,17 +82,25 @@ channels:
       policy: allowlist
       allowFrom:
         - "<CORY_DISCORD_USER_ID>"
+    # Ignore other bots in guild channels (recommended even in private servers).
+    allowBots: false
     # Guild/channel policy. Recommended: allowlist + explicit guild/channel IDs.
     groupPolicy: allowlist
     guilds:
       "<DISCORD_GUILD_ID>":
-        # When true, only respond if the bot is mentioned (safer when MESSAGE_CONTENT intent is disabled/limited).
-        requireMention: true
+        # Freeform channel reading requires the Discord "Message Content" privileged intent.
+        # If you do not enable it, set requireMention: true (mention-gated) instead.
+        requireMention: false
         channels:
-          "<DISCORD_CHANNEL_ID>":
+          # Primary request intake channel (auto-thread tasks).
+          "<DISCORD_PRIMARY_CHANNEL_ID>":
             allow: true
             # Auto-create a task thread for each new request in this channel.
             autoThread: true
+          # Optional: updates/status channel (no auto-thread by default).
+          "<DISCORD_UPDATES_CHANNEL_ID>":
+            allow: true
+            autoThread: false
 
 # Optional non-secret vars (applied only when missing from the process env).
 # env:

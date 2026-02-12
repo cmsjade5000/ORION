@@ -53,6 +53,7 @@
       "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md).",
       "enabled": false,
       "token": "${DISCORD_BOT_TOKEN}",
+      "allowBots": false,
       "commands": {
         "native": "auto",
         "nativeSkills": "auto"
@@ -65,11 +66,15 @@
       "groupPolicy": "allowlist",
       "guilds": {
         "<DISCORD_GUILD_ID>": {
-          "requireMention": true,
+          "requireMention": false,
           "channels": {
-            "<DISCORD_CHANNEL_ID>": {
+            "<DISCORD_PRIMARY_CHANNEL_ID>": {
               "allow": true,
               "autoThread": true
+            },
+            "<DISCORD_UPDATES_CHANNEL_ID>": {
+              "allow": true,
+              "autoThread": false
             }
           }
         }
