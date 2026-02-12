@@ -1,0 +1,16 @@
+[Unit]
+Description=AEGIS daily maintenance monitor (ORION update + security audit; read-only)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aegis
+Group=aegis
+EnvironmentFile=/etc/aegis-monitor.env
+ExecStart=/usr/local/bin/aegis-maintenance-orion
+
+# Keep this quiet unless there's a real issue.
+StandardOutput=append:/var/log/aegis-monitor/maintenance.log
+StandardError=append:/var/log/aegis-monitor/maintenance.log
+

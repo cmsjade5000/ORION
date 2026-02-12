@@ -25,6 +25,8 @@ export function registerMiniApp(bot: Bot) {
         );
         return;
       }
+      // Cache-bust Telegram WebViews: each /miniapp invocation gets a unique URL so old bundles don't stick.
+      u.searchParams.set("v", String(Date.now()));
       // Normalize to a string (also prevents accidental whitespace).
       url = u.toString();
     } catch {

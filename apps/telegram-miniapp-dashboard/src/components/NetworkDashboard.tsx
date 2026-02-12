@@ -307,7 +307,7 @@ export default function NetworkDashboard(props: {
         const isDown = (orion?.status ?? "idle") === "offline" || orion?.badge === "❗";
         const isSuspect = orion?.badge === "⚠️";
         const isListening = composerActive && !isDown && !isSuspect && (orion?.status ?? "idle") === "idle";
-        const processes = isListening ? ["🙂"] : (orion?.processes ?? []);
+        const processes = orion?.processes ?? [];
         const cls = [
           "nodeCentralNoLabel",
           "orionNode",

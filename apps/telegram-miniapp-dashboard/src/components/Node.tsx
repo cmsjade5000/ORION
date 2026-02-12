@@ -8,7 +8,7 @@ function fallbackCentralEmoji(status: AgentStatus): string {
   // These are only used if the backend doesn't provide a process emoji.
   if (status === "offline") return "🤕";
   if (status === "busy") return "😬";
-  return "🙂";
+  return "💤";
 }
 
 function activityEmoji(a: AgentActivity | undefined): string | null {

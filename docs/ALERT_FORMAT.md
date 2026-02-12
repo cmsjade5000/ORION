@@ -25,6 +25,9 @@ Body (keep to 3 blocks max):
 Optional:
 - `Incident:` `INC-...`
 
+Digest note:
+- Digest alerts should keep the same template, use title `AEGIS (Digest): Lower-priority alerts`, and list each queued event as a compact bullet with timestamp, severity, trigger, summary, and incident id (if present).
+
 ## Examples
 
 Example (security signal):
@@ -47,4 +50,3 @@ What I did: Restarted ORION gateway once; health is OK now.
 Next: No action needed.
 Incident: INC-AEGIS-OPS-20260208T132500Z
 ```
-

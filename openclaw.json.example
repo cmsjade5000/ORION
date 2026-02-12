@@ -52,7 +52,10 @@
   },
   "env": {
     "vars": {
-      "ORION_MINIAPP_URL": "https://<your-miniapp-host>"
+      "ORION_MINIAPP_URL": "https://<your-miniapp-host>",
+      "FLIC_ROUTER_ENABLED": "1",
+      "FLIC_VAULT_BASE_URL": "https://vault966-r2.fly.dev",
+      "FLIC_BOT_USERNAME": "Flic_GatewayBot"
     }
   },
   "models": {

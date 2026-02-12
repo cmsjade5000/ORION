@@ -83,9 +83,29 @@ fi
 : "${SLACK_CHANNEL_ID:=}"
 : "${AEGIS_TELEGRAM_TOKEN:=}"
 : "${AEGIS_TELEGRAM_CHAT_ID:=}"
+: "${AEGIS_DIGEST_ENABLED:=1}"
+: "${AEGIS_DIGEST_WINDOW_SEC:=43200}"
+: "${AEGIS_DIGEST_SEVERITIES:=P2}"
+: "${AEGIS_DIGEST_MAX_ITEMS:=25}"
+
+AEGIS_DIGEST_SEVERITIES="$(printf '%s' "$AEGIS_DIGEST_SEVERITIES" | tr -d '[:space:]')"
+case "${AEGIS_DIGEST_WINDOW_SEC}" in
+  ''|*[!0-9]*) AEGIS_DIGEST_WINDOW_SEC=43200 ;;
+esac
+if [ "${AEGIS_DIGEST_WINDOW_SEC}" -le 0 ]; then
+  AEGIS_DIGEST_WINDOW_SEC=43200
+fi
+case "${AEGIS_DIGEST_MAX_ITEMS}" in
+  ''|*[!0-9]*) AEGIS_DIGEST_MAX_ITEMS=25 ;;
+esac
+if [ "${AEGIS_DIGEST_MAX_ITEMS}" -le 0 ]; then
+  AEGIS_DIGEST_MAX_ITEMS=25
+fi
 
 DEFENSE_PLANS_DIR="$STATE_DIR/defense_plans"
 ALERT_SENT=0
+DIGEST_PENDING_FILE="$STATE_DIR/digest_pending.tsv"
+DIGEST_LAST_SENT_FILE="$STATE_DIR/digest_last_sent_epoch"
 
 post_slack() {
   local text="$1"
@@ -115,6 +135,100 @@ notify() {
   local text="$1"
   post_slack "$text"
   post_telegram "$text"
+}
+
+digest_enabled() {
+  case "${AEGIS_DIGEST_ENABLED}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+digest_should_queue() {
+  local severity="${1:-}"
+  if ! digest_enabled; then
+    return 1
+  fi
+  [ -n "$severity" ] || return 1
+  case ",${AEGIS_DIGEST_SEVERITIES}," in
+    *",${severity},"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+queue_digest_item() {
+  # queue_digest_item <severity> <trigger> <summary> [incident_id]
+  local severity="${1:-}"
+  local trigger="${2:-}"
+  local summary="${3:-}"
+  local incident_id="${4:-}"
+  local now_iso
+  now_iso="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$now_iso" "$severity" "$trigger" "$summary" "$incident_id" >>"$DIGEST_PENDING_FILE"
+  chmod 0640 "$DIGEST_PENDING_FILE" 2>/dev/null || true
+}
+
+flush_digest_if_due() {
+  if ! digest_enabled; then
+    return 0
+  fi
+  if [ ! -s "$DIGEST_PENDING_FILE" ]; then
+    return 0
+  fi
+
+  local now last elapsed total shown max_items hidden
+  now=$(date +%s)
+  if [ -f "$DIGEST_LAST_SENT_FILE" ]; then
+    last=$(cat "$DIGEST_LAST_SENT_FILE" 2>/dev/null || echo 0)
+  else
+    # Start the first digest window when we first have pending items.
+    echo "$now" >"$DIGEST_LAST_SENT_FILE"
+    chmod 0640 "$DIGEST_LAST_SENT_FILE" 2>/dev/null || true
+    return 0
+  fi
+
+  elapsed=$((now - last))
+  if [ "$elapsed" -lt "$AEGIS_DIGEST_WINDOW_SEC" ]; then
+    return 0
+  fi
+
+  total=$(wc -l <"$DIGEST_PENDING_FILE" | tr -d '[:space:]')
+  shown=0
+  max_items="$AEGIS_DIGEST_MAX_ITEMS"
+  hidden=0
+  local items=""
+  while IFS=$'\t' read -r ts sev trig summary incident_id; do
+    [ -n "$ts" ] || continue
+    if [ "$shown" -ge "$max_items" ]; then
+      hidden=$((hidden + 1))
+      continue
+    fi
+    shown=$((shown + 1))
+    if [ -n "$incident_id" ]; then
+      items="${items}- ${ts} ${sev} ${summary} (Trigger: ${trig}; Incident: ${incident_id})"$'\n'
+    else
+      items="${items}- ${ts} ${sev} ${summary} (Trigger: ${trig})"$'\n'
+    fi
+  done <"$DIGEST_PENDING_FILE"
+
+  local title what next text
+  title="AEGIS (Digest): Lower-priority alerts"
+  what="$total digest-queued events over the last ~$((AEGIS_DIGEST_WINDOW_SEC / 3600))h."
+  next="Review items below and investigate only if unexpected."
+  text="$(format_alert "$title" "$what" "" "$next" "")"
+  if [ -n "$items" ]; then
+    text="${text}"$'\n\n'"Events:"$'\n'"${items%$'\n'}"
+  fi
+  if [ "$hidden" -gt 0 ]; then
+    text="${text}"$'\n'"(+${hidden} more events omitted; increase AEGIS_DIGEST_MAX_ITEMS to include more.)"
+  fi
+
+  notify "$text"
+  echo "$now" >"$DIGEST_LAST_SENT_FILE"
+  chmod 0640 "$DIGEST_LAST_SENT_FILE" 2>/dev/null || true
+  : >"$DIGEST_PENDING_FILE"
+  chmod 0640 "$DIGEST_PENDING_FILE" 2>/dev/null || true
+  log "INFO: digest sent events=$total shown=$shown hidden=$hidden"
 }
 
 msg_security() {
@@ -167,6 +281,12 @@ alert_throttled() {
     if ! printf '%s\n' "$text" | grep -Eq '^Incident:[[:space:]]+'; then
       text="${text}"$'\n'"Incident: $incident_id"
     fi
+  fi
+  if digest_should_queue "$severity"; then
+    queue_digest_item "$severity" "$trigger" "$summary" "$incident_id"
+    log "INFO: digest queued key=$key severity=$severity trigger=$trigger"
+    ALERT_SENT=1
+    return 0
   fi
   notify "$text"
   ALERT_SENT=1
@@ -367,5 +487,6 @@ if command -v tailscale >/dev/null 2>&1; then
   fi
 fi
 
+flush_digest_if_due
 mark_ok
 log "OK: sentinel cycle"

@@ -77,9 +77,15 @@ fi
 mv "${STATE_FILE}.tmp" "${STATE_FILE}"
 
 for id in "${new_ids[@]}"; do
+  kind="Plan"
+  if [[ "${id}" == INC-AEGIS-MAINT-* ]]; then
+    kind="Maintenance Plan"
+  elif [[ "${id}" == INC-AEGIS-SEC-* ]]; then
+    kind="Defense Plan"
+  fi
   msg=$(
     cat <<EOF
-AEGIS prepared a Defense Plan: ${id}
+AEGIS prepared a ${kind}: ${id}
 
 Reply "review ${id}" and I'll walk you through it, or run:
 scripts/aegis_defense.sh show ${id}

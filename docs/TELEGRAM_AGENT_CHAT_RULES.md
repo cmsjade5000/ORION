@@ -18,6 +18,9 @@ Active now:
 Current Telegram commands (implemented by the Telegram plugin, not by specialist chat bots):
 - `/agents` shows the Agent Dashboard inline keyboard.
 - `/miniapp` sends an inline `web_app` button for the ORION Mini App (requires `ORION_MINIAPP_URL`).
+- `/flic` starts a guided 4-question movie-picks flow and returns a locked Vault picks deep link.
+- `/reroll` reuses the last Flic filters and advances offset for a fresh stack.
+- `/flicreset` clears in-memory Flic chat state for the current DM.
 
 ---
 ## 2. Hierarchy & Speaking Protocol

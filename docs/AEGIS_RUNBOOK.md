@@ -60,6 +60,19 @@ Security sentinel (signal-only):
   - Repo source: `scripts/aegis_remote/aegis-sentinel` (copy to `/usr/local/bin/aegis-sentinel` on Hetzner)
 - Log: `/var/log/aegis-sentinel/sentinel.log`
 
+Maintenance monitor (ORION update + security audit; read-only):
+- Timer: `aegis-maintenance-orion.timer` (recommended: daily)
+- Timer reliability: `Persistent=true` (missed runs fire after reboot)
+- Service: `aegis-maintenance-orion.service`
+- Script: `/usr/local/bin/aegis-maintenance-orion`
+  - Repo source: `scripts/aegis_remote/aegis-maintenance-orion` (copy to `/usr/local/bin/aegis-maintenance-orion` on Hetzner)
+- Suggested unit templates (copy to `/etc/systemd/system/`):
+  - `docs/systemd/aegis-maintenance-orion.service`
+  - `docs/systemd/aegis-maintenance-orion.timer`
+- Log: `/var/log/aegis-monitor/maintenance.log`
+- Output: writes a HITL plan under:
+  - `/var/lib/aegis-sentinel/defense_plans/INC-AEGIS-MAINT-*.md`
+
 Human-in-the-loop defender (allowlisted executor):
 - Script: `/usr/local/bin/aegis-defend`
   - Repo source: `scripts/aegis_remote/aegis-defend` (copy to `/usr/local/bin/aegis-defend` on Hetzner)
@@ -97,6 +110,12 @@ Telegram alerts (secondary, optional):
 - `AEGIS_TELEGRAM_TOKEN=...`
 - `AEGIS_TELEGRAM_CHAT_ID=...`
 
+Digesting lower-priority alerts (optional, recommended):
+- `AEGIS_DIGEST_ENABLED=1` enables digest mode for configured severities (`0` disables digest mode).
+- `AEGIS_DIGEST_SEVERITIES=P2` comma-separated severities to digest (default `P2`).
+- `AEGIS_DIGEST_WINDOW_SEC=43200` digest send window in seconds (default 12 hours, approximately twice daily).
+- `AEGIS_DIGEST_MAX_ITEMS=25` max events included per digest message before summarizing overflow.
+
 Mini App dashboard (optional but recommended):
 - `MINIAPP_INGEST_URL=https://orion-miniapp-cory-95ce0d.fly.dev`
 - `MINIAPP_INGEST_TOKEN=...` (must match the Fly `INGEST_TOKEN` secret)
@@ -109,6 +128,10 @@ Telegram helper (run on the Hetzner host after you message the bot in the target
 AEGIS uses SSH over Tailscale to run only two operations on the Mac mini:
 - `openclaw health`
 - `openclaw gateway restart`
+
+Optional read-only maintenance probes (recommended for update monitoring):
+- `openclaw security audit --deep --json`
+- `openclaw update status` (and/or `openclaw update --json status` if supported)
 
 Mac mini forced-command script:
 - `/Users/corystoner/.openclaw/bin/aegis-ssh-command`
@@ -140,6 +163,10 @@ Security sentinel:
 - `AEGIS: own OpenClaw service was down; restarted successfully.`
 - `AEGIS: own OpenClaw service is down and restart failed.`
 
+Digest behavior:
+- By default, lower-priority `P2` alerts are queued and sent as a digest every `AEGIS_DIGEST_WINDOW_SEC` (default 12 hours, approximately twice daily).
+- `P0/P1` alerts bypass the digest queue and are sent immediately.
+
 Throttling:
 - Alerts are throttled to prevent spam loops.
 - Typical windows are 10–30 minutes per alert type.
@@ -154,19 +181,22 @@ From your local machine (this repo), copy the scripts:
 ```bash
 # Copy scripts (add/remove as needed)
 scp scripts/aegis_remote/aegis-monitor-orion \
+    scripts/aegis_remote/aegis-maintenance-orion \
     scripts/aegis_remote/aegis-sentinel \
     scripts/aegis_remote/aegis-defend \
     scripts/aegis_remote/lib_alert_format.sh \
     root@100.75.104.54:/usr/local/bin/
 
 # Ensure executable bits (remote)
-ssh root@100.75.104.54 'chmod 0755 /usr/local/bin/aegis-monitor-orion /usr/local/bin/aegis-sentinel /usr/local/bin/aegis-defend; chmod 0644 /usr/local/bin/lib_alert_format.sh'
+ssh root@100.75.104.54 'chmod 0755 /usr/local/bin/aegis-monitor-orion /usr/local/bin/aegis-maintenance-orion /usr/local/bin/aegis-sentinel /usr/local/bin/aegis-defend; chmod 0644 /usr/local/bin/lib_alert_format.sh'
 ```
 
 Restart timers/services (remote):
 
 ```bash
 ssh root@100.75.104.54 'systemctl restart aegis-monitor-orion.service aegis-sentinel.service'
+# If installed:
+# ssh root@100.75.104.54 'systemctl restart aegis-maintenance-orion.service'
 ```
 
 Quick verification (remote):

@@ -44,6 +44,7 @@ fi
 src_dir="$ROOT/scripts/aegis_remote"
 files=(
   "$src_dir/aegis-monitor-orion"
+  "$src_dir/aegis-maintenance-orion"
   "$src_dir/aegis-sentinel"
   "$src_dir/aegis-defend"
   "$src_dir/lib_alert_format.sh"
@@ -60,12 +61,18 @@ echo "Deploying AEGIS scripts to ${user}@${host}:${dest}/"
 scp "${files[@]}" "${user}@${host}:${dest}/"
 
 echo "Setting permissions..."
-ssh "${user}@${host}" "chmod 0755 ${dest}/aegis-monitor-orion ${dest}/aegis-sentinel ${dest}/aegis-defend; chmod 0644 ${dest}/lib_alert_format.sh"
+ssh "${user}@${host}" "chmod 0755 ${dest}/aegis-monitor-orion ${dest}/aegis-maintenance-orion ${dest}/aegis-sentinel ${dest}/aegis-defend; chmod 0644 ${dest}/lib_alert_format.sh"
 
 if [[ "$do_restart" -eq 1 ]]; then
   echo "Restarting services..."
-  ssh "${user}@${host}" "systemctl restart aegis-monitor-orion.service aegis-sentinel.service"
+  ssh "${user}@${host}" "set -euo pipefail
+systemctl restart aegis-monitor-orion.service aegis-sentinel.service
+
+# Maintenance unit is optional; restart only if installed.
+if systemctl list-unit-files | grep -q '^aegis-maintenance-orion\\.service'; then
+  systemctl restart aegis-maintenance-orion.service || true
+fi
+"
 fi
 
 echo "AEGIS_DEPLOY_OK host=${host}"
-

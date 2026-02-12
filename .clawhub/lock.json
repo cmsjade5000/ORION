@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "things-mac": {
+      "version": "1.0.0",
+      "installedAt": 1770773382610
+    },
+    "apple-reminders": {
+      "version": "1.0.0",
+      "installedAt": 1770773384705
+    },
+    "apple-notes": {
+      "version": "1.0.0",
+      "installedAt": 1770773386811
+    },
+    "peekaboo": {
+      "version": "1.0.0",
+      "installedAt": 1770773388388
+    },
+    "session-logs": {
+      "version": "1.0.0",
+      "installedAt": 1770773390229
+    }
+  }
+}

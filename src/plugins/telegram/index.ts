@@ -1,5 +1,6 @@
 import { Bot } from "grammy";
 import { registerDashboard } from "./dashboard";
+import { registerFlicChatRouter } from "./flic";
 import { registerMiniApp } from "./miniapp";
 
 /**
@@ -8,4 +9,5 @@ import { registerMiniApp } from "./miniapp";
 export function setupTelegramPlugin(bot: Bot) {
   registerDashboard(bot);
   registerMiniApp(bot);
+  registerFlicChatRouter(bot);
 }

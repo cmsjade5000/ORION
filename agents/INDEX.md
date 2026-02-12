@@ -128,6 +128,7 @@ Constraints:
 ## AEGIS (Remote Sentinel)
 
 AEGIS is a remote sentinel that monitors and revives ORION (availability) and watches for security-relevant anomalies (alert-only).
+It can also run **read-only** maintenance probes (OpenClaw security audit + update status) via the restricted SSH allowlist, and write a HITL plan for ORION to execute.
 
 Current status:
 - Remote-only (Hetzner). Not spawned via `sessions_spawn`.

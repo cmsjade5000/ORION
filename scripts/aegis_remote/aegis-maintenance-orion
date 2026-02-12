@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# AEGIS maintenance monitor (ORION host):
+# - read-only update/status probes over restricted SSH
+# - emits a HITL "plan" artifact on the AEGIS host (no auto-fix)
+#
+# Intended to run on the Hetzner AEGIS host via systemd timer (daily).
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SELF_DIR/lib_alert_format.sh" ]; then
+  # shellcheck source=./lib_alert_format.sh
+  . "$SELF_DIR/lib_alert_format.sh"
+else
+  format_alert() {
+    local title="${1-}" what_saw="${2-}" what_did="${3-}" next="${4-}" incident="${5-}"
+    printf '%s' "$title"
+    if [ -n "$what_saw" ] || [ -n "$what_did" ] || [ -n "$next" ] || [ -n "$incident" ]; then
+      printf '\n\n'
+    fi
+    [ -n "$what_saw" ] && printf 'What I saw: %s\n' "$what_saw"
+    [ -n "$what_did" ] && printf 'What I did: %s\n' "$what_did"
+    [ -n "$next" ] && printf 'Next: %s\n' "$next"
+    [ -n "$incident" ] && printf 'Incident: %s\n' "$incident"
+  }
+fi
+
+ENV_FILE="/etc/aegis-monitor.env"
+
+LOG_DIR="/var/log/aegis-monitor"
+LOG_FILE="$LOG_DIR/maintenance.log"
+STATE_DIR="/var/lib/aegis-monitor"
+PLANS_DIR="/var/lib/aegis-sentinel/defense_plans"
+
+mkdir -p "$STATE_DIR" "$LOG_DIR" "$PLANS_DIR"
+touch "$LOG_FILE"
+chmod 0640 "$LOG_FILE" 2>/dev/null || true
+
+log() {
+  local msg="$*"
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$msg" >>"$LOG_FILE"
+  logger -t aegis-maintenance -- "$msg" || true
+}
+
+die() {
+  log "ERROR: $*"
+  exit 2
+}
+
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+fi
+
+: "${ORION_HOST:=}"
+: "${ORION_SSH_USER:=}"
+: "${SSH_IDENTITY:=}"
+
+# Must match Mac mini forced-command allowlist (`~/.openclaw/bin/aegis-ssh-command`).
+: "${ORION_OPENCLAW_SECURITY_AUDIT_CMD:=/Users/corystoner/.npm-global/bin/openclaw security audit --deep --json}"
+: "${ORION_OPENCLAW_UPDATE_STATUS_CMD:=/Users/corystoner/.npm-global/bin/openclaw update status}"
+
+if [ -z "$ORION_HOST" ] || [ -z "$ORION_SSH_USER" ] || [ -z "$SSH_IDENTITY" ]; then
+  log "SKIP: missing ORION_HOST/ORION_SSH_USER/SSH_IDENTITY in $ENV_FILE"
+  exit 0
+fi
+
+SSH_BASE=(
+  ssh
+  -o BatchMode=yes
+  -o ConnectTimeout=15
+  -o StrictHostKeyChecking=accept-new
+  -i "$SSH_IDENTITY"
+  "${ORION_SSH_USER}@${ORION_HOST}"
+)
+
+remote() {
+  local cmd="$1"
+  "${SSH_BASE[@]}" "bash -lc \"$cmd\""
+}
+
+incident_id="INC-AEGIS-MAINT-$(date -u '+%Y%m%dT%H%M%SZ')"
+plan_file="${PLANS_DIR}/${incident_id}.md"
+
+tmpdir="$(mktemp -d)"
+cleanup() { rm -rf "$tmpdir" || true; }
+trap cleanup EXIT
+
+audit_json="${tmpdir}/audit.json"
+update_txt="${tmpdir}/update.txt"
+
+log "START: incident=$incident_id"
+
+if ! remote "$ORION_OPENCLAW_SECURITY_AUDIT_CMD" >"$audit_json" 2>"${tmpdir}/audit.err"; then
+  rc=$?
+  err="$(tail -n 50 "${tmpdir}/audit.err" 2>/dev/null || true)"
+  log "FAIL: security_audit rc=$rc err=$(printf %q "$err")"
+  die "security audit failed (rc=$rc)"
+fi
+
+if ! remote "$ORION_OPENCLAW_UPDATE_STATUS_CMD" >"$update_txt" 2>"${tmpdir}/update.err"; then
+  rc=$?
+  err="$(tail -n 50 "${tmpdir}/update.err" 2>/dev/null || true)"
+  log "WARN: update_status rc=$rc err=$(printf %q "$err")"
+  : >"$update_txt"
+fi
+
+critical="0"
+warn="0"
+info="0"
+if command -v jq >/dev/null 2>&1; then
+  critical="$(jq -r '.summary.critical // 0' "$audit_json" 2>/dev/null || echo 0)"
+  warn="$(jq -r '.summary.warn // 0' "$audit_json" 2>/dev/null || echo 0)"
+  info="$(jq -r '.summary.info // 0' "$audit_json" 2>/dev/null || echo 0)"
+else
+  critical="$(grep -Eo '\"critical\"[[:space:]]*:[[:space:]]*[0-9]+' "$audit_json" | head -n 1 | grep -Eo '[0-9]+' || echo 0)"
+  warn="$(grep -Eo '\"warn\"[[:space:]]*:[[:space:]]*[0-9]+' "$audit_json" | head -n 1 | grep -Eo '[0-9]+' || echo 0)"
+  info="$(grep -Eo '\"info\"[[:space:]]*:[[:space:]]*[0-9]+' "$audit_json" | head -n 1 | grep -Eo '[0-9]+' || echo 0)"
+fi
+
+# Noise controls: ignore the most common expected warning on a loopback-only gateway.
+ignored_warn_ids=("gateway.trusted_proxies_missing")
+warn_lines=""
+if command -v jq >/dev/null 2>&1; then
+  warn_lines="$(
+    jq -r --argjson ignore "$(printf '%s\n' "${ignored_warn_ids[@]}" | jq -R . | jq -s .)" '
+      .findings
+      | map(select(.severity=="critical" or .severity=="warn"))
+      | map(select((.severity=="warn" and (.checkId as $id | ($ignore | index($id))==null)) or .severity=="critical"))
+      | map("\(.severity)\t\(.checkId)\t\(.title)")
+      | .[]
+    ' "$audit_json" 2>/dev/null || true
+  )"
+else
+  warn_lines=""
+fi
+
+needs_attention=0
+if [ "${critical:-0}" -gt 0 ] 2>/dev/null; then
+  needs_attention=1
+fi
+
+if [ "${needs_attention}" -eq 0 ] && [ -n "${warn_lines}" ]; then
+  needs_attention=1
+fi
+
+if [ "${needs_attention}" -eq 0 ]; then
+  log "OK: no actionable findings (critical=$critical warn=$warn info=$info)"
+  date -u '+%Y-%m-%dT%H:%M:%SZ' >"$STATE_DIR/last_ok.maintenance"
+  exit 0
+fi
+
+code=""
+if command -v openssl >/dev/null 2>&1; then
+  code="$(openssl rand -base64 12 2>/dev/null | tr -dc 'A-Z2-7' | head -c 8 || true)"
+fi
+if [ -z "$code" ]; then
+  code="$(date -u '+%H%M%S')"
+fi
+
+{
+  printf '# AEGIS Maintenance Plan (ORION host)\n\n'
+  printf 'Incident: %s\n' "$incident_id"
+  printf 'Detected: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  printf 'ApprovalCode: %s\n\n' "$code"
+  printf '## Summary\n\n'
+  printf -- '- OpenClaw security audit (deep): critical=%s warn=%s info=%s (warn may include ignored items)\n' "$critical" "$warn" "$info"
+  printf -- '- OpenClaw update status (raw):\n\n'
+  printf '```text\n'
+  sed -n '1,40p' "$update_txt" | sed -E 's/[[:cntrl:]]//g' || true
+  printf '```\n\n'
+  printf '## Findings (actionable)\n\n'
+  if [ -n "$warn_lines" ]; then
+    printf '```text\n'
+    printf '%s\n' "$warn_lines"
+    printf '```\n\n'
+  else
+    printf '_Unable to enumerate findings (jq missing or audit format unexpected). Review full JSON if needed._\n\n'
+  fi
+  printf '## Recommended Actions (ORION executes)\n\n'
+  printf -- '- Review: run `openclaw security audit --deep` locally and inspect critical findings.\n'
+  printf -- '- If safe: `openclaw security audit --deep --fix` (chmod/tighten defaults).\n'
+  printf -- '- Check OpenClaw update: `openclaw update status` then (optionally) `openclaw update`.\n'
+  printf -- '- If repo changes are needed: commit + push from ORION host (run a secrets scan first).\n'
+  printf -- '- Reboot meaning: prefer `openclaw gateway restart` (not OS reboot) unless explicitly required.\n\n'
+  printf '## Stop Gates\n\n'
+  printf -- '- No automatic fixes/updates/reboots. Require explicit approval from Cory/ORION.\n'
+} >"$plan_file"
+
+chmod 0640 "$plan_file" 2>/dev/null || true
+log "PLAN_WRITTEN: file=$plan_file critical=$critical warn=$warn"
+
+msg="$(format_alert \
+  "AEGIS (Security Watch): Maintenance attention needed" \
+  "openclaw security audit (deep) indicates actionable findings." \
+  "" \
+  "ORION: review plan ${incident_id} and decide whether to apply fixes/updates." \
+  "$incident_id")"
+
+printf '%s\n' "$msg"
+

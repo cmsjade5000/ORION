@@ -45,9 +45,18 @@ Runbook:
 This repo includes an optional Telegram Mini App dashboard:
 - App: `apps/telegram-miniapp-dashboard/`
 - ORION command: `/miniapp` (sends a `web_app` button via the Telegram plugin)
+- Flic conversation commands:
+  - `/flic` starts a guided 4-question movie flow and emits a locked Vault picks deep link.
+  - `/reroll` keeps the same filters and advances picks offset for a fresh stack.
+  - `/flicreset` clears in-memory Flic conversation state for the current DM.
 
 Config:
 - Set `ORION_MINIAPP_URL` to your deployed HTTPS URL (see `openclaw.json.example` / `openclaw.yaml`).
+- Flic deep-link router env vars:
+  - `FLIC_ROUTER_ENABLED=1`
+  - `FLIC_VAULT_BASE_URL=https://vault966-r2.fly.dev`
+  - `FLIC_BOT_USERNAME=Flic_GatewayBot`
+  - Optional: `FLIC_APP_SHORT_NAME=<telegram-miniapp-short-name>`
 - Security note: do not enable command routing from the Mini App into ORION unless you explicitly accept the risk (see `SECURITY.md` and the Mini App README).
 
 ## Workspace Contract (OpenClaw)

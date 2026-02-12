@@ -34,6 +34,7 @@ If an action would change security posture or risks data loss, **alert only**.
 - **Normal:** silence.
 - **ORION recovered (self-healed):** brief report to ORION (1 message), include incident id and timestamps.
 - **ORION not recoverable:** escalate to Cory with a crisp summary and next steps.
+- **Digest mode (optional):** lower-priority `P2` signals may be batched into twice-daily digests; critical `P0/P1` alerts stay immediate.
 
 ## Operating Model
 
@@ -54,6 +55,7 @@ If an action would change security posture or risks data loss, **alert only**.
 Availability:
 - ORION OpenClaw gateway health.
 - ORION channel health (Slack/Telegram) if available.
+- ORION maintenance posture (read-only): OpenClaw security audit + update status via restricted SSH allowlist.
 
 Security signals (alert-only):
 - SSH auth anomalies.

@@ -265,7 +265,8 @@ function orionFaceForActivity(activity) {
     case "tooling":
       return "🤓";
     case "messaging":
-      return "🙂";
+      // Avoid smiley faces: users want ORION to look tired/neutral, especially around idle.
+      return "🫩";
     case "error":
       return "😫";
     default:
@@ -289,7 +290,8 @@ function orionFaceForTool(type) {
 function orionFaceForTask(type) {
   switch (type) {
     case "task.started":
-      return "😄";
+      // Avoid "forced smile" while working; keep ORION more neutral.
+      return "🤔";
     case "task.completed":
       return "🥳";
     case "task.failed":
@@ -310,7 +312,7 @@ function orionBadgeForActivity(activity) {
     case "messaging":
       return "✉️";
     case "thinking":
-      return "💭";
+      return "✨";
     case "error":
       return "⚠️";
     default:
@@ -1173,6 +1175,7 @@ if (AEGIS_HEARTBEAT_MS > 0) {
         STORE.orionHealth.noAckWarnUntil = 0;
         STORE.orionHealth.downSince = 0;
         if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
+        if (!wasDownOrSuspect) maybeFlashOrionTiredWakeFace(now);
       } else {
         STORE.orionHealth.lastFailAt = now;
         STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
@@ -1223,6 +1226,43 @@ function addOrionBadge(emoji, holdMs = 5200) {
   if (!emoji) return;
   STORE.orionBadges.set(emoji, Math.max(STORE.orionBadges.get(emoji) || 0, Date.now() + holdMs));
   STORE.orionLastActionAt = Date.now();
+}
+
+function addOrionCosmeticBadge(emoji, holdMs = 1200, atMs = Date.now()) {
+  // Cosmetic badge: does NOT bump `orionLastActionAt`.
+  if (!emoji) return;
+  STORE.orionBadges.set(emoji, Math.max(STORE.orionBadges.get(emoji) || 0, atMs + Math.max(350, holdMs)));
+}
+
+function orionIsVisuallyIdle(atMs = Date.now()) {
+  const activeFresh =
+    STORE.activeAgentId &&
+    STORE.activeUpdatedAt &&
+    atMs - STORE.activeUpdatedAt <= ACTIVE_STALE_MS;
+  const hasBadges = (() => {
+    for (const until of STORE.orionBadges.values()) {
+      if (until > atMs) return true;
+    }
+    return false;
+  })();
+  const hasIo = Boolean(STORE.orionIo?.until && STORE.orionIo.until > atMs);
+  const hasBadgeReal = Boolean(STORE.orionBadge?.until && STORE.orionBadge.until > atMs);
+
+  // If ORION is down/suspect/restarting, do not show "sleep/wake" faces.
+  const orionDown = Boolean(STORE.orionHealth?.downSince && STORE.orionHealth.downSince > 0);
+  const orionRestarting = Boolean(STORE.orionHealth?.restartingUntil && STORE.orionHealth.restartingUntil > atMs);
+  const orionSuspect =
+    !orionDown &&
+    (Boolean(STORE.orionHealth?.noAckWarnUntil && STORE.orionHealth.noAckWarnUntil > atMs) ||
+      (Number(STORE.orionHealth?.consecutiveFails) || 0) > 0);
+
+  return !activeFresh && !hasBadges && !hasIo && !hasBadgeReal && !orionDown && !orionRestarting && !orionSuspect;
+}
+
+function maybeFlashOrionTiredWakeFace(atMs = Date.now()) {
+  // Every OK AEGIS health ping can briefly show a tired face, but ONLY if ORION is idle.
+  if (!orionIsVisuallyIdle(atMs)) return;
+  addOrionCosmeticBadge("🫩", 900, atMs);
 }
 
 function setOrionIo(mode, holdMs = 2400) {
@@ -1285,6 +1325,10 @@ function applyEventToStore(body) {
       STORE.orionHealth.noAckWarnUntil = 0;
       STORE.orionHealth.downSince = 0;
       if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
+
+      if (!wasDownOrSuspect && kind === "ok") {
+        maybeFlashOrionTiredWakeFace(now);
+      }
     } else {
       STORE.orionHealth.lastFailAt = now;
       STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
@@ -1373,6 +1417,7 @@ function applyEventToStore(body) {
 
   if (type === "agent.activity") {
     if (agentId) {
+      const isAegis = agentId === "AEGIS";
       const focusId = ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
       if (activity === "idle") {
         setAgentActivity(agentId, "idle");
@@ -1382,8 +1427,11 @@ function applyEventToStore(body) {
       } else {
         setAgentStatus(agentId, "active");
         if (activity) setAgentActivity(agentId, activity);
-        bumpActive(focusId);
-        setLink(focusId, "out", LINK_STALE_MS);
+        // AEGIS is a system/sentinel indicator; its heartbeat must not steal ORION focus or keep ORION "awake".
+        if (!isAegis) {
+          bumpActive(focusId);
+          setLink(focusId, "out", LINK_STALE_MS);
+        }
       }
       if (ATLAS_SUBAGENTS_SET.has(agentId)) {
         // Keep ATLAS visibly "working" when its sub-agents are active.
@@ -1392,10 +1440,12 @@ function applyEventToStore(body) {
       }
     }
     // Mirror activity to the central node so the user can see what ORION is doing.
-    const face = orionFaceForActivity(activity);
-    if (face) addOrionBadge(face, 5200);
-    const badge = orionBadgeForActivity(activity);
-    if (badge) setOrionBadge(badge, 2600);
+    if (agentId && agentId !== "AEGIS") {
+      const face = orionFaceForActivity(activity);
+      if (face) addOrionBadge(face, 5200);
+      const badge = orionBadgeForActivity(activity);
+      if (badge) setOrionBadge(badge, 2600);
+    }
     return;
   }
 
@@ -1526,7 +1576,7 @@ function snapshotLiveState() {
   const badgeReal = STORE.orionBadge?.until && STORE.orionBadge.until > now ? STORE.orionBadge.emoji : null;
   const orionProcesses =
     badges.length === 0 && !activeAgentId && !io && !badgeReal
-      ? ["😴"] // Stable idle indicator when nothing is happening.
+      ? ["💤"] // Stable sleep indicator when nothing is happening.
       : badges.slice(0, 3).map((b) => b.emoji);
 
   // Idle character: when ORION is truly idle (sleeping), cycle small "dream" icons
@@ -1535,7 +1585,7 @@ function snapshotLiveState() {
   const idleForMs = Math.max(0, now - (Number(STORE.orionLastActionAt) || 0));
   const dreamBadge =
     isVisuallyIdle && idleForMs > 7_000
-      ? (["💭", "🌙", "✨", "📎", "🗺️", "📊", "🎧", "🧩"][Math.floor(now / 6500) % 8])
+      ? (["🐑", "🌙", "✨", "💤", "⭐️", "💫"][Math.floor(now / 6500) % 6])
       : null;
 
   return {
@@ -2043,7 +2093,7 @@ app.post("/api/command", (req, res) => {
   // Visual: ORION is dispatching work outwards (faces only).
   addOrionBadge("😉", 2600);
   setOrionIo("dispatching", 2000);
-  setOrionBadge(orionBadgeForActivity(activity) || "💭", 2000);
+  setOrionBadge(orionBadgeForActivity(activity) || "✨", 2000);
 
   const sequence = targets.length ? targets : [targetAgent];
   setWorkflow(sequence, { id: acceptedId });
@@ -2118,7 +2168,7 @@ app.post("/api/command", (req, res) => {
         // Visual: ORION dispatches each hop.
         addOrionBadge("😉", 1800);
         setOrionIo("dispatching", 1400);
-        setOrionBadge(orionBadgeForActivity(activity) || "💭", 1400);
+        setOrionBadge(orionBadgeForActivity(activity) || "✨", 1400);
         startHop(agentId);
         if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
       }
@@ -2340,9 +2390,9 @@ if (shouldServeStatic) {
           res.setHeader("Cache-Control", "no-store");
           return;
         }
-        // Vite fingerprints assets (content hash in filename), so long caching is safe.
+        // In practice Telegram WebViews can be stubborn about caching; prefer revalidation.
         if (p.includes(`${path.sep}assets${path.sep}`)) {
-          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          res.setHeader("Cache-Control", "no-store");
           return;
         }
         // Conservative default for other static files.

@@ -1,0 +1,11 @@
+[Unit]
+Description=AEGIS daily maintenance monitor (ORION read-only probes)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=aegis-maintenance-orion.service
+
+[Install]
+WantedBy=timers.target
+
