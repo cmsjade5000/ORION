@@ -76,7 +76,9 @@ channels:
       nativeSkills: auto
     # Reply-to behavior inside Discord threads/channels.
     # off = never reply-to a specific message, first = reply-to the first triggering message, all = reply-to every triggering message.
-    replyToMode: first
+    # For Discord threads, "first" can attempt to reply to the thread-starter
+    # system message. Keep it off for reliable delivery.
+    replyToMode: off
     # DM policy (recommended: allowlist or pairing).
     dm:
       policy: allowlist

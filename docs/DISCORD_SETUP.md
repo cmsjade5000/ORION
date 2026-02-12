@@ -78,7 +78,10 @@ openclaw config set channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISC
 openclaw config set channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_UPDATES_CHANNEL_ID>".autoThread false
 
 # Optional: reply threading style (nested replies)
-openclaw config set channels.discord.replyToMode first
+# IMPORTANT: when using auto-threading, `replyToMode=first` can end up trying to
+# reply to Discord's "thread starter" system message (type=21). That can cause
+# the gateway to produce no visible reply. For reliability, keep replyToMode off.
+openclaw config set channels.discord.replyToMode off
 
 # Proactive updates target (used by scripts/notify_inbox_results.py)
 export DISCORD_DEFAULT_POST_TARGET="channel:<DISCORD_UPDATES_CHANNEL_ID>"

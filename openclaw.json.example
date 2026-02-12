@@ -58,7 +58,8 @@
         "native": "auto",
         "nativeSkills": "auto"
       },
-      "replyToMode": "first",
+      "_comment_replyToMode": "For Discord threads, replyToMode=first can attempt to reply to the thread-starter system message. Keep it off for reliable delivery.",
+      "replyToMode": "off",
       "dm": {
         "policy": "allowlist",
         "allowFrom": ["<CORY_DISCORD_USER_ID>"]
