@@ -99,6 +99,9 @@ openclaw channels resolve --channel discord "<DISCORD_CHANNEL_ID>" --json
 - Invite shows “Invalid scope: account.global_name.update” (or similar):
   - Regenerate the invite using **OAuth2 → URL Generator** with scopes limited to: `bot` and `applications.commands`.
   - Do not include any `account.*` scopes in the authorize URL.
+- You “installed the app” but the bot user never appears in the server member list:
+  - Your invite URL is missing the `bot` scope. Regenerate with scopes: `bot` and `applications.commands`.
+  - Confirm you’re selecting the correct server in the invite dropdown and you have **Manage Server** permission.
 - Missing token / wrong token: channel shows configured=false or probe fails.
 - Bot can DM but won’t respond in channels:
   - Channel/guild not allowlisted, or `groupPolicy` is `disabled`.
