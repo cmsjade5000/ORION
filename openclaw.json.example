@@ -23,7 +23,17 @@
       {
         "id": "main",
         "subagents": {
-          "allowAgents": ["*"]
+          "allowAgents": [
+            "atlas",
+            "node",
+            "pulse",
+            "stratus",
+            "pixel",
+            "ember",
+            "ledger",
+            "scribe",
+            "wire"
+          ]
         }
       }
     ]

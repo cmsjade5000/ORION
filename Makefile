@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim avatar audio-check lint dev task-packets test shellcheck ci
+.PHONY: soul restart routingsim avatar audio-check lint dev task-packets plan-graph test shellcheck ci
 
 ## Regenerate all agent SOUL.md files
 soul:
@@ -35,6 +35,10 @@ dev:
 task-packets:
 	python3 scripts/validate_task_packets.py
 
+## Validate markdown plan dependency graphs (T# + depends_on)
+plan-graph:
+	python3 scripts/validate_plan_graph.py
+
 ## Run unit tests + Task Packet validation
 test:
 	npm test
@@ -43,5 +47,5 @@ test:
 shellcheck:
 	./scripts/ci_shellcheck.sh
 
-## Must-pass CI gate (lint + tests)
-ci: shellcheck test
+## Must-pass CI gate (lint + tests + plan validation)
+ci: shellcheck test plan-graph
