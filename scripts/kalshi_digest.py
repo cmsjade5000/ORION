@@ -18,7 +18,7 @@ try:
         settlement_cash_delta_usd,
         summarize_post_snapshot,
     )
-    from scripts.arb.kalshi_ledger import closed_loop_report  # type: ignore
+    from scripts.arb.kalshi_ledger import closed_loop_report, load_ledger  # type: ignore
 except ModuleNotFoundError:
     # Allow running from repo root without package install.
     import sys
@@ -35,12 +35,102 @@ except ModuleNotFoundError:
         settlement_cash_delta_usd,
         summarize_post_snapshot,
     )
-    from scripts.arb.kalshi_ledger import closed_loop_report  # type: ignore
+    from scripts.arb.kalshi_ledger import closed_loop_report, load_ledger  # type: ignore
 
 
 def _repo_root() -> str:
     here = os.path.abspath(os.path.dirname(__file__))
     return os.path.abspath(os.path.join(here, ".."))
+
+
+def _param_recommendations(cl: Dict[str, Any], current_inputs: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Produce conservative, non-auto-applied parameter recommendations from closed-loop stats."""
+
+    def _num(x: Any) -> Optional[float]:
+        try:
+            if x is None:
+                return None
+            return float(x)
+        except Exception:
+            return None
+
+    def _int(x: Any) -> Optional[int]:
+        try:
+            if x is None:
+                return None
+            return int(x)
+        except Exception:
+            return None
+
+    settled = _int(cl.get("settled_orders")) or 0
+    if settled < 5:
+        return []
+
+    cur_unc = _num((current_inputs or {}).get("uncertainty_bps"))
+    cur_edge = _num((current_inputs or {}).get("min_edge_bps"))
+    cur_pers = _int((current_inputs or {}).get("persistence_cycles"))
+
+    wr = _num(cl.get("win_rate"))
+    ap = _num(cl.get("avg_implied_win_prob_settled"))
+    brier = _num(cl.get("brier_score_settled"))
+    pnl = _num(cl.get("realized_pnl_usd_approx"))
+
+    recs: List[Dict[str, Any]] = []
+
+    # If we underperform implied probability or calibration is bad, increase conservatism.
+    if wr is not None and ap is not None and wr + 0.05 < ap:
+        target = 75.0 if cur_unc is None else min(200.0, float(cur_unc) + 25.0)
+        recs.append(
+            {
+                "env": "KALSHI_ARB_UNCERTAINTY_BPS",
+                "value": str(int(round(target))),
+                "why": "Win-rate is materially below implied probability; add buffer to reduce false positives.",
+            }
+        )
+
+    if brier is not None and brier > 0.25:
+        target = 100.0 if cur_unc is None else min(250.0, float(cur_unc) + 25.0)
+        recs.append(
+            {
+                "env": "KALSHI_ARB_UNCERTAINTY_BPS",
+                "value": str(int(round(target))),
+                "why": "Poor calibration (high Brier); add uncertainty buffer and keep sigma=auto.",
+            }
+        )
+
+    if pnl is not None and pnl < 0.0:
+        # Trade less frequently by requiring persistence.
+        target = 2 if cur_pers is None else min(4, int(cur_pers) + 1)
+        recs.append(
+            {
+                "env": "KALSHI_ARB_PERSISTENCE_CYCLES",
+                "value": str(int(target)),
+                "why": "Negative realized P/L; require edge persistence across more cycles before entering.",
+            }
+        )
+
+    if cur_edge is not None and pnl is not None and pnl < 0.0:
+        target = min(400.0, float(cur_edge) + 20.0)
+        recs.append(
+            {
+                "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                "value": str(int(round(target))),
+                "why": "Negative realized P/L; tighten min-edge to trade less and only take clearer mispricings.",
+            }
+        )
+
+    # Deduplicate by env; keep first (most relevant).
+    seen: set[str] = set()
+    out: List[Dict[str, Any]] = []
+    for r in recs:
+        e = r.get("env")
+        if not isinstance(e, str) or not e:
+            continue
+        if e in seen:
+            continue
+        seen.add(e)
+        out.append(r)
+    return out
 
 
 def _read_openclaw_telegram_chat_id() -> Optional[int]:
@@ -328,7 +418,11 @@ def main() -> int:
             if isinstance(latest_trade, dict):
                 diag = latest_trade.get("diagnostics")
                 if isinstance(diag, dict):
-                    best = diag.get("best_effective_edge")
+                    best = (
+                        diag.get("best_effective_edge_pass_filters")
+                        or diag.get("best_effective_edge_any_quote")
+                        or diag.get("best_effective_edge")
+                    )
                     if isinstance(best, dict) and best.get("ticker"):
                         try:
                             msg_lines.append(
@@ -348,12 +442,22 @@ def main() -> int:
                                 parts.append(f"{r}={c}")
                         if parts:
                             msg_lines.append(f"Blockers: {', '.join(parts)}")
+                    totals = diag.get("totals")
+                    if isinstance(totals, dict):
+                        try:
+                            qp = int(totals.get("quotes_present") or 0)
+                            pn = int(totals.get("pass_non_edge_filters") or 0)
+                            msg_lines.append(f"Diag: quotes {qp}, pass-non-edge {pn}")
+                        except Exception:
+                            pass
     except Exception:
         pass
 
     # Closed-loop learning (persistent): entry quality vs (eventual) realized outcomes.
+    cl_report: Optional[Dict[str, Any]] = None
     try:
         cl = closed_loop_report(root, window_hours=float(args.window_hours))
+        cl_report = cl if isinstance(cl, dict) else None
         if isinstance(cl.get("avg_effective_edge_bps"), (int, float)):
             msg_lines.append(f"Avg effective edge (window): {float(cl['avg_effective_edge_bps']):.0f} bps")
         if isinstance(cl.get("avg_implied_win_prob"), (int, float)):
@@ -406,6 +510,42 @@ def main() -> int:
             msg_lines.append(f"Avg strike distance at entry: {float(cl['avg_abs_strike_distance_pct']):.2f}%")
     except Exception:
         pass
+
+    # Ledger health: show whether we are seeing settlements we can't attribute/parse.
+    try:
+        led = load_ledger(root)
+        um = led.get("unmatched_settlements") if isinstance(led, dict) else None
+        if isinstance(um, list) and um:
+            now = int(time.time())
+            start = now - int(max(60.0, float(args.window_hours) * 3600.0))
+            recent = 0
+            for it in um:
+                if isinstance(it, dict) and int(it.get("ts_unix") or 0) >= start:
+                    recent += 1
+            if recent:
+                msg_lines.append(f"Unmatched settlements (window): {recent} (total {len(um)})")
+    except Exception:
+        pass
+
+    # Conservative "parameter recs" (do not auto-apply; just persist and optionally surface one hint).
+    param_recs: List[Dict[str, Any]] = []
+    try:
+        # Pull current params from the most recent trade artifact (if present).
+        current_inputs = None
+        for o in reversed(run_objs):
+            t = o.get("trade")
+            if isinstance(t, dict) and isinstance(t.get("inputs"), dict):
+                current_inputs = t.get("inputs")
+                break
+        if isinstance(cl_report, dict):
+            param_recs = _param_recommendations(cl_report, current_inputs=current_inputs)
+            if param_recs:
+                # Keep Telegram short: only 1 line.
+                r0 = param_recs[0]
+                if isinstance(r0, dict) and isinstance(r0.get("env"), str) and isinstance(r0.get("value"), str):
+                    msg_lines.append(f"Param rec: set {r0['env']}={r0['value']}")
+    except Exception:
+        param_recs = []
 
     # Deployed downside risk (approx): sum of our tracked notional per market (cost basis), from local state.
     rs = _load_risk_state_summary(state_path)
@@ -548,6 +688,7 @@ def main() -> int:
         "cash_usd": avail_usd,
         "portfolio_value_usd": port_usd,
         "kill_switch_on": kill_on,
+        "param_recommendations": param_recs,
         "message": "\n".join(msg_lines),
     }
 
@@ -558,6 +699,17 @@ def main() -> int:
         with open(os.path.join(out_dir, f"{now}.json"), "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)
             f.write("\n")
+    except Exception:
+        pass
+
+    # Persist param recs separately so we can trend them over time.
+    try:
+        if param_recs:
+            out_dir = os.path.join(root, "tmp", "kalshi_ref_arb", "recommendations")
+            os.makedirs(out_dir, exist_ok=True)
+            with open(os.path.join(out_dir, f"{now}.json"), "w", encoding="utf-8") as f:
+                json.dump({"timestamp_unix": now, "window_hours": float(args.window_hours), "recs": param_recs}, f, indent=2, sort_keys=True)
+                f.write("\n")
     except Exception:
         pass
 

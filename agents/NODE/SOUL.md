@@ -1,6 +1,6 @@
 # SOUL.md — NODE
 
-**Generated:** dc07587+dirty
+**Generated:** 97c6e66+dirty
 **Source:** src/core/shared + USER.md + src/agents/NODE.md
 
 ---

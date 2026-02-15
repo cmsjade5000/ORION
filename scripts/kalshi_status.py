@@ -9,6 +9,17 @@ import os
 import time
 from typing import Any, Dict, Optional, Tuple
 
+try:
+    from scripts.arb.kalshi_ledger import load_ledger  # type: ignore
+except ModuleNotFoundError:
+    import sys
+
+    here = os.path.abspath(os.path.dirname(__file__))
+    repo_root = os.path.abspath(os.path.join(here, ".."))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    from scripts.arb.kalshi_ledger import load_ledger  # type: ignore
+
 
 def _repo_root() -> str:
     here = os.path.abspath(os.path.dirname(__file__))
@@ -131,7 +142,12 @@ def main() -> int:
         )
     else:
         diag = trade.get("diagnostics") if isinstance(trade.get("diagnostics"), dict) else {}
-        best = diag.get("best_effective_edge") if isinstance(diag.get("best_effective_edge"), dict) else {}
+        best = (
+            diag.get("best_effective_edge_pass_filters")
+            or diag.get("best_effective_edge_any_quote")
+            or diag.get("best_effective_edge")
+        )
+        best = best if isinstance(best, dict) else {}
         if best.get("ticker"):
             try:
                 lines.append(
@@ -150,6 +166,23 @@ def main() -> int:
                 parts.append(f"{r}={c}")
         if parts:
             lines.append(f"Blockers: {', '.join(parts)}")
+        totals = diag.get("totals") if isinstance(diag.get("totals"), dict) else {}
+        if totals:
+            try:
+                qp = int(totals.get("quotes_present") or 0)
+                pn = int(totals.get("pass_non_edge_filters") or 0)
+                lines.append(f"Diag: quotes {qp}, pass-non-edge {pn}")
+            except Exception:
+                pass
+
+    # Ledger health: show unmatched settlements (so we know if settlement parsing needs work).
+    try:
+        led = load_ledger(root)
+        um = led.get("unmatched_settlements") if isinstance(led, dict) else None
+        if isinstance(um, list) and um:
+            lines.append(f"Unmatched settlements: {len(um)}")
+    except Exception:
+        pass
 
     msg = "\n".join(lines)
     payload = {
@@ -163,4 +196,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -192,24 +192,67 @@ def _extract_cash_delta_usd_from_settlement(s: Dict[str, Any]) -> Optional[float
         "payout_dollars",
         "amount_dollars",
         "net_dollars",
+        "cashDeltaDollars",
+        "profitDollars",
+        "payoutDollars",
+        "amountDollars",
+        "netDollars",
+        "cash_delta_usd",
+        "profit_usd",
+        "payout_usd",
+        "amount_usd",
+        "net_usd",
         "cash_delta",
         "profit",
         "payout",
         "amount",
         "net",
+        "cashDelta",
+        "profitUsd",
+        "payoutUsd",
+        "amountUsd",
+        "netUsd",
+        # Cent-denominated common variants.
+        "cash_delta_cents",
+        "profit_cents",
+        "payout_cents",
+        "amount_cents",
+        "net_cents",
+        "cashDeltaCents",
+        "profitCents",
+        "payoutCents",
+        "amountCents",
+        "netCents",
     ]
     for k in candidates:
         v = s.get(k)
         if v is None:
             continue
+        # Some schemas nest the amount as {"amount": ...}.
+        if isinstance(v, dict):
+            for kk in ("amount", "value", "dollars", "cents"):
+                if kk in v:
+                    v = v.get(kk)
+                    break
         # Strings like "1.23"
+        if isinstance(v, str):
+            vv = v.strip().replace("$", "").replace(",", "")
+            v = vv
         fx = _safe_float(v)
         if fx is None:
             continue
         if isinstance(v, int):
-            # Likely cents if large.
-            if abs(int(v)) >= 100:
+            # Likely cents if large, or explicitly a *_cents key.
+            if k.endswith("_cents") or k.endswith("Cents") or abs(int(v)) >= 100:
                 return float(v) / 100.0
+            return float(v)
+        # If it's a float but looks like cents (e.g. 1234.0), handle conservatively.
+        if k.endswith("_cents") or k.endswith("Cents"):
+            return float(fx) / 100.0
+        if abs(float(fx)) >= 100.0 and abs(float(fx)) <= 1_000_000.0:
+            # Many settlement payloads use integer cents but serialized as float.
+            if float(fx).is_integer():
+                return float(fx) / 100.0
         return float(fx)
     return None
 

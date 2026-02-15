@@ -172,6 +172,7 @@ def update_from_run(repo_root: str, *, ts_unix: int, trade: Dict[str, Any], post
             if len(hashes) > 2000:
                 del hashes[: len(hashes) - 2000]
             attributed = _attribute_settlement(ledger, s, ts_unix=ts_unix)
+            parsed = _parse_settlement_outcome(s)
             if not attributed:
                 um = ledger.setdefault("unmatched_settlements", [])
                 if not isinstance(um, list):
@@ -180,9 +181,41 @@ def update_from_run(repo_root: str, *, ts_unix: int, trade: Dict[str, Any], post
                 um.append({"ts_unix": int(ts_unix), "settlement": s})
                 if len(um) > 500:
                     del um[: len(um) - 500]
+                _capture_settlement_sample(repo_root, ts_unix=ts_unix, settlement=s, parsed=parsed, reason="unattributed")
+            else:
+                # Even if attributed, keep a small sample of "weird" settlements for schema tuning.
+                if parsed.get("outcome_yes") is None and parsed.get("cash_delta_usd") is None:
+                    _capture_settlement_sample(repo_root, ts_unix=ts_unix, settlement=s, parsed=parsed, reason="parsed_incomplete")
 
     save_ledger(repo_root, ledger)
     return ledger
+
+
+def _capture_settlement_sample(
+    repo_root: str,
+    *,
+    ts_unix: int,
+    settlement: Dict[str, Any],
+    parsed: Dict[str, Any],
+    reason: str,
+) -> None:
+    """Persist a small rotating jsonl sample of settlement schemas for later parser improvements."""
+    try:
+        day = time.strftime("%Y%m%d", time.gmtime(int(ts_unix)))
+        d = os.path.join(repo_root, "tmp", "kalshi_ref_arb", "settlement_samples")
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, f"{day}.jsonl")
+        rec = {
+            "ts_unix": int(ts_unix),
+            "reason": str(reason),
+            "parsed": parsed,
+            "settlement": settlement,
+        }
+        # Append-only, daily-rotated.
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, sort_keys=True, ensure_ascii=True) + "\n")
+    except Exception:
+        return
 
 
 def _iter_orders(ledger: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
@@ -199,18 +232,67 @@ def _iter_orders(ledger: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
 
 def _parse_settlement_outcome(s: Dict[str, Any]) -> Dict[str, Any]:
     """Best-effort parsing. Outcome is for YES (True means YES happened)."""
-    ticker = s.get("ticker") or s.get("market_ticker")
-    ticker = ticker if isinstance(ticker, str) else ""
-    side = s.get("side") or s.get("position_side") or s.get("contract_side")
-    side = side.strip().lower() if isinstance(side, str) else ""
-    if side not in ("yes", "no"):
-        side = ""
-    count = _safe_int(s.get("count") or s.get("quantity") or s.get("contracts"))
+    def _iter_dict_candidates(root: Dict[str, Any]) -> List[Dict[str, Any]]:
+        # Try a few common nestings without exploding the search space.
+        out: List[Dict[str, Any]] = [root]
+        for k in (
+            "settlement",
+            "market",
+            "position",
+            "result",
+            "outcome",
+            "resolution",
+            "details",
+            "data",
+        ):
+            v = root.get(k)
+            if isinstance(v, dict):
+                out.append(v)
+        return out
+
+    cands = _iter_dict_candidates(s)
+
+    ticker = ""
+    for d in cands:
+        t = d.get("ticker") or d.get("market_ticker") or d.get("marketTicker")
+        if isinstance(t, str) and t:
+            ticker = t
+            break
+        m = d.get("market")
+        if isinstance(m, dict):
+            t2 = m.get("ticker") or m.get("market_ticker") or m.get("marketTicker")
+            if isinstance(t2, str) and t2:
+                ticker = t2
+                break
+
+    side = ""
+    for d in cands:
+        v = d.get("side") or d.get("position_side") or d.get("contract_side") or d.get("contractSide")
+        if isinstance(v, str):
+            vv = v.strip().lower()
+            if vv in ("yes", "no"):
+                side = vv
+                break
+
+    count = None
+    for d in cands:
+        count = _safe_int(d.get("count") or d.get("quantity") or d.get("contracts") or d.get("contract_count") or d.get("num_contracts"))
+        if isinstance(count, int) and count > 0:
+            break
+        # Sometimes flat yes/no positions.
+        pos = d.get("position")
+        if isinstance(pos, dict) and side in ("yes", "no"):
+            cv = _safe_int(pos.get(side))
+            if isinstance(cv, int) and cv > 0:
+                count = cv
+                break
 
     outcome_yes: Optional[bool] = None
     # Common keys for 0/1 settlement.
     for k in (
         "settlement_price_dollars",
+        "settlement_price_cents",
+        "settlement_value_cents",
         "settlement_price",
         "settlement_value",
         "result",
@@ -218,7 +300,11 @@ def _parse_settlement_outcome(s: Dict[str, Any]) -> Dict[str, Any]:
         "final_outcome",
         "resolved",
     ):
-        v = s.get(k)
+        v = None
+        for d in cands:
+            if k in d:
+                v = d.get(k)
+                break
         if v is None:
             continue
         if isinstance(v, str):
@@ -230,11 +316,25 @@ def _parse_settlement_outcome(s: Dict[str, Any]) -> Dict[str, Any]:
                 outcome_yes = False
                 break
         fv = _safe_float(v)
-        if fv is not None and (0.0 <= fv <= 1.0):
+        if fv is None:
+            continue
+        # Support cents-like ints (0/100).
+        if isinstance(v, int) and (0 <= int(v) <= 100):
+            outcome_yes = bool(int(v) >= 50)
+            break
+        if fv > 1.0 and fv <= 100.0:
+            # Looks like cents or percent, treat 50+ as YES.
+            outcome_yes = bool(fv >= 50.0)
+            break
+        if 0.0 <= fv <= 1.0:
             outcome_yes = bool(fv >= 0.5)
             break
 
-    payout = _safe_float(s.get("payout_dollars") or s.get("payout") or s.get("amount_dollars") or s.get("amount"))
+    payout = None
+    for d in cands:
+        payout = _safe_float(d.get("payout_dollars") or d.get("payout") or d.get("amount_dollars") or d.get("amount"))
+        if payout is not None:
+            break
     cash_delta = settlement_cash_delta_usd({"settlements": {"settlements": [s]}}).get("cash_delta_usd")
     cash_delta_f = float(cash_delta) if isinstance(cash_delta, (int, float)) else None
     return {

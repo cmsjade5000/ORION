@@ -49,6 +49,36 @@ class TestKalshiLedger(unittest.TestCase):
             self.assertIn("fills", o)
             self.assertEqual(int(o["fills"]["count"]), 2)
 
+    def test_update_from_run_attributes_settlement_with_cents_outcome(self) -> None:
+        from scripts.arb.kalshi_ledger import load_ledger, save_ledger, update_from_run
+
+        with tempfile.TemporaryDirectory() as td:
+            os.makedirs(os.path.join(td, "tmp", "kalshi_ref_arb"), exist_ok=True)
+            save_ledger(td, {"version": 1, "orders": {}, "unmatched_settlements": [], "settlement_hashes": []})
+
+            ts = int(time.time())
+            trade = {
+                "placed": [
+                    {
+                        "mode": "live",
+                        "order_id": "O2",
+                        "order": {"ticker": "T2", "side": "no", "action": "buy", "count": 1, "price_dollars": "0.40"},
+                    }
+                ]
+            }
+            post = {
+                "fills": {"fills": [{"order_id": "O2", "ticker": "T2", "count": 1, "price_dollars": "0.40"}]},
+                "settlements": {"settlements": [{"market_ticker": "T2", "side": "no", "count": 1, "settlement_price_cents": 0}]},
+            }
+
+            update_from_run(td, ts_unix=ts, trade=trade, post=post)
+            led = load_ledger(td)
+            o = led["orders"]["O2"]
+            self.assertIn("settlement", o)
+            st = o["settlement"]
+            self.assertIsInstance(st.get("parsed"), dict)
+            self.assertIn("outcome_yes", st["parsed"])
+
 
 if __name__ == "__main__":
     unittest.main()

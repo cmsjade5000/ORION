@@ -57,6 +57,75 @@ class TestKalshiAnalytics(unittest.TestCase):
         s = settlement_cash_delta_usd(post)
         self.assertAlmostEqual(float(s["cash_delta_usd"]), 2.0, places=12)
 
+    def test_settlement_cash_delta_usd_handles_cents_variants(self) -> None:
+        from scripts.arb.kalshi_analytics import settlement_cash_delta_usd
+
+        post = {"settlements": {"settlements": [{"ticker": "A", "profit_cents": 125}, {"ticker": "B", "netCents": -25}]}}
+        s = settlement_cash_delta_usd(post)
+        self.assertAlmostEqual(float(s["cash_delta_usd"]), 1.0, places=12)
+
+    def test_trade_diagnostics_best_candidate_ignores_untradable_price_bounds(self) -> None:
+        import argparse
+        import scripts.kalshi_ref_arb as mod
+
+        args = argparse.Namespace(
+            uncertainty_bps=50.0,
+            min_edge_bps=80.0,
+            min_seconds_to_expiry=900,
+            min_liquidity_usd=200.0,
+            max_spread=0.05,
+            min_price=0.05,
+            max_price=0.95,
+        )
+
+        # Candidate A: higher effective edge but untradable due to ask=1.0 (out of bounds)
+        s1 = mod.Signal(
+            ticker="T_BAD",
+            strike_type="greater",
+            strike=1.0,
+            expected_expiration_time="2030-01-01T00:00:00Z",
+            spot_ref=50_000.0,
+            t_years=0.01,
+            sigma_annual=0.8,
+            p_yes=0.9,
+            yes_bid=0.99,
+            yes_ask=1.0,
+            no_bid=0.01,
+            no_ask=0.02,
+            edge_bps_buy_yes=200.0,
+            edge_bps_buy_no=0.0,
+            recommended=None,
+            filters={"liquidity_dollars": 10_000.0, "yes_spread": 0.01, "no_spread": 0.01},
+            rejected_reasons=[],
+        )
+
+        # Candidate B: lower edge but tradable within bounds.
+        s2 = mod.Signal(
+            ticker="T_OK",
+            strike_type="greater",
+            strike=1.0,
+            expected_expiration_time="2030-01-01T00:00:00Z",
+            spot_ref=50_000.0,
+            t_years=0.01,
+            sigma_annual=0.8,
+            p_yes=0.7,
+            yes_bid=0.49,
+            yes_ask=0.50,
+            no_bid=0.50,
+            no_ask=0.51,
+            edge_bps_buy_yes=150.0,
+            edge_bps_buy_no=0.0,
+            recommended=None,
+            filters={"liquidity_dollars": 10_000.0, "yes_spread": 0.01, "no_spread": 0.01},
+            rejected_reasons=[],
+        )
+
+        d = mod._compute_trade_diagnostics([s1, s2], args, markets_fetched=2, candidates_recommended=0)
+        best = d.get("best_effective_edge_pass_filters")
+        self.assertIsInstance(best, dict)
+        assert isinstance(best, dict)
+        self.assertEqual(best.get("ticker"), "T_OK")
+
     def test_signal_filters_gate_recommended_side(self) -> None:
         import scripts.kalshi_ref_arb as mod
         from scripts.arb.kalshi import KalshiMarket

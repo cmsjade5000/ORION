@@ -189,13 +189,24 @@ export function registerKalshiCommands(bot: Bot) {
       );
     } else {
       const diag = trade?.diagnostics;
-      const best = diag?.best_effective_edge;
+      const best =
+        diag?.best_effective_edge_pass_filters ??
+        diag?.best_effective_edge_any_quote ??
+        diag?.best_effective_edge;
       if (best?.ticker) {
         try {
           lines.push(
             `No trades: best eff edge ${Number(best.effective_edge_bps).toFixed(0)} bps on ${best.ticker} ${best.side} @ ${Number(best.ask).toFixed(4)}`
           );
         } catch {}
+      }
+      const totals = diag?.totals;
+      if (totals && typeof totals === "object") {
+        const qp = Number((totals as any).quotes_present ?? NaN);
+        const pn = Number((totals as any).pass_non_edge_filters ?? NaN);
+        if (Number.isFinite(qp) || Number.isFinite(pn)) {
+          lines.push(`Diag: quotes ${Number.isFinite(qp) ? qp : "?"}, pass-non-edge ${Number.isFinite(pn) ? pn : "?"}`);
+        }
       }
     }
 
@@ -217,4 +228,3 @@ export function registerKalshiCommands(bot: Bot) {
     await ctx.reply(out.ok ? out.message : `Kalshi digest error: ${out.message}`);
   });
 }
-

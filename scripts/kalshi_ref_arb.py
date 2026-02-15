@@ -554,70 +554,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
         order_count += 1
 
     # Diagnostics: if no trades placed, explain why.
-    diagnostics: Dict[str, Any] = {
-        "markets_fetched": len(markets),
-        "signals_computed": len(all_signals),
-        "candidates_recommended": len(signals),
-    }
-    try:
-        # Best effective edge (edge - uncertainty) among either side, even if it didn't qualify.
-        best = None
-        for s in all_signals:
-            for side in ("yes", "no"):
-                ask = s.yes_ask if side == "yes" else s.no_ask
-                edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
-                if ask is None or edge is None:
-                    continue
-                eff = float(edge) - float(args.uncertainty_bps)
-                cand = {
-                    "ticker": s.ticker,
-                    "side": side,
-                    "ask": float(ask),
-                    "edge_bps": float(edge),
-                    "effective_edge_bps": float(eff),
-                    "tte_min": float(s.t_years) * 365.0 * 24.0 * 60.0,
-                    "liquidity_dollars": (s.filters or {}).get("liquidity_dollars"),
-                    "spread": (s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"),
-                }
-                if best is None or float(cand["effective_edge_bps"]) > float(best["effective_edge_bps"]):
-                    best = cand
-        diagnostics["best_effective_edge"] = best
-
-        # Blocker counts (approx, per-side).
-        blockers: Dict[str, int] = {}
-        for s in all_signals:
-            tte_s = float(s.t_years) * 365.0 * 24.0 * 3600.0
-            liq = (s.filters or {}).get("liquidity_dollars")
-            try:
-                liq_f = float(liq) if liq is not None else None
-            except Exception:
-                liq_f = None
-            for side in ("yes", "no"):
-                ask = s.yes_ask if side == "yes" else s.no_ask
-                spread = (s.filters or {}).get("yes_spread" if side == "yes" else "no_spread")
-                edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
-                if ask is None or edge is None:
-                    blockers[f"{side}_missing_quote"] = blockers.get(f"{side}_missing_quote", 0) + 1
-                    continue
-                eff = float(edge) - float(args.uncertainty_bps)
-                if tte_s < float(args.min_seconds_to_expiry):
-                    blockers["too_close_to_expiry"] = blockers.get("too_close_to_expiry", 0) + 1
-                if liq_f is not None and liq_f < float(args.min_liquidity_usd):
-                    blockers["liquidity_below_min"] = blockers.get("liquidity_below_min", 0) + 1
-                try:
-                    sp = float(spread) if spread is not None else None
-                except Exception:
-                    sp = None
-                if sp is not None and sp > float(args.max_spread):
-                    blockers[f"{side}_spread_too_wide"] = blockers.get(f"{side}_spread_too_wide", 0) + 1
-                if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
-                    blockers[f"{side}_price_out_of_bounds"] = blockers.get(f"{side}_price_out_of_bounds", 0) + 1
-                if eff < float(args.min_edge_bps):
-                    blockers["effective_edge_below_min"] = blockers.get("effective_edge_below_min", 0) + 1
-        top = sorted(blockers.items(), key=lambda kv: kv[1], reverse=True)[:8]
-        diagnostics["top_blockers"] = [{"reason": k, "count": int(v)} for k, v in top]
-    except Exception:
-        pass
+    diagnostics: Dict[str, Any] = _compute_trade_diagnostics(all_signals, args, markets_fetched=len(markets), candidates_recommended=len(signals))
 
     state.append_run(
         {
@@ -660,6 +597,142 @@ def cmd_trade(args: argparse.Namespace) -> int:
     }
     sys.stdout.write(_json(out) + "\n")
     return 0
+
+
+def _compute_trade_diagnostics(
+    all_signals: List[Signal],
+    args: argparse.Namespace,
+    *,
+    markets_fetched: int,
+    candidates_recommended: int,
+) -> Dict[str, Any]:
+    """Explain why a cycle did not trade.
+
+    Goal: avoid misleading "best edge" candidates that are untradable due to basic filters
+    (price bounds, spread, expiry, liquidity), and provide a clear reason histogram.
+    """
+    diagnostics: Dict[str, Any] = {
+        "markets_fetched": int(markets_fetched),
+        "signals_computed": len(all_signals),
+        "candidates_recommended": int(candidates_recommended),
+    }
+
+    def _safe_float(x: Any) -> Optional[float]:
+        try:
+            if x is None:
+                return None
+            return float(x)
+        except Exception:
+            return None
+
+    def _cand_for(s: Signal, side: str) -> Optional[Dict[str, Any]]:
+        ask = s.yes_ask if side == "yes" else s.no_ask
+        edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
+        if ask is None or edge is None:
+            return None
+        eff = float(edge) - float(args.uncertainty_bps)
+        return {
+            "ticker": s.ticker,
+            "side": side,
+            "ask": float(ask),
+            "edge_bps": float(edge),
+            "effective_edge_bps": float(eff),
+            "tte_min": float(s.t_years) * 365.0 * 24.0 * 60.0,
+            "liquidity_dollars": (s.filters or {}).get("liquidity_dollars"),
+            "spread": (s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"),
+        }
+
+    def _passes_non_edge_filters(s: Signal, side: str) -> bool:
+        ask = s.yes_ask if side == "yes" else s.no_ask
+        if ask is None:
+            return False
+        tte_s = float(s.t_years) * 365.0 * 24.0 * 3600.0
+        if tte_s < float(args.min_seconds_to_expiry):
+            return False
+        liq = _safe_float((s.filters or {}).get("liquidity_dollars"))
+        if liq is not None and liq < float(args.min_liquidity_usd):
+            return False
+        sp = _safe_float((s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"))
+        if sp is not None and sp > float(args.max_spread):
+            return False
+        if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
+            return False
+        return True
+
+    # "Best" candidates.
+    best_any_quote = None
+    best_passing_non_edge = None
+    for s in all_signals:
+        for side in ("yes", "no"):
+            cand = _cand_for(s, side)
+            if cand is None:
+                continue
+            if (best_any_quote is None) or (float(cand["effective_edge_bps"]) > float(best_any_quote["effective_edge_bps"])):
+                best_any_quote = cand
+            if _passes_non_edge_filters(s, side):
+                if (best_passing_non_edge is None) or (
+                    float(cand["effective_edge_bps"]) > float(best_passing_non_edge["effective_edge_bps"])
+                ):
+                    best_passing_non_edge = cand
+
+    diagnostics["best_effective_edge_any_quote"] = best_any_quote
+    diagnostics["best_effective_edge_pass_filters"] = best_passing_non_edge
+
+    # Reason histogram.
+    primary_counts: Dict[str, int] = {}
+    all_reason_counts: Dict[str, int] = {}
+    totals = {
+        "sides_evaluated": 0,
+        "quotes_present": 0,
+        "pass_non_edge_filters": 0,
+        "pass_all_filters": 0,
+    }
+
+    for s in all_signals:
+        tte_s = float(s.t_years) * 365.0 * 24.0 * 3600.0
+        liq_f = _safe_float((s.filters or {}).get("liquidity_dollars"))
+        for side in ("yes", "no"):
+            totals["sides_evaluated"] += 1
+            ask = s.yes_ask if side == "yes" else s.no_ask
+            edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
+            spread = _safe_float((s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"))
+
+            reasons: List[str] = []
+            if ask is None or edge is None:
+                reasons.append(f"{side}_missing_quote")
+            else:
+                totals["quotes_present"] += 1
+                if tte_s < float(args.min_seconds_to_expiry):
+                    reasons.append("too_close_to_expiry")
+                if liq_f is not None and liq_f < float(args.min_liquidity_usd):
+                    reasons.append("liquidity_below_min")
+                if spread is not None and spread > float(args.max_spread):
+                    reasons.append(f"{side}_spread_too_wide")
+                if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
+                    reasons.append(f"{side}_price_out_of_bounds")
+                if _passes_non_edge_filters(s, side):
+                    totals["pass_non_edge_filters"] += 1
+                # Edge thresholds last (least "structural").
+                eff = float(edge) - float(args.uncertainty_bps)
+                if float(edge) < float(args.min_edge_bps):
+                    reasons.append(f"{side}_edge_below_min")
+                if eff < float(args.min_edge_bps):
+                    reasons.append(f"{side}_effective_edge_below_min")
+                if not reasons:
+                    totals["pass_all_filters"] += 1
+
+            # Count primary + all reasons.
+            primary = reasons[0] if reasons else "ok"
+            primary_counts[primary] = primary_counts.get(primary, 0) + 1
+            for r in reasons:
+                all_reason_counts[r] = all_reason_counts.get(r, 0) + 1
+
+    diagnostics["totals"] = totals
+    diagnostics["blockers_primary"] = primary_counts
+    diagnostics["blockers_all"] = all_reason_counts
+    top = sorted(primary_counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
+    diagnostics["top_blockers"] = [{"reason": k, "count": int(v)} for k, v in top]
+    return diagnostics
 
 
 def cmd_balance(args: argparse.Namespace) -> int:

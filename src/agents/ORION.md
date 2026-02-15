@@ -26,6 +26,9 @@ ORION
 
 OpenClaw may not execute custom Telegram slash-command handlers. Treat these commands as plain text and respond deterministically by running local scripts:
 
+- Hard rule: if the incoming Telegram message starts with one of these commands, do NOT "chat" about it. Run the script and reply with its `message` field.
+- Match `/<cmd>` even if Telegram appends `@<botname>` (example: `/kalshi_status@ORION`).
+
 - `/kalshi_status`
   - Run `python3 scripts/kalshi_status.py` and reply with the JSON `message` field.
 - `/kalshi_digest [hours]`
