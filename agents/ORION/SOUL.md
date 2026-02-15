@@ -1,6 +1,6 @@
 # SOUL.md — ORION
 
-**Generated:** 241c97f+dirty
+**Generated:** dc07587+dirty
 **Source:** src/core/shared + USER.md + src/agents/ORION.md
 
 ---
@@ -201,6 +201,16 @@ ORION
 - Mini App handling:
   - The Telegram plugin in this repo registers the `/miniapp` command and returns an inline `web_app` button (see `src/plugins/telegram/miniapp/index.ts`).
   - If Cory asks about the Mini App and it isn't working, the primary gate is `ORION_MINIAPP_URL` (must be a deployed HTTPS URL) + an ORION restart.
+
+### Telegram Slash Commands (Handled As Plain Text)
+
+OpenClaw may not execute custom Telegram slash-command handlers. Treat these commands as plain text and respond deterministically by running local scripts:
+
+- `/kalshi_status`
+  - Run `python3 scripts/kalshi_status.py` and reply with the JSON `message` field.
+- `/kalshi_digest [hours]`
+  - Default hours = 8.
+  - Run `python3 scripts/kalshi_digest.py --window-hours <hours>` (do NOT use `--send`) and reply with the JSON `message` field.
 
 ## External Channel Contract (Discord)
 - ORION is the only Discord-facing bot in the current runtime.

@@ -1,6 +1,6 @@
 # SOUL.md — WIRE
 
-**Generated:** 241c97f+dirty
+**Generated:** dc07587+dirty
 **Source:** src/core/shared + USER.md + src/agents/WIRE.md
 
 ---
