@@ -133,6 +133,24 @@ def main() -> int:
     if status:
         lines.append(f"Trade: {status}{f' ({reason})' if reason else ''}")
 
+    # Multi-series cycle: show selected series if present.
+    try:
+        tbs = run.get("trades_by_series") if isinstance(run.get("trades_by_series"), dict) else None
+        if tbs is None:
+            tbs = trade.get("trades_by_series") if isinstance(trade, dict) else None
+        if isinstance(tbs, dict) and tbs:
+            sel = None
+            for s, it in tbs.items():
+                tr = (it or {}).get("trade") if isinstance(it, dict) else None
+                inp = tr.get("inputs") if isinstance(tr, dict) else None
+                if isinstance(inp, dict) and bool(inp.get("allow_write")):
+                    sel = s
+                    break
+            if isinstance(sel, str) and sel:
+                lines.append(f"Series selected: {sel}")
+    except Exception:
+        pass
+
     placed = trade.get("placed") if isinstance(trade.get("placed"), list) else []
     live = [p for p in placed if isinstance(p, dict) and p.get("mode") == "live"]
     if live:

@@ -410,12 +410,34 @@ def main() -> int:
     try:
         if stats.live_orders == 0:
             latest_trade = None
+            latest_run = None
             for o in reversed(run_objs):
                 t = o.get("trade")
                 if isinstance(t, dict) and t.get("mode") == "trade":
                     latest_trade = t
+                    latest_run = o
                     break
             if isinstance(latest_trade, dict):
+                # If the cycle is evaluating multiple series, surface which one was selected.
+                try:
+                    tbs = None
+                    if isinstance(latest_run, dict) and isinstance(latest_run.get("trades_by_series"), dict):
+                        tbs = latest_run.get("trades_by_series")
+                    elif isinstance(latest_trade.get("trades_by_series"), dict):
+                        tbs = latest_trade.get("trades_by_series")
+                    if isinstance(tbs, dict) and tbs:
+                        sel = None
+                        # The selected series is the one with allow_write=true in its inputs.
+                        for s, it in tbs.items():
+                            tr = (it or {}).get("trade") if isinstance(it, dict) else None
+                            inp = tr.get("inputs") if isinstance(tr, dict) else None
+                            if isinstance(inp, dict) and bool(inp.get("allow_write")):
+                                sel = s
+                                break
+                        if isinstance(sel, str) and sel:
+                            msg_lines.append(f"Series selected: {sel}")
+                except Exception:
+                    pass
                 diag = latest_trade.get("diagnostics")
                 if isinstance(diag, dict):
                     best_pass = diag.get("best_effective_edge_pass_filters") if isinstance(diag.get("best_effective_edge_pass_filters"), dict) else None

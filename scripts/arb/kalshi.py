@@ -74,29 +74,66 @@ class KalshiClient:
         event_ticker: Optional[str] = None,
         tickers: Optional[List[str]] = None,
         limit: int = 100,
+        cursor: str = "",
+        max_pages: int = 10,
     ) -> List[KalshiMarket]:
-        params: Dict[str, Any] = {"limit": str(int(limit))}
-        if status:
-            params["status"] = status
-        if series_ticker:
-            params["series_ticker"] = series_ticker
-        if event_ticker:
-            params["event_ticker"] = event_ticker
-        if tickers:
-            params["tickers"] = ",".join(tickers)
+        """List markets, with best-effort pagination support.
 
-        obj = self.http.get_json(f"{self.base_url}/trade-api/v2/markets", params=params)
-        items = obj.get("markets") if isinstance(obj, dict) else None
-        if not isinstance(items, list):
+        Kalshi endpoints commonly paginate via a `cursor` query param and a next-cursor field
+        in the response. We support both single-shot and multi-page collection up to `limit`.
+        """
+
+        def _next_cursor(obj: Any) -> str:
+            if not isinstance(obj, dict):
+                return ""
+            for k in ("next_cursor", "nextCursor", "cursor", "next"):
+                v = obj.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            return ""
+
+        want = max(0, int(limit))
+        if want == 0:
             return []
+
         out: List[KalshiMarket] = []
-        for raw in items:
-            if not isinstance(raw, dict):
-                continue
-            m = _parse_market(raw)
-            if m is not None:
-                out.append(m)
-        return out
+        cur = str(cursor or "").strip()
+        pages = 0
+
+        while len(out) < want and pages < max(1, int(max_pages)):
+            pages += 1
+            per = min(200, want - len(out))  # server may cap; we just request.
+            params: Dict[str, Any] = {"limit": str(int(per))}
+            if cur:
+                params["cursor"] = cur
+            if status:
+                params["status"] = status
+            if series_ticker:
+                params["series_ticker"] = series_ticker
+            if event_ticker:
+                params["event_ticker"] = event_ticker
+            if tickers:
+                params["tickers"] = ",".join(tickers)
+
+            obj = self.http.get_json(f"{self.base_url}/trade-api/v2/markets", params=params)
+            items = obj.get("markets") if isinstance(obj, dict) else None
+            if not isinstance(items, list) or not items:
+                break
+            for raw in items:
+                if not isinstance(raw, dict):
+                    continue
+                m = _parse_market(raw)
+                if m is not None:
+                    out.append(m)
+                if len(out) >= want:
+                    break
+
+            nxt = _next_cursor(obj)
+            if not nxt or nxt == cur:
+                break
+            cur = nxt
+
+        return out[:want]
 
     def get_market(self, ticker: str) -> Optional[KalshiMarket]:
         obj = self.http.get_json(f"{self.base_url}/trade-api/v2/markets/{ticker}")
