@@ -1,6 +1,6 @@
 # SOUL.md — AEGIS
 
-**Generated:** 2a60d95+dirty
+**Generated:** 88a6da5+dirty
 **Source:** src/core/shared + USER.md + src/agents/AEGIS.md
 
 ---
