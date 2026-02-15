@@ -661,6 +661,7 @@ def _compute_trade_diagnostics(
 
     # "Best" candidates.
     best_any_quote = None
+    best_in_bounds = None
     best_passing_non_edge = None
     for s in all_signals:
         for side in ("yes", "no"):
@@ -669,6 +670,9 @@ def _compute_trade_diagnostics(
                 continue
             if (best_any_quote is None) or (float(cand["effective_edge_bps"]) > float(best_any_quote["effective_edge_bps"])):
                 best_any_quote = cand
+            if float(cand["ask"]) >= float(args.min_price) and float(cand["ask"]) <= float(args.max_price):
+                if (best_in_bounds is None) or (float(cand["effective_edge_bps"]) > float(best_in_bounds["effective_edge_bps"])):
+                    best_in_bounds = cand
             if _passes_non_edge_filters(s, side):
                 if (best_passing_non_edge is None) or (
                     float(cand["effective_edge_bps"]) > float(best_passing_non_edge["effective_edge_bps"])
@@ -676,6 +680,7 @@ def _compute_trade_diagnostics(
                     best_passing_non_edge = cand
 
     diagnostics["best_effective_edge_any_quote"] = best_any_quote
+    diagnostics["best_effective_edge_in_bounds"] = best_in_bounds
     diagnostics["best_effective_edge_pass_filters"] = best_passing_non_edge
 
     # Reason histogram.

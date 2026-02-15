@@ -418,15 +418,21 @@ def main() -> int:
             if isinstance(latest_trade, dict):
                 diag = latest_trade.get("diagnostics")
                 if isinstance(diag, dict):
-                    best = (
-                        diag.get("best_effective_edge_pass_filters")
-                        or diag.get("best_effective_edge_any_quote")
-                        or diag.get("best_effective_edge")
+                    best_pass = diag.get("best_effective_edge_pass_filters") if isinstance(diag.get("best_effective_edge_pass_filters"), dict) else None
+                    best_bounds = diag.get("best_effective_edge_in_bounds") if isinstance(diag.get("best_effective_edge_in_bounds"), dict) else None
+                    best_any = (
+                        diag.get("best_effective_edge_any_quote")
+                        if isinstance(diag.get("best_effective_edge_any_quote"), dict)
+                        else (diag.get("best_effective_edge") if isinstance(diag.get("best_effective_edge"), dict) else None)
                     )
+                    best = best_pass or best_bounds or best_any
                     if isinstance(best, dict) and best.get("ticker"):
+                        prefix = "No trades:"
+                        if best_pass is None and best_bounds is None and best_any is not None:
+                            prefix = "No trades (no quotes in bounds):"
                         try:
                             msg_lines.append(
-                                f"No trades: best eff edge {float(best.get('effective_edge_bps')):.0f} bps on {best.get('ticker')} {best.get('side')} @ {float(best.get('ask')):.4f}"
+                                f"{prefix} best eff edge {float(best.get('effective_edge_bps')):.0f} bps on {best.get('ticker')} {best.get('side')} @ {float(best.get('ask')):.4f}"
                             )
                         except Exception:
                             pass

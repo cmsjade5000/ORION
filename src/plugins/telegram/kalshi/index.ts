@@ -189,14 +189,15 @@ export function registerKalshiCommands(bot: Bot) {
       );
     } else {
       const diag = trade?.diagnostics;
-      const best =
-        diag?.best_effective_edge_pass_filters ??
-        diag?.best_effective_edge_any_quote ??
-        diag?.best_effective_edge;
+      const bestPass = diag?.best_effective_edge_pass_filters;
+      const bestBounds = diag?.best_effective_edge_in_bounds;
+      const bestAny = diag?.best_effective_edge_any_quote ?? diag?.best_effective_edge;
+      const best = bestPass ?? bestBounds ?? bestAny;
       if (best?.ticker) {
         try {
+          const prefix = !bestPass && !bestBounds && bestAny ? "No trades (no quotes in bounds):" : "No trades:";
           lines.push(
-            `No trades: best eff edge ${Number(best.effective_edge_bps).toFixed(0)} bps on ${best.ticker} ${best.side} @ ${Number(best.ask).toFixed(4)}`
+            `${prefix} best eff edge ${Number(best.effective_edge_bps).toFixed(0)} bps on ${best.ticker} ${best.side} @ ${Number(best.ask).toFixed(4)}`
           );
         } catch {}
       }
