@@ -429,8 +429,14 @@ def main() -> int:
                         sel = None
                         # The selected series is the one with allow_write=true in its inputs.
                         for s, it in tbs.items():
-                            tr = (it or {}).get("trade") if isinstance(it, dict) else None
-                            inp = tr.get("inputs") if isinstance(tr, dict) else None
+                            tr = None
+                            if isinstance(it, dict):
+                                tr = it.get("trade") or it.get("scan") or (it.get("scan") if isinstance(it.get("scan"), dict) else None)
+                            inp = None
+                            if isinstance(tr, dict):
+                                inp = tr.get("inputs")
+                            if inp is None and isinstance(it, dict) and isinstance((it.get("scan") or {}).get("inputs"), dict):
+                                inp = (it.get("scan") or {}).get("inputs")
                             if isinstance(inp, dict) and bool(inp.get("allow_write")):
                                 sel = s
                                 break

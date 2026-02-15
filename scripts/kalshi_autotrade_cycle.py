@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Tuple
 
 try:
     from scripts.arb.kalshi_analytics import match_fills_for_order  # type: ignore
-    from scripts.arb.risk import RiskConfig, cooldown_active, set_cooldown  # type: ignore
+    from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
 except ModuleNotFoundError:
@@ -22,7 +22,7 @@ except ModuleNotFoundError:
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
     from scripts.arb.kalshi_analytics import match_fills_for_order  # type: ignore
-    from scripts.arb.risk import RiskConfig, cooldown_active, set_cooldown  # type: ignore
+    from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
 
@@ -98,9 +98,24 @@ def _load_json(path: str, default: Dict[str, Any]) -> Dict[str, Any]:
 
 def _save_json(path: str, obj: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2, sort_keys=True)
         f.write("\n")
+    try:
+        os.replace(tmp, path)
+    except Exception:
+        # Best-effort fallback.
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(obj, f, indent=2, sort_keys=True)
+                f.write("\n")
+        except Exception:
+            pass
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
 
 
 def _maybe_reconcile_risk_state(root: str, post: Dict[str, Any]) -> None:
@@ -256,7 +271,38 @@ def _acquire_lock(root: str, *, ttl_s: int) -> bool:
             f.write("\n")
         return True
     except Exception:
-        return True
+        # If we can't take a lock, skip the cycle (safer than overlapping).
+        return False
+
+
+def _record_observations_from_scan(root: str, scan_obj: Dict[str, Any], *, ts_unix: int) -> None:
+    """Record edge observations from scan output into RiskState in one place."""
+    try:
+        state = RiskState(os.path.join(root, "tmp", "kalshi_ref_arb", "state.json"))
+        sigs = scan_obj.get("signals") if isinstance(scan_obj, dict) else None
+        if not isinstance(sigs, list):
+            return
+        for it in sigs:
+            if not isinstance(it, dict):
+                continue
+            t = it.get("ticker")
+            if not isinstance(t, str) or not t:
+                continue
+            rec = it.get("recommended")
+            if not isinstance(rec, dict):
+                continue
+            side = rec.get("side")
+            if side not in ("yes", "no"):
+                continue
+            eff = rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps")
+            try:
+                eb = float(eff)
+            except Exception:
+                continue
+            state.record_observation(f"{t}:{side}", edge_bps=eb, ts_unix=int(ts_unix))
+        state.save()
+    except Exception:
+        return
 
 
 def _release_lock(root: str) -> None:
@@ -362,6 +408,92 @@ def _best_series_from_scan(root: str, series_list: list[str], *, sigma: str, sig
     return best_series, summary
 
 
+def _scan_series(
+    root: str,
+    series: str,
+    *,
+    sigma: str,
+    sigma_window_h: int,
+    min_edge: str,
+    uncertainty: str,
+    min_liq: str,
+    max_spread: str,
+    min_tte: str,
+    min_px: str,
+    max_px: str,
+) -> Dict[str, Any]:
+    sigma_arg = sigma
+    if str(sigma).strip().lower() == "auto":
+        try:
+            v = conservative_sigma_auto(series, window_hours=int(sigma_window_h))
+        except Exception:
+            v = None
+        if v is not None:
+            sigma_arg = f"{float(v):.4f}"
+
+    argv = [
+        "python3",
+        "scripts/kalshi_ref_arb.py",
+        "scan",
+        "--series",
+        series,
+        "--limit",
+        os.environ.get("KALSHI_ARB_LIMIT", "20"),
+        "--sigma-annual",
+        str(sigma_arg),
+        "--min-edge-bps",
+        str(min_edge),
+        "--uncertainty-bps",
+        str(uncertainty),
+        "--min-liquidity-usd",
+        str(min_liq),
+        "--max-spread",
+        str(max_spread),
+        "--min-seconds-to-expiry",
+        str(min_tte),
+        "--min-price",
+        str(min_px),
+        "--max-price",
+        str(max_px),
+    ]
+    rc, _, obj = _run_cmd_json(argv, cwd=root, timeout_s=60)
+    out = obj if isinstance(obj, dict) else {"raw": obj}
+    out["_rc"] = int(rc)
+    out["_sigma_arg"] = str(sigma_arg)
+    out.setdefault("inputs", {})
+    if isinstance(out.get("inputs"), dict):
+        out["inputs"].setdefault("series", series)
+        out["inputs"].setdefault("sigma_annual", sigma_arg)
+    return out
+
+
+def _best_candidate_from_scan(scan_obj: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    best = None
+    sigs = scan_obj.get("signals") if isinstance(scan_obj, dict) else None
+    if not isinstance(sigs, list):
+        return None
+    for it in sigs:
+        if not isinstance(it, dict):
+            continue
+        rec = it.get("recommended")
+        if not isinstance(rec, dict):
+            continue
+        eff = rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps")
+        try:
+            eff_f = float(eff)
+        except Exception:
+            continue
+        cand = {
+            "ticker": it.get("ticker"),
+            "side": rec.get("side"),
+            "limit_price": rec.get("limit_price"),
+            "effective_edge_bps": eff_f,
+        }
+        if best is None or float(cand["effective_edge_bps"]) > float(best.get("effective_edge_bps") or -1e9):
+            best = cand
+    return best
+
+
 def main() -> int:
     root = _repo_root()
     os.chdir(root)
@@ -429,19 +561,35 @@ def main() -> int:
         sizing_mode = os.environ.get("KALSHI_ARB_SIZING_MODE", "fixed")
         sigma_window_h = int(os.environ.get("KALSHI_ARB_SIGMA_WINDOW_H", "168"))
 
-        selected_series, scan_summary = _best_series_from_scan(
-            root,
-            series_list,
-            sigma=sigma,
-            sigma_window_h=sigma_window_h,
-            min_edge=min_edge,
-            uncertainty=uncertainty,
-            min_liq=min_liq,
-            max_spread=max_spread,
-            min_tte=min_tte,
-            min_px=min_px,
-            max_px=max_px,
-        )
+        # Scan each series once, pick the best, then trade only the selected series.
+        scans_by_series: Dict[str, Any] = {}
+        scan_summary: Dict[str, Any] = {"series": []}
+        selected_series = series_list[0]
+        selected_eff = None
+        for s in series_list:
+            sobj = _scan_series(
+                root,
+                s,
+                sigma=sigma,
+                sigma_window_h=sigma_window_h,
+                min_edge=min_edge,
+                uncertainty=uncertainty,
+                min_liq=min_liq,
+                max_spread=max_spread,
+                min_tte=min_tte,
+                min_px=min_px,
+                max_px=max_px,
+            )
+            best = _best_candidate_from_scan(sobj)
+            scans_by_series[s] = sobj
+            scan_summary["series"].append({"series": s, "rc": int(sobj.get("_rc") or 0), "best": best, "sigma_arg": str(sobj.get("_sigma_arg") or "")})
+            if best is not None:
+                eff_f = float(best.get("effective_edge_bps") or 0.0)
+                if selected_eff is None or eff_f > float(selected_eff):
+                    selected_eff = eff_f
+                    selected_series = s
+        scan_summary["selected_series"] = selected_series
+        scan_summary["selected_effective_edge_bps"] = selected_eff
 
         sigma_arg = sigma
         if str(sigma).strip().lower() == "auto":
@@ -470,73 +618,72 @@ def main() -> int:
             "persistence_window_min": float(persist_win),
         }
 
-        # Run trade across all series to record persistence observations, but only allow live writes
-        # for the selected series (global risk stays the same).
+        # Record persistence observations from scans once per cycle (cheaper than running trade N times).
+        try:
+            for sobj in scans_by_series.values():
+                if isinstance(sobj, dict):
+                    _record_observations_from_scan(root, sobj, ts_unix=ts)
+        except Exception:
+            pass
+
+        # Trade only the selected series (live), still guarded by kill switch + risk caps.
+        trade_argv = [
+            "python3",
+            "scripts/kalshi_ref_arb.py",
+            "trade",
+            "--series",
+            selected_series,
+            "--limit",
+            os.environ.get("KALSHI_ARB_LIMIT", "20"),
+            "--sigma-annual",
+            str(sigma_arg),
+            "--min-edge-bps",
+            min_edge,
+            "--uncertainty-bps",
+            uncertainty,
+            "--min-liquidity-usd",
+            min_liq,
+            "--max-spread",
+            max_spread,
+            "--min-seconds-to-expiry",
+            min_tte,
+            "--min-price",
+            min_px,
+            "--max-price",
+            max_px,
+            "--persistence-cycles",
+            persist,
+            "--persistence-window-min",
+            persist_win,
+            "--sizing-mode",
+            sizing_mode,
+            "--allow-write",
+            "--max-orders-per-run",
+            os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "1"),
+            "--max-contracts-per-order",
+            os.environ.get("KALSHI_ARB_MAX_CONTRACTS_PER_ORDER", "1"),
+            "--max-notional-per-run-usd",
+            os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "2"),
+            "--max-notional-per-market-usd",
+            os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "5"),
+        ]
+        trade_rc, _, trade = _run_cmd_json(trade_argv, cwd=root, timeout_s=90)
+        trade = trade if isinstance(trade, dict) else {"mode": "trade", "status": "error", "reason": "bad_json"}
+        # Expose scan context per series in the run artifact for status/digests.
         trades_by_series: Dict[str, Any] = {}
         for s in series_list:
+            sobj = scans_by_series.get(s)
+            if not isinstance(sobj, dict):
+                sobj = {"_rc": 1}
             allow_write = (s == selected_series)
-            per_sigma_arg = sigma
-            if str(sigma).strip().lower() == "auto":
-                try:
-                    v = conservative_sigma_auto(s, window_hours=int(sigma_window_h))
-                except Exception:
-                    v = None
-                if v is not None:
-                    per_sigma_arg = f"{float(v):.4f}"
-
-            trade_argv = [
-                "python3",
-                "scripts/kalshi_ref_arb.py",
-                "trade",
-                "--series",
-                s,
-                "--limit",
-                os.environ.get("KALSHI_ARB_LIMIT", "20"),
-                "--sigma-annual",
-                str(per_sigma_arg),
-                "--min-edge-bps",
-                min_edge,
-                "--uncertainty-bps",
-                uncertainty,
-                "--min-liquidity-usd",
-                min_liq,
-                "--max-spread",
-                max_spread,
-                "--min-seconds-to-expiry",
-                min_tte,
-                "--min-price",
-                min_px,
-                "--max-price",
-                max_px,
-                "--persistence-cycles",
-                persist,
-                "--persistence-window-min",
-                persist_win,
-                "--sizing-mode",
-                sizing_mode,
-                "--max-orders-per-run",
-                (os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "1") if allow_write else "0"),
-                "--max-contracts-per-order",
-                os.environ.get("KALSHI_ARB_MAX_CONTRACTS_PER_ORDER", "1"),
-                "--max-notional-per-run-usd",
-                os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "2"),
-                "--max-notional-per-market-usd",
-                os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "5"),
-            ]
-            if allow_write:
-                trade_argv.append("--allow-write")
-
-            trc, _, tob = _run_cmd_json(trade_argv, cwd=root, timeout_s=90)
-            tob = tob if isinstance(tob, dict) else {"mode": "trade", "status": "error", "reason": "bad_json"}
-            tob.setdefault("inputs", {})
-            if isinstance(tob.get("inputs"), dict):
-                tob["inputs"].setdefault("series", s)
-                tob["inputs"].setdefault("sigma_annual", per_sigma_arg)
-                tob["inputs"].setdefault("allow_write", bool(allow_write))
-            trades_by_series[s] = {"rc": int(trc), "trade": tob}
-
-        trade_rc = int(trades_by_series.get(selected_series, {}).get("rc") or 0)
-        trade = trades_by_series.get(selected_series, {}).get("trade") or {"mode": "trade", "status": "error", "reason": "missing_selected"}
+            trades_by_series[s] = {
+                "rc": int(sobj.get("_rc") or 0),
+                "scan": {
+                    "best": _best_candidate_from_scan(sobj) if isinstance(sobj, dict) else None,
+                    "sigma_arg": sobj.get("_sigma_arg"),
+                    "inputs": {"series": s, "allow_write": bool(allow_write)},
+                },
+            }
 
         # Post-trade portfolio snapshot: used to confirm fills/positions and power digests.
         post_rc, _, post = _run_cmd_json(
