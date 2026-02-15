@@ -1,6 +1,6 @@
 # SOUL.md — SCRIBE
 
-**Generated:** 82ae817+dirty
+**Generated:** 241c97f+dirty
 **Source:** src/core/shared + USER.md + src/agents/SCRIBE.md
 
 ---

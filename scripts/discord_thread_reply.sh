@@ -22,6 +22,8 @@ fi
 target="$1"
 shift
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 SUPPRESS_RAW="${ORION_SUPPRESS_DISCORD:-${DISCORD_SUPPRESS:-}}"
 case "$(printf '%s' "${SUPPRESS_RAW}" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|y|on)
@@ -37,10 +39,13 @@ else
   msg="$*"
 fi
 
+if ! printf '%s' "${msg}" | python3 "${SCRIPT_DIR}/discord_mass_mention_guard.py"; then
+  exit 1
+fi
+
 OPENCLAW="${OPENCLAW_BIN:-}"
 if [[ -z "${OPENCLAW}" ]]; then
-  OPENCLAW="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openclaww.sh"
+  OPENCLAW="${SCRIPT_DIR}/openclaww.sh"
 fi
 
 exec "${OPENCLAW}" message thread reply --channel discord --target "${target}" --message "${msg}"
-

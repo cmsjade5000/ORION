@@ -87,12 +87,55 @@ openclaw config set channels.discord.replyToMode off
 export DISCORD_DEFAULT_POST_TARGET="channel:<DISCORD_UPDATES_CHANNEL_ID>"
 ```
 
+## High-Autonomy Bootstrap (Server-Wide ORION Operations)
+
+If you want ORION to run with broad autonomy in your Discord server (without full Administrator), use:
+
+```bash
+./scripts/discord_autonomy_bootstrap.sh <DISCORD_APP_ID> <DISCORD_GUILD_ID> <DISCORD_PRIMARY_CHANNEL_ID> [DISCORD_UPDATES_CHANNEL_ID]
+```
+
+What it wires:
+- Enables `channels.discord`
+- Sets `requireMention=false` for the guild
+- Enables auto-threading on your primary intake channel
+- Optionally allowlists an updates channel
+- Prints a Discord OAuth invite URL with broad non-admin bot permissions
+
+Permission set includes:
+- View Channels
+- Send Messages
+- Send Messages in Threads
+- Create Public/Private Threads
+- Manage Threads
+- Read Message History
+- Attach Files
+- Embed Links
+- Add Reactions
+- Manage Messages
+- Use External Emojis
+- Use Application Commands
+
+After running it:
+
+```bash
+./scripts/discord_selfcheck.sh
+openclaw channels status --probe --json
+```
+
 ## Verify
 
 ```bash
 openclaw channels status --probe --json
 openclaw channels resolve --channel discord "<DISCORD_CHANNEL_ID>" --json
 ```
+
+## Training Loop (Practice + Evaluation)
+
+After setup is live and `## Verify` passes, run `docs/DISCORD_TRAINING_LOOP.md`.
+
+- Use it to rehearse Discord thread handling and delegated-result synthesis.
+- Use its evaluation criteria to record pass/fail and follow-up fixes.
 
 ## Common Failures
 

@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+from .http import HttpClient, HttpConfig, safe_float
+
+
+@dataclass(frozen=True)
+class SpotQuote:
+    symbol: str
+    venue: str
+    price: float
+
+
+class CoinbasePublic:
+    def __init__(self, http_cfg: Optional[HttpConfig] = None):
+        self.http = HttpClient(http_cfg or HttpConfig())
+
+    def get_spot(self, product: str) -> Optional[SpotQuote]:
+        # Coinbase Exchange (aka "advanced trade") public ticker.
+        # Example product: BTC-USD, ETH-USD
+        url = f"https://api.exchange.coinbase.com/products/{product}/ticker"
+        obj = self.http.get_json(url)
+        price = safe_float(obj.get("price") if isinstance(obj, dict) else None)
+        if price is None:
+            return None
+        return SpotQuote(symbol=product, venue="coinbase", price=price)
+
+
+class KrakenPublic:
+    def __init__(self, http_cfg: Optional[HttpConfig] = None):
+        self.http = HttpClient(http_cfg or HttpConfig())
+
+    def get_spot(self, pair: str) -> Optional[SpotQuote]:
+        # Example pair: XBTUSD, ETHUSD
+        url = "https://api.kraken.com/0/public/Ticker"
+        obj = self.http.get_json(url, params={"pair": pair})
+        if not isinstance(obj, dict) or obj.get("error"):
+            return None
+        result = obj.get("result") or {}
+        if not isinstance(result, dict) or not result:
+            return None
+        # Kraken returns a dict keyed by pair name (may be normalized, e.g., XXBTZUSD)
+        first_key = next(iter(result.keys()))
+        data = result.get(first_key) or {}
+        if not isinstance(data, dict):
+            return None
+        # "c" = last trade closed [price, lot volume]
+        c = data.get("c") or []
+        price = safe_float(c[0] if isinstance(c, list) and c else None)
+        if price is None:
+            return None
+        return SpotQuote(symbol=pair, venue="kraken", price=price)
+
+
+def ref_spot_btc_usd() -> Optional[float]:
+    cb = CoinbasePublic()
+    kr = KrakenPublic()
+    q1 = cb.get_spot("BTC-USD")
+    q2 = kr.get_spot("XBTUSD")
+    prices = [q.price for q in [q1, q2] if q is not None]
+    if not prices:
+        return None
+    prices.sort()
+    # Median (robust to one outlier if we extend to more venues later).
+    return prices[len(prices) // 2]
+
+
+def ref_spot_eth_usd() -> Optional[float]:
+    cb = CoinbasePublic()
+    kr = KrakenPublic()
+    q1 = cb.get_spot("ETH-USD")
+    q2 = kr.get_spot("ETHUSD")
+    prices = [q.price for q in [q1, q2] if q is not None]
+    if not prices:
+        return None
+    prices.sort()
+    return prices[len(prices) // 2]
+

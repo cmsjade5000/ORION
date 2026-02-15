@@ -22,6 +22,8 @@ target="$1"
 thread_name="$2"
 shift 2
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 SUPPRESS_RAW="${ORION_SUPPRESS_DISCORD:-${DISCORD_SUPPRESS:-}}"
 case "$(printf '%s' "${SUPPRESS_RAW}" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|y|on)
@@ -31,10 +33,15 @@ case "$(printf '%s' "${SUPPRESS_RAW}" | tr '[:upper:]' '[:lower:]')" in
 esac
 
 initial_msg="${*:-}"
+if [[ -n "${initial_msg}" ]]; then
+  if ! printf '%s' "${initial_msg}" | python3 "${SCRIPT_DIR}/discord_mass_mention_guard.py"; then
+    exit 1
+  fi
+fi
 
 OPENCLAW="${OPENCLAW_BIN:-}"
 if [[ -z "${OPENCLAW}" ]]; then
-  OPENCLAW="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openclaww.sh"
+  OPENCLAW="${SCRIPT_DIR}/openclaww.sh"
 fi
 
 args=(message thread create --channel discord --target "${target}" --thread-name "${thread_name}")
@@ -43,4 +50,3 @@ if [[ -n "${initial_msg}" ]]; then
 fi
 
 exec "${OPENCLAW}" "${args[@]}"
-

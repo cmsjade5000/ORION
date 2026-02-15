@@ -71,6 +71,19 @@ Reply in an existing Discord thread via OpenClaw.
 
 ---
 
+## discord_autonomy_bootstrap.sh
+
+### Purpose
+Apply a high-autonomy Discord configuration for ORION in a specific guild and print a broad non-admin bot invite URL.
+
+### Usage
+
+```bash
+./scripts/discord_autonomy_bootstrap.sh <DISCORD_APP_ID> <DISCORD_GUILD_ID> <DISCORD_PRIMARY_CHANNEL_ID> [DISCORD_UPDATES_CHANNEL_ID]
+```
+
+---
+
 ## miniapp_upload_artifact.sh
 
 ### Purpose
@@ -136,3 +149,78 @@ Generated files should never be edited by hand.
 Generate SOULs for all agents:
 ```bash
 ./scripts/soul_factory.sh --all
+```
+
+---
+
+## arb_bot.py / arb_scan.sh
+
+### Purpose
+Read-only Polymarket arb scanner (detects simple within-market YES/NO buy-both arbs from order books).
+
+### Usage
+
+```bash
+python3 scripts/arb_bot.py scan --max-markets 10 --min-edge-bps 20
+```
+
+Wrapper:
+
+```bash
+./scripts/arb_scan.sh --max-markets 10 --min-edge-bps 20
+```
+
+Notes:
+- This is intentionally read-only; it does not place orders.
+- See `docs/ARB_BOT.md`.
+
+---
+
+## kalshi_ref_arb.py
+
+### Purpose
+Kalshi crypto reference arb bot (scan Kalshi markets; optionally trade with explicit `--allow-write` and local credentials).
+
+### Usage
+
+Scan:
+
+```bash
+python3 scripts/kalshi_ref_arb.py scan --series KXBTC --limit 10
+```
+
+Trade (dry-run unless `--allow-write`):
+
+```bash
+python3 scripts/kalshi_ref_arb.py trade --series KXBTC --limit 10
+```
+
+Docs:
+- `docs/KALSHI_REF_ARB.md`
+
+---
+
+## kalshi_autotrade_cycle.py
+
+### Purpose
+Deterministic Kalshi autotrade cycle runner intended for OpenClaw cron (no manual operation):
+- runs `kalshi_ref_arb.py balance`
+- runs `kalshi_ref_arb.py trade --allow-write` with conservative caps and a $50 lifetime budget
+- writes artifacts under `tmp/kalshi_ref_arb/runs/`
+- sends Telegram notifications only on live orders or errors (rate-limited)
+
+---
+
+## kalshi_digest.py
+
+### Purpose
+Send a concise Telegram digest summarizing the last N hours of Kalshi arb activity:
+- cycles, live orders, errors
+- lifetime notional vs $50 budget
+- kill switch state
+
+### Usage
+
+```bash
+python3 scripts/kalshi_digest.py --window-hours 8 --send
+```

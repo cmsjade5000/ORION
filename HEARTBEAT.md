@@ -52,3 +52,4 @@ If there is no urgent work and no Ready task you can safely execute:
 
 - Log one line to `tmp/heartbeat.log` (timestamp + `idle`).
 - Output exactly: `NO_REPLY`
+
