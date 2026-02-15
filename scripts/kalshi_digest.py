@@ -316,6 +316,41 @@ def main() -> int:
         except Exception:
             pass
 
+    # If we didn't place trades, explain why (from latest cycle diagnostics).
+    try:
+        if stats.live_orders == 0:
+            latest_trade = None
+            for o in reversed(run_objs):
+                t = o.get("trade")
+                if isinstance(t, dict) and t.get("mode") == "trade":
+                    latest_trade = t
+                    break
+            if isinstance(latest_trade, dict):
+                diag = latest_trade.get("diagnostics")
+                if isinstance(diag, dict):
+                    best = diag.get("best_effective_edge")
+                    if isinstance(best, dict) and best.get("ticker"):
+                        try:
+                            msg_lines.append(
+                                f"No trades: best eff edge {float(best.get('effective_edge_bps')):.0f} bps on {best.get('ticker')} {best.get('side')} @ {float(best.get('ask')):.4f}"
+                            )
+                        except Exception:
+                            pass
+                    tb = diag.get("top_blockers")
+                    if isinstance(tb, list) and tb:
+                        parts = []
+                        for it in tb[:5]:
+                            if not isinstance(it, dict):
+                                continue
+                            r = it.get("reason")
+                            c = it.get("count")
+                            if isinstance(r, str) and isinstance(c, int):
+                                parts.append(f"{r}={c}")
+                        if parts:
+                            msg_lines.append(f"Blockers: {', '.join(parts)}")
+    except Exception:
+        pass
+
     # Closed-loop learning (persistent): entry quality vs (eventual) realized outcomes.
     try:
         cl = closed_loop_report(root, window_hours=float(args.window_hours))

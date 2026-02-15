@@ -47,6 +47,7 @@ class Signal:
     edge_bps_buy_no: Optional[float]
     recommended: Optional[Dict[str, Any]]
     filters: Optional[Dict[str, Any]]
+    rejected_reasons: Optional[List[str]]
 
 
 def _json(obj: Any) -> str:
@@ -117,16 +118,19 @@ def _signal_for_market(
     if spot is None:
         return None
 
+    base_rejected: List[str] = []
+
     t_years = _t_years_until(m.expected_expiration_time)
     if t_years is None:
         return None
+    tte_s = float(t_years) * 365.0 * 24.0 * 3600.0
     # Avoid trading extremely near expiry; spreads widen and fills get random.
-    if float(t_years) * 365.0 * 24.0 * 3600.0 < float(min_seconds_to_expiry):
-        return None
+    if tte_s < float(min_seconds_to_expiry):
+        base_rejected.append("too_close_to_expiry")
 
     # Prefer more liquid markets; thin books are mostly noise.
     if (m.liquidity_dollars is not None) and (float(m.liquidity_dollars) < float(min_liquidity_usd)):
-        return None
+        base_rejected.append("liquidity_below_min")
 
     if m.strike_type == "greater":
         p_yes = prob_lognormal_greater(spot=spot, strike=m.floor_strike, t_years=t_years, sigma_annual=sigma_annual)
@@ -159,10 +163,18 @@ def _signal_for_market(
         edge_no = (p_no - no_ask) * 10_000.0
 
     recommended = None
+    rejected: List[str] = []
     # Recommend buy at ask if edge clears threshold.
     if edge_yes is not None and edge_yes >= min_edge_bps:
+        reasons = list(base_rejected)
         eff = float(edge_yes) - float(uncertainty_bps)
-        if (yes_ask >= min_price) and (yes_ask <= max_price) and ((yes_spread is None) or (yes_spread <= max_spread)):
+        if not (yes_ask is not None and (yes_ask >= min_price) and (yes_ask <= max_price)):
+            reasons.append("yes_price_out_of_bounds")
+        if (yes_spread is not None) and (yes_spread > max_spread):
+            reasons.append("yes_spread_too_wide")
+        if eff < float(min_edge_bps):
+            reasons.append("yes_effective_edge_below_min")
+        if not reasons:
             if eff >= float(min_edge_bps):
                 recommended = {
                     "action": "buy",
@@ -172,9 +184,18 @@ def _signal_for_market(
                     "effective_edge_bps": eff,
                     "uncertainty_bps": float(uncertainty_bps),
                 }
+        else:
+            rejected.extend(reasons)
     if edge_no is not None and edge_no >= min_edge_bps:
+        reasons = list(base_rejected)
         eff = float(edge_no) - float(uncertainty_bps)
-        if (no_ask >= min_price) and (no_ask <= max_price) and ((no_spread is None) or (no_spread <= max_spread)):
+        if not (no_ask is not None and (no_ask >= min_price) and (no_ask <= max_price)):
+            reasons.append("no_price_out_of_bounds")
+        if (no_spread is not None) and (no_spread > max_spread):
+            reasons.append("no_spread_too_wide")
+        if eff < float(min_edge_bps):
+            reasons.append("no_effective_edge_below_min")
+        if not reasons:
             rec2 = {"action": "buy", "side": "no", "limit_price": f"{no_ask:.4f}", "edge_bps": edge_no}
             rec2["effective_edge_bps"] = eff
             rec2["uncertainty_bps"] = float(uncertainty_bps)
@@ -182,6 +203,8 @@ def _signal_for_market(
             if eff >= float(min_edge_bps):
                 if recommended is None or float(rec2["effective_edge_bps"]) > float(recommended.get("effective_edge_bps") or -1e9):
                     recommended = rec2
+        else:
+            rejected.extend(reasons)
 
     return Signal(
         ticker=m.ticker,
@@ -209,6 +232,7 @@ def _signal_for_market(
             "yes_spread": yes_spread,
             "no_spread": no_spread,
         },
+        rejected_reasons=sorted(list(dict.fromkeys(rejected))) if rejected else [],
     )
 
 
@@ -299,6 +323,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
             cash_usd = None
     markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
 
+    all_signals: List[Signal] = []
     signals: List[Signal] = []
     for m in markets:
         s = _signal_for_market(
@@ -313,9 +338,11 @@ def cmd_trade(args: argparse.Namespace) -> int:
             min_price=args.min_price,
             max_price=args.max_price,
         )
-        if s is None or not s.recommended:
+        if s is None:
             continue
-        signals.append(s)
+        all_signals.append(s)
+        if s.recommended:
+            signals.append(s)
 
     # Observation recording for persistence gating (trade less, avoid one-off microstructure).
     now_ts = int(time.time())
@@ -526,6 +553,72 @@ def cmd_trade(args: argparse.Namespace) -> int:
         total_notional += notional
         order_count += 1
 
+    # Diagnostics: if no trades placed, explain why.
+    diagnostics: Dict[str, Any] = {
+        "markets_fetched": len(markets),
+        "signals_computed": len(all_signals),
+        "candidates_recommended": len(signals),
+    }
+    try:
+        # Best effective edge (edge - uncertainty) among either side, even if it didn't qualify.
+        best = None
+        for s in all_signals:
+            for side in ("yes", "no"):
+                ask = s.yes_ask if side == "yes" else s.no_ask
+                edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
+                if ask is None or edge is None:
+                    continue
+                eff = float(edge) - float(args.uncertainty_bps)
+                cand = {
+                    "ticker": s.ticker,
+                    "side": side,
+                    "ask": float(ask),
+                    "edge_bps": float(edge),
+                    "effective_edge_bps": float(eff),
+                    "tte_min": float(s.t_years) * 365.0 * 24.0 * 60.0,
+                    "liquidity_dollars": (s.filters or {}).get("liquidity_dollars"),
+                    "spread": (s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"),
+                }
+                if best is None or float(cand["effective_edge_bps"]) > float(best["effective_edge_bps"]):
+                    best = cand
+        diagnostics["best_effective_edge"] = best
+
+        # Blocker counts (approx, per-side).
+        blockers: Dict[str, int] = {}
+        for s in all_signals:
+            tte_s = float(s.t_years) * 365.0 * 24.0 * 3600.0
+            liq = (s.filters or {}).get("liquidity_dollars")
+            try:
+                liq_f = float(liq) if liq is not None else None
+            except Exception:
+                liq_f = None
+            for side in ("yes", "no"):
+                ask = s.yes_ask if side == "yes" else s.no_ask
+                spread = (s.filters or {}).get("yes_spread" if side == "yes" else "no_spread")
+                edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
+                if ask is None or edge is None:
+                    blockers[f"{side}_missing_quote"] = blockers.get(f"{side}_missing_quote", 0) + 1
+                    continue
+                eff = float(edge) - float(args.uncertainty_bps)
+                if tte_s < float(args.min_seconds_to_expiry):
+                    blockers["too_close_to_expiry"] = blockers.get("too_close_to_expiry", 0) + 1
+                if liq_f is not None and liq_f < float(args.min_liquidity_usd):
+                    blockers["liquidity_below_min"] = blockers.get("liquidity_below_min", 0) + 1
+                try:
+                    sp = float(spread) if spread is not None else None
+                except Exception:
+                    sp = None
+                if sp is not None and sp > float(args.max_spread):
+                    blockers[f"{side}_spread_too_wide"] = blockers.get(f"{side}_spread_too_wide", 0) + 1
+                if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
+                    blockers[f"{side}_price_out_of_bounds"] = blockers.get(f"{side}_price_out_of_bounds", 0) + 1
+                if eff < float(args.min_edge_bps):
+                    blockers["effective_edge_below_min"] = blockers.get("effective_edge_below_min", 0) + 1
+        top = sorted(blockers.items(), key=lambda kv: kv[1], reverse=True)[:8]
+        diagnostics["top_blockers"] = [{"reason": k, "count": int(v)} for k, v in top]
+    except Exception:
+        pass
+
     state.append_run(
         {
             "series": args.series,
@@ -563,6 +656,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
         "skipped": skipped,
         "total_notional_usd": total_notional,
         "cash_usd": cash_usd,
+        "diagnostics": diagnostics,
     }
     sys.stdout.write(_json(out) + "\n")
     return 0
