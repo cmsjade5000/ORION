@@ -480,6 +480,79 @@ def cmd_trade(args: argparse.Namespace) -> int:
             )
         else:
             try:
+                # Freshness / recheck guard: refetch the market right before sending a live order
+                # and ensure the edge + microstructure filters still hold.
+                try:
+                    m2 = kc.get_market(s.ticker)
+                except Exception:
+                    m2 = None
+                if m2 is None:
+                    skipped.append({"ticker": s.ticker, "reason": "recheck_failed", "detail": "market_fetch_none"})
+                    continue
+
+                # Use the freshest ask/bid for the side we plan to buy.
+                ask2 = m2.yes_ask if side == "yes" else m2.no_ask
+                bid2 = m2.yes_bid if side == "yes" else m2.no_bid
+                if ask2 is None:
+                    skipped.append({"ticker": s.ticker, "reason": "recheck_failed", "detail": "ask_missing", "side": side})
+                    continue
+                # Price bounds
+                if float(ask2) < float(args.min_price) or float(ask2) > float(args.max_price):
+                    skipped.append(
+                        {
+                            "ticker": s.ticker,
+                            "reason": "recheck_failed",
+                            "detail": "price_out_of_bounds",
+                            "side": side,
+                            "ask": float(ask2),
+                        }
+                    )
+                    continue
+                # Spread
+                if bid2 is not None:
+                    sp2 = float(ask2) - float(bid2)
+                    if sp2 > float(args.max_spread):
+                        skipped.append(
+                            {
+                                "ticker": s.ticker,
+                                "reason": "recheck_failed",
+                                "detail": "spread_too_wide",
+                                "side": side,
+                                "spread": float(sp2),
+                            }
+                        )
+                        continue
+                # Edge recompute (prob from model, price from fresh quote)
+                p = float(s.p_yes) if side == "yes" else (1.0 - float(s.p_yes))
+                edge2 = (p - float(ask2)) * 10_000.0
+                eff2 = float(edge2) - float(args.uncertainty_bps)
+                if eff2 < float(args.min_edge_bps):
+                    skipped.append(
+                        {
+                            "ticker": s.ticker,
+                            "reason": "recheck_failed",
+                            "detail": "effective_edge_below_min",
+                            "side": side,
+                            "effective_edge_bps": float(eff2),
+                            "ask": float(ask2),
+                        }
+                    )
+                    continue
+
+                # If the market moved favorably (lower ask), use the better price.
+                # If it moved unfavorably, we'd have skipped above.
+                if float(ask2) < float(price):
+                    price = float(ask2)
+                    notional = price * float(count)
+                    order = KalshiOrder(
+                        ticker=s.ticker,
+                        side=side,
+                        action="buy",
+                        count=count,
+                        price_dollars=f"{price:.4f}",
+                        client_order_id=client_order_id,
+                    )
+
                 resp = kc.create_order(order)
                 order_id = None
                 status = None

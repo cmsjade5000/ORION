@@ -133,6 +133,27 @@ def main() -> int:
     if status:
         lines.append(f"Trade: {status}{f' ({reason})' if reason else ''}")
 
+    # Surface scan timeout/errors from latest run cycle inputs.
+    try:
+        ci = run.get("cycle_inputs") if isinstance(run.get("cycle_inputs"), dict) else {}
+        ss = ci.get("scan_summary")
+        series = (ss or {}).get("series") if isinstance(ss, dict) else None
+        if isinstance(series, list) and series:
+            timeouts = 0
+            errs = 0
+            for it in series:
+                if not isinstance(it, dict):
+                    continue
+                rc = int(it.get("rc") or 0)
+                if rc == 124:
+                    timeouts += 1
+                elif rc != 0:
+                    errs += 1
+            if timeouts or errs:
+                lines.append(f"Scans: timeouts {timeouts}, errors {errs}")
+    except Exception:
+        pass
+
     # Multi-series cycle: show selected series if present.
     try:
         tbs = run.get("trades_by_series") if isinstance(run.get("trades_by_series"), dict) else None

@@ -418,6 +418,26 @@ def main() -> int:
                     latest_run = o
                     break
             if isinstance(latest_trade, dict):
+                # Surface scan timeout/errors (multi-series pre-scan phase).
+                try:
+                    ci = latest_run.get("cycle_inputs") if isinstance(latest_run, dict) else {}
+                    ss = ci.get("scan_summary") if isinstance(ci, dict) else None
+                    series = (ss or {}).get("series") if isinstance(ss, dict) else None
+                    if isinstance(series, list) and series:
+                        timeouts = 0
+                        errs = 0
+                        for it in series:
+                            if not isinstance(it, dict):
+                                continue
+                            rc = int(it.get("rc") or 0)
+                            if rc == 124:
+                                timeouts += 1
+                            elif rc != 0:
+                                errs += 1
+                        if timeouts or errs:
+                            msg_lines.append(f"Scans: timeouts {timeouts}, errors {errs}")
+                except Exception:
+                    pass
                 # If the cycle is evaluating multiple series, surface which one was selected.
                 try:
                     tbs = None

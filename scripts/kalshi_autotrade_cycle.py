@@ -7,6 +7,8 @@ import os
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, Optional, Tuple
 
 try:
@@ -25,6 +27,50 @@ except ModuleNotFoundError:
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
+
+
+def _day_bounds_unix(*, tz: str, now_unix: int) -> tuple[int, int]:
+    """Return [start, end) unix seconds for the local trading day in the given tz."""
+    z = ZoneInfo(tz)
+    dt = datetime.fromtimestamp(int(now_unix), tz=z)
+    start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return int(start.timestamp()), int(end.timestamp())
+
+
+def _daily_realized_pnl_usd(repo_root: str, *, now_unix: int, tz: str = "America/New_York") -> Optional[float]:
+    """Best-effort: sum attributed settlement cash deltas for today's settlements in the ledger."""
+    try:
+        from scripts.arb.kalshi_ledger import load_ledger  # type: ignore
+    except Exception:
+        return None
+
+    try:
+        led = load_ledger(repo_root)
+    except Exception:
+        return None
+    orders = led.get("orders") if isinstance(led, dict) else None
+    if not isinstance(orders, dict):
+        return None
+
+    start, end = _day_bounds_unix(tz=tz, now_unix=int(now_unix))
+    pnl = 0.0
+    any_seen = False
+    for _, o in orders.items():
+        if not isinstance(o, dict):
+            continue
+        st = o.get("settlement") if isinstance(o.get("settlement"), dict) else None
+        if not isinstance(st, dict):
+            continue
+        ts_seen = int(st.get("ts_seen") or 0)
+        if ts_seen < start or ts_seen >= end:
+            continue
+        parsed = st.get("parsed") if isinstance(st.get("parsed"), dict) else {}
+        cd = parsed.get("cash_delta_usd")
+        if isinstance(cd, (int, float)):
+            pnl += float(cd)
+            any_seen = True
+    return float(pnl) if any_seen else 0.0
 
 
 def _repo_root() -> str:
@@ -554,6 +600,44 @@ def main() -> int:
         # Run balance first (auth check). If this fails, we want to know.
         bal_rc, _, bal = _run_cmd_json(["python3", "scripts/kalshi_ref_arb.py", "balance"], cwd=root, timeout_s=30)
 
+        # Daily loss gate (best-effort, local ledger): if exceeded, cooldown until tomorrow.
+        try:
+            limit = float(os.environ.get("KALSHI_ARB_DAILY_LOSS_LIMIT_USD", "10") or 0.0)
+        except Exception:
+            limit = 0.0
+        if limit > 0.0:
+            pnl_today = _daily_realized_pnl_usd(root, now_unix=ts, tz="America/New_York")
+            if isinstance(pnl_today, (int, float)) and float(pnl_today) <= -float(limit):
+                # Cooldown until next local midnight.
+                try:
+                    _, end = _day_bounds_unix(tz="America/New_York", now_unix=ts)
+                    seconds = max(60, int(end - ts))
+                except Exception:
+                    seconds = int(os.environ.get("KALSHI_ARB_COOLDOWN_S", "1800"))
+                set_cooldown(RiskConfig(), root, seconds=seconds, reason="daily_loss_limit")
+                post_rc, _, post = _run_cmd_json(
+                    ["python3", "scripts/kalshi_ref_arb.py", "portfolio", "--hours", "1", "--limit", "50"],
+                    cwd=root,
+                    timeout_s=60,
+                )
+                if post_rc == 0 and isinstance(post, dict):
+                    _maybe_reconcile_risk_state(root, post)
+                artifact = {
+                    "ts_unix": ts,
+                    "cycle_inputs": {"daily_loss_limit_usd": float(limit), "pnl_today_usd_approx": float(pnl_today)},
+                    "balance_rc": bal_rc,
+                    "balance": bal,
+                    "trade_rc": 2,
+                    "trade": {"mode": "trade", "status": "refused", "reason": "daily_loss_limit", "pnl_today_usd_approx": float(pnl_today)},
+                    "post_rc": post_rc,
+                    "post": post,
+                }
+                artifact_path = os.path.join(out_dir, f"{ts}.json")
+                _save_json(artifact_path, artifact)
+                return 0
+        else:
+            pnl_today = None
+
         # Live trade (user-authorized) but still guarded by kill switch + risk caps in the bot.
         series_raw = os.environ.get("KALSHI_ARB_SERIES", "KXBTC")
         series_list = _parse_series_list(series_raw) or ["KXBTC"]
@@ -601,6 +685,39 @@ def main() -> int:
         scan_summary["selected_series"] = selected_series
         scan_summary["selected_effective_edge_bps"] = selected_eff
 
+        # If all scans failed (timeouts/errors), skip trading this cycle rather than
+        # blindly defaulting to the first series.
+        if selected_eff is None:
+            post_rc, _, post = _run_cmd_json(
+                ["python3", "scripts/kalshi_ref_arb.py", "portfolio", "--hours", "1", "--limit", "50"],
+                cwd=root,
+                timeout_s=60,
+            )
+            if post_rc == 0 and isinstance(post, dict):
+                _maybe_reconcile_risk_state(root, post)
+            artifact = {
+                "ts_unix": ts,
+                "cycle_inputs": {
+                    "series_list": series_list,
+                    "scan_summary": scan_summary,
+                    "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
+                    "pnl_today_usd_approx": float(pnl_today) if isinstance(pnl_today, (int, float)) else None,
+                },
+                "balance_rc": bal_rc,
+                "balance": bal,
+                "trade_rc": 2,
+                "trade": {"mode": "trade", "status": "refused", "reason": "scan_failed"},
+                "trades_by_series": {
+                    s: {"rc": int((scans_by_series.get(s) or {}).get("_rc") or 0), "scan": {"inputs": {"series": s, "allow_write": False}}}
+                    for s in series_list
+                },
+                "post_rc": post_rc,
+                "post": post,
+            }
+            artifact_path = os.path.join(out_dir, f"{ts}.json")
+            _save_json(artifact_path, artifact)
+            return 0
+
         sigma_arg = sigma
         if str(sigma).strip().lower() == "auto":
             try:
@@ -626,6 +743,8 @@ def main() -> int:
             "max_price": float(max_px),
             "persistence_cycles": int(persist),
             "persistence_window_min": float(persist_win),
+            "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
+            "pnl_today_usd_approx": float(pnl_today) if isinstance(pnl_today, (int, float)) else None,
         }
 
         # Record persistence observations from scans once per cycle (cheaper than running trade N times).
