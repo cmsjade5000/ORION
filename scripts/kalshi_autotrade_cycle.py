@@ -154,7 +154,15 @@ def _maybe_reconcile_risk_state(root: str, post: Dict[str, Any]) -> None:
 
 
 def _run_cmd_json(argv: list[str], *, cwd: str, timeout_s: int = 60) -> Tuple[int, str, Dict[str, Any]]:
-    proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
+    try:
+        proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired as e:
+        stdout = (e.stdout or "").strip() if isinstance(e.stdout, str) else ""
+        stderr = (e.stderr or "").strip() if isinstance(e.stderr, str) else ""
+        return 124, stdout, {"raw_stdout": stdout, "raw_stderr": stderr, "error": "timeout", "timeout_s": int(timeout_s)}
+    except Exception as e:
+        return 1, "", {"raw_stdout": "", "raw_stderr": str(e), "error": "exception"}
+
     stdout = (proc.stdout or "").strip()
     if stdout:
         try:
@@ -456,7 +464,8 @@ def _scan_series(
         "--max-price",
         str(max_px),
     ]
-    rc, _, obj = _run_cmd_json(argv, cwd=root, timeout_s=60)
+    scan_timeout_s = int(os.environ.get("KALSHI_ARB_SCAN_TIMEOUT_S", "30"))
+    rc, _, obj = _run_cmd_json(argv, cwd=root, timeout_s=scan_timeout_s)
     out = obj if isinstance(obj, dict) else {"raw": obj}
     out["_rc"] = int(rc)
     out["_sigma_arg"] = str(sigma_arg)
@@ -580,7 +589,8 @@ def main() -> int:
                 min_px=min_px,
                 max_px=max_px,
             )
-            best = _best_candidate_from_scan(sobj)
+            rc = int(sobj.get("_rc") or 0) if isinstance(sobj, dict) else 1
+            best = _best_candidate_from_scan(sobj) if rc == 0 else None
             scans_by_series[s] = sobj
             scan_summary["series"].append({"series": s, "rc": int(sobj.get("_rc") or 0), "best": best, "sigma_arg": str(sobj.get("_sigma_arg") or "")})
             if best is not None:
