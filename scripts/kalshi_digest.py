@@ -236,10 +236,13 @@ def _extract_stats(run_objs: List[Dict[str, Any]]) -> DigestStats:
 
         if bal_rc != 0:
             errors += 1
-        kill_refused = bool(trade.get("status") == "refused" and trade.get("reason") == "kill_switch")
+        refused = bool(trade.get("status") == "refused")
+        reason = str(trade.get("reason") or "")
+        kill_refused = refused and reason == "kill_switch"
+        gate_refused = refused and reason in ("kill_switch", "cooldown", "scan_failed", "daily_loss_limit")
         if kill_refused:
             kill_seen += 1
-        if (trade_rc != 0) and (not kill_refused):
+        if (trade_rc != 0) and (not gate_refused):
             errors += 1
 
         placed = trade.get("placed") or []

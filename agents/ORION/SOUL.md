@@ -1,6 +1,6 @@
 # SOUL.md — ORION
 
-**Generated:** 88a6da5+dirty
+**Generated:** a27c143+dirty
 **Source:** src/core/shared + USER.md + src/agents/ORION.md
 
 ---

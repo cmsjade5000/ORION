@@ -266,7 +266,8 @@ def _recent_run_health(runs_dir: str, *, lookback: int, min_ts_unix: int = 0) ->
         trade = o.get("trade") if isinstance(o.get("trade"), dict) else {}
         refused = bool(trade.get("status") == "refused")
         reason = str(trade.get("reason") or "")
-        gate_refused = refused and reason in ("kill_switch", "cooldown")
+        # Refusals are not necessarily "errors". Treat operator-style stop gates as healthy.
+        gate_refused = refused and reason in ("kill_switch", "cooldown", "scan_failed", "daily_loss_limit")
         if bal_rc != 0:
             errors += 1
         if post_rc != 0:
