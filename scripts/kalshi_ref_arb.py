@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 # When executed as `python3 scripts/kalshi_ref_arb.py`, sys.path[0] is the scripts/
 # directory and the repo root may not be importable as a package. Fix up path.
 try:
-    from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_eth_usd  # type: ignore
+    from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
     from scripts.arb.prob import (  # type: ignore
         beta_posterior_mean,
@@ -31,7 +31,7 @@ except ModuleNotFoundError:
     repo_root = os.path.abspath(os.path.join(here, ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
-    from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_eth_usd  # type: ignore
+    from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
     from scripts.arb.prob import (  # type: ignore
         beta_posterior_mean,
@@ -111,6 +111,10 @@ def _ref_spot_for_series(series: str) -> Optional[float]:
         return ref_spot_btc_usd()
     if "ETH" in s or s.startswith("KXETH") or s.startswith("ETH"):
         return ref_spot_eth_usd()
+    if "XRP" in s or s.startswith("KXXRP") or s.startswith("XRP"):
+        return ref_spot_xrp_usd()
+    if "DOGE" in s or s.startswith("KXDOGE") or s.startswith("DOGE"):
+        return ref_spot_doge_usd()
     return None
 
 

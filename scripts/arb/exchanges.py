@@ -53,12 +53,11 @@ class KrakenPublic:
             return None
         return SpotQuote(symbol=pair, venue="kraken", price=price)
 
-
-def ref_spot_btc_usd() -> Optional[float]:
+def _ref_spot_median(*, cb_product: str, kr_pair: str) -> Optional[float]:
     cb = CoinbasePublic()
     kr = KrakenPublic()
-    q1 = cb.get_spot("BTC-USD")
-    q2 = kr.get_spot("XBTUSD")
+    q1 = cb.get_spot(cb_product)
+    q2 = kr.get_spot(kr_pair)
     prices = [q.price for q in [q1, q2] if q is not None]
     if not prices:
         return None
@@ -67,14 +66,17 @@ def ref_spot_btc_usd() -> Optional[float]:
     return prices[len(prices) // 2]
 
 
-def ref_spot_eth_usd() -> Optional[float]:
-    cb = CoinbasePublic()
-    kr = KrakenPublic()
-    q1 = cb.get_spot("ETH-USD")
-    q2 = kr.get_spot("ETHUSD")
-    prices = [q.price for q in [q1, q2] if q is not None]
-    if not prices:
-        return None
-    prices.sort()
-    return prices[len(prices) // 2]
+def ref_spot_btc_usd() -> Optional[float]:
+    return _ref_spot_median(cb_product="BTC-USD", kr_pair="XBTUSD")
 
+
+def ref_spot_eth_usd() -> Optional[float]:
+    return _ref_spot_median(cb_product="ETH-USD", kr_pair="ETHUSD")
+
+
+def ref_spot_xrp_usd() -> Optional[float]:
+    return _ref_spot_median(cb_product="XRP-USD", kr_pair="XRPUSD")
+
+
+def ref_spot_doge_usd() -> Optional[float]:
+    return _ref_spot_median(cb_product="DOGE-USD", kr_pair="DOGEUSD")

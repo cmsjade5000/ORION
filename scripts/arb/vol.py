@@ -143,6 +143,40 @@ def realized_vol_eth_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedV
     return out
 
 
+def realized_vol_xrp_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedVol]:
+    out: List[RealizedVol] = []
+    cb = CoinbasePublic()
+    kr = KrakenPublic()
+    cb_prices = cb.hourly_closes("XRP-USD", window_hours=window_hours)
+    if cb_prices:
+        v = realized_vol_annual_from_prices(cb_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="coinbase", symbol="XRP-USD", window_hours=int(window_hours), vol_annual=float(v)))
+    kr_prices = kr.hourly_closes("XRPUSD", window_hours=window_hours)
+    if kr_prices:
+        v = realized_vol_annual_from_prices(kr_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="kraken", symbol="XRPUSD", window_hours=int(window_hours), vol_annual=float(v)))
+    return out
+
+
+def realized_vol_doge_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedVol]:
+    out: List[RealizedVol] = []
+    cb = CoinbasePublic()
+    kr = KrakenPublic()
+    cb_prices = cb.hourly_closes("DOGE-USD", window_hours=window_hours)
+    if cb_prices:
+        v = realized_vol_annual_from_prices(cb_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="coinbase", symbol="DOGE-USD", window_hours=int(window_hours), vol_annual=float(v)))
+    kr_prices = kr.hourly_closes("DOGEUSD", window_hours=window_hours)
+    if kr_prices:
+        v = realized_vol_annual_from_prices(kr_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="kraken", symbol="DOGEUSD", window_hours=int(window_hours), vol_annual=float(v)))
+    return out
+
+
 def conservative_sigma_auto(series: str, *, window_hours: int = 24 * 7) -> Optional[float]:
     s = (series or "").upper()
     vols: List[RealizedVol] = []
@@ -150,10 +184,13 @@ def conservative_sigma_auto(series: str, *, window_hours: int = 24 * 7) -> Optio
         vols = realized_vol_btc_usd_annual(window_hours=window_hours)
     elif "ETH" in s:
         vols = realized_vol_eth_usd_annual(window_hours=window_hours)
+    elif "XRP" in s:
+        vols = realized_vol_xrp_usd_annual(window_hours=window_hours)
+    elif "DOGE" in s:
+        vols = realized_vol_doge_usd_annual(window_hours=window_hours)
     if not vols:
         return None
     # Conservative: take the maximum across venues.
     v = max(x.vol_annual for x in vols)
     # Clamp to sane bounds to avoid overreacting to bad data.
     return float(min(2.0, max(0.20, v)))
-
