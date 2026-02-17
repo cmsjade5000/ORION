@@ -15,7 +15,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `agents.defaults.model.primary = "google/gemini-2.5-flash-lite"` (pinned)
 - `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
-- `agents.list[0].subagents.allowAgents = ["*"]` (so ORION can target specialists via `sessions_spawn`)
+- `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","ember","ledger","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
 - `channels.telegram.enabled = true`
 - `channels.telegram.commands.native = false` (avoid Telegram bot command registration churn)
 - `channels.telegram.commands.nativeSkills = false`
@@ -27,6 +27,14 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `channels.telegram.groups = { "<TELEGRAM_GROUP_ID>": {} }`
 - `channels.telegram.streamMode = "partial"`
 - `channels.telegram.reactionLevel = "ack"`
+- Optional (Discord):
+  - `channels.discord.enabled = true`
+  - `channels.discord.token = "${DISCORD_BOT_TOKEN}"`
+  - `channels.discord.dm.policy = "allowlist"`
+  - `channels.discord.dm.allowFrom = ["<CORY_DISCORD_USER_ID>"]`
+  - `channels.discord.groupPolicy = "allowlist"`
+  - `channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_PRIMARY_CHANNEL_ID>".allow = true`
+  - `channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_PRIMARY_CHANNEL_ID>".autoThread = true`
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
 

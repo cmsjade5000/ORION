@@ -23,7 +23,17 @@
       {
         "id": "main",
         "subagents": {
-          "allowAgents": ["*"]
+          "allowAgents": [
+            "atlas",
+            "node",
+            "pulse",
+            "stratus",
+            "pixel",
+            "ember",
+            "ledger",
+            "scribe",
+            "wire"
+          ]
         }
       }
     ]
@@ -53,11 +63,13 @@
       "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md).",
       "enabled": false,
       "token": "${DISCORD_BOT_TOKEN}",
+      "allowBots": false,
       "commands": {
         "native": "auto",
         "nativeSkills": "auto"
       },
-      "replyToMode": "first",
+      "_comment_replyToMode": "For Discord threads, replyToMode=first can attempt to reply to the thread-starter system message. Keep it off for reliable delivery.",
+      "replyToMode": "off",
       "dm": {
         "policy": "allowlist",
         "allowFrom": ["<CORY_DISCORD_USER_ID>"]
@@ -65,11 +77,15 @@
       "groupPolicy": "allowlist",
       "guilds": {
         "<DISCORD_GUILD_ID>": {
-          "requireMention": true,
+          "requireMention": false,
           "channels": {
-            "<DISCORD_CHANNEL_ID>": {
+            "<DISCORD_PRIMARY_CHANNEL_ID>": {
               "allow": true,
               "autoThread": true
+            },
+            "<DISCORD_UPDATES_CHANNEL_ID>": {
+              "allow": true,
+              "autoThread": false
             }
           }
         }

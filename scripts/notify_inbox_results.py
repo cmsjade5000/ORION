@@ -284,6 +284,15 @@ def _get_discord_default_target(repo_root: Path) -> str:
     cfg_path = _get_openclaw_cfg_path()
     try:
         cfg = json.loads(_read_text(cfg_path))
+        # Prefer config-defined env vars when present (used by OpenClaw services/cron).
+        env_target = (
+            (cfg.get("env", {}) or {})
+            .get("vars", {})
+            .get("DISCORD_DEFAULT_POST_TARGET", "")
+        )
+        if isinstance(env_target, str) and env_target.strip():
+            return env_target.strip()
+
         allow_from = (
             (cfg.get("channels", {}) or {})
             .get("discord", {})
@@ -435,6 +444,15 @@ def _format_message(*, queued: list[PacketQueued], results: list[PacketResult], 
         clipped.append(ln)
         chars += len(ln) + 1
     return "\n".join(clipped).rstrip() + "\n"
+
+
+def _sanitize_outbound(text: str) -> str:
+    # Prevent accidental mass-mentions in Discord (and keep Telegram clean too).
+    # We keep it simple: break the "@" token.
+    return (
+        text.replace("@everyone", "@ everyone")
+        .replace("@here", "@ here")
+    )
 
 
 def _infer_result_ok(preview_lines: list[str]) -> bool | None:
@@ -590,7 +608,7 @@ def main() -> int:
             print(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
         if new_queued_dc or new_results_dc:
             print("DISCORD:")
-            print(_format_message(queued=new_queued_dc, results=new_results_dc))
+            print(_format_message(queued=new_queued_dc, results=new_results_dc, max_len=1900))
     else:
         if (new_queued_tg or new_results_tg) and not suppress_tg:
             chat_id = _get_telegram_chat_id()
@@ -602,7 +620,7 @@ def main() -> int:
                 )
                 return 2
 
-            msg = _format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800)
+            msg = _sanitize_outbound(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
             try:
                 _telegram_send_message(chat_id=chat_id, token=token, text=msg)
             except urllib.error.HTTPError as e:
@@ -615,7 +633,7 @@ def main() -> int:
         if (new_queued_dc or new_results_dc) and not suppress_dc:
             try:
                 target = _get_discord_default_target(repo_root)
-                msg = _format_message(queued=new_queued_dc, results=new_results_dc)
+                msg = _sanitize_outbound(_format_message(queued=new_queued_dc, results=new_results_dc, max_len=1900))
                 _discord_send_message(repo_root=repo_root, target=target, text=msg)
             except Exception as e:
                 print(f"ERROR: Discord send failed: {e}", file=sys.stderr)

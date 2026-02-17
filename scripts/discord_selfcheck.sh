@@ -82,6 +82,14 @@ else
     [[ -n "${dm_policy}" ]] && ok "channels.discord.dm.policy=${dm_policy}" || say "WARN: channels.discord.dm.policy not set"
     gp="$(jq -r '.channels.discord.groupPolicy // empty' "${cfg_file}" 2>/dev/null || true)"
     [[ -n "${gp}" ]] && ok "channels.discord.groupPolicy=${gp}" || say "WARN: channels.discord.groupPolicy not set"
+
+    # Reliability: replyToMode=first can end up targeting Discord's thread-starter system message
+    # when autoThread is enabled, which can suppress visible replies.
+    rtm="$(jq -r '.channels.discord.replyToMode // empty' "${cfg_file}" 2>/dev/null || true)"
+    auto_threads="$(jq -r '[.channels.discord.guilds // {} | to_entries[]? | .value.channels // {} | to_entries[]? | select(.value.autoThread==true)] | length' "${cfg_file}" 2>/dev/null || echo 0)"
+    if [[ "${rtm}" == "first" && "${auto_threads}" != "0" ]]; then
+      say "WARN: channels.discord.replyToMode=first + autoThread=true may suppress replies in new threads; recommend: openclaw config set channels.discord.replyToMode off"
+    fi
   fi
 fi
 
@@ -108,4 +116,3 @@ if [[ "${fail}" -eq 0 ]]; then
 fi
 
 exit 1
-
