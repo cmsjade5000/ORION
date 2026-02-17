@@ -27,6 +27,14 @@ import urllib.request
 from pathlib import Path
 
 try:
+    # When executed as `python3 scripts/notify_inbox_results.py`, sys.path[0] is `scripts/`,
+    # so sibling imports work.
+    from inbox_state import load_kv_state, parse_notify_channels, save_kv_state
+except Exception:  # pragma: no cover
+    # When imported as a module (unit tests), prefer package-style import.
+    from scripts.inbox_state import load_kv_state, parse_notify_channels, save_kv_state  # type: ignore
+
+try:
     # Optional dependency: Mini App dashboard progress visibility.
     # When executed as `python3 scripts/notify_inbox_results.py`, sys.path[0] is `scripts/`,
     # so `miniapp_ingest` is importable as a sibling module.
@@ -74,21 +82,8 @@ def _env_truthy(name: str) -> bool:
     return v in {"1", "true", "yes", "y", "on"}
 
 def _parse_notify_channels(raw: str) -> set[str]:
-    """
-    Parse `Notify:` values.
-
-    Supported:
-    - "telegram"
-    - "discord"
-    - "telegram,discord" (comma/space/plus separated)
-    - "none" / empty -> no notifications
-    """
-    s = (raw or "").strip().lower()
-    if not s or s == "none":
-        return set()
-    parts = [p.strip() for p in re.split(r"[,+\\s]+", s) if p.strip()]
-    # Keep only known channels (future-proof: ignore unknown tokens).
-    return {p for p in parts if p in {"telegram", "discord"}}
+    # Back-compat wrapper to keep internal calls stable.
+    return parse_notify_channels(raw)
 
 
 def _split_packets(lines: list[str], start_line_offset: int) -> list[tuple[int, list[str]]]:
@@ -218,26 +213,11 @@ def _sha256_text(lines: list[str]) -> str:
 
 
 def _load_state(state_path: Path) -> dict[str, float]:
-    if not state_path.exists():
-        return {}
-    try:
-        obj = json.loads(_read_text(state_path))
-        if not isinstance(obj, dict):
-            return {}
-        out: dict[str, float] = {}
-        for k, v in obj.items():
-            if isinstance(k, str) and isinstance(v, (int, float)):
-                out[k] = float(v)
-        return out
-    except Exception:
-        return {}
+    return load_kv_state(state_path)
 
 
 def _save_state(state_path: Path, state: dict[str, float]) -> None:
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = state_path.with_suffix(state_path.suffix + ".tmp")
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(state_path)
+    save_kv_state(state_path, state)
 
 
 def _get_openclaw_cfg_path() -> Path:

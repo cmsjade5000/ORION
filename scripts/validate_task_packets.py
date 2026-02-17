@@ -30,6 +30,7 @@ REQUIRED_SECTIONS = (
 )
 
 ATLAS_DIRECTED_SUBAGENTS = {"NODE", "PULSE", "STRATUS"}
+ALLOWED_NOTIFY_CHANNELS = {"telegram", "discord", "none"}
 
 
 @dataclass
@@ -165,6 +166,20 @@ def validate_inbox_file(path: str) -> list[str]:
                 )
 
         requester = fields.get("Requester", "").strip()
+        emergency = fields.get("Emergency", "").strip().upper()
+        incident = fields.get("Incident", "").strip()
+        notify = fields.get("Notify", "").strip().lower()
+
+        if notify:
+            # Support "telegram,discord" style lists but reject unknown tokens.
+            tokens = [t.strip() for t in re.split(r"[,+\s]+", notify) if t.strip()]
+            bad = sorted({t for t in tokens if t not in ALLOWED_NOTIFY_CHANNELS})
+            if bad:
+                errors.append(
+                    f"{path}:{pkt.start_line}: packet {n}: Notify contains unknown channel(s): {bad!r} "
+                    f"(allowed: {sorted(ALLOWED_NOTIFY_CHANNELS)!r})"
+                )
+
         if expected_owner:
             allowed_requesters = {"ORION"}
             if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
@@ -172,7 +187,6 @@ def validate_inbox_file(path: str) -> list[str]:
 
                 # Emergency bypass: ORION may request directly only when ATLAS is unavailable,
                 # and only for reversible diagnostic/recovery work (see docs/AGENT_HIERARCHY.md).
-                emergency = fields.get("Emergency", "").strip().upper()
                 if emergency == "ATLAS_UNAVAILABLE":
                     allowed_requesters = {"ATLAS", "ORION"}
 
@@ -185,6 +199,12 @@ def validate_inbox_file(path: str) -> list[str]:
                         f"{path}:{pkt.start_line}: packet {n}: Requester must be one of {sorted(allowed_requesters)!r} "
                         f"(got {requester!r}){extra}"
                     )
+
+        # Emergency bypass packets must be incident-linked for auditability.
+        if emergency == "ATLAS_UNAVAILABLE" and not incident:
+            errors.append(
+                f"{path}:{pkt.start_line}: packet {n}: Emergency ATLAS_UNAVAILABLE requires non-empty 'Incident:' field"
+            )
 
     return errors
 

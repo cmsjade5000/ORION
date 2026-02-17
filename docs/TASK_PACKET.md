@@ -44,11 +44,18 @@ Output Format:
 - `Timebox:` e.g., `30m` or `2h`
 - `Dependencies:` other tasks/agents needed first
 - `Checkpoints:` interim status points
-- `Notify:` `telegram` | `none`
+- `Notify:` `telegram` | `discord` | `none` (also supports `telegram,discord`)
   - Use `Notify: telegram` when a delegated packet is user-initiated and Cory expects a follow-up message when the specialist posts a `Result:`.
   - If the packet will execute via the inbox runner, use `Notify: telegram` so Cory gets:
     - a one-time "Queued" update, and
     - a follow-up "Results" update when `Result:` is written.
+- `Idempotency Key:` optional stable key to dedupe runner-backed packets across retries/reruns.
+  - Used by `scripts/run_inbox_packets.py` to avoid repeating the same work when the packet is re-filed or re-queued.
+- Retry policy (used by `scripts/run_inbox_packets.py` for allowlisted read-only packets):
+  - `Retry Max Attempts:` integer (default `1`, meaning no retries)
+  - `Retry Backoff Seconds:` number (default `60`)
+  - `Retry Backoff Multiplier:` number (default `2`)
+  - `Retry Max Backoff Seconds:` number (default `3600`)
 - `Severity:` `P0` (emergency) | `P1` (urgent) | `P2` (normal) | `P3` (backlog)
 - `Emergency:` use only for explicit emergency modes (example: `ATLAS_UNAVAILABLE`)
 - `Incident:` incident id when an emergency bypass is used (see `tasks/INCIDENTS.md`)
