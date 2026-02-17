@@ -62,6 +62,11 @@ def _load_dotenv(path: str) -> None:
                     continue
                 if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
                     v = v[1:-1]
+                # Keep strategy params consistent with ~/.openclaw/.env even if the
+                # gateway process already has older exported values.
+                if k.startswith("KALSHI_ARB_"):
+                    os.environ[k] = v
+                    continue
                 if k not in os.environ or os.environ.get(k, "") == "":
                     os.environ[k] = v
     except Exception:
