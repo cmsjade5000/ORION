@@ -53,12 +53,32 @@ class KrakenPublic:
             return None
         return SpotQuote(symbol=pair, venue="kraken", price=price)
 
+
+class BitstampPublic:
+    def __init__(self, http_cfg: Optional[HttpConfig] = None):
+        self.http = HttpClient(http_cfg or HttpConfig())
+
+    def get_spot(self, pair: str) -> Optional[SpotQuote]:
+        # Example pair: btcusd, ethusd, xrpusd, dogeusd
+        url = f"https://www.bitstamp.net/api/v2/ticker/{pair}/"
+        obj = self.http.get_json(url)
+        price = safe_float(obj.get("last") if isinstance(obj, dict) else None)
+        if price is None:
+            return None
+        return SpotQuote(symbol=pair, venue="bitstamp", price=price)
+
+
 def _ref_spot_median(*, cb_product: str, kr_pair: str) -> Optional[float]:
     cb = CoinbasePublic()
     kr = KrakenPublic()
+    bs = BitstampPublic()
     q1 = cb.get_spot(cb_product)
     q2 = kr.get_spot(kr_pair)
-    prices = [q.price for q in [q1, q2] if q is not None]
+    # Bitstamp pair format is lowercase with no separators.
+    bs_pair = cb_product.replace("-", "").lower()  # BTC-USD -> btcusd
+    q3 = bs.get_spot(bs_pair)
+
+    prices = [q.price for q in [q1, q2, q3] if q is not None]
     if not prices:
         return None
     prices.sort()

@@ -109,10 +109,44 @@ class KrakenPublic:
         return [c for _, c in rows]
 
 
+class BitstampPublic:
+    def __init__(self, http_cfg: Optional[HttpConfig] = None):
+        self.http = HttpClient(http_cfg or HttpConfig(timeout_seconds=10.0))
+
+    def hourly_closes(self, pair: str, *, window_hours: int = 24 * 7) -> Optional[List[float]]:
+        # Bitstamp OHLC: data.ohlc rows with timestamp/close.
+        # pair example: btcusd, ethusd, xrpusd, dogeusd
+        limit = max(10, int(window_hours) + 5)
+        url = f"https://www.bitstamp.net/api/v2/ohlc/{pair}/"
+        obj = self.http.get_json(url, params={"step": 3600, "limit": limit})
+        if not isinstance(obj, dict):
+            return None
+        data = obj.get("data") or {}
+        if not isinstance(data, dict):
+            return None
+        rows_obj = data.get("ohlc")
+        if not isinstance(rows_obj, list):
+            return None
+        rows = []
+        for r in rows_obj:
+            if not isinstance(r, dict):
+                continue
+            ts = safe_float(r.get("timestamp"))
+            close = safe_float(r.get("close"))
+            if ts is None or close is None:
+                continue
+            rows.append((int(ts), float(close)))
+        if not rows:
+            return None
+        rows.sort(key=lambda x: x[0])
+        return [c for _, c in rows]
+
+
 def realized_vol_btc_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedVol]:
     out: List[RealizedVol] = []
     cb = CoinbasePublic()
     kr = KrakenPublic()
+    bs = BitstampPublic()
     cb_prices = cb.hourly_closes("BTC-USD", window_hours=window_hours)
     if cb_prices:
         v = realized_vol_annual_from_prices(cb_prices, dt_seconds=3600)
@@ -123,6 +157,11 @@ def realized_vol_btc_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedV
         v = realized_vol_annual_from_prices(kr_prices, dt_seconds=3600)
         if v is not None:
             out.append(RealizedVol(venue="kraken", symbol="XBTUSD", window_hours=int(window_hours), vol_annual=float(v)))
+    bs_prices = bs.hourly_closes("btcusd", window_hours=window_hours)
+    if bs_prices:
+        v = realized_vol_annual_from_prices(bs_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="bitstamp", symbol="btcusd", window_hours=int(window_hours), vol_annual=float(v)))
     return out
 
 
@@ -130,6 +169,7 @@ def realized_vol_eth_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedV
     out: List[RealizedVol] = []
     cb = CoinbasePublic()
     kr = KrakenPublic()
+    bs = BitstampPublic()
     cb_prices = cb.hourly_closes("ETH-USD", window_hours=window_hours)
     if cb_prices:
         v = realized_vol_annual_from_prices(cb_prices, dt_seconds=3600)
@@ -140,6 +180,11 @@ def realized_vol_eth_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedV
         v = realized_vol_annual_from_prices(kr_prices, dt_seconds=3600)
         if v is not None:
             out.append(RealizedVol(venue="kraken", symbol="ETHUSD", window_hours=int(window_hours), vol_annual=float(v)))
+    bs_prices = bs.hourly_closes("ethusd", window_hours=window_hours)
+    if bs_prices:
+        v = realized_vol_annual_from_prices(bs_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="bitstamp", symbol="ethusd", window_hours=int(window_hours), vol_annual=float(v)))
     return out
 
 
@@ -147,6 +192,7 @@ def realized_vol_xrp_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedV
     out: List[RealizedVol] = []
     cb = CoinbasePublic()
     kr = KrakenPublic()
+    bs = BitstampPublic()
     cb_prices = cb.hourly_closes("XRP-USD", window_hours=window_hours)
     if cb_prices:
         v = realized_vol_annual_from_prices(cb_prices, dt_seconds=3600)
@@ -157,6 +203,11 @@ def realized_vol_xrp_usd_annual(*, window_hours: int = 24 * 7) -> List[RealizedV
         v = realized_vol_annual_from_prices(kr_prices, dt_seconds=3600)
         if v is not None:
             out.append(RealizedVol(venue="kraken", symbol="XRPUSD", window_hours=int(window_hours), vol_annual=float(v)))
+    bs_prices = bs.hourly_closes("xrpusd", window_hours=window_hours)
+    if bs_prices:
+        v = realized_vol_annual_from_prices(bs_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="bitstamp", symbol="xrpusd", window_hours=int(window_hours), vol_annual=float(v)))
     return out
 
 
@@ -164,6 +215,7 @@ def realized_vol_doge_usd_annual(*, window_hours: int = 24 * 7) -> List[Realized
     out: List[RealizedVol] = []
     cb = CoinbasePublic()
     kr = KrakenPublic()
+    bs = BitstampPublic()
     cb_prices = cb.hourly_closes("DOGE-USD", window_hours=window_hours)
     if cb_prices:
         v = realized_vol_annual_from_prices(cb_prices, dt_seconds=3600)
@@ -174,6 +226,11 @@ def realized_vol_doge_usd_annual(*, window_hours: int = 24 * 7) -> List[Realized
         v = realized_vol_annual_from_prices(kr_prices, dt_seconds=3600)
         if v is not None:
             out.append(RealizedVol(venue="kraken", symbol="DOGEUSD", window_hours=int(window_hours), vol_annual=float(v)))
+    bs_prices = bs.hourly_closes("dogeusd", window_hours=window_hours)
+    if bs_prices:
+        v = realized_vol_annual_from_prices(bs_prices, dt_seconds=3600)
+        if v is not None:
+            out.append(RealizedVol(venue="bitstamp", symbol="dogeusd", window_hours=int(window_hours), vol_annual=float(v)))
     return out
 
 
