@@ -706,6 +706,23 @@ function addFeedItem(rec) {
   return rec;
 }
 
+function removeFeedItem(id) {
+  const key = String(id || "").trim();
+  if (!key) return;
+  STORE.feedById.delete(key);
+  STORE.feed = STORE.feed.filter((it) => it && it.id !== key);
+}
+
+function clearPendingOrionReplies() {
+  // Pending placeholders are UI-only; drop them as soon as we have a real ORION response.
+  for (const it of STORE.feed) {
+    if (!it) continue;
+    const agentId = String(it.agentId || "");
+    const isPending = typeof it.id === "string" && it.id.startsWith("pending_");
+    if (isPending && agentId === "ORION") removeFeedItem(it.id);
+  }
+}
+
 function setWorkflow(steps, { id } = {}) {
   const now = Date.now();
   const list = Array.isArray(steps) ? steps.filter((s) => typeof s === "string" && s.trim()).slice(0, 8) : [];
@@ -1375,6 +1392,7 @@ function applyEventToStore(body) {
   if (type === "response.created") {
     const text = String(body?.text || body?.response?.text || "").trim();
     if (!text) return;
+    clearPendingOrionReplies();
     const id = typeof body?.id === "string" ? body.id : createId("feed");
     addFeedItem({
       id,
@@ -2175,6 +2193,18 @@ app.post("/api/command", (req, res) => {
   };
   startHop(sequence[0]);
 
+  // UI-only: show a short "pending" placeholder in the Responses feed.
+  // This is cleared automatically when a real `response.created` arrives via /api/ingest.
+  addFeedItem({
+    id: `pending_${acceptedId}`,
+    kind: "response",
+    ts: Date.now(),
+    icon: "⏳",
+    text: "Pending reply…",
+    agentId: "ORION",
+    expiresAt: Date.now() + 90_000,
+  });
+
   if (STREAM_CLIENTS.size > 0) {
     sseBroadcast("command.accepted", {
       requestId,
@@ -2245,15 +2275,6 @@ app.post("/api/command", (req, res) => {
             // Demo behavior: if the user asked for files, generate small valid artifacts
             // and surface them as floating bubbles in the Mini App.
             simulateArtifactsFromText({ text, agentId: focusId });
-            // Demo behavior: surface a short simulated response in the in-app feed so
-            // live Telegram testing is useful even before ORION routing is wired.
-            const flat = String(text || "").replace(/\s+/g, " ").trim();
-            const preview = flat.length > 220 ? `${flat.slice(0, 220)}…` : flat;
-            applyEventToStore({
-              type: "response.created",
-              agentId: "ORION",
-              text: preview ? `Simulated reply: received "${preview}"` : "Simulated reply: received.",
-            });
             if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
           }
         }
