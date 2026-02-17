@@ -81,3 +81,51 @@ def prob_lognormal_between(
 class KalshiFair:
     p_yes: float
     p_no: float
+
+
+def clamp01(x: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(x)))
+    except Exception:
+        return 0.0
+
+
+def beta_posterior_mean(*, p_prior: float, k_prior: float, p_obs: float, k_obs: float) -> float:
+    """Return posterior mean of a Beta distribution updated with a fractional observation.
+
+    We treat:
+    - prior as Beta(alpha0, beta0) with concentration k_prior.
+    - observation as a pseudo-count update of size k_obs at rate p_obs.
+    """
+    p0 = clamp01(float(p_prior))
+    po = clamp01(float(p_obs))
+    kp = max(0.0, float(k_prior))
+    ko = max(0.0, float(k_obs))
+    # Avoid alpha/beta==0 edge cases for p=0 or p=1.
+    eps = 1e-6
+    a0 = max(eps, p0 * kp)
+    b0 = max(eps, (1.0 - p0) * kp)
+    a1 = a0 + po * ko
+    b1 = b0 + (1.0 - po) * ko
+    den = a1 + b1
+    if den <= 0:
+        return p0
+    return clamp01(a1 / den)
+
+
+def kelly_fraction_binary(*, p_win: float, price: float) -> float:
+    """Full-Kelly stake fraction for a $1 payout contract bought for `price`.
+
+    If you pay `price` now:
+    - Win (prob p): + (1 - price)
+    - Lose: - price
+
+    The full-Kelly stake fraction (in dollars staked / bankroll) is:
+      f* = (p - price) / (1 - price)
+    """
+    p = clamp01(float(p_win))
+    a = clamp01(float(price))
+    if a >= 0.999999:
+        return 0.0
+    f = (p - a) / max(1e-9, (1.0 - a))
+    return max(0.0, min(1.0, float(f)))

@@ -17,8 +17,15 @@ from typing import Any, Dict, List, Optional
 try:
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_eth_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
-    from scripts.arb.prob import prob_lognormal_between, prob_lognormal_greater, prob_lognormal_less  # type: ignore
+    from scripts.arb.prob import (  # type: ignore
+        beta_posterior_mean,
+        kelly_fraction_binary,
+        prob_lognormal_between,
+        prob_lognormal_greater,
+        prob_lognormal_less,
+    )
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, kill_switch_tripped  # type: ignore
+    from scripts.arb.vol import conservative_sigma_auto  # type: ignore
 except ModuleNotFoundError:
     here = os.path.abspath(os.path.dirname(__file__))
     repo_root = os.path.abspath(os.path.join(here, ".."))
@@ -26,8 +33,15 @@ except ModuleNotFoundError:
         sys.path.insert(0, repo_root)
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_eth_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
-    from scripts.arb.prob import prob_lognormal_between, prob_lognormal_greater, prob_lognormal_less  # type: ignore
+    from scripts.arb.prob import (  # type: ignore
+        beta_posterior_mean,
+        kelly_fraction_binary,
+        prob_lognormal_between,
+        prob_lognormal_greater,
+        prob_lognormal_less,
+    )
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, kill_switch_tripped  # type: ignore
+    from scripts.arb.vol import conservative_sigma_auto  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -50,6 +64,10 @@ class Signal:
     filters: Optional[Dict[str, Any]]
     rejected_reasons: Optional[List[str]]
     strike_high: Optional[float] = None
+    # Best-effort confidence signals:
+    p_yes_posterior: Optional[float] = None
+    posterior_k_obs: Optional[float] = None
+    vol_anomaly_ratio: Optional[float] = None
 
 
 def _json(obj: Any) -> str:
@@ -111,6 +129,9 @@ def _signal_for_market(
     max_price: float,
     min_notional_usd: float,
     min_notional_bypass_edge_bps: float,
+    bayes_prior_k: float = 20.0,
+    bayes_obs_k_max: float = 30.0,
+    vol_anomaly_ratio: Optional[float] = None,
 ) -> Optional[Signal]:
     if m.strike_type not in ("greater", "less", "between"):
         return None
@@ -165,7 +186,11 @@ def _signal_for_market(
     if p_yes is None:
         return None
 
-    p_no = 1.0 - p_yes
+    # Bayesian posterior (best-effort): treat the market mid as a noisy observation of probability.
+    # We keep p_yes (model) for edge detection; use posterior for sizing/confidence.
+    p_yes_model = float(p_yes)
+    p_yes_post: Optional[float] = None
+    k_obs: Optional[float] = None
 
     yes_ask = m.yes_ask
     no_ask = m.no_ask
@@ -179,9 +204,37 @@ def _signal_for_market(
     if (m.no_bid is not None) and (m.no_ask is not None):
         no_spread = float(m.no_ask) - float(m.no_bid)
 
+    try:
+        yes_mid = None
+        if (m.yes_bid is not None) and (m.yes_ask is not None):
+            yes_mid = 0.5 * (float(m.yes_bid) + float(m.yes_ask))
+        # Observation strength: scales with liquidity and tighter spreads, capped.
+        if yes_mid is not None and m.liquidity_dollars is not None and yes_spread is not None:
+            liq = max(0.0, float(m.liquidity_dollars))
+            spread = max(0.0, float(yes_spread))
+            tight = max(0.0, min(1.0, 1.0 - (spread / max(1e-9, float(max_spread)))))
+            ko = min(float(bayes_obs_k_max), (liq / 750.0) * 5.0 * tight)
+            # Vol regime penalty: if vol spikes vs baseline, treat observation as noisier.
+            if isinstance(vol_anomaly_ratio, (int, float)) and float(vol_anomaly_ratio) > 1.0:
+                ko = ko / float(min(3.0, max(1.0, float(vol_anomaly_ratio))))
+            if ko > 0.0:
+                p_yes_post = beta_posterior_mean(
+                    p_prior=p_yes_model,
+                    k_prior=float(bayes_prior_k),
+                    p_obs=float(yes_mid),
+                    k_obs=float(ko),
+                )
+                k_obs = float(ko)
+    except Exception:
+        p_yes_post = None
+        k_obs = None
+
+    p_no = 1.0 - p_yes_model
+    p_no_post = 1.0 - float(p_yes_post) if isinstance(p_yes_post, (int, float)) else None
+
     edge_yes = None
     if yes_ask is not None:
-        edge_yes = (p_yes - yes_ask) * 10_000.0
+        edge_yes = (p_yes_model - yes_ask) * 10_000.0
 
     edge_no = None
     if no_ask is not None:
@@ -213,6 +266,9 @@ def _signal_for_market(
                     "edge_bps": edge_yes,
                     "effective_edge_bps": eff,
                     "uncertainty_bps": float(uncertainty_bps),
+                    "p_yes_model": float(p_yes_model),
+                    "p_yes_posterior": float(p_yes_post) if isinstance(p_yes_post, (int, float)) else None,
+                    "posterior_k_obs": float(k_obs) if isinstance(k_obs, (int, float)) else None,
                 }
         else:
             rejected.extend(reasons)
@@ -234,6 +290,9 @@ def _signal_for_market(
             rec2 = {"action": "buy", "side": "no", "limit_price": f"{no_ask:.4f}", "edge_bps": edge_no}
             rec2["effective_edge_bps"] = eff
             rec2["uncertainty_bps"] = float(uncertainty_bps)
+            rec2["p_no_model"] = float(p_no)
+            rec2["p_no_posterior"] = float(p_no_post) if isinstance(p_no_post, (int, float)) else None
+            rec2["posterior_k_obs"] = float(k_obs) if isinstance(k_obs, (int, float)) else None
             # Prefer larger edge.
             if eff >= float(min_edge_bps):
                 if recommended is None or float(rec2["effective_edge_bps"]) > float(recommended.get("effective_edge_bps") or -1e9):
@@ -250,7 +309,10 @@ def _signal_for_market(
         spot_ref=float(spot_ref),
         t_years=float(t_years),
         sigma_annual=float(sigma_annual),
-        p_yes=float(p_yes),
+        p_yes=float(p_yes_model),
+        p_yes_posterior=float(p_yes_post) if isinstance(p_yes_post, (int, float)) else None,
+        posterior_k_obs=float(k_obs) if isinstance(k_obs, (int, float)) else None,
+        vol_anomaly_ratio=float(vol_anomaly_ratio) if isinstance(vol_anomaly_ratio, (int, float)) else None,
         yes_bid=m.yes_bid,
         yes_ask=m.yes_ask,
         no_bid=m.no_bid,
@@ -281,6 +343,18 @@ def cmd_scan(args: argparse.Namespace) -> int:
     # Fetch spot once per scan. Previously this was done per-market, which is slow and can
     # trigger scan timeouts.
     spot = _ref_spot_for_series(args.series)
+    vol_ratio = None
+    if bool(getattr(args, "vol_anomaly", False)):
+        try:
+            short = conservative_sigma_auto(args.series, window_hours=int(args.vol_anomaly_window_h))
+        except Exception:
+            short = None
+        try:
+            base = float(args.sigma_annual)
+        except Exception:
+            base = None
+        if short is not None and base and base > 0:
+            vol_ratio = float(short) / float(base)
 
     sigs: List[Dict[str, Any]] = []
     for m in markets:
@@ -298,6 +372,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
             max_price=args.max_price,
             min_notional_usd=args.min_notional_usd,
             min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
+            bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
+            bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
+            vol_anomaly_ratio=vol_ratio,
         )
         if s is None:
             continue
@@ -401,6 +478,18 @@ def cmd_trade(args: argparse.Namespace) -> int:
     markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
     # Fetch spot once per run (instead of per-market).
     spot = _ref_spot_for_series(args.series)
+    vol_ratio = None
+    if bool(getattr(args, "vol_anomaly", False)):
+        try:
+            short = conservative_sigma_auto(args.series, window_hours=int(args.vol_anomaly_window_h))
+        except Exception:
+            short = None
+        try:
+            base = float(args.sigma_annual)
+        except Exception:
+            base = None
+        if short is not None and base and base > 0:
+            vol_ratio = float(short) / float(base)
 
     all_signals: List[Signal] = []
     signals: List[Signal] = []
@@ -419,6 +508,9 @@ def cmd_trade(args: argparse.Namespace) -> int:
             max_price=args.max_price,
             min_notional_usd=args.min_notional_usd,
             min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
+            bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
+            bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
+            vol_anomaly_ratio=vol_ratio,
         )
         if s is None:
             continue
@@ -530,6 +622,29 @@ def cmd_trade(args: argparse.Namespace) -> int:
             if eff >= float(args.edge_tier4_bps):
                 tier = 4
             count = min(int(cfg.max_contracts_per_order), int(max_count_budget), int(tier))
+            notional = price * float(count)
+
+        if args.sizing_mode == "kelly" and settled_gate_ok:
+            # Fractional Kelly sizing:
+            # - Use Bayesian posterior prob if present, else model prob.
+            # - Convert to stake fraction and cap hard by both budget and configured caps.
+            try:
+                if side == "yes":
+                    p_win = float(rec.get("p_yes_posterior")) if rec.get("p_yes_posterior") is not None else float(rec.get("p_yes_model") or s.p_yes)
+                else:
+                    p_win = float(rec.get("p_no_posterior")) if rec.get("p_no_posterior") is not None else float(rec.get("p_no_model") or (1.0 - float(s.p_yes)))
+            except Exception:
+                p_win = float(1.0 - float(s.p_yes)) if side == "no" else float(s.p_yes)
+            f_star = kelly_fraction_binary(p_win=float(p_win), price=float(price))
+            kelly_frac = float(getattr(args, "kelly_fraction", 0.10) or 0.10)
+            kelly_cap = float(getattr(args, "kelly_cap_fraction", 0.10) or 0.10)
+            bankroll = float(cash_usd) if isinstance(cash_usd, (int, float)) and cash_usd > 0 else float(cfg.max_notional_per_run_usd)
+            f = max(0.0, min(float(kelly_cap), float(f_star) * float(kelly_frac)))
+            target_notional = min(float(budget), max(0.0, bankroll * f))
+            # Keep at least a 1-contract probe if budget allows.
+            k_count = int(target_notional / max(0.0001, price))
+            k_count = max(1, k_count)
+            count = min(int(cfg.max_contracts_per_order), int(max_count_budget), int(k_count))
             notional = price * float(count)
 
         # Cap stacking per ticker (based on current open position).
@@ -1030,6 +1145,10 @@ def main() -> int:
         default=4000.0,
         help="If effective edge >= this, allow a low-notional order to pass the fee-aware gate.",
     )
+    scan.add_argument("--bayes-prior-k", type=float, default=20.0, help="Bayesian prior concentration for p_yes (higher = trust model more).")
+    scan.add_argument("--bayes-obs-k-max", type=float, default=30.0, help="Max observation strength (pseudo-count) from market mid/liquidity.")
+    scan.add_argument("--vol-anomaly", action="store_true", help="Enable short-vs-baseline vol regime ratio for diagnostics/sizing.")
+    scan.add_argument("--vol-anomaly-window-h", type=int, default=24, help="Window for short realized vol used by --vol-anomaly.")
     scan.set_defaults(func=cmd_scan)
 
     trade = sub.add_parser("trade", help="Trade mode (dry-run unless --allow-write).")
@@ -1049,11 +1168,17 @@ def main() -> int:
     trade.add_argument("--min-notional-bypass-edge-bps", type=float, default=4000.0)
     trade.add_argument("--persistence-cycles", type=int, default=1, help="Require edge to persist across N cycles before trading.")
     trade.add_argument("--persistence-window-min", type=float, default=30.0)
-    trade.add_argument("--sizing-mode", default="fixed", choices=["fixed", "edge_tiers"], help="Position sizing mode (default fixed=1 probe).")
+    trade.add_argument("--sizing-mode", default="fixed", choices=["fixed", "edge_tiers", "kelly"], help="Position sizing mode (default fixed=1 probe).")
     trade.add_argument("--min-settled-for-scaling", type=int, default=10, help="Require at least N settled orders before scaling >1 contract.")
     trade.add_argument("--edge-tier2-bps", type=float, default=200.0)
     trade.add_argument("--edge-tier3-bps", type=float, default=300.0)
     trade.add_argument("--edge-tier4-bps", type=float, default=450.0)
+    trade.add_argument("--kelly-fraction", type=float, default=0.10, help="Fractional Kelly multiplier (e.g. 0.10 = 0.10 of full Kelly).")
+    trade.add_argument("--kelly-cap-fraction", type=float, default=0.10, help="Hard cap on stake fraction of bankroll for Kelly sizing.")
+    trade.add_argument("--bayes-prior-k", type=float, default=20.0, help="Bayesian prior concentration for p_yes (higher = trust model more).")
+    trade.add_argument("--bayes-obs-k-max", type=float, default=30.0, help="Max observation strength (pseudo-count) from market mid/liquidity.")
+    trade.add_argument("--vol-anomaly", action="store_true", help="Enable short-vs-baseline vol regime ratio for diagnostics/sizing.")
+    trade.add_argument("--vol-anomaly-window-h", type=int, default=24, help="Window for short realized vol used by --vol-anomaly.")
     trade.add_argument("--allow-write", action="store_true", help="Enable live Kalshi order placement (requires env creds).")
     trade.add_argument("--max-orders-per-run", type=int, default=2)
     trade.add_argument("--max-contracts-per-order", type=int, default=10)

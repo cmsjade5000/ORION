@@ -774,6 +774,12 @@ def main() -> int:
         persist = os.environ.get("KALSHI_ARB_PERSISTENCE_CYCLES", "2")
         persist_win = os.environ.get("KALSHI_ARB_PERSISTENCE_WINDOW_MIN", "30")
         sizing_mode = os.environ.get("KALSHI_ARB_SIZING_MODE", "fixed")
+        kelly_fraction = os.environ.get("KALSHI_ARB_KELLY_FRACTION", "0.10")
+        kelly_cap_fraction = os.environ.get("KALSHI_ARB_KELLY_CAP_FRACTION", "0.10")
+        bayes_prior_k = os.environ.get("KALSHI_ARB_BAYES_PRIOR_K", "20")
+        bayes_obs_k_max = os.environ.get("KALSHI_ARB_BAYES_OBS_K_MAX", "30")
+        vol_anomaly = os.environ.get("KALSHI_ARB_VOL_ANOMALY", "0")
+        vol_anomaly_window_h = os.environ.get("KALSHI_ARB_VOL_ANOMALY_WINDOW_H", "24")
         sigma_window_h = int(os.environ.get("KALSHI_ARB_SIGMA_WINDOW_H", "168"))
 
         # Scan each series once, pick the best, then trade only the selected series.
@@ -934,6 +940,14 @@ def main() -> int:
             persist_win,
             "--sizing-mode",
             sizing_mode,
+            "--kelly-fraction",
+            kelly_fraction,
+            "--kelly-cap-fraction",
+            kelly_cap_fraction,
+            "--bayes-prior-k",
+            bayes_prior_k,
+            "--bayes-obs-k-max",
+            bayes_obs_k_max,
             "--allow-write",
             "--max-orders-per-run",
             os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "1"),
@@ -946,6 +960,8 @@ def main() -> int:
             "--max-open-contracts-per-ticker",
             os.environ.get("KALSHI_ARB_MAX_OPEN_CONTRACTS_PER_TICKER", "2"),
         ]
+        if str(vol_anomaly).strip().lower() in ("1", "true", "yes", "y", "on"):
+            trade_argv.extend(["--vol-anomaly", "--vol-anomaly-window-h", str(vol_anomaly_window_h)])
         trade_rc, _, trade = _run_cmd_json(trade_argv, cwd=root, timeout_s=90)
         trade = trade if isinstance(trade, dict) else {"mode": "trade", "status": "error", "reason": "bad_json"}
         # Expose scan context per series in the run artifact for status/digests.
