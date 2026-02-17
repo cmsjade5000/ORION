@@ -63,6 +63,11 @@ ALLOWLIST_COMMANDS: dict[str, list[str]] = {
     "scripts/node_sanity_check.sh": ["bash", "-lc", "scripts/node_sanity_check.sh"],
     "ledger_snapshot.sh": ["bash", "-lc", "scripts/ledger_snapshot.sh"],
     "scripts/ledger_snapshot.sh": ["bash", "-lc", "scripts/ledger_snapshot.sh"],
+
+    # Read-only arb scanning (no trading / no secrets).
+    "arb_scan.sh": ["bash", "-lc", "scripts/arb_scan.sh"],
+    "./scripts/arb_scan.sh": ["bash", "-lc", "scripts/arb_scan.sh"],
+    "scripts/arb_scan.sh": ["bash", "-lc", "scripts/arb_scan.sh"],
 }
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Send a plain-text email via AgentMail, and print a single status line.
+# Send a plain-text (and optional HTML) email via AgentMail, and print a single status line.
 #
 # This is used to keep ORION honest: only report success if the AgentMail API
 # returns a message_id.
@@ -9,6 +9,7 @@ set -euo pipefail
 # Usage:
 #   ./scripts/agentmail_send.sh --to you@example.com --subject "Hi" --text "Body"
 #   ./scripts/agentmail_send.sh --to you@example.com --subject "Hi" --text-file /tmp/body.txt
+#   ./scripts/agentmail_send.sh --to you@example.com --subject "Hi" --text-file /tmp/body.txt --html-file /tmp/body.html
 #   ./scripts/agentmail_send.sh you@example.com "Hi" "Body"  # positional compatibility
 #
 # Env:
@@ -29,6 +30,7 @@ to=""
 subject=""
 text=""
 text_file=""
+html_file=""
 
 # Positional compatibility:
 #   agentmail_send.sh <to> <subject> <text...>
@@ -49,6 +51,7 @@ while [ "${#}" -gt 0 ]; do
     --text) text="${2-}"; shift 2 ;;
     --body) text="${2-}"; shift 2 ;; # common alias
     --text-file) text_file="${2-}"; shift 2 ;;
+    --html-file) html_file="${2-}"; shift 2 ;;
     -h|--help)
       sed -n '1,120p' "$0"
       exit 0
@@ -84,8 +87,22 @@ else
   fi
 fi
 
+html_path=""
+if [ -n "$html_file" ]; then
+  if [ ! -f "$html_file" ]; then
+    echo "EMAIL_SEND_FAILED: missing file: $html_file" >&2
+    exit 2
+  fi
+  html_path="$tmpdir/body.html"
+  cp "$html_file" "$html_path"
+fi
+
 out_json="$tmpdir/out.json"
-if ! node "$ROOT/skills/agentmail/cli.js" send --from "$FROM_INBOX" --to "$to" --subject "$subject" --text-file "$body_path" >"$out_json" 2>"$tmpdir/err.log"; then
+cmd=(node "$ROOT/skills/agentmail/cli.js" send --from "$FROM_INBOX" --to "$to" --subject "$subject" --text-file "$body_path")
+if [ -n "$html_path" ]; then
+  cmd+=(--html-file "$html_path")
+fi
+if ! "${cmd[@]}" >"$out_json" 2>"$tmpdir/err.log"; then
   err="$(sed -n '1,4p' "$tmpdir/err.log" | tr '\n' ' ' | sed 's/  */ /g')"
   echo "EMAIL_SEND_FAILED: ${err:-unknown error}" >&2
   exit 1

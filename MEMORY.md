@@ -14,6 +14,8 @@ Rules:
 
 ## Where To Put Things
 
+- `memory/INDEX.md`
+  - Current objectives, active projects, constraints, key decisions, known issues.
 - `memory/WORKING.md`
   - Current goal, blockers, "what is happening right now".
 - `tasks/QUEUE.md`
@@ -25,3 +27,10 @@ Rules:
 
 - API keys, bot tokens, OAuth caches, auth profiles.
 - Anything under `~/.openclaw/`.
+
+## Bankr (On-Chain Info)
+
+- Use Bankr for read-only on-chain questions (balances, holdings, portfolio status).
+- Prefer the safe wrapper: `python3 scripts/bankr_prompt.py "<question>"` (blocks write intents by default).
+- Bankr CLI stores credentials under `~/.bankr/` (local-only, never commit).
+- Only allow write intents (swap/bridge/send/sign/submit) after explicit user confirmation (`--allow-write`).

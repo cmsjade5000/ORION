@@ -31,16 +31,18 @@ This document outlines the recommended workflow for developing and maintaining t
    - See `docs/OPENCLAW_CONFIG_MIGRATION.md` for mapping details.
    - For single-bot delegation behavior, follow `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`.
    - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.
+   - For Discord setup and ongoing practice/evaluation, follow `docs/DISCORD_SETUP.md` and `docs/DISCORD_TRAINING_LOOP.md`.
    - Optional Mini App dashboard:
      - Set `ORION_MINIAPP_URL` (deployed HTTPS URL). ORION exposes `/miniapp`.
      - See `apps/telegram-miniapp-dashboard/README.md` for deployment + security notes.
    - For best gateway-service reliability, store model/provider auth using `openclaw models auth paste-token` (LaunchAgent services may not inherit your shell env vars).
    - For email, follow `docs/EMAIL_POLICY.md` (ORION-only inbox; threat preflight; draft-first outbound).
+   - For structured administrative intelligence (reports, comparisons, triage, dashboards), follow `docs/ADMIN_INTELLIGENCE_PLAYBOOK.md`.
    - For outages/power failures/manual restart, follow `docs/RECOVERY.md` (and use `./status.sh` for a fast local+AEGIS snapshot).
 
 6. **Go live locally (recommended order)**
    ```bash
-   openclaw gateway install
+    openclaw gateway install
    openclaw gateway start
    openclaw doctor --repair
    openclaw security audit --deep
