@@ -460,6 +460,11 @@ const AEGIS_ALARM_MS = Number(process.env.AEGIS_ALARM_MS || 30_000);
 const AEGIS_WARN_MS = Number(process.env.AEGIS_WARN_MS || 0);
 const AEGIS_HEARTBEAT_MS = Number(process.env.AEGIS_HEARTBEAT_MS || 15_000);
 const AEGIS_PING_MS = Number(process.env.AEGIS_PING_MS || 1_100);
+// AEGIS UI should be driven by real telemetry, not simulation.
+// If no telemetry arrives within these windows, degrade to warn/alarm.
+const AEGIS_TELEMETRY_WARN_MS = Number(process.env.AEGIS_TELEMETRY_WARN_MS || 30_000);
+const AEGIS_TELEMETRY_ALARM_MS = Number(process.env.AEGIS_TELEMETRY_ALARM_MS || 90_000);
+const AEGIS_SIMULATED_HEARTBEAT = process.env.AEGIS_SIMULATED_HEARTBEAT === "1";
 // ORION health pinging is "AEGIS flavored" and drives the AEGIS indicator + ORION down/restarting UX.
 // This is intentionally simple and local: it pings the gateway via `openclaw health` when available.
 // NOTE: In production this server commonly runs on Fly and does not sit on the ORION host.
@@ -527,6 +532,11 @@ function createStore() {
     orionIo: { mode: null, until: 0 },
     orionBadge: { emoji: null, until: 0 },
     system: { alarmUntil: 0, warnUntil: 0 },
+    aegisTelemetry: {
+      lastTelemetryAt: 0,
+      lastOkAt: 0,
+      lastFailAt: 0,
+    },
     // ORION health as observed by AEGIS pings.
     // This is UI-focused state and does not attempt to be a full incident system.
     orionHealth: {
@@ -1118,7 +1128,10 @@ function openclawHealthOnce(timeoutMs) {
 
 let orionHealthPingInFlight = false;
 let orionHealthcheckSupported = true;
-if (AEGIS_HEARTBEAT_MS > 0) {
+// AEGIS pulses should be driven by real telemetry. Only run a local heartbeat loop when:
+// - We are explicitly doing real, co-located health checks, OR
+// - We are in local dev and explicitly enabled simulation.
+if (AEGIS_HEARTBEAT_MS > 0 && (ORION_HEALTHCHECK_ENABLED || (!IS_PROD && AEGIS_SIMULATED_HEARTBEAT))) {
   const tickAegisHeartbeat = async () => {
     const a = STORE.agents.get("AEGIS");
     if (!a) return;
@@ -1126,10 +1139,8 @@ if (AEGIS_HEARTBEAT_MS > 0) {
     if (a.activity === "messaging") return;
 
     const startedAt = Date.now();
-    // Always run a *visual* heartbeat pulse for AEGIS so the UI feels alive on Fly
-    // (where `openclaw health` is typically unavailable).
-    //
     // Only perform a real healthcheck when explicitly enabled *and* supported.
+    // In simulation mode (local demos), we pulse without touching ORION health state.
     const doRealHealthcheck = ORION_HEALTHCHECK_ENABLED && orionHealthcheckSupported;
     if (doRealHealthcheck) STORE.orionHealth.lastCheckAt = startedAt;
 
@@ -1167,7 +1178,9 @@ if (AEGIS_HEARTBEAT_MS > 0) {
 
     const now = Date.now();
     if (ok !== null) {
+      STORE.aegisTelemetry.lastTelemetryAt = now;
       if (ok) {
+        STORE.aegisTelemetry.lastOkAt = now;
         const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
         STORE.orionHealth.lastOkAt = now;
         STORE.orionHealth.lastFailAt = 0;
@@ -1177,6 +1190,7 @@ if (AEGIS_HEARTBEAT_MS > 0) {
         if (wasDownOrSuspect) STORE.orionHealth.restartingUntil = now + Math.max(1_500, ORION_RESTARTING_MS);
         if (!wasDownOrSuspect) maybeFlashOrionTiredWakeFace(now);
       } else {
+        STORE.aegisTelemetry.lastFailAt = now;
         STORE.orionHealth.lastFailAt = now;
         STORE.orionHealth.consecutiveFails = Math.max(0, Number(STORE.orionHealth.consecutiveFails) || 0) + 1;
         // First few misses are "no response"; only flip to confirmed outage after N consecutive fails.
@@ -1293,10 +1307,12 @@ function applyEventToStore(body) {
     const kind = typeof body?.kind === "string" ? body.kind : (ok ? "ok" : "unhealthy");
     const now = ts;
     STORE.orionHealth.lastCheckAt = now;
+    STORE.aegisTelemetry.lastTelemetryAt = now;
+    if (ok) STORE.aegisTelemetry.lastOkAt = now;
+    else STORE.aegisTelemetry.lastFailAt = now;
 
-    // Visual AEGIS heartbeat: on Fly, "openclaw health" is typically unavailable,
-    // so we treat each ingested health check as the heartbeat tick to drive the
-    // satellite pulse animation.
+    // Treat each ingested health check as a heartbeat tick. This is real telemetry
+    // (driven by /api/ingest), not a simulation.
     const aegis = STORE.agents.get("AEGIS");
     if (aegis) {
       const startedAt = now;
@@ -1316,6 +1332,16 @@ function applyEventToStore(body) {
         }
       }, holdMs);
     }
+
+    addFeedItem({
+      id: createId("aegis"),
+      kind: "event",
+      ts: now,
+      icon: ok ? "🛰️" : (kind === "unreachable" ? "🚨" : "⚠️"),
+      text: ok ? "AEGIS: health ok" : (kind === "unreachable" ? "AEGIS: no response" : "AEGIS: unhealthy"),
+      agentId: "AEGIS",
+      expiresAt: now + Math.max(10_000, FEED_TTL_MS),
+    });
 
     if (ok) {
       const wasDownOrSuspect = STORE.orionHealth.downSince > 0 || STORE.orionHealth.consecutiveFails > 0;
@@ -1535,20 +1561,32 @@ function snapshotLiveState() {
     (Boolean(STORE.orionHealth?.noAckWarnUntil && STORE.orionHealth.noAckWarnUntil > now) ||
       (Number(STORE.orionHealth?.consecutiveFails) || 0) > 0);
   const orionNoAck = orionSuspect;
+
+  const lastTel = Number(STORE.aegisTelemetry?.lastTelemetryAt) || 0;
+  const telAge = lastTel > 0 ? (now - lastTel) : Number.POSITIVE_INFINITY;
+  const telAlarm = Number.isFinite(telAge) && telAge > Math.max(5_000, AEGIS_TELEMETRY_ALARM_MS);
+  const telWarn = Number.isFinite(telAge) && telAge > Math.max(4_000, AEGIS_TELEMETRY_WARN_MS);
+  const aegisStatus =
+    orionDown ? "alarm" : (orionNoAck ? "warn" : (telAlarm ? "alarm" : (telWarn ? "warn" : (lastTel ? "ok" : "unknown"))));
+
   const agents = AGENTS.map((id) => {
     const a = STORE.agents.get(id);
     if (!a) return { id, status: "idle", activity: "idle" };
 
     const stale = !a.updatedAt || now - a.updatedAt > STALE_MS;
-    const status = stale ? "idle" : a.status;
+    // AEGIS should look "offline" until we have telemetry (otherwise green-by-default feels like a lie).
+    const status =
+      id === "AEGIS" && !a.updatedAt
+        ? "offline"
+        : (stale ? "idle" : a.status);
     const activity = stale ? "idle" : a.activity;
 
     // AEGIS is a "system/remote" agent: show a semi-permanent badge.
     // Prefer alarming icons for recent failures.
     let badge = null;
     if (id === "AEGIS") {
-      const alarm = orionDown || (STORE.system?.alarmUntil && STORE.system.alarmUntil > now);
-      const warn = orionNoAck || (STORE.system?.warnUntil && STORE.system.warnUntil > now) || CONFIG_WARN;
+      const alarm = aegisStatus === "alarm" || (STORE.system?.alarmUntil && STORE.system.alarmUntil > now);
+      const warn = aegisStatus === "warn" || (STORE.system?.warnUntil && STORE.system.warnUntil > now);
       badge = alarm ? "🚨" : warn ? "⚠️" : "🛰️";
     }
 
@@ -1612,6 +1650,13 @@ function snapshotLiveState() {
           ? "⚠️"
           : (badgeReal || dreamBadge),
       io: (orionDown || orionRestarting) ? null : io,
+    },
+    aegis: {
+      status: aegisStatus,
+      lastTelemetryAt: lastTel || null,
+      lastOkAt: Number(STORE.aegisTelemetry?.lastOkAt) || null,
+      lastFailAt: Number(STORE.aegisTelemetry?.lastFailAt) || null,
+      simulated: Boolean(!IS_PROD && AEGIS_SIMULATED_HEARTBEAT && !ORION_HEALTHCHECK_ENABLED),
     },
     artifacts: STORE.artifacts
       .filter((a) => a && a.expiresAt && a.expiresAt > now)
