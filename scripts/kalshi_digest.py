@@ -215,21 +215,66 @@ def _send_email_via_agentmail(to_email: str, subject: str, body: str, *, cwd: st
     try:
         import subprocess
         import tempfile
+        import re
+
+        def _write_last_send(obj: Dict[str, Any]) -> None:
+            try:
+                p = os.path.join(cwd, "tmp", "kalshi_ref_arb", "last_email_send.json")
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(obj, f, indent=2, sort_keys=True)
+                    f.write("\n")
+            except Exception:
+                return
 
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as f:
             f.write(body)
             f.write("\n")
             body_path = f.name
         try:
-            proc = subprocess.run(
-                ["bash", "scripts/agentmail_send.sh", "--to", str(to_email), "--subject", str(subject), "--text-file", body_path],
-                cwd=cwd,
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=30,
+            last_err = ""
+            for attempt in range(1, 4):
+                proc = subprocess.run(
+                    ["bash", "scripts/agentmail_send.sh", "--to", str(to_email), "--subject", str(subject), "--text-file", body_path],
+                    cwd=cwd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                )
+                out = (proc.stdout or "").strip()
+                err = (proc.stderr or "").strip()
+                if int(proc.returncode) == 0:
+                    mid = None
+                    m = re.search(r"message_id=(\S+)", out)
+                    if m:
+                        mid = m.group(1).strip().strip("<>").strip()
+                    _write_last_send(
+                        {
+                            "ts_unix": int(time.time()),
+                            "ok": True,
+                            "to": str(to_email),
+                            "subject": str(subject),
+                            "message_id": mid,
+                            "attempt": attempt,
+                        }
+                    )
+                    return True
+                last_err = err or out or f"returncode={proc.returncode}"
+                time.sleep(min(10.0, 1.5 * float(attempt)))
+
+            _write_last_send(
+                {
+                    "ts_unix": int(time.time()),
+                    "ok": False,
+                    "to": str(to_email),
+                    "subject": str(subject),
+                    "error": str(last_err)[:1000],
+                }
             )
-            return int(proc.returncode) == 0
+            if last_err:
+                print(f"EMAIL_SEND_FAILED: {last_err[:400]}", file=os.sys.stderr)
+            return False
         finally:
             try:
                 os.remove(body_path)
@@ -244,6 +289,17 @@ def _send_email_html_via_agentmail(to_email: str, subject: str, *, text_body: st
     try:
         import subprocess
         import tempfile
+        import re
+
+        def _write_last_send(obj: Dict[str, Any]) -> None:
+            try:
+                p = os.path.join(cwd, "tmp", "kalshi_ref_arb", "last_email_send.json")
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(obj, f, indent=2, sort_keys=True)
+                    f.write("\n")
+            except Exception:
+                return
 
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tf:
             tf.write(text_body)
@@ -255,26 +311,60 @@ def _send_email_html_via_agentmail(to_email: str, subject: str, *, text_body: st
             html_path = hf.name
 
         try:
-            proc = subprocess.run(
-                [
-                    "bash",
-                    "scripts/agentmail_send.sh",
-                    "--to",
-                    str(to_email),
-                    "--subject",
-                    str(subject),
-                    "--text-file",
-                    text_path,
-                    "--html-file",
-                    html_path,
-                ],
-                cwd=cwd,
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=45,
+            last_err = ""
+            for attempt in range(1, 4):
+                proc = subprocess.run(
+                    [
+                        "bash",
+                        "scripts/agentmail_send.sh",
+                        "--to",
+                        str(to_email),
+                        "--subject",
+                        str(subject),
+                        "--text-file",
+                        text_path,
+                        "--html-file",
+                        html_path,
+                    ],
+                    cwd=cwd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                )
+                out = (proc.stdout or "").strip()
+                err = (proc.stderr or "").strip()
+                if int(proc.returncode) == 0:
+                    mid = None
+                    m = re.search(r"message_id=(\S+)", out)
+                    if m:
+                        mid = m.group(1).strip().strip("<>").strip()
+                    _write_last_send(
+                        {
+                            "ts_unix": int(time.time()),
+                            "ok": True,
+                            "to": str(to_email),
+                            "subject": str(subject),
+                            "message_id": mid,
+                            "attempt": attempt,
+                        }
+                    )
+                    return True
+                last_err = err or out or f"returncode={proc.returncode}"
+                time.sleep(min(10.0, 1.5 * float(attempt)))
+
+            _write_last_send(
+                {
+                    "ts_unix": int(time.time()),
+                    "ok": False,
+                    "to": str(to_email),
+                    "subject": str(subject),
+                    "error": str(last_err)[:1000],
+                }
             )
-            return int(proc.returncode) == 0
+            if last_err:
+                print(f"EMAIL_SEND_FAILED: {last_err[:400]}", file=os.sys.stderr)
+            return False
         finally:
             for p in (text_path, html_path):
                 try:
@@ -1547,6 +1637,17 @@ def main() -> int:
         else:
             ok = _send_email_via_agentmail(to_email, subject, payload["message"], cwd=root)
         if not ok:
+            # If email sending fails, alert via Telegram (best-effort) so Cory knows to investigate.
+            try:
+                chat_id = _telegram_chat_id()
+                if chat_id is not None:
+                    _send_telegram(
+                        int(chat_id),
+                        "ORION: Kalshi digest email FAILED. Check tmp/kalshi_ref_arb/last_email_send.json",
+                        cwd=root,
+                    )
+            except Exception:
+                pass
             print("ERROR: email send failed", file=os.sys.stderr)
             return 5
     return 0
