@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim avatar audio-check lint dev task-packets test shellcheck ci
+.PHONY: soul restart routingsim looptest avatar audio-check lint dev task-packets test shellcheck ci
 
 ## Regenerate all agent SOUL.md files
 soul:
@@ -12,6 +12,11 @@ restart:
 ## Run the routing simulation scoring exercise
 routingsim:
 	@echo "See docs/routing_sim.md for routing simulation instructions"
+
+## Internal loop testing (no Telegram delivery); writes report to tmp/looptests/
+looptest:
+	@ORION_SUPPRESS_TELEGRAM=1 TELEGRAM_SUPPRESS=1 ORION_SUPPRESS_DISCORD=1 DISCORD_SUPPRESS=1 NOTIFY_DRY_RUN=1 \
+		python3 scripts/loop_test_routing_sim.py
 
 ## Preview your agent avatar (as specified in IDENTITY.md)
 avatar:

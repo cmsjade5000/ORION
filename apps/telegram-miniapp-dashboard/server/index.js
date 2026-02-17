@@ -1821,6 +1821,15 @@ app.post("/api/sse-auth", (req, res) => {
 
   const ctx = extractTelegramContext(req);
   if (!ctx.verified && !canAcceptUnverifiedInitData()) {
+    // Log only non-sensitive metadata to help diagnose initData failures in prod.
+    // Do NOT log initData or user/chat ids.
+    // eslint-disable-next-line no-console
+    console.log("[miniapp] initData reject", {
+      endpoint: "sse-auth",
+      error: ctx.error || "unknown",
+      initDataLen: ctx.initData ? ctx.initData.length : 0,
+      hasHash: Boolean(ctx.params && typeof ctx.params.hash === "string" && String(ctx.params.hash).trim()),
+    });
     return res.status(401).json({
       ok: false,
       error: {
@@ -1919,6 +1928,13 @@ app.get("/api/state", (req, res) => {
   }
 
   if (!ctx.verified && !canAcceptUnverifiedInitData()) {
+    // eslint-disable-next-line no-console
+    console.log("[miniapp] initData reject", {
+      endpoint: "state",
+      error: ctx.error || "unknown",
+      initDataLen: ctx.initData ? ctx.initData.length : 0,
+      hasHash: Boolean(ctx.params && typeof ctx.params.hash === "string" && String(ctx.params.hash).trim()),
+    });
     return res.status(401).json({
       ok: false,
       error: {
