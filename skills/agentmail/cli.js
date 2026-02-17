@@ -15,6 +15,7 @@ function usage() {
   console.error('Send (flag form):');
   console.error('  send --from <from_inbox_id> --to <to> --subject <subject> --text <text...>');
   console.error('  send --from <from_inbox_id> --to <to> --subject <subject> --text-file <path>');
+  console.error('  send --from <from_inbox_id> --to <to> --subject <subject> --text-file <path> --html-file <path>');
   console.error('Reply-last (flag form):');
   console.error('  reply-last --from <from_inbox_id> --text <text...> [--from-email <sender_email>]');
   console.error('  reply-last --from <from_inbox_id> --text-file <path> [--from-email <sender_email>]');
@@ -103,6 +104,11 @@ async function main() {
     const to = flags.to ?? flags._[1];
     const subject = flags.subject ?? flags._[2];
     const textFile = flags['text-file'] ?? flags.text_file ?? flags.textFile ?? null;
+    const htmlFile = flags['html-file'] ?? flags.html_file ?? flags.htmlFile ?? null;
+    const html =
+      (htmlFile ? fs.readFileSync(String(htmlFile), 'utf8') : null) ??
+      flags.html ??
+      null;
     const text =
       (textFile ? fs.readFileSync(String(textFile), 'utf8') : null) ??
       flags.text ??
@@ -110,7 +116,7 @@ async function main() {
 
     if (!from || !to || !subject || !text) usage();
 
-    const out = await sendMessage(from, { to, subject, text });
+    const out = await sendMessage(from, { to, subject, text, ...(html ? { html } : {}) });
     console.log(JSON.stringify(out, null, 2));
     return;
   }

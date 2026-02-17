@@ -27,6 +27,16 @@ class TestKalshiAnalytics(unittest.TestCase):
         self.assertEqual(out["T3"]["yes"], 7)
         self.assertEqual(out["T3"]["no"], 1)
 
+    def test_extract_market_position_counts_handles_signed_net_position(self) -> None:
+        from scripts.arb.kalshi_analytics import extract_market_position_counts
+
+        post = {"positions": {"market_positions": [{"ticker": "TYES", "position": 3}, {"ticker": "TNO", "position": -2}]}}
+        out = extract_market_position_counts(post)
+        self.assertEqual(out["TYES"]["yes"], 3)
+        self.assertEqual(out["TYES"]["no"], 0)
+        self.assertEqual(out["TNO"]["yes"], 0)
+        self.assertEqual(out["TNO"]["no"], 2)
+
     def test_match_fills_for_order_aggregates_counts_and_avg(self) -> None:
         from scripts.arb.kalshi_analytics import match_fills_for_order
 
@@ -76,6 +86,8 @@ class TestKalshiAnalytics(unittest.TestCase):
             max_spread=0.05,
             min_price=0.05,
             max_price=0.95,
+            min_notional_usd=0.0,
+            min_notional_bypass_edge_bps=0.0,
         )
 
         # Candidate A: higher effective edge but untradable due to ask=1.0 (out of bounds)
@@ -164,6 +176,8 @@ class TestKalshiAnalytics(unittest.TestCase):
                 min_seconds_to_expiry=900,
                 min_price=0.05,
                 max_price=0.95,
+                min_notional_usd=0.0,
+                min_notional_bypass_edge_bps=0.0,
             )
             self.assertIsNotNone(s)
             assert s is not None
@@ -184,6 +198,8 @@ class TestKalshiAnalytics(unittest.TestCase):
                 min_seconds_to_expiry=900,
                 min_price=0.05,
                 max_price=0.95,
+                min_notional_usd=0.0,
+                min_notional_bypass_edge_bps=0.0,
             )
             self.assertIsNotNone(s2)
             assert s2 is not None

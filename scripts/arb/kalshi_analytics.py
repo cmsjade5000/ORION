@@ -130,6 +130,17 @@ def extract_market_position_counts(post: Dict[str, Any]) -> Dict[str, Dict[str, 
                 yes = int(cnt)
             elif side == "no":
                 no = int(cnt)
+            elif side is None:
+                # Kalshi positions often come back as a single signed net position for the
+                # market (positive means net YES, negative means net NO).
+                try:
+                    c = int(cnt)
+                except Exception:
+                    c = 0
+                if c > 0:
+                    yes = max(yes, int(c))
+                elif c < 0:
+                    no = max(no, int(abs(c)))
             # Explicit yes/no fields
             yes = max(yes, int(_safe_int(d.get("yes_count")) or _safe_int(d.get("yes_position")) or 0))
             no = max(no, int(_safe_int(d.get("no_count")) or _safe_int(d.get("no_position")) or 0))
@@ -147,6 +158,7 @@ def match_fills_for_order(post: Dict[str, Any], order_id: str) -> Dict[str, Any]
     lst = _as_list(fills.get("fills"))
     total = 0
     notional = 0.0
+    fee_total = 0.0
     tickers: List[str] = []
     for f in lst:
         d = _as_dict(f)
@@ -160,6 +172,7 @@ def match_fills_for_order(post: Dict[str, Any], order_id: str) -> Dict[str, Any]
             or _safe_float(d.get("no_price_dollars"))
             or _safe_float(d.get("price"))
         )
+        fee = _safe_float(d.get("fee_cost")) or _safe_float(d.get("fee_dollars")) or _safe_float(d.get("fee"))
         t = d.get("ticker") or d.get("market_ticker")
         if isinstance(t, str) and t and t not in tickers:
             tickers.append(t)
@@ -167,8 +180,10 @@ def match_fills_for_order(post: Dict[str, Any], order_id: str) -> Dict[str, Any]
             total += cnt
             if px is not None:
                 notional += float(px) * float(cnt)
+            if fee is not None:
+                fee_total += float(fee)
     avg = (notional / float(total)) if total > 0 else None
-    return {"fills_count": total, "avg_price_dollars": avg, "tickers": tickers}
+    return {"fills_count": total, "avg_price_dollars": avg, "fee_total_usd": fee_total, "tickers": tickers}
 
 
 def dedupe_settlements(settlements: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

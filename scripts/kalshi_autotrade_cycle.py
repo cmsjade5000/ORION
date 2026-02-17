@@ -16,6 +16,7 @@ try:
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
+    from scripts.arb.kalshi_autotune import apply_overrides_to_environ, load_overrides, maybe_autotune  # type: ignore
 except ModuleNotFoundError:
     import sys
 
@@ -27,6 +28,7 @@ except ModuleNotFoundError:
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
+    from scripts.arb.kalshi_autotune import apply_overrides_to_environ, load_overrides, maybe_autotune  # type: ignore
 
 
 def _day_bounds_unix(*, tz: str, now_unix: int) -> tuple[int, int]:
@@ -221,16 +223,73 @@ def _run_cmd_json(argv: list[str], *, cwd: str, timeout_s: int = 60) -> Tuple[in
 def _send_telegram(chat_id: int, text: str, *, cwd: str) -> None:
     # Best-effort; do not raise.
     try:
+        # Avoid `bash -lc "...$..."` here: dollar signs in the text would be expanded
+        # by the shell (e.g. "$0.76" -> "bash.76"). Pass args directly instead.
         subprocess.run(
-            ["bash", "-lc", f"scripts/telegram_send_message.sh {chat_id} {json.dumps(text)}"],
+            ["bash", "scripts/telegram_send_message.sh", str(int(chat_id)), str(text)],
             cwd=cwd,
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=15,
+            timeout=20,
         )
     except Exception:
         return
+
+
+def _truthy_env(name: str, default: str = "0") -> bool:
+    v = str(os.environ.get(name, default) or "").strip().lower()
+    return v in ("1", "true", "yes", "y", "on")
+
+
+def _fmt_usd(x: Any) -> str:
+    try:
+        return f"${float(x):.2f}"
+    except Exception:
+        return "$?"
+
+
+def _fmt_price_dollars(x: Any) -> str:
+    try:
+        return f"{float(x):.4f}"
+    except Exception:
+        return "?"
+
+
+def _orion_order_sentence(lo: dict[str, Any], post: Any) -> str:
+    o = (lo.get("order") or {}) if isinstance(lo.get("order"), dict) else {}
+    action = str(o.get("action") or "buy")
+    side = str(o.get("side") or "").lower()  # yes/no
+    count = o.get("count") or o.get("initial_count") or lo.get("count") or "?"
+    ticker = str(o.get("ticker") or lo.get("ticker") or "?")
+    price = o.get("price_dollars")
+    notional = lo.get("notional_usd")
+
+    # Human phrasing.
+    side_word = "YES" if side == "yes" else ("NO" if side == "no" else side.upper() or "?")
+    verb = "placed" if action != "buy" else "placed"
+    line = f"ORION: I {verb} a {action} order: {side_word} {count}x {ticker} @ { _fmt_price_dollars(price) } (~{_fmt_usd(notional)})"
+
+    # Fill hint if we can match fills quickly.
+    filled_hint = ""
+    try:
+        order_id = lo.get("order_id") if isinstance(lo.get("order_id"), str) else None
+        if order_id and isinstance(post, dict):
+            m = match_fills_for_order(post, order_id)
+            if int(m.get("fills_count") or 0) > 0:
+                ap = m.get("avg_price_dollars")
+                if isinstance(ap, (int, float)):
+                    filled_hint = f" (filled {int(m.get('fills_count') or 0)} @ ~{float(ap):.4f})"
+                else:
+                    filled_hint = f" (filled {int(m.get('fills_count') or 0)})"
+        elif isinstance(post, dict):
+            fills = (post.get("fills") or {}).get("fills")
+            if isinstance(fills, list) and fills:
+                filled_hint = " (fill(s) detected)"
+    except Exception:
+        filled_hint = ""
+
+    return line + filled_hint
 
 
 def _list_run_files(runs_dir: str) -> list[str]:
@@ -244,12 +303,40 @@ def _list_run_files(runs_dir: str) -> list[str]:
     return paths
 
 
+def _is_transient_http_err_payload(payload: Any) -> bool:
+    """Heuristic for short-lived infra/API errors we should not escalate.
+
+    We still record these in run artifacts and digests, but we avoid triggering
+    cooldown/kill-switch behavior off them.
+    """
+    if not isinstance(payload, dict):
+        return False
+    s = payload.get("raw_stderr")
+    if not isinstance(s, str) or not s:
+        return False
+    return any(
+        x in s
+        for x in (
+            "HTTP Error 502",
+            "HTTP Error 503",
+            "HTTP Error 504",
+            "timed out",
+            "Temporary failure",
+            "Connection reset",
+            "Connection refused",
+            "Name or service not known",
+        )
+    )
+
+
 def _recent_run_health(runs_dir: str, *, lookback: int, min_ts_unix: int = 0) -> dict[str, int]:
     files = _list_run_files(runs_dir)
     if lookback > 0:
         files = files[-lookback:]
     errors = 0
     order_failed = 0
+    considered = 0
+
     for p in files:
         try:
             with open(p, "r", encoding="utf-8") as f:
@@ -260,17 +347,20 @@ def _recent_run_health(runs_dir: str, *, lookback: int, min_ts_unix: int = 0) ->
             continue
         if int(o.get("ts_unix") or 0) < int(min_ts_unix):
             continue
+        considered += 1
         bal_rc = int(o.get("balance_rc") or 0)
         trade_rc = int(o.get("trade_rc") or 0)
         post_rc = int(o.get("post_rc") or 0)
+        bal_payload = o.get("balance")
+        post_payload = o.get("post")
         trade = o.get("trade") if isinstance(o.get("trade"), dict) else {}
         refused = bool(trade.get("status") == "refused")
         reason = str(trade.get("reason") or "")
         # Refusals are not necessarily "errors". Treat operator-style stop gates as healthy.
         gate_refused = refused and reason in ("kill_switch", "cooldown", "scan_failed", "daily_loss_limit")
-        if bal_rc != 0:
+        if bal_rc != 0 and not _is_transient_http_err_payload(bal_payload):
             errors += 1
-        if post_rc != 0:
+        if post_rc != 0 and not _is_transient_http_err_payload(post_payload):
             errors += 1
         if (trade_rc != 0) and (not gate_refused):
             errors += 1
@@ -279,7 +369,7 @@ def _recent_run_health(runs_dir: str, *, lookback: int, min_ts_unix: int = 0) ->
             for s in skipped:
                 if isinstance(s, dict) and s.get("reason") == "order_failed":
                     order_failed += 1
-    return {"errors": errors, "order_failed": order_failed, "runs": len(files)}
+    return {"errors": errors, "order_failed": order_failed, "runs": int(considered)}
 
 
 def _kill_switch_path(root: str) -> str:
@@ -425,6 +515,10 @@ def _best_series_from_scan(root: str, series_list: list[str], *, sigma: str, sig
             str(min_px),
             "--max-price",
             str(max_px),
+            "--min-notional-usd",
+            str(os.environ.get("KALSHI_ARB_MIN_NOTIONAL_USD", "0.20")),
+            "--min-notional-bypass-edge-bps",
+            str(os.environ.get("KALSHI_ARB_MIN_NOTIONAL_BYPASS_EDGE_BPS", "4000")),
         ]
         rc, _, obj = _run_cmd_json(argv, cwd=root, timeout_s=60)
         best = None
@@ -476,6 +570,8 @@ def _scan_series(
     min_tte: str,
     min_px: str,
     max_px: str,
+    min_notional: str,
+    min_notional_bypass: str,
 ) -> Dict[str, Any]:
     sigma_arg = sigma
     if str(sigma).strip().lower() == "auto":
@@ -510,6 +606,10 @@ def _scan_series(
         str(min_px),
         "--max-price",
         str(max_px),
+        "--min-notional-usd",
+        str(min_notional),
+        "--min-notional-bypass-edge-bps",
+        str(min_notional_bypass),
     ]
     scan_timeout_s = int(os.environ.get("KALSHI_ARB_SCAN_TIMEOUT_S", "30"))
     rc, _, obj = _run_cmd_json(argv, cwd=root, timeout_s=scan_timeout_s)
@@ -562,6 +662,21 @@ def main() -> int:
 
     try:
         ts = int(time.time())
+        # Auto-tune status is captured into run artifacts for visibility.
+        autotune_status: Optional[Dict[str, Any]] = None
+
+        # Apply any persisted param overrides (written by the auto-tuner) and then
+        # optionally run auto-tune. Keep this inside the cycle lock to avoid
+        # overlapping cycles racing on override files.
+        try:
+            apply_overrides_to_environ(load_overrides(root))
+        except Exception:
+            pass
+        try:
+            autotune_status = maybe_autotune(root)
+        except Exception:
+            autotune_status = None
+
         out_dir = os.path.join(root, "tmp", "kalshi_ref_arb", "runs")
         notify_state_path = os.path.join(root, "tmp", "kalshi_ref_arb", "notify_state.json")
         notify_state = _load_json(notify_state_path, default={"last_notify_ts": 0})
@@ -586,7 +701,7 @@ def main() -> int:
                 _maybe_reconcile_risk_state(root, post)
             artifact = {
                 "ts_unix": ts,
-                "cycle_inputs": {"cooldown_active": True},
+                "cycle_inputs": {"cooldown_active": True, "autotune": autotune_status},
                 "balance_rc": bal_rc,
                 "balance": bal,
                 "trade_rc": 2,
@@ -625,7 +740,11 @@ def main() -> int:
                     _maybe_reconcile_risk_state(root, post)
                 artifact = {
                     "ts_unix": ts,
-                    "cycle_inputs": {"daily_loss_limit_usd": float(limit), "pnl_today_usd_approx": float(pnl_today)},
+                    "cycle_inputs": {
+                        "daily_loss_limit_usd": float(limit),
+                        "pnl_today_usd_approx": float(pnl_today),
+                        "autotune": autotune_status,
+                    },
                     "balance_rc": bal_rc,
                     "balance": bal,
                     "trade_rc": 2,
@@ -650,6 +769,8 @@ def main() -> int:
         min_tte = os.environ.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY", "900")
         min_px = os.environ.get("KALSHI_ARB_MIN_PRICE", "0.05")
         max_px = os.environ.get("KALSHI_ARB_MAX_PRICE", "0.95")
+        min_notional = os.environ.get("KALSHI_ARB_MIN_NOTIONAL_USD", "0.20")
+        min_notional_bypass = os.environ.get("KALSHI_ARB_MIN_NOTIONAL_BYPASS_EDGE_BPS", "4000")
         persist = os.environ.get("KALSHI_ARB_PERSISTENCE_CYCLES", "2")
         persist_win = os.environ.get("KALSHI_ARB_PERSISTENCE_WINDOW_MIN", "30")
         sizing_mode = os.environ.get("KALSHI_ARB_SIZING_MODE", "fixed")
@@ -673,6 +794,8 @@ def main() -> int:
                 min_tte=min_tte,
                 min_px=min_px,
                 max_px=max_px,
+                min_notional=min_notional,
+                min_notional_bypass=min_notional_bypass,
             )
             rc = int(sobj.get("_rc") or 0) if isinstance(sobj, dict) else 1
             best = _best_candidate_from_scan(sobj) if rc == 0 else None
@@ -686,9 +809,25 @@ def main() -> int:
         scan_summary["selected_series"] = selected_series
         scan_summary["selected_effective_edge_bps"] = selected_eff
 
-        # If all scans failed (timeouts/errors), skip trading this cycle rather than
+        # If *all* scans failed (timeouts/errors), skip trading this cycle rather than
         # blindly defaulting to the first series.
-        if selected_eff is None:
+        #
+        # Important: `selected_eff is None` can also mean "scan succeeded but no market
+        # passed the filters" (i.e., no opportunity). In that case we still run the
+        # trade step for the selected series so we get diagnostics in the run artifact
+        # (why no trades), and we remain ready if the market changes between scan/trade.
+        any_scan_ok = False
+        try:
+            for it in (scan_summary.get("series") or []):
+                if not isinstance(it, dict):
+                    continue
+                if int(it.get("rc") or 0) == 0:
+                    any_scan_ok = True
+                    break
+        except Exception:
+            any_scan_ok = False
+
+        if not any_scan_ok:
             post_rc, _, post = _run_cmd_json(
                 ["python3", "scripts/kalshi_ref_arb.py", "portfolio", "--hours", "1", "--limit", "50"],
                 cwd=root,
@@ -703,6 +842,7 @@ def main() -> int:
                     "scan_summary": scan_summary,
                     "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
                     "pnl_today_usd_approx": float(pnl_today) if isinstance(pnl_today, (int, float)) else None,
+                    "autotune": autotune_status,
                 },
                 "balance_rc": bal_rc,
                 "balance": bal,
@@ -732,6 +872,7 @@ def main() -> int:
             "series": selected_series,
             "series_list": series_list,
             "scan_summary": scan_summary,
+            "autotune": autotune_status,
             "sigma": str(sigma),
             "sigma_arg": str(sigma_arg),
             "sigma_window_h": int(sigma_window_h),
@@ -742,6 +883,8 @@ def main() -> int:
             "min_seconds_to_expiry": int(min_tte),
             "min_price": float(min_px),
             "max_price": float(max_px),
+            "min_notional_usd": float(min_notional),
+            "min_notional_bypass_edge_bps": float(min_notional_bypass),
             "persistence_cycles": int(persist),
             "persistence_window_min": float(persist_win),
             "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
@@ -781,6 +924,10 @@ def main() -> int:
             min_px,
             "--max-price",
             max_px,
+            "--min-notional-usd",
+            min_notional,
+            "--min-notional-bypass-edge-bps",
+            min_notional_bypass,
             "--persistence-cycles",
             persist,
             "--persistence-window-min",
@@ -796,6 +943,8 @@ def main() -> int:
             os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "2"),
             "--max-notional-per-market-usd",
             os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "5"),
+            "--max-open-contracts-per-ticker",
+            os.environ.get("KALSHI_ARB_MAX_OPEN_CONTRACTS_PER_TICKER", "2"),
         ]
         trade_rc, _, trade = _run_cmd_json(trade_argv, cwd=root, timeout_s=90)
         trade = trade if isinstance(trade, dict) else {"mode": "trade", "status": "error", "reason": "bad_json"}
@@ -853,9 +1002,10 @@ def main() -> int:
             and trade.get("status") == "refused"
             and trade.get("reason") in ("kill_switch", "cooldown")
         )
-        any_error = (bal_rc != 0) or ((trade_rc != 0) and (not kill_refused))
-        if post_rc != 0:
-            any_error = True
+        bal_hard_err = (bal_rc != 0) and (not _is_transient_http_err_payload(bal))
+        post_hard_err = (post_rc != 0) and (not _is_transient_http_err_payload(post))
+        trade_hard_err = (trade_rc != 0) and (not kill_refused)
+        any_error = bool(bal_hard_err or post_hard_err or trade_hard_err)
         any_order_failed = any(
             isinstance(x, dict) and x.get("reason") == "order_failed"
             for x in ((trade.get("skipped") or []) if isinstance(trade, dict) else [])
@@ -878,6 +1028,7 @@ def main() -> int:
         last = int(notify_state.get("last_notify_ts") or 0)
         rate_limit_s = int(os.environ.get("KALSHI_ARB_NOTIFY_MIN_INTERVAL_S", "900"))  # 15m
         allowed = (now - last) >= rate_limit_s
+        notify_trades = _truthy_env("KALSHI_ARB_NOTIFY_TRADES", default="0")
 
         placed = (trade.get("placed") or []) if isinstance(trade, dict) else []
         live_orders = [p for p in placed if isinstance(p, dict) and p.get("mode") == "live"]
@@ -886,9 +1037,11 @@ def main() -> int:
             and trade.get("status") == "refused"
             and trade.get("reason") in ("kill_switch", "cooldown")
         )
-        any_error = (bal_rc != 0) or ((trade_rc != 0) and (not kill_refused))
-        if post_rc != 0:
-            any_error = True
+        bal_hard_err = (bal_rc != 0) and (not _is_transient_http_err_payload(bal))
+        post_hard_err = (post_rc != 0) and (not _is_transient_http_err_payload(post))
+        trade_hard_err = (trade_rc != 0) and (not kill_refused)
+        any_error = bool(bal_hard_err or post_hard_err or trade_hard_err)
+        any_soft_err = bool((bal_rc != 0) or (post_rc != 0)) and (not any_error)
         any_order_failed = any(
             isinstance(x, dict) and x.get("reason") == "order_failed"
             for x in ((trade.get("skipped") or []) if isinstance(trade, dict) else [])
@@ -910,38 +1063,24 @@ def main() -> int:
         # If we just auto-paused, notify once (rate-limited like other messages).
         kill_on = os.path.exists(_kill_switch_path(root))
 
-        if can_notify and allowed and (live_orders or any_error or any_order_failed):
+        # Default: alert-only. Don't spam on every trade unless explicitly enabled.
+        should_notify = bool(any_error or any_soft_err or any_order_failed)
+        if notify_trades:
+            should_notify = should_notify or bool(live_orders)
+
+        if can_notify and allowed and should_notify:
             parts = []
             if any_error:
-                parts.append("Kalshi arb: ERROR running cycle")
+                parts.append("ORION: I hit an error during the Kalshi cycle. I’ll pause and retry safely.")
+            elif any_soft_err:
+                parts.append("ORION: Transient Kalshi/API issue detected. I’ll retry next cycle.")
             if live_orders:
-                lo = live_orders[0]
-                o = (lo.get("order") or {}) if isinstance(lo, dict) else {}
-                filled_hint = ""
-                try:
-                    # If we have a post snapshot with fills, give a stronger signal.
-                    order_id = lo.get("order_id") if isinstance(lo.get("order_id"), str) else None
-                    if order_id and isinstance(post, dict):
-                        m = match_fills_for_order(post, order_id)
-                        if int(m.get("fills_count") or 0) > 0:
-                            ap = m.get("avg_price_dollars")
-                            if isinstance(ap, (int, float)):
-                                filled_hint = f" (filled {int(m.get('fills_count') or 0)} @ ~{float(ap):.4f})"
-                            else:
-                                filled_hint = f" (filled {int(m.get('fills_count') or 0)})"
-                    elif isinstance(post, dict):
-                        fills = (post.get("fills") or {}).get("fills")
-                        if isinstance(fills, list) and fills:
-                            filled_hint = " (fill(s) detected)"
-                except Exception:
-                    filled_hint = ""
-                parts.append(
-                    f"Kalshi arb: placed {o.get('action')} {o.get('side')} {o.get('count')}x {o.get('ticker')} @ {o.get('price_dollars')} (~${lo.get('notional_usd')}){filled_hint}"
-                )
+                if notify_trades:
+                    parts.append(_orion_order_sentence(live_orders[0], post))
             if not parts and any_order_failed:
-                parts.append("Kalshi arb: order_failed (see tmp/kalshi_ref_arb/runs)")
+                parts.append("ORION: I attempted an order, but it failed validation or was rejected. See tmp/kalshi_ref_arb/runs for details.")
             if not parts and kill_on and (health["runs"] >= lookback) and (health["errors"] >= max_err or health["order_failed"] >= max_of):
-                parts.append("Kalshi arb: auto-paused (kill switch ON) due to repeated errors/order failures")
+                parts.append("ORION: I auto-paused trading (kill switch ON) due to repeated errors/order failures. I’ll wait for you to review.")
             msg = "\n".join(parts)
             _send_telegram(int(chat_id), msg, cwd=root)
             notify_state["last_notify_ts"] = now

@@ -14,6 +14,8 @@ Rules:
 
 ## Where To Put Things
 
+- `memory/INDEX.md`
+  - Current objectives, active projects, constraints, key decisions, known issues.
 - `memory/WORKING.md`
   - Current goal, blockers, "what is happening right now".
 - `tasks/QUEUE.md`

@@ -79,6 +79,37 @@ class TestKalshiLedger(unittest.TestCase):
             self.assertIsInstance(st.get("parsed"), dict)
             self.assertIn("outcome_yes", st["parsed"])
 
+    def test_update_from_run_ignores_zero_count_settlements(self) -> None:
+        from scripts.arb.kalshi_ledger import load_ledger, save_ledger, update_from_run
+
+        with tempfile.TemporaryDirectory() as td:
+            os.makedirs(os.path.join(td, "tmp", "kalshi_ref_arb"), exist_ok=True)
+            save_ledger(td, {"version": 1, "orders": {}, "unmatched_settlements": [], "settlement_hashes": []})
+
+            ts = int(time.time())
+            trade = {"placed": []}
+            post = {
+                "fills": {"fills": []},
+                "settlements": {
+                    "settlements": [
+                        {
+                            "ticker": "T0",
+                            "event_ticker": "E0",
+                            "yes_count": 0,
+                            "no_count": 0,
+                            "revenue": 0,
+                            "yes_total_cost": 0,
+                            "no_total_cost": 0,
+                        }
+                    ]
+                },
+            }
+
+            update_from_run(td, ts_unix=ts, trade=trade, post=post)
+            led = load_ledger(td)
+            self.assertEqual(list(led.get("unmatched_settlements") or []), [])
+            self.assertEqual(list(led.get("settlement_hashes") or []), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -155,6 +155,12 @@ miniapp_orion_health() {
 # (bad config, model outage, etc.).
 : "${AEGIS_ORION_RESTART_MAX:=2}"               # max restarts in the window
 : "${AEGIS_ORION_RESTART_WINDOW_SEC:=900}"      # 15 minutes
+#
+# Health probe debouncing.
+# `openclaw health` can fail transiently (brief network/API hiccups). AEGIS should
+# avoid restarting ORION on a single blip.
+: "${AEGIS_ORION_HEALTH_RETRIES:=2}"            # additional retries after the first attempt
+: "${AEGIS_ORION_HEALTH_RETRY_SLEEP_SEC:=3}"    # base sleep between retries (backoff is linear)
 
 post_slack() {
   local text="$1"
@@ -309,6 +315,49 @@ remote() {
   "${SSH_BASE[@]}" "bash -lc \"$cmd\""
 }
 
+remote_health_probe() {
+  # remote_health_probe
+  # Writes combined stdout/stderr to stdout; returns the ssh/openclaw rc.
+  remote "$ORION_OPENCLAW_HEALTH_CMD" 2>&1
+}
+
+health_ok_with_retries() {
+  # health_ok_with_retries
+  # Returns 0 if health is OK, otherwise returns the last rc.
+  #
+  # Sets:
+  # - HEALTH_LAST_RC
+  # - HEALTH_LAST_LINE (first line of output, trimmed)
+  local tries i rc out first
+  tries=$((AEGIS_ORION_HEALTH_RETRIES + 1))
+  HEALTH_LAST_RC=1
+  HEALTH_LAST_LINE=""
+
+  for ((i=1; i<=tries; i++)); do
+    out="$(remote_health_probe)"
+    rc=$?
+    first="$(printf '%s\n' "$out" | sed -n '1p' | tr -d '\r' | sed -E 's/[[:space:]]+$//')"
+    HEALTH_LAST_RC="$rc"
+    HEALTH_LAST_LINE="$first"
+
+    if [ "$rc" -eq 0 ]; then
+      return 0
+    fi
+
+    # SSH transport failures should be handled by the caller (unreachable).
+    if [ "$rc" -eq 255 ]; then
+      return 255
+    fi
+
+    # Retry non-transport failures a couple times to avoid flapping on transient probe failures.
+    if [ "$i" -lt "$tries" ]; then
+      sleep $((AEGIS_ORION_HEALTH_RETRY_SLEEP_SEC * i))
+    fi
+  done
+
+  return "$HEALTH_LAST_RC"
+}
+
 outage_id_file="$STATE_DIR/orion_outage_id"
 
 # Note: `ssh` exits 255 for transport/auth failures (host down, network, key problems).
@@ -316,7 +365,7 @@ outage_id_file="$STATE_DIR/orion_outage_id"
 #
 # If the SSH transport is up but the remote forced-command rejects the command or `openclaw health`
 # fails, ssh will typically exit non-255; those are actionable and may warrant a restart attempt.
-if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
+if health_ok_with_retries; then
   mark_ok
   miniapp_orion_health true "ok"
   miniapp_activity "idle"
@@ -338,7 +387,7 @@ if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
 fi
 
 # Capture the most recent health failure type for power/network scenarios.
-health_rc=$?
+health_rc=$HEALTH_LAST_RC
 
 # Ensure we have an incident id as soon as we detect an outage.
 incident_id=""
@@ -377,7 +426,7 @@ fi
 
 # Restart loop guard.
 if ! restart_allowed_or_lock; then
-  log "ALERT: restart guard active; not restarting ORION ($incident_id)"
+  log "ALERT: restart guard active; not restarting ORION ($incident_id) (health_first_line=${HEALTH_LAST_LINE:-unknown})"
   miniapp_orion_health false "unhealthy" "$incident_id"
   miniapp_activity "idle"
   if throttle_ok "orion_restart_guard_incident" 900; then
@@ -400,7 +449,7 @@ if ! restart_allowed_or_lock; then
   exit 2
 fi
 
-log "WARN: ORION health failed, attempting restart ($incident_id)"
+log "WARN: ORION health failed after retries, attempting restart ($incident_id) (health_first_line=${HEALTH_LAST_LINE:-unknown})"
 restart_rc=0
 if ! remote "$ORION_OPENCLAW_RESTART_CMD" >/dev/null 2>&1; then
   restart_rc=$?
@@ -431,7 +480,7 @@ fi
 record_restart_attempt
 sleep 3
 
-if remote "$ORION_OPENCLAW_HEALTH_CMD" >/dev/null 2>&1; then
+if health_ok_with_retries; then
   mark_ok
   log "RECOVERED: ORION restart succeeded"
   miniapp_orion_health true "ok" "$incident_id"

@@ -223,6 +223,17 @@ def main() -> int:
                 lines.append(f"Diag: quotes {qp}, pass-non-edge {pn}")
             except Exception:
                 pass
+        st = diag.get("skipped_top") if isinstance(diag.get("skipped_top"), list) else []
+        parts2 = []
+        for it in st[:5]:
+            if not isinstance(it, dict):
+                continue
+            r = it.get("reason")
+            c = it.get("count")
+            if isinstance(r, str) and isinstance(c, int):
+                parts2.append(f"{r}={c}")
+        if parts2:
+            lines.append(f"Skips: {', '.join(parts2)}")
 
     # Ledger health: show unmatched settlements (so we know if settlement parsing needs work).
     try:

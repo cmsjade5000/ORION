@@ -53,8 +53,31 @@ def prob_lognormal_less(
     return 1.0 - p
 
 
+def prob_lognormal_between(
+    *,
+    spot: float,
+    lower: float,
+    upper: float,
+    t_years: float,
+    sigma_annual: float,
+) -> Optional[float]:
+    """Approximate P(lower <= S_T <= upper) under lognormal with zero drift."""
+    if lower <= 0 or upper <= 0:
+        return None
+    lo = float(min(lower, upper))
+    hi = float(max(lower, upper))
+    if hi <= lo:
+        return 0.0
+    p_hi = prob_lognormal_less(spot=spot, strike=hi, t_years=t_years, sigma_annual=sigma_annual)
+    p_lo = prob_lognormal_less(spot=spot, strike=lo, t_years=t_years, sigma_annual=sigma_annual)
+    if p_hi is None or p_lo is None:
+        return None
+    # P(lo <= X <= hi) = P(X <= hi) - P(X < lo). We use <= for both; difference is negligible.
+    p = float(p_hi) - float(p_lo)
+    return max(0.0, min(1.0, p))
+
+
 @dataclass(frozen=True)
 class KalshiFair:
     p_yes: float
     p_no: float
-

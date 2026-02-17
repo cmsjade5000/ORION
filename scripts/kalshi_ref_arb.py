@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
@@ -15,8 +16,8 @@ from typing import Any, Dict, List, Optional
 # directory and the repo root may not be importable as a package. Fix up path.
 try:
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_eth_usd  # type: ignore
-    from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiOrder  # type: ignore
-    from scripts.arb.prob import prob_lognormal_greater, prob_lognormal_less  # type: ignore
+    from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.prob import prob_lognormal_between, prob_lognormal_greater, prob_lognormal_less  # type: ignore
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, kill_switch_tripped  # type: ignore
 except ModuleNotFoundError:
     here = os.path.abspath(os.path.dirname(__file__))
@@ -24,8 +25,8 @@ except ModuleNotFoundError:
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_eth_usd  # type: ignore
-    from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiOrder  # type: ignore
-    from scripts.arb.prob import prob_lognormal_greater, prob_lognormal_less  # type: ignore
+    from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.prob import prob_lognormal_between, prob_lognormal_greater, prob_lognormal_less  # type: ignore
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, kill_switch_tripped  # type: ignore
 
 
@@ -48,6 +49,7 @@ class Signal:
     recommended: Optional[Dict[str, Any]]
     filters: Optional[Dict[str, Any]]
     rejected_reasons: Optional[List[str]]
+    strike_high: Optional[float] = None
 
 
 def _json(obj: Any) -> str:
@@ -98,6 +100,7 @@ def _signal_for_market(
     m: KalshiMarket,
     *,
     series: str,
+    spot: Optional[float] = None,
     sigma_annual: float,
     min_edge_bps: float,
     uncertainty_bps: float,
@@ -106,16 +109,16 @@ def _signal_for_market(
     min_seconds_to_expiry: int,
     min_price: float,
     max_price: float,
+    min_notional_usd: float,
+    min_notional_bypass_edge_bps: float,
 ) -> Optional[Signal]:
-    if m.strike_type not in ("greater", "less"):
-        return None
-    if m.floor_strike is None:
+    if m.strike_type not in ("greater", "less", "between"):
         return None
     if not m.expected_expiration_time:
         return None
 
-    spot = _ref_spot_for_series(series)
-    if spot is None:
+    spot_ref = float(spot) if isinstance(spot, (int, float)) else _ref_spot_for_series(series)
+    if spot_ref is None:
         return None
 
     base_rejected: List[str] = []
@@ -132,10 +135,32 @@ def _signal_for_market(
     if (m.liquidity_dollars is not None) and (float(m.liquidity_dollars) < float(min_liquidity_usd)):
         base_rejected.append("liquidity_below_min")
 
+    strike = None
+    strike_high = None
     if m.strike_type == "greater":
-        p_yes = prob_lognormal_greater(spot=spot, strike=m.floor_strike, t_years=t_years, sigma_annual=sigma_annual)
+        if m.floor_strike is None:
+            return None
+        strike = float(m.floor_strike)
+        p_yes = prob_lognormal_greater(spot=float(spot_ref), strike=strike, t_years=t_years, sigma_annual=sigma_annual)
+    elif m.strike_type == "less":
+        # Kalshi uses cap_strike for "or below" markets.
+        if m.cap_strike is None:
+            return None
+        strike = float(m.cap_strike)
+        p_yes = prob_lognormal_less(spot=float(spot_ref), strike=strike, t_years=t_years, sigma_annual=sigma_annual)
     else:
-        p_yes = prob_lognormal_less(spot=spot, strike=m.floor_strike, t_years=t_years, sigma_annual=sigma_annual)
+        # between: floor_strike is lower, cap_strike is upper.
+        if m.floor_strike is None or m.cap_strike is None:
+            return None
+        strike = float(m.floor_strike)
+        strike_high = float(m.cap_strike)
+        p_yes = prob_lognormal_between(
+            spot=float(spot_ref),
+            lower=float(m.floor_strike),
+            upper=float(m.cap_strike),
+            t_years=t_years,
+            sigma_annual=sigma_annual,
+        )
 
     if p_yes is None:
         return None
@@ -170,6 +195,11 @@ def _signal_for_market(
         eff = float(edge_yes) - float(uncertainty_bps)
         if not (yes_ask is not None and (yes_ask >= min_price) and (yes_ask <= max_price)):
             reasons.append("yes_price_out_of_bounds")
+        # Fee-aware gate: very low-notional orders are dominated by fees. Allow only if edge is huge.
+        if float(min_notional_usd) > 0.0 and yes_ask is not None:
+            notional_1x = float(yes_ask)
+            if notional_1x < float(min_notional_usd) and eff < float(min_notional_bypass_edge_bps):
+                reasons.append("yes_notional_below_min")
         if (yes_spread is not None) and (yes_spread > max_spread):
             reasons.append("yes_spread_too_wide")
         if eff < float(min_edge_bps):
@@ -191,6 +221,11 @@ def _signal_for_market(
         eff = float(edge_no) - float(uncertainty_bps)
         if not (no_ask is not None and (no_ask >= min_price) and (no_ask <= max_price)):
             reasons.append("no_price_out_of_bounds")
+        # Fee-aware gate: very low-notional orders are dominated by fees. Allow only if edge is huge.
+        if float(min_notional_usd) > 0.0 and no_ask is not None:
+            notional_1x = float(no_ask)
+            if notional_1x < float(min_notional_usd) and eff < float(min_notional_bypass_edge_bps):
+                reasons.append("no_notional_below_min")
         if (no_spread is not None) and (no_spread > max_spread):
             reasons.append("no_spread_too_wide")
         if eff < float(min_edge_bps):
@@ -209,9 +244,10 @@ def _signal_for_market(
     return Signal(
         ticker=m.ticker,
         strike_type=m.strike_type,
-        strike=float(m.floor_strike),
+        strike=float(strike),
+        strike_high=float(strike_high) if strike_high is not None else None,
         expected_expiration_time=m.expected_expiration_time,
-        spot_ref=float(spot),
+        spot_ref=float(spot_ref),
         t_years=float(t_years),
         sigma_annual=float(sigma_annual),
         p_yes=float(p_yes),
@@ -228,9 +264,12 @@ def _signal_for_market(
             "min_seconds_to_expiry": int(min_seconds_to_expiry),
             "min_price": float(min_price),
             "max_price": float(max_price),
+            "min_notional_usd": float(min_notional_usd),
+            "min_notional_bypass_edge_bps": float(min_notional_bypass_edge_bps),
             "liquidity_dollars": m.liquidity_dollars,
             "yes_spread": yes_spread,
             "no_spread": no_spread,
+            "strike_high": float(strike_high) if strike_high is not None else None,
         },
         rejected_reasons=sorted(list(dict.fromkeys(rejected))) if rejected else [],
     )
@@ -239,12 +278,16 @@ def _signal_for_market(
 def cmd_scan(args: argparse.Namespace) -> int:
     kc = KalshiClient(base_url=args.kalshi_base_url)
     markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
+    # Fetch spot once per scan. Previously this was done per-market, which is slow and can
+    # trigger scan timeouts.
+    spot = _ref_spot_for_series(args.series)
 
     sigs: List[Dict[str, Any]] = []
     for m in markets:
         s = _signal_for_market(
             m,
             series=args.series,
+            spot=spot,
             sigma_annual=args.sigma_annual,
             min_edge_bps=args.min_edge_bps,
             uncertainty_bps=args.uncertainty_bps,
@@ -253,6 +296,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             min_seconds_to_expiry=args.min_seconds_to_expiry,
             min_price=args.min_price,
             max_price=args.max_price,
+            min_notional_usd=args.min_notional_usd,
+            min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
         )
         if s is None:
             continue
@@ -276,6 +321,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "min_seconds_to_expiry": args.min_seconds_to_expiry,
             "min_price": args.min_price,
             "max_price": args.max_price,
+            "min_notional_usd": args.min_notional_usd,
+            "min_notional_bypass_edge_bps": args.min_notional_bypass_edge_bps,
         },
         "signals": sigs,
     }
@@ -321,7 +368,39 @@ def cmd_trade(args: argparse.Namespace) -> int:
             cash_usd = float(bal.get("balance") or 0.0) / 100.0
         except Exception:
             cash_usd = None
+
+    # Optional: cap stacking into the same ticker (avoid accidental averaging down).
+    max_open_per_ticker = int(getattr(args, "max_open_contracts_per_ticker", 0) or 0)
+    open_abs_pos: Dict[str, int] = {}
+    positions_loaded = False
+
+    def _ensure_positions_loaded() -> None:
+        nonlocal positions_loaded, open_abs_pos
+        if positions_loaded:
+            return
+        positions_loaded = True
+        if (not args.allow_write) or max_open_per_ticker <= 0:
+            return
+        try:
+            pos = kc.get_positions(limit=200)
+            items = pos.get("market_positions") if isinstance(pos, dict) else None
+            if isinstance(items, list):
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    t = it.get("ticker") or it.get("market_ticker")
+                    if not isinstance(t, str) or not t:
+                        continue
+                    try:
+                        p = int(it.get("position") or it.get("count") or 0)
+                    except Exception:
+                        p = 0
+                    open_abs_pos[t] = max(open_abs_pos.get(t, 0), abs(int(p)))
+        except Exception:
+            open_abs_pos = {}
     markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
+    # Fetch spot once per run (instead of per-market).
+    spot = _ref_spot_for_series(args.series)
 
     all_signals: List[Signal] = []
     signals: List[Signal] = []
@@ -329,6 +408,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
         s = _signal_for_market(
             m,
             series=args.series,
+            spot=spot,
             sigma_annual=args.sigma_annual,
             min_edge_bps=args.min_edge_bps,
             uncertainty_bps=args.uncertainty_bps,
@@ -337,6 +417,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
             min_seconds_to_expiry=args.min_seconds_to_expiry,
             min_price=args.min_price,
             max_price=args.max_price,
+            min_notional_usd=args.min_notional_usd,
+            min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
         )
         if s is None:
             continue
@@ -365,6 +447,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
     placed: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
     total_notional = 0.0
+    # Count order attempts (not only successful placements) so risk caps apply even
+    # when the API rejects an order.
     order_count = 0
 
     # Optional: pro sizing modes (off by default).
@@ -448,7 +532,39 @@ def cmd_trade(args: argparse.Namespace) -> int:
             count = min(int(cfg.max_contracts_per_order), int(max_count_budget), int(tier))
             notional = price * float(count)
 
-        client_order_id = f"orion-refarb-{int(time.time())}-{order_count}"
+        # Cap stacking per ticker (based on current open position).
+        if max_open_per_ticker > 0:
+            _ensure_positions_loaded()
+            existing = int(open_abs_pos.get(s.ticker) or 0)
+            if existing >= max_open_per_ticker:
+                skipped.append(
+                    {
+                        "ticker": s.ticker,
+                        "reason": "position_cap_ticker",
+                        "existing_open": existing,
+                        "cap": int(max_open_per_ticker),
+                        "requested_count": int(count),
+                    }
+                )
+                continue
+            if (existing + int(count)) > max_open_per_ticker:
+                new_count = max(0, int(max_open_per_ticker) - existing)
+                if new_count <= 0:
+                    skipped.append(
+                        {
+                            "ticker": s.ticker,
+                            "reason": "position_cap_ticker",
+                            "existing_open": existing,
+                            "cap": int(max_open_per_ticker),
+                            "requested_count": int(count),
+                        }
+                    )
+                    continue
+                count = int(new_count)
+                notional = price * float(count)
+
+        # Must be unique even if the API rejects an order, otherwise retries can 4xx.
+        client_order_id = f"orion-refarb-{int(time.time()*1000)}-{order_count}-{uuid.uuid4().hex[:8]}"
         order = KalshiOrder(
             ticker=s.ticker,
             side=side,
@@ -457,6 +573,9 @@ def cmd_trade(args: argparse.Namespace) -> int:
             price_dollars=f"{price:.4f}",
             client_order_id=client_order_id,
         )
+
+        # Enforce max_orders_per_run based on attempts, not only successful placements.
+        order_count += 1
 
         if not args.allow_write:
             placed.append(
@@ -473,6 +592,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     "spot_ref": s.spot_ref,
                     "sigma_annual": s.sigma_annual,
                     "strike": s.strike,
+                    "strike_high": s.strike_high,
                     "strike_type": s.strike_type,
                     "expected_expiration_time": s.expected_expiration_time,
                     "filters": s.filters,
@@ -553,7 +673,12 @@ def cmd_trade(args: argparse.Namespace) -> int:
                         client_order_id=client_order_id,
                     )
 
-                resp = kc.create_order(order)
+                try:
+                    resp = kc.create_order(order)
+                except KalshiNoFillError as e:
+                    # FOK/IOC style no-fill is not a system error; it just means liquidity moved.
+                    skipped.append({"ticker": s.ticker, "reason": "no_fill", "error": str(e), "order": asdict(order)})
+                    continue
                 order_id = None
                 status = None
                 if isinstance(resp, dict):
@@ -575,6 +700,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                         "spot_ref": s.spot_ref,
                         "sigma_annual": s.sigma_annual,
                         "strike": s.strike,
+                        "strike_high": s.strike_high,
                         "strike_type": s.strike_type,
                         "expected_expiration_time": s.expected_expiration_time,
                         "market": {
@@ -624,10 +750,24 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 continue
 
         total_notional += notional
-        order_count += 1
 
     # Diagnostics: if no trades placed, explain why.
     diagnostics: Dict[str, Any] = _compute_trade_diagnostics(all_signals, args, markets_fetched=len(markets), candidates_recommended=len(signals))
+    # Also include skip reasons from the decision loop (risk gates, persistence, stacking caps).
+    try:
+        sc: Dict[str, int] = {}
+        for it in skipped:
+            if not isinstance(it, dict):
+                continue
+            r = it.get("reason")
+            if isinstance(r, str) and r:
+                sc[r] = sc.get(r, 0) + 1
+        if sc:
+            top = sorted(sc.items(), key=lambda kv: kv[1], reverse=True)[:10]
+            diagnostics["skipped_reasons"] = sc
+            diagnostics["skipped_top"] = [{"reason": k, "count": int(v)} for k, v in top]
+    except Exception:
+        pass
 
     state.append_run(
         {
@@ -659,6 +799,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "min_seconds_to_expiry": args.min_seconds_to_expiry,
             "min_price": args.min_price,
             "max_price": args.max_price,
+            "min_notional_usd": args.min_notional_usd,
+            "min_notional_bypass_edge_bps": args.min_notional_bypass_edge_bps,
             "allow_write": bool(args.allow_write),
             "risk": asdict(cfg),
         },
@@ -730,6 +872,14 @@ def _compute_trade_diagnostics(
             return False
         if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
             return False
+        # Fee-aware gate: low-notional orders are fee-dominated unless edge is huge.
+        edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
+        min_notional = float(getattr(args, "min_notional_usd", 0.0) or 0.0)
+        bypass = float(getattr(args, "min_notional_bypass_edge_bps", 0.0) or 0.0)
+        if min_notional > 0.0 and edge is not None:
+            eff = float(edge) - float(args.uncertainty_bps)
+            if float(ask) < float(min_notional) and eff < float(bypass):
+                return False
         return True
 
     # "Best" candidates.
@@ -788,10 +938,16 @@ def _compute_trade_diagnostics(
                     reasons.append(f"{side}_spread_too_wide")
                 if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
                     reasons.append(f"{side}_price_out_of_bounds")
+                # Fee-aware: low-notional orders (per 1 contract) require huge edge.
+                eff = float(edge) - float(args.uncertainty_bps)
+                min_notional = float(getattr(args, "min_notional_usd", 0.0) or 0.0)
+                bypass = float(getattr(args, "min_notional_bypass_edge_bps", 0.0) or 0.0)
+                if float(min_notional) > 0.0:
+                    if float(ask) < float(min_notional) and eff < float(bypass):
+                        reasons.append(f"{side}_notional_below_min")
                 if _passes_non_edge_filters(s, side):
                     totals["pass_non_edge_filters"] += 1
                 # Edge thresholds last (least "structural").
-                eff = float(edge) - float(args.uncertainty_bps)
                 if float(edge) < float(args.min_edge_bps):
                     reasons.append(f"{side}_edge_below_min")
                 if eff < float(args.min_edge_bps):
@@ -862,6 +1018,18 @@ def main() -> int:
     scan.add_argument("--min-seconds-to-expiry", type=int, default=900, help="Skip markets expiring too soon.")
     scan.add_argument("--min-price", type=float, default=0.05, help="Skip asks below this price (tail risk).")
     scan.add_argument("--max-price", type=float, default=0.95, help="Skip asks above this price (tail risk).")
+    scan.add_argument(
+        "--min-notional-usd",
+        type=float,
+        default=0.20,
+        help="Fee-aware gate: skip very low-notional 1x orders unless edge is huge. Set 0 to disable.",
+    )
+    scan.add_argument(
+        "--min-notional-bypass-edge-bps",
+        type=float,
+        default=4000.0,
+        help="If effective edge >= this, allow a low-notional order to pass the fee-aware gate.",
+    )
     scan.set_defaults(func=cmd_scan)
 
     trade = sub.add_parser("trade", help="Trade mode (dry-run unless --allow-write).")
@@ -877,6 +1045,8 @@ def main() -> int:
     trade.add_argument("--min-seconds-to-expiry", type=int, default=900)
     trade.add_argument("--min-price", type=float, default=0.05)
     trade.add_argument("--max-price", type=float, default=0.95)
+    trade.add_argument("--min-notional-usd", type=float, default=0.20)
+    trade.add_argument("--min-notional-bypass-edge-bps", type=float, default=4000.0)
     trade.add_argument("--persistence-cycles", type=int, default=1, help="Require edge to persist across N cycles before trading.")
     trade.add_argument("--persistence-window-min", type=float, default=30.0)
     trade.add_argument("--sizing-mode", default="fixed", choices=["fixed", "edge_tiers"], help="Position sizing mode (default fixed=1 probe).")
@@ -889,6 +1059,12 @@ def main() -> int:
     trade.add_argument("--max-contracts-per-order", type=int, default=10)
     trade.add_argument("--max-notional-per-run-usd", type=float, default=25.0)
     trade.add_argument("--max-notional-per-market-usd", type=float, default=25.0)
+    trade.add_argument(
+        "--max-open-contracts-per-ticker",
+        type=int,
+        default=2,
+        help="Cap stacking into the same market ticker (abs open contracts). Set 0 to disable.",
+    )
     trade.add_argument("--kill-switch-path", default="tmp/kalshi_ref_arb.KILL")
     trade.set_defaults(func=cmd_trade)
 

@@ -164,6 +164,17 @@ def update_from_run(repo_root: str, *, ts_unix: int, trade: Dict[str, Any], post
         for s in s_list:
             if not isinstance(s, dict):
                 continue
+            # Kalshi occasionally includes "settlement" rows with no associated position
+            # (yes_count=no_count=0 and/or count=0). These are not actionable and should
+            # not pollute unmatched-settlement stats.
+            try:
+                yc = int(s.get("yes_count") or 0)
+                nc = int(s.get("no_count") or 0)
+                c = int(s.get("count") or 0)
+                if (yc + nc) <= 0 and c <= 0:
+                    continue
+            except Exception:
+                pass
             h = _sha1(s)
             if h in seen:
                 continue

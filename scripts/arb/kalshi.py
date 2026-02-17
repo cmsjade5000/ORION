@@ -8,6 +8,7 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -23,13 +24,18 @@ class KalshiMarket:
     subtitle: str
     status: str
     strike_type: str
-    floor_strike: Optional[float]
     expected_expiration_time: str
     yes_bid: Optional[float]
     yes_ask: Optional[float]
     no_bid: Optional[float]
     no_ask: Optional[float]
     liquidity_dollars: Optional[float]
+    # Strike fields vary by strike_type:
+    # - greater: floor_strike
+    # - less: cap_strike
+    # - between: both floor_strike and cap_strike
+    floor_strike: Optional[float] = None
+    cap_strike: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -159,9 +165,6 @@ class KalshiClient:
             # Kalshi order endpoints accept cent-based prices; include these for compatibility.
             "yes_price": cents if order.side == "yes" else None,
             "no_price": cents if order.side == "no" else None,
-            # Also include dollars fixed-point for readability where supported.
-            "yes_price_dollars": order.price_dollars if order.side == "yes" else None,
-            "no_price_dollars": order.price_dollars if order.side == "no" else None,
             # Conservative default: avoid leaving resting orders around if edge disappears.
             "time_in_force": "fill_or_kill",
         }
@@ -299,6 +302,33 @@ class KalshiClient:
             with urllib.request.urlopen(req, timeout=20.0) as resp:
                 raw = resp.read()
             return json.loads(raw.decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            # Include response body to make 400/401/403 actionable in run artifacts.
+            try:
+                b = e.read()
+                detail = b.decode("utf-8", errors="replace").strip()
+            except Exception:
+                detail = ""
+            if len(detail) > 1200:
+                detail = detail[:1200] + "...(truncated)"
+            # Some "errors" are just execution outcomes (e.g., FOK no fill). Treat those
+            # as a distinct exception so callers can avoid triggering cooldown/kill switch.
+            try:
+                obj = json.loads(detail) if detail else None
+            except Exception:
+                obj = None
+            code = None
+            try:
+                if isinstance(obj, dict):
+                    err = obj.get("error")
+                    if isinstance(err, dict):
+                        code = err.get("code")
+            except Exception:
+                code = None
+            if int(getattr(e, "code", 0) or 0) == 409 and code == "fill_or_kill_insufficient_resting_volume":
+                raise KalshiNoFillError(f"FOK no fill: {path} (HTTP 409) body={detail!r}")
+            extra = f" body={detail!r}" if detail else ""
+            raise RuntimeError(f"Kalshi POST failed: {path} (HTTP {getattr(e, 'code', '?')}){extra}")
         except Exception as e:
             raise RuntimeError(f"Kalshi POST failed: {path} ({e})")
 
@@ -323,6 +353,10 @@ class KalshiClient:
             raise RuntimeError("Missing KALSHI_API_KEY_ID or KALSHI_PRIVATE_KEY_PATH.")
         if not os.path.exists(self.private_key_path):
             raise RuntimeError(f"Private key not found: {self.private_key_path}")
+
+
+class KalshiNoFillError(RuntimeError):
+    """Raised when a FOK/IOC order cannot fill due to insufficient resting liquidity."""
 
 
 def _rsa_pss_sha256_sign_base64(message: bytes, private_key_path: str) -> str:
@@ -374,6 +408,7 @@ def _parse_market(raw: Dict[str, Any]) -> Optional[KalshiMarket]:
         status=str(raw.get("status") or ""),
         strike_type=str(raw.get("strike_type") or ""),
         floor_strike=safe_float(raw.get("floor_strike")),
+        cap_strike=safe_float(raw.get("cap_strike")),
         expected_expiration_time=str(raw.get("expected_expiration_time") or ""),
         yes_bid=safe_float(raw.get("yes_bid_dollars")),
         yes_ask=safe_float(raw.get("yes_ask_dollars")),

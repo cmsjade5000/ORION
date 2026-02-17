@@ -1,5 +1,7 @@
 # Working Memory
 
+Last verified: 2026-02-17
+
 ## Current Goal
 
 Go live locally on the Mac mini:
