@@ -26,6 +26,11 @@ import time
 from pathlib import Path
 
 try:
+    from inbox_state import load_kv_state, save_kv_state, sha256_lines
+except Exception:  # pragma: no cover
+    from scripts.inbox_state import load_kv_state, save_kv_state, sha256_lines  # type: ignore
+
+try:
     # Optional dependency: Mini App dashboard progress visibility.
     # When executed as `python3 scripts/run_inbox_packets.py`, sys.path[0] is `scripts/`,
     # so `miniapp_ingest` is importable as a sibling module.
@@ -121,6 +126,14 @@ def _packet_has_result(packet_lines: list[str]) -> bool:
         return False
     return any(ln.strip() for ln in packet_lines[start + 1 :])
 
+def _packet_before_result(packet_lines: list[str]) -> list[str]:
+    out: list[str] = []
+    for ln in packet_lines:
+        if ln.strip() == "Result:":
+            break
+        out.append(ln)
+    return out
+
 
 def _packet_is_read_only(packet_lines: list[str]) -> bool:
     txt = "\n".join(packet_lines).lower()
@@ -165,6 +178,31 @@ def _extract_commands(packet_lines: list[str]) -> list[str]:
 def _safe_command_argv(cmd: str) -> list[str] | None:
     # Exact allowlist only.
     return ALLOWLIST_COMMANDS.get(cmd)
+
+def _parse_int(raw: str, default: int) -> int:
+    try:
+        return int(str(raw).strip())
+    except Exception:
+        return default
+
+def _parse_float(raw: str, default: float) -> float:
+    try:
+        return float(str(raw).strip())
+    except Exception:
+        return default
+
+
+def _retry_params(fields: dict[str, str]) -> tuple[int, float, float, float]:
+    """
+    Return (max_attempts, base_backoff_s, multiplier, max_backoff_s).
+
+    Defaults keep current behavior: 1 attempt and no retries.
+    """
+    max_attempts = max(1, _parse_int(fields.get("Retry Max Attempts", ""), 1))
+    base = max(0.0, _parse_float(fields.get("Retry Backoff Seconds", ""), 60.0))
+    mult = max(1.0, _parse_float(fields.get("Retry Backoff Multiplier", ""), 2.0))
+    maxb = max(base, _parse_float(fields.get("Retry Max Backoff Seconds", ""), 3600.0))
+    return max_attempts, base, mult, maxb
 
 
 def _write_artifact(repo_root: Path, owner: str, packet_start_line: int, stdout: str, stderr: str) -> Path:
@@ -234,7 +272,7 @@ def _format_result_block(*, ok: bool, findings: list[str], artifact_rel: str) ->
     return lines
 
 
-def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
+def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -> bool:
     fields = pref.fields
     owner = (fields.get("Owner", "").strip() or pref.inbox_path.stem).upper()
     notify = fields.get("Notify", "").strip().lower()
@@ -254,6 +292,18 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
         if not argv:
             return False
         argv_list.append(argv)
+
+    # Retry policy (best-effort). Default is max_attempts=1 (no retry).
+    now = time.time()
+    max_attempts, base_backoff, mult, max_backoff = _retry_params(fields)
+    pkt_hash = sha256_lines(_packet_before_result(pref.raw_lines))
+    attempts_key = f"attempts:{pkt_hash}"
+    next_key = f"next_allowed:{pkt_hash}"
+    state0 = load_kv_state(state_path)
+    attempts = int(state0.get(attempts_key, 0.0))
+    next_allowed = float(state0.get(next_key, 0.0))
+    if next_allowed and now < next_allowed:
+        return False
 
     # Mini App progress visibility: mark the specialist as starting work.
     # Best-effort only; failures should not affect execution.
@@ -287,6 +337,26 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
             )
         else:
             miniapp_emit("tool.finished", agentId=owner, extra={"source": "inbox_runner", "code": 0})
+
+    # Persist retry state on failure. If we still have retries left, do NOT write a Result block yet.
+    if not ok:
+        attempts += 1
+        state = load_kv_state(state_path)
+        state[attempts_key] = float(attempts)
+        if attempts < max_attempts:
+            backoff = min(max_backoff, base_backoff * (mult ** max(0, attempts - 1)))
+            state[next_key] = float(now + backoff)
+            # Keep state bounded.
+            if len(state) > 8000:
+                state = dict(sorted(state.items(), key=lambda kv: kv[1], reverse=True)[:6000])
+            save_kv_state(state_path, state)
+            miniapp_emit("task.failed", agentId=owner, extra={"source": "inbox_runner", "retry": True})
+            return True
+        # Exhausted retries: fall through and write a Result block.
+        state[next_key] = 0.0
+        if len(state) > 8000:
+            state = dict(sorted(state.items(), key=lambda kv: kv[1], reverse=True)[:6000])
+        save_kv_state(state_path, state)
 
     stdout = "\n".join([s for s in combined_out if s]).strip() + ("\n" if any(combined_out) else "")
     stderr = "\n".join([s for s in combined_err if s]).strip() + ("\n" if any(combined_err) else "")
@@ -328,7 +398,7 @@ def _process_one_packet(repo_root: Path, pref: PacketRef) -> bool:
     return True
 
 
-def run(repo_root: Path, *, max_packets: int) -> int:
+def run(repo_root: Path, *, max_packets: int, state_path: Path) -> int:
     inbox_dir = repo_root / "tasks" / "INBOX"
     if not inbox_dir.exists():
         print("RUNNER_NO_INBOX")
@@ -363,7 +433,7 @@ def run(repo_root: Path, *, max_packets: int) -> int:
                 raw_lines=pkt_lines,
             )
 
-            if _process_one_packet(repo_root, pref):
+            if _process_one_packet(repo_root, pref, state_path=state_path):
                 processed += 1
                 if processed >= max_packets:
                     print(f"RUNNER_OK processed={processed}")
@@ -377,8 +447,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Run allowlisted inbox task packets and write Result blocks.")
     ap.add_argument("--repo-root", default=".", help="Repo root (default: .)")
     ap.add_argument("--max-packets", type=int, default=1, help="Max packets to process per run (default: 1)")
+    ap.add_argument(
+        "--state-path",
+        default="tmp/inbox_runner_state.json",
+        help="State file path for retries/backoff (default: tmp/inbox_runner_state.json)",
+    )
     args = ap.parse_args()
-    return run(Path(args.repo_root).resolve(), max_packets=max(1, int(args.max_packets)))
+    repo_root = Path(args.repo_root).resolve()
+    state_path = (repo_root / args.state_path).resolve()
+    return run(repo_root, max_packets=max(1, int(args.max_packets)), state_path=state_path)
 
 
 if __name__ == "__main__":

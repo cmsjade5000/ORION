@@ -70,6 +70,7 @@ class TestValidateTaskPackets(unittest.TestCase):
             "Owner: NODE\n"
             "Requester: ORION\n"
             "Emergency: ATLAS_UNAVAILABLE\n"
+            "Incident: INC-TEST-1\n"
             "Objective: Do a thing.\n"
             "Success Criteria:\n"
             "- It worked.\n"
@@ -88,6 +89,62 @@ class TestValidateTaskPackets(unittest.TestCase):
         errs = self.v.validate_inbox_file(path)
         td.cleanup()
         self.assertEqual(errs, [])
+
+    def test_node_blocks_emergency_without_incident(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: NODE\n"
+            "Requester: ORION\n"
+            "Emergency: ATLAS_UNAVAILABLE\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("NODE", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Incident" in e for e in errs), errs)
+
+    def test_notify_allows_known_channels_and_blocks_unknown(self):
+        ok = (
+            "TASK_PACKET v1\n"
+            "Owner: PIXEL\n"
+            "Requester: ORION\n"
+            "Notify: telegram,discord\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("PIXEL", ok)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertEqual(errs, [])
+
+        bad = ok.replace("telegram,discord", "telegram,sms")
+        path, td = self._write_inbox("PIXEL", bad)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Notify" in e for e in errs), errs)
 
     def test_pixel_requires_orion(self):
         pkt = VALID_PACKET.format(owner="PIXEL", requester="ATLAS")
