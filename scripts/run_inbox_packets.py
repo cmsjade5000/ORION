@@ -427,7 +427,10 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     return True
 
 
-def run(repo_root: Path, *, max_packets: int, state_path: Path) -> int:
+def run(repo_root: Path, *, max_packets: int, state_path: Path | None = None) -> int:
+    # Backward-compatible default for tests/callers that didn't pass state_path.
+    if state_path is None:
+        state_path = (repo_root / "tmp" / "inbox_runner_state.json").resolve()
     inbox_dir = repo_root / "tasks" / "INBOX"
     if not inbox_dir.exists():
         print("RUNNER_NO_INBOX")
