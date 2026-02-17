@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 try:
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.momentum import momentum_pct, update_ref_spot_history  # type: ignore
     from scripts.arb.prob import (  # type: ignore
         beta_posterior_mean,
         kelly_fraction_binary,
@@ -33,6 +34,7 @@ except ModuleNotFoundError:
         sys.path.insert(0, repo_root)
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.momentum import momentum_pct, update_ref_spot_history  # type: ignore
     from scripts.arb.prob import (  # type: ignore
         beta_posterior_mean,
         kelly_fraction_binary,
@@ -68,10 +70,17 @@ class Signal:
     p_yes_posterior: Optional[float] = None
     posterior_k_obs: Optional[float] = None
     vol_anomaly_ratio: Optional[float] = None
+    momentum_15m_pct: Optional[float] = None
+    momentum_60m_pct: Optional[float] = None
 
 
 def _json(obj: Any) -> str:
     return json.dumps(obj, indent=2, sort_keys=True)
+
+
+def _repo_root() -> str:
+    here = os.path.abspath(os.path.dirname(__file__))
+    return os.path.abspath(os.path.join(here, ".."))
 
 
 def _parse_iso_z(ts: str) -> Optional[float]:
@@ -136,6 +145,8 @@ def _signal_for_market(
     bayes_prior_k: float = 20.0,
     bayes_obs_k_max: float = 30.0,
     vol_anomaly_ratio: Optional[float] = None,
+    momentum_15m_pct: Optional[float] = None,
+    momentum_60m_pct: Optional[float] = None,
 ) -> Optional[Signal]:
     if m.strike_type not in ("greater", "less", "between"):
         return None
@@ -317,6 +328,8 @@ def _signal_for_market(
         p_yes_posterior=float(p_yes_post) if isinstance(p_yes_post, (int, float)) else None,
         posterior_k_obs=float(k_obs) if isinstance(k_obs, (int, float)) else None,
         vol_anomaly_ratio=float(vol_anomaly_ratio) if isinstance(vol_anomaly_ratio, (int, float)) else None,
+        momentum_15m_pct=float(momentum_15m_pct) if isinstance(momentum_15m_pct, (int, float)) else None,
+        momentum_60m_pct=float(momentum_60m_pct) if isinstance(momentum_60m_pct, (int, float)) else None,
         yes_bid=m.yes_bid,
         yes_ask=m.yes_ask,
         no_bid=m.no_bid,
@@ -342,11 +355,26 @@ def _signal_for_market(
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
+    repo_root = _repo_root()
     kc = KalshiClient(base_url=args.kalshi_base_url)
     markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
     # Fetch spot once per scan. Previously this was done per-market, which is slow and can
     # trigger scan timeouts.
     spot = _ref_spot_for_series(args.series)
+    if spot is not None:
+        try:
+            update_ref_spot_history(repo_root, series=args.series, spot_ref=float(spot), ts_unix=int(time.time()))
+        except Exception:
+            pass
+    m15 = None
+    m60 = None
+    try:
+        if spot is not None:
+            m15 = momentum_pct(repo_root, series=args.series, lookback_s=15 * 60, spot_ref_now=float(spot))
+            m60 = momentum_pct(repo_root, series=args.series, lookback_s=60 * 60, spot_ref_now=float(spot))
+    except Exception:
+        m15 = None
+        m60 = None
     vol_ratio = None
     if bool(getattr(args, "vol_anomaly", False)):
         try:
@@ -379,6 +407,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
             bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
             vol_anomaly_ratio=vol_ratio,
+            momentum_15m_pct=m15,
+            momentum_60m_pct=m60,
         )
         if s is None:
             continue
@@ -404,6 +434,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "max_price": args.max_price,
             "min_notional_usd": args.min_notional_usd,
             "min_notional_bypass_edge_bps": args.min_notional_bypass_edge_bps,
+            "spot_ref": float(spot) if isinstance(spot, (int, float)) else None,
+            "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
+            "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,
         },
         "signals": sigs,
     }
@@ -412,7 +445,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 
 def cmd_trade(args: argparse.Namespace) -> int:
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    repo_root = _repo_root()
     cfg = RiskConfig(
         max_orders_per_run=args.max_orders_per_run,
         max_contracts_per_order=args.max_contracts_per_order,
@@ -482,6 +515,20 @@ def cmd_trade(args: argparse.Namespace) -> int:
     markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
     # Fetch spot once per run (instead of per-market).
     spot = _ref_spot_for_series(args.series)
+    if spot is not None:
+        try:
+            update_ref_spot_history(repo_root, series=args.series, spot_ref=float(spot), ts_unix=int(time.time()))
+        except Exception:
+            pass
+    m15 = None
+    m60 = None
+    try:
+        if spot is not None:
+            m15 = momentum_pct(repo_root, series=args.series, lookback_s=15 * 60, spot_ref_now=float(spot))
+            m60 = momentum_pct(repo_root, series=args.series, lookback_s=60 * 60, spot_ref_now=float(spot))
+    except Exception:
+        m15 = None
+        m60 = None
     vol_ratio = None
     if bool(getattr(args, "vol_anomaly", False)):
         try:
@@ -515,6 +562,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
             bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
             bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
             vol_anomaly_ratio=vol_ratio,
+            momentum_15m_pct=m15,
+            momentum_60m_pct=m60,
         )
         if s is None:
             continue
@@ -923,6 +972,9 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "allow_write": bool(args.allow_write),
             "risk": asdict(cfg),
         },
+        "ref_spot": float(spot) if isinstance(spot, (int, float)) else None,
+        "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
+        "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,
         "placed": placed,
         "skipped": skipped,
         "total_notional_usd": total_notional,
