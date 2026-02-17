@@ -127,3 +127,20 @@ On session start, the system should load `memory/WORKING.md` as working memory.
 This repo stores OpenClaw skills under `skills/`.
 
 Install/update skills manually, then smoke test the gateway.
+
+## File-First Tickets (Repo-Native)
+
+In addition to per-specialist inboxes (`tasks/INBOX/*.md`), ORION uses a repo-native,
+file-first ticket workflow for durable execution tracking:
+
+- Spec: `tasks/TICKETS.md`
+- Intake (append-only): `tasks/INTAKE/`
+- Lanes: `tasks/WORK/{backlog,in-progress,testing,done}/`
+- Plan/status: `tasks/NOTES/plan.md`, `tasks/NOTES/status.md`
+
+How this integrates with specialists:
+- ORION creates/maintains the ticket file (the durable “what/why/done”).
+- ORION delegates execution via `TASK_PACKET v1` in `tasks/INBOX/<AGENT>.md`,
+  referencing the ticket path.
+- Specialists update the ticket and drop artifacts under `tasks/WORK/artifacts/<ticket>/`,
+  then add a `Result:` under the packet.

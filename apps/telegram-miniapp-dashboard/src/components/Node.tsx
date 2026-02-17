@@ -7,7 +7,8 @@ function fallbackCentralEmoji(status: AgentStatus): string {
   // Ensures the central ORION node never shows an "empty" emoji state.
   // These are only used if the backend doesn't provide a process emoji.
   if (status === "offline") return "🤕";
-  if (status === "busy") return "😬";
+  // Keep 😬 reserved for "suspect/yellow health" (server-driven), not generic busy.
+  if (status === "busy") return "🤔";
   return "💤";
 }
 
