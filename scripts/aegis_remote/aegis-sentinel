@@ -454,11 +454,36 @@ else
 fi
 
 # 5) Tailscale peer changes (signal only)
-peer_tmp="$STATE_DIR/tailscale.current"
-peer_hash="$STATE_DIR/tailscale.hash"
+peer_members_tmp="$STATE_DIR/tailscale.peers.current"
+peer_status_tmp="$STATE_DIR/tailscale.status.current"
+peer_members_hash="$STATE_DIR/tailscale.peers.hash"
+peer_status_hash="$STATE_DIR/tailscale.status.hash"
+
+: "${AEGIS_TAILSCALE_STATUS_ALERT:=0}"
+: "${AEGIS_TAILSCALE_MEMBERSHIP_ALERT:=1}"
+
+bool_enabled() {
+  # bool_enabled <value>
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 if command -v tailscale >/dev/null 2>&1; then
   if tailscale status --json >/dev/null 2>&1; then
+    tailscale status --json \
+      | jq -S '{
+          self: {dnsName: .Self.DNSName, hostName: .Self.HostName, os: .Self.OS, tailscaleIPs: .Self.TailscaleIPs},
+          peers: (
+            .Peer
+            | to_entries
+            | map(.value)
+            | map({dnsName: .DNSName, hostName: .HostName, os: .OS, tailscaleIPs: .TailscaleIPs})
+            | sort_by(.dnsName)
+          )
+        }' >"$peer_members_tmp" 2>/dev/null || true
+
     tailscale status --json \
       | jq -S '{
           self: {dnsName: .Self.DNSName, hostName: .Self.HostName, os: .Self.OS, tailscaleIPs: .Self.TailscaleIPs, online: .Self.Online, active: .Self.Active},
@@ -469,20 +494,45 @@ if command -v tailscale >/dev/null 2>&1; then
             | map({dnsName: .DNSName, hostName: .HostName, os: .OS, tailscaleIPs: .TailscaleIPs, online: .Online, active: .Active})
             | sort_by(.dnsName)
           )
-        }' >"$peer_tmp" 2>/dev/null || true
+        }' >"$peer_status_tmp" 2>/dev/null || true
 
-    if [ -s "$peer_tmp" ]; then
-      current=$(sha256sum "$peer_tmp" | awk '{print $1}')
-      last=""
-      [ -f "$peer_hash" ] && last=$(cat "$peer_hash" 2>/dev/null || true)
-      if [ -n "$last" ] && [ "$current" != "$last" ]; then
-        log "ALERT: tailscale peer status changed"
-        alert_throttled \
-          "tailscale_peer_change" 3600 \
-          "$(msg_security "Tailscale peer status changed." "The peer list or peer online/active status changed." "Review tailscale status if unexpected (device added/removed, offline, or renamed).")" \
-          "P2" "AEGIS_SYSTEM_ALERT" "Tailscale peer status changed." "Alerted only; requires review."
+    if [ -s "$peer_members_tmp" ] && [ -s "$peer_status_tmp" ]; then
+      current_members=$(sha256sum "$peer_members_tmp" | awk '{print $1}')
+      last_members=""
+      [ -f "$peer_members_hash" ] && last_members=$(cat "$peer_members_hash" 2>/dev/null || true)
+
+      current_status=$(sha256sum "$peer_status_tmp" | awk '{print $1}')
+      last_status=""
+      [ -f "$peer_status_hash" ] && last_status=$(cat "$peer_status_hash" 2>/dev/null || true)
+
+      # Policy:
+      # - Suppress routine "online/active" churn by default (no notify, no digest).
+      # - Still allow alerting on peer membership drift (new/removed/renamed device) when enabled.
+      if [ -n "$last_members" ] && [ "$current_members" != "$last_members" ]; then
+        log "ALERT: tailscale peer membership changed"
+        if bool_enabled "$AEGIS_TAILSCALE_MEMBERSHIP_ALERT"; then
+          alert_throttled \
+            "tailscale_peer_membership_change" 21600 \
+            "$(msg_security "Tailscale peer membership changed." "The peer list or stable peer identity fields changed (added/removed/renamed device)." "Review tailscale status if unexpected.")" \
+            "P2" "AEGIS_SYSTEM_ALERT" "Tailscale peer membership changed." "Alerted only; requires review."
+        else
+          log "INFO: tailscale peer membership alert suppressed by policy"
+        fi
+      elif [ -n "$last_status" ] && [ "$current_status" != "$last_status" ]; then
+        # Status-only drift (online/active) is routine; do not reach out by default.
+        if bool_enabled "$AEGIS_TAILSCALE_STATUS_ALERT"; then
+          log "ALERT: tailscale peer online/active status changed (status alerts enabled)"
+          alert_throttled \
+            "tailscale_peer_status_change" 3600 \
+            "$(msg_security "Tailscale peer status changed." "Peer online/active status changed." "Review tailscale status if unexpected.")" \
+            "P2" "AEGIS_SYSTEM_ALERT" "Tailscale peer status changed." "Alerted only; requires review."
+        else
+          log "INFO: tailscale peer online/active status changed (suppressed)"
+        fi
       fi
-      echo "$current" >"$peer_hash"
+
+      echo "$current_members" >"$peer_members_hash"
+      echo "$current_status" >"$peer_status_hash"
     fi
   fi
 fi

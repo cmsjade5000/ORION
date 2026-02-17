@@ -10,7 +10,7 @@ For repo-native file-first execution tickets, use:
 - Lanes: `tasks/WORK/{backlog,in-progress,testing,done}/`
 
 ## Ready (ORION triage)
-- [ ] (add task)
+- [ ] Send Telegram wrap-up summary of recent platform work (draft ready: `tasks/INBOX/SCRIBE.md` under Result; ORION sends)
 
 ## Specialist Assignments (ORION-only)
 
