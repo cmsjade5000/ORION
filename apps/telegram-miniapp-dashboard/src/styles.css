@@ -229,15 +229,6 @@ html {
   transform: translateY(-1px);
 }
 
-.aegisBottomDot {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-}
-
 .edgeBadge {
   position: absolute;
   top: -6px;
