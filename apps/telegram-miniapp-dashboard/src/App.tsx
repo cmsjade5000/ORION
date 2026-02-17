@@ -28,7 +28,7 @@ export default function App() {
   const [draft, setDraft] = useState<string>("");
   const [focusSignal, setFocusSignal] = useState<number>(0);
   const [activeOverlay, setActiveOverlay] = useState<null | "activity" | "files" | "about" | "aegis">(null);
-  const [activityTab, setActivityTab] = useState<"workflow" | "responses">("responses");
+  const [activityTab, setActivityTab] = useState<"workflow" | "responses" | "events">("responses");
   const [activitySplit, setActivitySplit] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem("orion.activitySplit") === "1";
@@ -69,24 +69,44 @@ export default function App() {
   }, []);
   const effectiveStartParam = startParam || urlStartParam;
 
+  const parseStart = (raw: string) => {
+    const s = String(raw || "").trim();
+    if (!s) return { compact: false as const, open: null as null | "aegis" | "files" | "activity" };
+    // Accept forms like:
+    // - "compact"
+    // - "compact:aegis" / "compact:files" / "compact:activity"
+    // - "compact_aegis" / "compact-aegis"
+    const norm = s.toLowerCase().replace(/[^a-z0-9:_-]+/g, "");
+    const parts = norm.split(/[:_-]+/g).filter(Boolean);
+    if (parts[0] !== "compact") return { compact: false as const, open: null as null | "aegis" | "files" | "activity" };
+    const hint = parts[1] || "";
+    const open =
+      hint === "aegis" ? "aegis" :
+      hint === "files" ? "files" :
+      (hint === "activity" || hint === "responses") ? "activity" :
+      null;
+    return { compact: true as const, open };
+  };
+
   const compactMode = useMemo(() => {
     try {
       const usp = new URLSearchParams(window.location.search);
       const q = usp.get("compact");
       if (q === "1" || q === "true") return true;
+      const mode = usp.get("mode");
+      if (mode && mode.toLowerCase() === "compact") return true;
     } catch {
       // ignore
     }
-    const s = String(effectiveStartParam || "").toLowerCase();
-    return s.includes("compact");
+    return parseStart(effectiveStartParam).compact;
   }, [effectiveStartParam]);
 
   useEffect(() => {
     if (!compactMode) return;
-    const s = String(effectiveStartParam || "").toLowerCase();
-    if (/\baegis\b/.test(s)) setActiveOverlay("aegis");
-    else if (/\bfiles\b/.test(s)) setActiveOverlay("files");
-    else if (/\bactivity\b/.test(s) || /\bresponses\b/.test(s)) setActiveOverlay("activity");
+    const p = parseStart(effectiveStartParam);
+    if (p.open === "aegis") setActiveOverlay("aegis");
+    else if (p.open === "files") setActiveOverlay("files");
+    else if (p.open === "activity") setActiveOverlay("activity");
   }, [compactMode, effectiveStartParam]);
 
   // Load/store dismissed artifact ids locally (per-device).
@@ -196,6 +216,37 @@ export default function App() {
     return orionFeed.filter((it) => it && it.ts > since).length;
   }, [responsesOpen, orionFeed]);
   const stateForNetwork = useMemo(() => ({ ...state, feed: orionFeed }), [state, orionFeed]);
+
+  const eventsFeed = useMemo(() => {
+    return (state.feed || []).filter((it) => {
+      if (!it) return false;
+      if (it.kind === "response" && (it.agentId || "") === "ORION") return false;
+      // Exclude pending placeholders (those are responses).
+      if (typeof it.id === "string" && it.id.startsWith("pending_")) return false;
+      return true;
+    });
+  }, [state.feed]);
+
+  const [lastPrompt, setLastPrompt] = useState<string>("");
+
+  const sendCommand = async (text: string) => {
+    setCommandError("");
+    try {
+      const trimmed = String(text || "").trim();
+      if (!trimmed) return false;
+      setLastPrompt(trimmed);
+      setOrionFlareAt(Date.now());
+      tgRef.current?.HapticFeedback?.impactOccurred?.("light");
+      const res = await submitCommand({ initData, text: trimmed });
+      // eslint-disable-next-line no-console
+      console.log("command.accepted", res);
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setCommandError(msg);
+      return false;
+    }
+  };
 
   const shareToTelegram = async (text: string) => {
     if (!initData) {
@@ -496,35 +547,19 @@ export default function App() {
       {compactMode ? null : (
       <footer className="card footerPanel footerPanelCompact">
         <div className="footerComposer">
-          <CommandBar
-            disabled={!initData || Boolean(authError)}
-            value={draft}
-            onChange={(v) => setDraft(v)}
-            focusSignal={focusSignal}
+            <CommandBar
+              disabled={!initData || Boolean(authError)}
+              value={draft}
+              onChange={(v) => setDraft(v)}
+              focusSignal={focusSignal}
             placeholder={
               authError
                 ? "Unauthorized (open from Telegram / configure initData verification)"
                 : (initData ? "Ask ORION" : "Open via bot Web App button to enable commands")
-            }
-            onTypingChange={(t) => setComposerActive(Boolean(t))}
-            onSubmit={async (text) => {
-              setCommandError("");
-              try {
-                setOrionFlareAt(Date.now());
-                // Light haptic on send, if available in this Telegram version.
-                tgRef.current?.HapticFeedback?.impactOccurred?.("light");
-                // Send to backend so ORION can later route this into task packets/sessions.
-                const res = await submitCommand({ initData, text });
-                // eslint-disable-next-line no-console
-                console.log("command.accepted", res);
-                return true;
-              } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                setCommandError(msg);
-                return false;
               }
-            }}
-          />
+              onTypingChange={(t) => setComposerActive(Boolean(t))}
+              onSubmit={async (text) => sendCommand(text)}
+            />
           {authError ? (
             <div style={{ marginTop: 8, fontSize: 12, color: "#ffb4a2" }}>
               {authError}
@@ -547,6 +582,8 @@ export default function App() {
             ? "Workflow + Responses"
             : (activityTab === "workflow"
               ? "Workflow"
+              : activityTab === "events"
+                ? "Events"
               : (unreadCount > 0 ? `${unreadCount} new` : "ORION only"))
         }
         onClose={() => setActiveOverlay(null)}
@@ -571,6 +608,15 @@ export default function App() {
                 aria-label="Responses tab"
               >
                 💬 Responses
+              </button>
+              <button
+                type="button"
+                className={activitySplit ? "button buttonGhost" : (activityTab === "events" ? "button" : "button buttonGhost")}
+                onClick={() => setActivityTab("events")}
+                disabled={activitySplit}
+                aria-label="Events tab"
+              >
+                • Events
               </button>
             </div>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "rgba(255,255,255,0.72)" }}>
@@ -601,12 +647,14 @@ export default function App() {
                 unreadCount={0}
                 variant="overlay"
                 maxItems={30}
-                onRerun={(t) => { setDraft(t); setFocusSignal((n) => n + 1); }}
+                onRerun={() => { setDraft(lastPrompt || ""); setFocusSignal((n) => n + 1); }}
                 onShare={(t) => shareToTelegram(t)}
               />
             </>
           ) : activityTab === "workflow" ? (
             <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
+          ) : activityTab === "events" ? (
+            <FeedPanel items={eventsFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={40} />
           ) : (
             <FeedPanel
               items={orionFeed}
@@ -615,7 +663,7 @@ export default function App() {
               unreadCount={0}
               variant="overlay"
               maxItems={30}
-              onRerun={(t) => { setDraft(t); setFocusSignal((n) => n + 1); }}
+              onRerun={() => { setDraft(lastPrompt || ""); setFocusSignal((n) => n + 1); }}
               onShare={(t) => shareToTelegram(t)}
             />
           )}

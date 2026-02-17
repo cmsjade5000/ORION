@@ -77,10 +77,10 @@ export default function FeedPanel(props: {
                         type="button"
                         className="button buttonGhost"
                         onClick={() => props.onRerun?.(it.text)}
-                        aria-label="Re-run"
-                        title="Re-run / tweak"
+                        aria-label="Tweak"
+                        title="Tweak last prompt"
                       >
-                        ↩︎ Re-run
+                        ✏️ Tweak
                       </button>
                     ) : null}
                     <button
