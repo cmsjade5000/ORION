@@ -9,6 +9,7 @@ import FeedPanel from "./components/FeedPanel";
 import FilesPanel from "./components/FilesPanel";
 import WorkflowPanel from "./components/WorkflowPanel";
 import OverlaySheet from "./components/OverlaySheet";
+import AegisPanel from "./components/AegisPanel";
 
 const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "AEGIS", "PULSE", "NODE", "STRATUS"] as const;
 
@@ -23,7 +24,7 @@ export default function App() {
   const [commandError, setCommandError] = useState<string>("");
   const [composerActive, setComposerActive] = useState<boolean>(false);
   const [orionFlareAt, setOrionFlareAt] = useState<number>(0);
-  const [activeOverlay, setActiveOverlay] = useState<null | "activity" | "files" | "about">(null);
+  const [activeOverlay, setActiveOverlay] = useState<null | "activity" | "files" | "about" | "aegis">(null);
   const [activityTab, setActivityTab] = useState<"workflow" | "responses">("responses");
   const [activitySplit, setActivitySplit] = useState<boolean>(() => {
     try {
@@ -128,6 +129,22 @@ export default function App() {
 
   const orionFeed = useMemo(() => {
     return (state.feed || []).filter((it) => it && it.kind === "response" && (it.agentId || "") === "ORION");
+  }, [state.feed]);
+
+  const aegisAgent = useMemo(() => {
+    return (state.agents || []).find((a) => a && a.id === "AEGIS") || null;
+  }, [state.agents]);
+
+  const aegisFeed = useMemo(() => {
+    const items = (state.feed || []).filter((it) => {
+      if (!it) return false;
+      const aid = String(it.agentId || "");
+      if (aid === "AEGIS") return true;
+      const text = String(it.text || "");
+      return /(?:\bAEGIS\b|heartbeat|health|down|outage|no ack|noack|restarting)/i.test(text);
+    });
+    // newest first in the feed store already; keep a small cap
+    return items.slice(0, 30);
   }, [state.feed]);
 
   const responsesOpen = activeOverlay === "activity" && (activitySplit || activityTab === "responses");
@@ -390,6 +407,27 @@ export default function App() {
             >
               ℹ️
             </button>
+
+            <button
+              type="button"
+              className="bottomBarButton"
+              onClick={() => setActiveOverlay("aegis")}
+              title="AEGIS"
+              aria-label="AEGIS"
+            >
+              <span className="aegisBottomIcon" aria-hidden="true">
+                <span className="aegisBottomIconEmoji">🛰️</span>
+                {(() => {
+                  const a = aegisAgent;
+                  if (!a) return <span className="edgeDot edgeDotWarn" aria-hidden="true" />;
+                  const badge = String((a as any).badge || "");
+                  const isAlarm = badge === "🚨" || a.status === "offline" || a.activity === "error";
+                  const isWarn = !isAlarm && badge === "⚠️";
+                  const cls = ["edgeDot", isAlarm ? "edgeDotAlarm" : isWarn ? "edgeDotWarn" : ""].filter(Boolean).join(" ");
+                  return <span className={cls} aria-hidden="true" />;
+                })()}
+              </span>
+            </button>
           </div>
         </div>
       </main>
@@ -530,6 +568,15 @@ export default function App() {
           <div className="pill">connection: {netPill}</div>
           <div className="pill">{pill}</div>
         </div>
+      </OverlaySheet>
+
+      <OverlaySheet
+        open={activeOverlay === "aegis"}
+        title="AEGIS"
+        subtitle="Health"
+        onClose={() => setActiveOverlay(null)}
+      >
+        <AegisPanel aegis={aegisAgent} items={aegisFeed} />
       </OverlaySheet>
     </div>
   );

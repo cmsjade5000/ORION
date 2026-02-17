@@ -205,6 +205,30 @@ html {
   box-shadow: 0 0 0 6px rgba(124, 247, 193, 0.12);
 }
 
+.edgeDotWarn {
+  background: rgba(255, 209, 102, 0.95);
+  box-shadow: 0 0 0 6px rgba(255, 209, 102, 0.14);
+}
+
+.edgeDotAlarm {
+  background: rgba(255, 107, 107, 0.95);
+  box-shadow: 0 0 0 6px rgba(255, 107, 107, 0.14);
+}
+
+.aegisBottomIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.aegisBottomIconEmoji {
+  font-size: 20px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
 .edgeBadge {
   position: absolute;
   top: -6px;

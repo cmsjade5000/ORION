@@ -153,9 +153,11 @@ export default function NetworkDashboard(props: {
     const R_LG = D_LG / 2;
     const D_SM = 44;
     const R_SM = D_SM / 2;
-    const pad = 18;
+    // Less dead-space: allow nodes/lines to reach closer to the stage edge.
+    const pad = 12;
 
-    const yOrion = clamp(h * 0.44, R_LG + pad, h - (R_MED + R_SM + 120));
+    // Shift the whole network up a bit so the bottom UI has more breathing room.
+    const yOrion = clamp(h * 0.40, R_LG + pad, h - (R_MED + R_SM + 120));
     // Top row: nudge a bit higher so it breathes.
     const yTop = clamp(yOrion - (R_LG + R_MED + 42), R_MED + pad, yOrion - 130);
     // Pull ATLAS and its child nodes closer to the bottom, while keeping a safe gap from ORION.
@@ -172,10 +174,6 @@ export default function NetworkDashboard(props: {
     const xNode = clamp(cx, R_SM + pad, w - (R_SM + pad));
     const xStratus = clamp(cx + spreadSmall, R_SM + pad, w - (R_SM + pad));
 
-    // AEGIS indicator: pin to top-left (inset), not centered.
-    const aegisX = pad;
-    const aegisY = pad;
-
     const yPulse = ySmall;
     const yNode = clamp(ySmall + 14, ySmall, h - (R_SM + pad));
     const yStratus = ySmall;
@@ -184,7 +182,6 @@ export default function NetworkDashboard(props: {
       w,
       h,
       orion: { x: cx, y: yOrion },
-      aegisIndicator: { x: aegisX, y: aegisY },
       top: {
         PIXEL: { x: xPixel, y: yTop },
         EMBER: { x: xEmber, y: yTop },
@@ -237,54 +234,6 @@ export default function NetworkDashboard(props: {
               </>
             ) : null}
           </>
-        );
-      })()}
-
-      {/* AEGIS: satellite + status dot (no node circle). */}
-      {(() => {
-        const a = agents.find((x) => x.id === "AEGIS");
-        if (!a) return null;
-        const badge = String((a as any).badge || "");
-        const isAlarm = badge === "🚨" || a.status === "offline" || a.activity === "error";
-        const isWarn = !isAlarm && badge === "⚠️";
-        const isHighAlert = isAlarm && badge === "🚨";
-        const isHealthy = !isAlarm && !isWarn;
-        const dotCls = [
-          "aegisDot",
-          isAlarm ? "aegisDotAlarm" : isWarn ? "aegisDotWarn" : "aegisDotOk",
-          isHighAlert ? "aegisDotHighAlert" : "",
-        ].filter(Boolean).join(" ");
-        const pinging = a.activity === "messaging";
-        const title = isAlarm ? "AEGIS: alarm" : isWarn ? "AEGIS: warn" : pinging ? "AEGIS: heartbeat" : "AEGIS: ok";
-        const pulseColor = isAlarm
-          ? "rgba(255, 107, 107, 0.75)"
-          : isWarn
-            ? "rgba(255, 209, 102, 0.82)"
-            : "rgba(124, 247, 193, 0.80)";
-        return (
-          <div
-            className={[
-              "aegisIndicator",
-              pinging ? "aegisIndicatorPinging" : "",
-              (pinging && isWarn) ? "aegisIndicatorNoAck" : "",
-              isHighAlert ? "aegisIndicatorHighAlert" : "",
-              isHealthy ? "aegisIndicatorAmbient" : "",
-            ].filter(Boolean).join(" ")}
-            title={title}
-            aria-label={title}
-            style={{
-              left: `${layout.aegisIndicator.x}px`,
-              top: `${layout.aegisIndicator.y}px`,
-              ...(pinging ? ({ ["--aegis-pulse" as any]: pulseColor } as any) : {}),
-            }}
-          >
-            <span className="aegisSatWrap" aria-hidden="true">
-              {isHealthy ? <span className="aegisAmbient" aria-hidden="true" /> : null}
-              {pinging ? <span className="aegisPulse" aria-hidden="true" /> : null}
-              <span className="aegisSat" aria-hidden="true">🛰️</span>
-            </span>
-            <span className={dotCls} aria-hidden="true" />
-          </div>
         );
       })()}
 
