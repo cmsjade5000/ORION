@@ -63,3 +63,23 @@ class TestEvidenceCore(unittest.TestCase):
         res = self.e.validate_items([low], time_window_hours=24, now=now, min_source_tier="secondary")
         self.assertFalse(res.ok)
 
+    def test_validate_items_multiclaim_traceability(self):
+        now = dt.datetime(2026, 2, 17, 12, 0, 0, tzinfo=dt.timezone.utc)
+        ok = {
+            "title": "T",
+            "source": "S",
+            "published_at": "2026-02-17T11:00:00Z",
+            "claims": [
+                {"claim": "A", "url": "https://example.com/a"},
+                {"claim": "B", "url": "https://example.com/b"},
+            ],
+            "source_tier": "secondary",
+            "confidence": "medium",
+        }
+        res = self.e.validate_items([ok], time_window_hours=24, now=now, min_source_tier="low")
+        self.assertTrue(res.ok, res.errors)
+
+        bad = dict(ok)
+        bad["claims"] = [{"claim": "A", "url": ""}]
+        res2 = self.e.validate_items([bad], time_window_hours=24, now=now, min_source_tier="low")
+        self.assertFalse(res2.ok)

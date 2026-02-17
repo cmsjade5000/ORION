@@ -205,6 +205,19 @@ def _retry_params(fields: dict[str, str]) -> tuple[int, float, float, float]:
     return max_attempts, base, mult, maxb
 
 
+def _idempotency_fingerprint(fields: dict[str, str], pkt_before_result: list[str]) -> str:
+    """
+    Stable dedupe key for runner-backed packets.
+
+    If a packet includes an explicit `Idempotency Key:`, prefer it.
+    Otherwise fall back to the sha256 of the packet content (before Result).
+    """
+    raw = (fields.get("Idempotency Key", "") or "").strip()
+    if raw:
+        return "ik:" + hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()
+    return "ph:" + sha256_lines(pkt_before_result)
+
+
 def _write_artifact(repo_root: Path, owner: str, packet_start_line: int, stdout: str, stderr: str) -> Path:
     out_dir = repo_root / "tmp" / "inbox_runner" / owner
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -296,10 +309,14 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     # Retry policy (best-effort). Default is max_attempts=1 (no retry).
     now = time.time()
     max_attempts, base_backoff, mult, max_backoff = _retry_params(fields)
-    pkt_hash = sha256_lines(_packet_before_result(pref.raw_lines))
-    attempts_key = f"attempts:{pkt_hash}"
-    next_key = f"next_allowed:{pkt_hash}"
+    before = _packet_before_result(pref.raw_lines)
+    fp = _idempotency_fingerprint(fields, before)
+    attempts_key = f"attempts:{fp}"
+    next_key = f"next_allowed:{fp}"
+    done_key = f"done:{fp}"
     state0 = load_kv_state(state_path)
+    if state0.get(done_key, 0.0) > 0:
+        return False
     attempts = int(state0.get(attempts_key, 0.0))
     next_allowed = float(state0.get(next_key, 0.0))
     if next_allowed and now < next_allowed:
@@ -381,6 +398,13 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     else:
         new_lines = file_lines[:result_idx] + result_block + file_lines[pref.packet_end_line :]
     pref.inbox_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+
+    # Mark as done in runner state so re-filed packets with the same Idempotency Key do not repeat work.
+    state = load_kv_state(state_path)
+    state[done_key] = float(time.time())
+    if len(state) > 8000:
+        state = dict(sorted(state.items(), key=lambda kv: kv[1], reverse=True)[:6000])
+    save_kv_state(state_path, state)
 
     # Final Mini App state + a short feed item so opening the Mini App after completion
     # still shows something meaningful even if the agent node has gone idle.

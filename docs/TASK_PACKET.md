@@ -49,6 +49,8 @@ Output Format:
   - If the packet will execute via the inbox runner, use `Notify: telegram` so Cory gets:
     - a one-time "Queued" update, and
     - a follow-up "Results" update when `Result:` is written.
+- `Idempotency Key:` optional stable key to dedupe runner-backed packets across retries/reruns.
+  - Used by `scripts/run_inbox_packets.py` to avoid repeating the same work when the packet is re-filed or re-queued.
 - Retry policy (used by `scripts/run_inbox_packets.py` for allowlisted read-only packets):
   - `Retry Max Attempts:` integer (default `1`, meaning no retries)
   - `Retry Backoff Seconds:` number (default `60`)

@@ -40,3 +40,10 @@ class TestRunInboxPacketsRetry(unittest.TestCase):
         self.assertEqual(mult, 2.0)
         self.assertEqual(maxb, 60.0)
 
+    def test_idempotency_fingerprint_prefers_key(self):
+        before = ["TASK_PACKET v1", "Owner: ATLAS", "Requester: ORION"]
+        fp1 = self.r._idempotency_fingerprint({"Idempotency Key": "abc"}, before)  # type: ignore[attr-defined]
+        fp2 = self.r._idempotency_fingerprint({"Idempotency Key": "abc"}, before)  # type: ignore[attr-defined]
+        fp3 = self.r._idempotency_fingerprint({"Idempotency Key": "def"}, before)  # type: ignore[attr-defined]
+        self.assertEqual(fp1, fp2)
+        self.assertNotEqual(fp1, fp3)

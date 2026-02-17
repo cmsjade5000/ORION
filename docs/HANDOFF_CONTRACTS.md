@@ -38,6 +38,9 @@ ORION responsibilities before sending:
 
 Optional lint:
 - `python3 scripts/scribe_lint.py --input draft.txt`
+Optional scaffold + score:
+- `python3 scripts/scribe_scaffold.py --destination telegram --input payload.json`
+- `python3 scripts/scribe_score.py --input draft.txt`
 
 ## Discovery To Execution (PIXEL -> ORION -> ATLAS)
 
@@ -65,4 +68,3 @@ EMBER handoff back to ORION should include:
 
 If emergency bypass is used (ATLAS unavailable):
 - include `Emergency: ATLAS_UNAVAILABLE` and `Incident: INC-...` in Task Packets
-

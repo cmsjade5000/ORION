@@ -73,6 +73,39 @@ def within_time_window(*, published_at: dt.datetime, now: dt.datetime, window: d
     return delta <= window
 
 
+def _parse_claims(obj: dict[str, Any]) -> list[tuple[str, str]]:
+    """
+    Optional traceability adapter:
+    - If `claims` is present, validate and return list of (claim_text, url).
+    - Otherwise return a single (claim,url) pair from required fields.
+    """
+    if "claims" in obj:
+        raw = obj.get("claims")
+        if not isinstance(raw, list) or not raw:
+            raise EvidenceError("claims must be a non-empty list when provided")
+        out: list[tuple[str, str]] = []
+        for i, it in enumerate(raw):
+            if not isinstance(it, dict):
+                raise EvidenceError(f"claims[{i}] must be an object")
+            c = it.get("claim", "")
+            u = it.get("url", "")
+            if not isinstance(c, str) or not c.strip():
+                raise EvidenceError(f"claims[{i}].claim missing/empty")
+            if not isinstance(u, str) or not u.strip():
+                raise EvidenceError(f"claims[{i}].url missing/empty")
+            out.append((c.strip(), u.strip()))
+        return out
+
+    # Fallback to the single-claim schema.
+    claim = obj.get("claim", "")
+    url = obj.get("url", "")
+    if not isinstance(claim, str) or not claim.strip():
+        raise EvidenceError("missing/empty field: claim")
+    if not isinstance(url, str) or not url.strip():
+        raise EvidenceError("missing/empty field: url")
+    return [(claim.strip(), url.strip())]
+
+
 @dataclasses.dataclass(frozen=True)
 class EvidenceItem:
     title: str
@@ -80,6 +113,7 @@ class EvidenceItem:
     url: str
     published_at: dt.datetime
     claim: str
+    claims: tuple[tuple[str, str], ...] = ()
     source_tier: str = "secondary"
     confidence: str = "medium"
 
@@ -93,8 +127,11 @@ class EvidenceItem:
 
         title = _req_str("title")
         source = _req_str("source")
-        url = _req_str("url")
-        claim = _req_str("claim")
+        # Traceability adapter: supports either a single claim+url, or a multi-claim list.
+        parsed_claims = _parse_claims(obj)
+        # Preserve compatibility with the existing schema by keeping url/claim required.
+        # If multi-claims are provided, prefer the first one for the legacy fields.
+        claim, url = parsed_claims[0][0], parsed_claims[0][1]
 
         published_raw = _req_str("published_at")
         published_at = parse_rfc3339(published_raw)
@@ -119,6 +156,7 @@ class EvidenceItem:
             url=url,
             published_at=published_at,
             claim=claim,
+            claims=tuple(parsed_claims),
             source_tier=tier,
             confidence=conf,
         )
@@ -171,9 +209,12 @@ def validate_items(
             )
 
         # Minimal traceability rule: if you make a claim, you must have a URL.
-        # (Claim and url are required earlier, but keep this explicit for future schema relaxations.)
-        if not it.url.strip():
-            errs.append(f"items[{i}]: missing url for claim traceability")
+        # (Claims are required earlier, but keep this explicit for future schema relaxations.)
+        if not it.claims:
+            errs.append(f"items[{i}]: no claims present for traceability")
+        else:
+            for j, (_c, u) in enumerate(it.claims):
+                if not u.strip():
+                    errs.append(f"items[{i}].claims[{j}]: missing url for claim traceability")
 
     return EvidenceCheckResult(ok=(len(errs) == 0), errors=errs)
-
