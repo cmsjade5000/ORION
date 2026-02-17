@@ -16,6 +16,7 @@ const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "AEGIS", "PULSE", "
 export default function App() {
   const [initData, setInitData] = useState<string>("");
   const [platform, setPlatform] = useState<string>("web");
+  const [startParam, setStartParam] = useState<string>("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("closed");
   const [polling, setPolling] = useState<boolean>(false);
   const [dlToken, setDlToken] = useState<string>("");
@@ -24,6 +25,8 @@ export default function App() {
   const [commandError, setCommandError] = useState<string>("");
   const [composerActive, setComposerActive] = useState<boolean>(false);
   const [orionFlareAt, setOrionFlareAt] = useState<number>(0);
+  const [draft, setDraft] = useState<string>("");
+  const [focusSignal, setFocusSignal] = useState<number>(0);
   const [activeOverlay, setActiveOverlay] = useState<null | "activity" | "files" | "about" | "aegis">(null);
   const [activityTab, setActivityTab] = useState<"workflow" | "responses">("responses");
   const [activitySplit, setActivitySplit] = useState<boolean>(() => {
@@ -51,9 +54,40 @@ export default function App() {
       setAuthError("");
       setInitData(tg.initData);
       setPlatform(`${tg.platform} (tg v${tg.version})`);
+      setStartParam(String((tg as any).startParam || "").trim());
       tgRef.current = tg.webApp as any;
     }
   }, []);
+
+  const urlStartParam = useMemo(() => {
+    try {
+      const usp = new URLSearchParams(window.location.search);
+      return String(usp.get("tgWebAppStartParam") || usp.get("startapp") || "").trim();
+    } catch {
+      return "";
+    }
+  }, []);
+  const effectiveStartParam = startParam || urlStartParam;
+
+  const compactMode = useMemo(() => {
+    try {
+      const usp = new URLSearchParams(window.location.search);
+      const q = usp.get("compact");
+      if (q === "1" || q === "true") return true;
+    } catch {
+      // ignore
+    }
+    const s = String(effectiveStartParam || "").toLowerCase();
+    return s.includes("compact");
+  }, [effectiveStartParam]);
+
+  useEffect(() => {
+    if (!compactMode) return;
+    const s = String(effectiveStartParam || "").toLowerCase();
+    if (/\baegis\b/.test(s)) setActiveOverlay("aegis");
+    else if (/\bfiles\b/.test(s)) setActiveOverlay("files");
+    else if (/\bactivity\b/.test(s) || /\bresponses\b/.test(s)) setActiveOverlay("activity");
+  }, [compactMode, effectiveStartParam]);
 
   // Load/store dismissed artifact ids locally (per-device).
   useEffect(() => {
@@ -162,6 +196,34 @@ export default function App() {
     return orionFeed.filter((it) => it && it.ts > since).length;
   }, [responsesOpen, orionFeed]);
   const stateForNetwork = useMemo(() => ({ ...state, feed: orionFeed }), [state, orionFeed]);
+
+  const shareToTelegram = async (text: string) => {
+    if (!initData) {
+      setCommandError("share failed: missing Telegram initData");
+      return;
+    }
+    const body = { text };
+    try {
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-init-data": initData,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as any;
+        const msg = data?.error?.message ? String(data.error.message) : `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      tgRef.current?.HapticFeedback?.notificationOccurred?.("success");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setCommandError(`share failed: ${msg}`);
+      tgRef.current?.HapticFeedback?.notificationOccurred?.("error");
+    }
+  };
 
   // Keep a short-lived signed token refreshed for artifact downloads.
   // (Tokens expire; a stale token would make old artifact bubbles fail to download.)
@@ -431,10 +493,14 @@ export default function App() {
         </div>
       </main>
 
+      {compactMode ? null : (
       <footer className="card footerPanel footerPanelCompact">
         <div className="footerComposer">
           <CommandBar
             disabled={!initData || Boolean(authError)}
+            value={draft}
+            onChange={(v) => setDraft(v)}
+            focusSignal={focusSignal}
             placeholder={
               authError
                 ? "Unauthorized (open from Telegram / configure initData verification)"
@@ -471,6 +537,7 @@ export default function App() {
           ) : null}
         </div>
       </footer>
+      )}
 
       <OverlaySheet
         open={activeOverlay === "activity"}
@@ -527,12 +594,30 @@ export default function App() {
           {activitySplit ? (
             <>
               <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
-              <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
+              <FeedPanel
+                items={orionFeed}
+                open={true}
+                onToggle={() => null}
+                unreadCount={0}
+                variant="overlay"
+                maxItems={30}
+                onRerun={(t) => { setDraft(t); setFocusSignal((n) => n + 1); }}
+                onShare={(t) => shareToTelegram(t)}
+              />
             </>
           ) : activityTab === "workflow" ? (
             <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
           ) : (
-            <FeedPanel items={orionFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={30} />
+            <FeedPanel
+              items={orionFeed}
+              open={true}
+              onToggle={() => null}
+              unreadCount={0}
+              variant="overlay"
+              maxItems={30}
+              onRerun={(t) => { setDraft(t); setFocusSignal((n) => n + 1); }}
+              onShare={(t) => shareToTelegram(t)}
+            />
           )}
         </div>
       </OverlaySheet>

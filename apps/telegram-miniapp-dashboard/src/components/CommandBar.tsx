@@ -4,13 +4,38 @@ export default function CommandBar(props: {
   placeholder?: string;
   disabled?: boolean;
   onTypingChange?: (typing: boolean) => void;
+  value?: string;
+  onChange?: (value: string) => void;
+  // Bump this number to request focus (used for "re-run" / "tweak" actions).
+  focusSignal?: number;
   // Return true to clear the input (accepted), false to keep it (rejected/failed).
   onSubmit: (text: string) => Promise<boolean> | boolean;
 }) {
-  const [value, setValue] = useState("");
+  const controlled = typeof props.value === "string" && typeof props.onChange === "function";
+  const [internalValue, setInternalValue] = useState("");
   const [sending, setSending] = useState(false);
   const [focused, setFocused] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const value = controlled ? (props.value as string) : internalValue;
+  const setValue = (next: string) => {
+    if (controlled) props.onChange?.(next);
+    else setInternalValue(next);
+  };
+
+  useEffect(() => {
+    if (!props.focusSignal) return;
+    const el = taRef.current;
+    if (!el) return;
+    try {
+      el.focus();
+      // Put caret at end for quick edits.
+      const n = el.value.length;
+      el.setSelectionRange?.(n, n);
+    } catch {
+      // ignore
+    }
+  }, [props.focusSignal]);
 
   // Auto-grow textarea (helps on mobile; avoids cramped single-line input).
   useEffect(() => {

@@ -5,6 +5,7 @@ export type TelegramContext = {
   initData: string;
   platform: string;
   version: string;
+  startParam?: string;
 };
 
 /**
@@ -33,6 +34,15 @@ export function initTelegram(): TelegramContext | null {
   return {
     webApp,
     initData: webApp.initData || "",
+    startParam: (() => {
+      try {
+        const unsafe = webApp.initDataUnsafe as any;
+        if (unsafe && typeof unsafe.start_param === "string") return unsafe.start_param;
+      } catch {
+        // ignore
+      }
+      return "";
+    })(),
     platform: webApp.platform,
     version: webApp.version,
   };

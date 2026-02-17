@@ -18,6 +18,8 @@ export default function FeedPanel(props: {
   unreadCount?: number;
   variant?: "drawer" | "overlay";
   maxItems?: number;
+  onRerun?: (text: string) => void;
+  onShare?: (text: string) => void;
 }) {
   const variant = props.variant || "drawer";
   const isOpen = variant === "overlay" ? true : props.open;
@@ -68,6 +70,47 @@ export default function FeedPanel(props: {
               </div>
               <div className="feedBody">
                 <div className="feedText">{it.text}</div>
+                {(it.kind === "response" && (it.agentId || "") === "ORION" && (props.onRerun || props.onShare)) ? (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    {props.onRerun ? (
+                      <button
+                        type="button"
+                        className="button buttonGhost"
+                        onClick={() => props.onRerun?.(it.text)}
+                        aria-label="Re-run"
+                        title="Re-run / tweak"
+                      >
+                        ↩︎ Re-run
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="button buttonGhost"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard?.writeText?.(it.text);
+                        } catch {
+                          // ignore (clipboard can be blocked in some webviews)
+                        }
+                      }}
+                      aria-label="Copy"
+                      title="Copy"
+                    >
+                      ⧉ Copy
+                    </button>
+                    {props.onShare ? (
+                      <button
+                        type="button"
+                        className="button buttonGhost"
+                        onClick={() => props.onShare?.(it.text)}
+                        aria-label="Share"
+                        title="Share to Telegram chat"
+                      >
+                        ⤴︎ Share
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="feedMeta">
                   <span className="feedTime">{relTime(it.ts, now)}</span>
                   {it.agentId ? <span className="feedAgent">{it.agentId}</span> : null}

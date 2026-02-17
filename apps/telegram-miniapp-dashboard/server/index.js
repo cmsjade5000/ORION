@@ -2454,6 +2454,65 @@ app.post("/api/command", (req, res) => {
   });
 });
 
+// Share a response back into Telegram (DM to the verified user by default).
+// This is a user-initiated action from inside the Mini App.
+app.post("/api/share", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const ctx = extractTelegramContext(req);
+  if (!ctx.verified && !canAcceptUnverifiedInitData()) {
+    return res.status(401).json({
+      ok: false,
+      error: { code: "UNAUTHORIZED", message: "Telegram initData not verified." },
+    });
+  }
+
+  const botToken = resolveTelegramBotToken();
+  if (!botToken) {
+    return res.status(503).json({
+      ok: false,
+      error: { code: "MISCONFIGURED", message: "Missing TELEGRAM_BOT_TOKEN" },
+    });
+  }
+
+  const rawText = String(req.body?.text || "").trim();
+  if (!rawText) {
+    return res.status(400).json({ ok: false, error: { code: "BAD_REQUEST", message: "Missing text" } });
+  }
+
+  // Prefer user DM (userId) to avoid spamming groups by accident.
+  const target = typeof ctx.userId === "number" ? String(ctx.userId) : (typeof ctx.chatId === "number" ? String(ctx.chatId) : "");
+  if (!/^[0-9]+$/.test(target)) {
+    return res.status(400).json({
+      ok: false,
+      error: { code: "BAD_REQUEST", message: "Missing Telegram target (userId/chatId)" },
+    });
+  }
+
+  const text = rawText.length > 3500 ? `${rawText.slice(0, 3500)}…` : rawText;
+  const payload = {
+    chat_id: target,
+    text: `ORION Mini App\\n\\n${text}`,
+    disable_web_page_preview: true,
+  };
+
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data || data.ok !== true) {
+      const err = data && data.description ? String(data.description) : `HTTP ${r.status}`;
+      return res.status(502).json({ ok: false, error: { code: "UPSTREAM_ERROR", message: err } });
+    }
+    return res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return res.status(502).json({ ok: false, error: { code: "UPSTREAM_ERROR", message: msg } });
+  }
+});
+
 // Serve the Vite build in production (single deployable service).
 // In dev, Vite serves the frontend on :5173 so we avoid requiring `dist/` here.
 const distDir = path.resolve(__dirname, "../dist");

@@ -29,6 +29,9 @@ export type TelegramWebApp = {
   // Docs: https://core.telegram.org/bots/webapps#initializing-mini-apps
   sendData?: (data: string) => void;
 
+  // Some clients support switching to inline query with a prefilled text.
+  switchInlineQuery?: (query: string, choose_chat_types?: string[]) => void;
+
   // Optional helper in many versions; keep it loose.
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
