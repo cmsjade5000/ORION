@@ -2541,6 +2541,12 @@ if (shouldServeStatic) {
       },
     })
   );
+
+  // Do not let the SPA catch-all swallow unknown API routes.
+  app.all("/api/*", (req, res) => {
+    return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Unknown API route" } });
+  });
+
   app.get("*", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.sendFile(distIndex);
