@@ -419,11 +419,11 @@ export default function App() {
                 <span className="aegisBottomIconEmoji">🛰️</span>
                 {(() => {
                   const a = aegisAgent;
-                  if (!a) return <span className="edgeDot edgeDotWarn" aria-hidden="true" />;
+                  if (!a) return <span className="aegisBottomDot edgeDotWarn" aria-hidden="true" />;
                   const badge = String((a as any).badge || "");
                   const isAlarm = badge === "🚨" || a.status === "offline" || a.activity === "error";
                   const isWarn = !isAlarm && badge === "⚠️";
-                  const cls = ["edgeDot", isAlarm ? "edgeDotAlarm" : isWarn ? "edgeDotWarn" : ""].filter(Boolean).join(" ");
+                  const cls = ["aegisBottomDot", isAlarm ? "edgeDotAlarm" : isWarn ? "edgeDotWarn" : ""].filter(Boolean).join(" ");
                   return <span className={cls} aria-hidden="true" />;
                 })()}
               </span>
