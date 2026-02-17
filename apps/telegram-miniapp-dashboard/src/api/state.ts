@@ -85,6 +85,14 @@ export type LiveState = {
   link?: ActiveLink | null;
   agents: AgentState[];
   orion?: OrionState;
+  aegis?: {
+    status: "unknown" | "ok" | "warn" | "alarm";
+    lastTelemetryAt?: number | null;
+    lastOkAt?: number | null;
+    lastFailAt?: number | null;
+    // True when the server is running a cosmetic heartbeat (should be OFF in prod).
+    simulated?: boolean;
+  };
   // Optional: recent artifacts created by ORION (PDFs, exports, etc.).
   artifacts?: Artifact[];
   // Optional: short response/activity feed entries.

@@ -14,14 +14,35 @@ function statusLabel(st: "ok" | "warn" | "alarm") {
   return "OK";
 }
 
+function relAge(ts: number | null | undefined) {
+  const t = typeof ts === "number" && Number.isFinite(ts) && ts > 0 ? ts : 0;
+  if (!t) return "never";
+  const d = Math.max(0, Date.now() - t);
+  if (d < 10_000) return "now";
+  const s = Math.floor(d / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
+}
+
 export default function AegisPanel(props: {
   aegis: AgentState | null;
   items: FeedItem[];
+  telemetry?: {
+    status: "unknown" | "ok" | "warn" | "alarm";
+    lastTelemetryAt?: number | null;
+    lastOkAt?: number | null;
+    lastFailAt?: number | null;
+    simulated?: boolean;
+  } | null;
 }) {
   const st = inferAegisStatus(props.aegis);
   const badge = props.aegis ? String((props.aegis as any).badge || "") : "";
   const activity = props.aegis?.activity || "idle";
   const agentStatus = props.aegis?.status || "offline";
+  const tel = props.telemetry || null;
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -44,6 +65,10 @@ export default function AegisPanel(props: {
           </div>
           <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.72)" }}>
             status: {agentStatus} · activity: {activity}{badge ? ` · badge: ${badge}` : ""}
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, color: "rgba(255,255,255,0.72)" }}>
+            telemetry: {tel ? tel.status : "unknown"} · last: {relAge(tel?.lastTelemetryAt ?? null)}
+            {tel?.simulated ? " · simulated" : ""}
           </div>
         </div>
       </div>
@@ -75,4 +100,3 @@ export default function AegisPanel(props: {
     </div>
   );
 }
-

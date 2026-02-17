@@ -419,12 +419,11 @@ export default function App() {
                 <span className="aegisBottomIconEmoji">🛰️</span>
               </span>
               {(() => {
-                const a = aegisAgent;
-                if (!a) return <span className="edgeDot edgeDotWarn" aria-hidden="true" />;
-                const badge = String((a as any).badge || "");
-                const isAlarm = badge === "🚨" || a.status === "offline" || a.activity === "error";
-                const isWarn = !isAlarm && badge === "⚠️";
-                const cls = ["edgeDot", isAlarm ? "edgeDotAlarm" : isWarn ? "edgeDotWarn" : ""].filter(Boolean).join(" ");
+                const tel = (state as any).aegis as any;
+                const st = tel && typeof tel.status === "string" ? tel.status : "unknown";
+                const cls = ["edgeDot", st === "alarm" ? "edgeDotAlarm" : st === "warn" || st === "unknown" ? "edgeDotWarn" : ""]
+                  .filter(Boolean)
+                  .join(" ");
                 return <span className={cls} aria-hidden="true" />;
               })()}
             </button>
@@ -576,7 +575,7 @@ export default function App() {
         subtitle="Health"
         onClose={() => setActiveOverlay(null)}
       >
-        <AegisPanel aegis={aegisAgent} items={aegisFeed} />
+        <AegisPanel aegis={aegisAgent} items={aegisFeed} telemetry={(state as any).aegis || null} />
       </OverlaySheet>
     </div>
   );
