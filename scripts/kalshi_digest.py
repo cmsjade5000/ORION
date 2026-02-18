@@ -562,6 +562,61 @@ def _summarize_skips_and_live_spot(run_objs: List[Dict[str, Any]]) -> Dict[str, 
     }
 
 
+def _load_sweep_stats(root: str) -> Optional[Dict[str, Any]]:
+    p = os.path.join(root, "tmp", "kalshi_ref_arb", "sweep_stats.json")
+    try:
+        obj = json.load(open(p, "r", encoding="utf-8"))
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        return None
+
+
+def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Optional[Dict[str, Any]]:
+    if not isinstance(obj, dict):
+        return None
+    entries = obj.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return None
+    window_s = int(obj.get("window_s") or 24 * 3600)
+    start = int(now_unix) - max(60, window_s)
+    totals = {
+        "cycles": 0,
+        "signals": 0,
+        "recommended": 0,
+        "placed_live": 0,
+        "no_fill": 0,
+        "recheck_failed": 0,
+        "live_spot_fail": 0,
+        "cache_hits": 0,
+    }
+    for it in entries:
+        if not isinstance(it, dict):
+            continue
+        try:
+            ts = int(it.get("ts_unix") or 0)
+        except Exception:
+            ts = 0
+        if ts < start:
+            continue
+        totals["cycles"] += 1
+        for k in ("signals_computed", "candidates_recommended", "placed_live", "no_fill", "recheck_failed", "live_spot_fail"):
+            try:
+                totals_map = {
+                    "signals_computed": "signals",
+                    "candidates_recommended": "recommended",
+                    "placed_live": "placed_live",
+                    "no_fill": "no_fill",
+                    "recheck_failed": "recheck_failed",
+                    "live_spot_fail": "live_spot_fail",
+                }
+                totals[totals_map[k]] += int(it.get(k) or 0)
+            except Exception:
+                pass
+        if bool(it.get("markets_cache_hit")):
+            totals["cache_hits"] += 1
+    return totals
+
+
 def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], now_unix: int) -> str:
     # Email-client friendly HTML: table layout + inline styles, no external assets.
     dt_local = datetime.datetime.fromtimestamp(int(now_unix)).astimezone()
@@ -1097,6 +1152,8 @@ def main() -> int:
 
     stats = _extract_stats(run_objs)
     sigma_s = _sigma_summary(run_objs)
+    sweep_stats = _load_sweep_stats(root)
+    sweep_roll = _sweep_rollup_24h(sweep_stats, now_unix=now)
     # ET "today so far" run stats (helps answer: did it run today, and did it trade today?).
     today_start, _ = _day_bounds_unix(tz="America/New_York", now_unix=now)
     today_files = _list_run_files_since(runs_dir, today_start)
@@ -1158,6 +1215,17 @@ def main() -> int:
     msg_lines.append(f"Kalshi arb digest ({int(args.window_hours)}h)")
     msg_lines.append(f"Cycles: {stats.cycles}")
     msg_lines.append(f"Live orders: {stats.live_orders} (notional { _format_usd(stats.live_notional_usd) })")
+    if isinstance(sweep_roll, dict) and int(sweep_roll.get("cycles") or 0) > 0:
+        msg_lines.append(
+            "Sweeps (24h): "
+            + f"cycles {int(sweep_roll.get('cycles') or 0)}, "
+            + f"signals {int(sweep_roll.get('signals') or 0)}, "
+            + f"recommended {int(sweep_roll.get('recommended') or 0)}, "
+            + f"placed {int(sweep_roll.get('placed_live') or 0)}, "
+            + f"no_fill {int(sweep_roll.get('no_fill') or 0)}, "
+            + f"live_spot_fail {int(sweep_roll.get('live_spot_fail') or 0)}, "
+            + f"cache_hit {int(sweep_roll.get('cache_hits') or 0)}/{int(sweep_roll.get('cycles') or 0)}"
+        )
     if isinstance(sigma_s.get("avg_sigma_arg"), (int, float)):
         mode = sigma_s.get("mode") or ""
         suffix = f" ({mode})" if isinstance(mode, str) and mode else ""
@@ -1709,6 +1777,7 @@ def main() -> int:
             "realized_pnl_usd_settled": today_realized_pnl,
         },
         "no_trade": no_trade_diag if isinstance(no_trade_diag, dict) and no_trade_diag else {},
+        "sweep_rollup_24h": sweep_roll if isinstance(sweep_roll, dict) else None,
         "param_recommendations": param_recs,
         "message": "\n".join(msg_lines),
     }

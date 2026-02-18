@@ -85,6 +85,117 @@ def _repo_root() -> str:
     return os.path.abspath(os.path.join(here, ".."))
 
 
+def _atomic_write_json(path: str, obj: Any) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def _safe_cache_key(*parts: Any) -> str:
+    # Restrictive filename sanitizer.
+    raw = "_".join(str(p) for p in parts if p is not None and str(p) != "")
+    keep = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+    out = "".join(c if c in keep else "_" for c in raw)
+    return out[:180] if len(out) > 180 else out
+
+
+def _list_markets_cached(
+    kc: KalshiClient,
+    *,
+    repo_root: str,
+    status: str,
+    series: str,
+    limit: int,
+    cache_s: int,
+    now_unix: Optional[int] = None,
+) -> tuple[List[KalshiMarket], bool]:
+    """Cache Kalshi `list_markets` output for a short window.
+
+    Goal: reduce API pressure + timeouts during 5-minute sweep loops. We still refetch
+    per-market quotes (get_market) at execution time, so this cache is only the universe.
+    """
+    now = int(now_unix if now_unix is not None else time.time())
+    ttl = max(0, int(cache_s))
+    if ttl <= 0:
+        return (kc.list_markets(status=status, series_ticker=series, limit=int(limit)), False)
+
+    cache_dir = os.path.join(repo_root, "tmp", "kalshi_ref_arb", "markets_cache")
+    key = _safe_cache_key(series, status, int(limit))
+    path = os.path.join(cache_dir, f"{key}.json")
+
+    try:
+        st = os.stat(path)
+        age = now - int(st.st_mtime)
+        if age >= 0 and age <= ttl:
+            obj = json.load(open(path, "r", encoding="utf-8"))
+            items = obj.get("markets") if isinstance(obj, dict) else None
+            if isinstance(items, list) and items:
+                out: List[KalshiMarket] = []
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    try:
+                        out.append(KalshiMarket(**it))
+                    except Exception:
+                        continue
+                if out:
+                    return (out, True)
+    except Exception:
+        pass
+
+    markets = kc.list_markets(status=status, series_ticker=series, limit=int(limit))
+    try:
+        payload = {
+            "ts_unix": now,
+            "status": str(status),
+            "series": str(series),
+            "limit": int(limit),
+            "markets": [asdict(m) for m in markets],
+        }
+        _atomic_write_json(path, payload)
+    except Exception:
+        pass
+    return (markets, False)
+
+
+def _update_sweep_stats(repo_root: str, entry: Dict[str, Any], *, window_s: int = 24 * 3600, max_entries: int = 600) -> None:
+    """Persist a tiny rolling stats file to explain sweep outcomes over time."""
+    path = os.path.join(repo_root, "tmp", "kalshi_ref_arb", "sweep_stats.json")
+    now = int(time.time())
+    try:
+        obj = json.load(open(path, "r", encoding="utf-8"))
+    except Exception:
+        obj = {}
+    entries = obj.get("entries") if isinstance(obj, dict) else None
+    if not isinstance(entries, list):
+        entries = []
+    # Prune old entries.
+    keep: List[Dict[str, Any]] = []
+    for it in entries:
+        if not isinstance(it, dict):
+            continue
+        try:
+            ts = int(it.get("ts_unix") or 0)
+        except Exception:
+            ts = 0
+        if ts <= 0:
+            continue
+        if now - ts <= int(window_s):
+            keep.append(it)
+    keep.append(dict(entry))
+    if len(keep) > int(max_entries):
+        keep = keep[-int(max_entries) :]
+    out = {
+        "updated_ts_unix": now,
+        "window_s": int(window_s),
+        "entries": keep,
+    }
+    _atomic_write_json(path, out)
+
+
 def _parse_iso_z(ts: str) -> Optional[float]:
     # Minimal parser for "YYYY-MM-DDTHH:MM:SSZ"
     if not ts or not ts.endswith("Z"):
@@ -389,7 +500,18 @@ def _signal_for_market(
 def cmd_scan(args: argparse.Namespace) -> int:
     repo_root = _repo_root()
     kc = KalshiClient(base_url=args.kalshi_base_url)
-    markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
+    try:
+        cache_s = int(os.environ.get("KALSHI_ARB_MARKETS_CACHE_S", "900") or 900)
+    except Exception:
+        cache_s = 900
+    markets, cache_hit = _list_markets_cached(
+        kc,
+        repo_root=repo_root,
+        status=args.status,
+        series=args.series,
+        limit=args.limit,
+        cache_s=cache_s,
+    )
     # Fetch spot once per scan. Previously this was done per-market, which is slow and can
     # trigger scan timeouts.
     spot = _ref_spot_for_series(args.series)
@@ -456,6 +578,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "series": args.series,
             "status": args.status,
             "limit": args.limit,
+            "markets_cache_s": int(cache_s),
+            "markets_cache_hit": bool(cache_hit),
             "sigma_annual": args.sigma_annual,
             "min_edge_bps": args.min_edge_bps,
             "uncertainty_bps": args.uncertainty_bps,
@@ -544,7 +668,18 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     open_abs_pos[t] = max(open_abs_pos.get(t, 0), abs(int(p)))
         except Exception:
             open_abs_pos = {}
-    markets = kc.list_markets(status=args.status, series_ticker=args.series, limit=args.limit)
+    try:
+        cache_s = int(os.environ.get("KALSHI_ARB_MARKETS_CACHE_S", "900") or 900)
+    except Exception:
+        cache_s = 900
+    markets, cache_hit = _list_markets_cached(
+        kc,
+        repo_root=repo_root,
+        status=args.status,
+        series=args.series,
+        limit=args.limit,
+        cache_s=cache_s,
+    )
     # Fetch spot once per run (instead of per-market).
     spot = _ref_spot_for_series(args.series)
     if spot is not None:
@@ -1215,6 +1350,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "series": args.series,
             "status": args.status,
             "limit": args.limit,
+            "markets_cache_s": int(cache_s),
+            "markets_cache_hit": bool(cache_hit),
             "sigma_annual": args.sigma_annual,
             "min_edge_bps": args.min_edge_bps,
             "uncertainty_bps": args.uncertainty_bps,
@@ -1239,6 +1376,48 @@ def cmd_trade(args: argparse.Namespace) -> int:
         "cash_usd": cash_usd,
         "diagnostics": diagnostics,
     }
+    # Rolling sweep stats (helps explain "why not trading" over time).
+    try:
+        placed_live = 0
+        if isinstance(placed, list):
+            for p in placed:
+                if isinstance(p, dict) and p.get("mode") == "live":
+                    placed_live += 1
+        no_fill = 0
+        recheck_failed = 0
+        live_spot_fail = 0
+        if isinstance(skipped, list):
+            for s in skipped:
+                if not isinstance(s, dict):
+                    continue
+                r = s.get("reason")
+                d = s.get("detail")
+                if r == "no_fill":
+                    no_fill += 1
+                if r == "recheck_failed":
+                    recheck_failed += 1
+                if d == "live_spot_required_failed":
+                    live_spot_fail += 1
+                elif isinstance(s.get("ref_spot_live_err"), str) and str(s.get("ref_spot_live_err") or "").strip():
+                    live_spot_fail += 1
+        _update_sweep_stats(
+            repo_root,
+            {
+                "ts_unix": int(out.get("timestamp_unix") or int(time.time())),
+                "series": str(args.series),
+                "status": str(args.status),
+                "markets_cache_hit": bool(cache_hit),
+                "markets_fetched": int(len(markets)),
+                "signals_computed": int(len(all_signals)),
+                "candidates_recommended": int(len(signals)),
+                "placed_live": int(placed_live),
+                "no_fill": int(no_fill),
+                "recheck_failed": int(recheck_failed),
+                "live_spot_fail": int(live_spot_fail),
+            },
+        )
+    except Exception:
+        pass
     sys.stdout.write(_json(out) + "\n")
     return 0
 
