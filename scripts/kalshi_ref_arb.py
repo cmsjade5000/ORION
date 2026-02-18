@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 try:
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.live_spot import live_spot  # type: ignore
     from scripts.arb.momentum import momentum_pct, update_ref_spot_history  # type: ignore
     from scripts.arb.prob import (  # type: ignore
         beta_posterior_mean,
@@ -34,6 +35,7 @@ except ModuleNotFoundError:
         sys.path.insert(0, repo_root)
     from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.live_spot import live_spot  # type: ignore
     from scripts.arb.momentum import momentum_pct, update_ref_spot_history  # type: ignore
     from scripts.arb.prob import (  # type: ignore
         beta_posterior_mean,
@@ -114,6 +116,35 @@ def _t_years_until(exp_iso_z: str, now_unix: Optional[int] = None) -> Optional[f
     return dt / (365.0 * 24.0 * 3600.0)
 
 
+def _model_p_yes(
+    *,
+    strike_type: str,
+    strike: float,
+    strike_high: Optional[float],
+    spot: float,
+    t_years: float,
+    sigma_annual: float,
+) -> Optional[float]:
+    st = str(strike_type or "").strip().lower()
+    if spot <= 0.0 or t_years < 0.0 or sigma_annual <= 0.0:
+        return None
+    if st == "greater":
+        return prob_lognormal_greater(spot=float(spot), strike=float(strike), t_years=float(t_years), sigma_annual=float(sigma_annual))
+    if st == "less":
+        return prob_lognormal_less(spot=float(spot), strike=float(strike), t_years=float(t_years), sigma_annual=float(sigma_annual))
+    if st == "between":
+        if strike_high is None:
+            return None
+        return prob_lognormal_between(
+            spot=float(spot),
+            lower=float(strike),
+            upper=float(strike_high),
+            t_years=float(t_years),
+            sigma_annual=float(sigma_annual),
+        )
+    return None
+
+
 def _ref_spot_for_series(series: str) -> Optional[float]:
     s = (series or "").upper()
     if "BTC" in s or s.startswith("KXBTC") or s.startswith("BTC"):
@@ -177,23 +208,24 @@ def _signal_for_market(
         if m.floor_strike is None:
             return None
         strike = float(m.floor_strike)
-        p_yes = prob_lognormal_greater(spot=float(spot_ref), strike=strike, t_years=t_years, sigma_annual=sigma_annual)
+        p_yes = _model_p_yes(strike_type="greater", strike=strike, strike_high=None, spot=float(spot_ref), t_years=t_years, sigma_annual=sigma_annual)
     elif m.strike_type == "less":
         # Kalshi uses cap_strike for "or below" markets.
         if m.cap_strike is None:
             return None
         strike = float(m.cap_strike)
-        p_yes = prob_lognormal_less(spot=float(spot_ref), strike=strike, t_years=t_years, sigma_annual=sigma_annual)
+        p_yes = _model_p_yes(strike_type="less", strike=strike, strike_high=None, spot=float(spot_ref), t_years=t_years, sigma_annual=sigma_annual)
     else:
         # between: floor_strike is lower, cap_strike is upper.
         if m.floor_strike is None or m.cap_strike is None:
             return None
         strike = float(m.floor_strike)
         strike_high = float(m.cap_strike)
-        p_yes = prob_lognormal_between(
+        p_yes = _model_p_yes(
+            strike_type="between",
+            strike=float(m.floor_strike),
+            strike_high=float(m.cap_strike),
             spot=float(spot_ref),
-            lower=float(m.floor_strike),
-            upper=float(m.cap_strike),
             t_years=t_years,
             sigma_annual=sigma_annual,
         )
@@ -817,6 +849,22 @@ def cmd_trade(args: argparse.Namespace) -> int:
             )
         else:
             try:
+                live = None
+                spot_live = None
+                spot_live_err = ""
+                # Optional: use a sub-second live ref spot (WS) to reprice p and edge right before ordering.
+                try:
+                    live = live_spot(args.series)
+                except Exception:
+                    live = None
+                if live is not None and getattr(live, "ok", False):
+                    try:
+                        spot_live = float(getattr(live, "price"))
+                    except Exception:
+                        spot_live = None
+                elif live is not None:
+                    spot_live_err = str(getattr(live, "error", "") or "")
+
                 # Freshness / recheck guard: refetch the market right before sending a live order
                 # and ensure the edge + microstructure filters still hold.
                 try:
@@ -859,8 +907,26 @@ def cmd_trade(args: argparse.Namespace) -> int:
                             }
                         )
                         continue
-                # Edge recompute (prob from model, price from fresh quote)
-                p = float(s.p_yes) if side == "yes" else (1.0 - float(s.p_yes))
+                # Edge recompute:
+                # - price from fresh quote
+                # - probability repriced from live spot (if available) else original spot snapshot
+                p_yes2 = None
+                try:
+                    px = float(spot_live) if isinstance(spot_live, (int, float)) and float(spot_live) > 0 else float(s.spot_ref)
+                    p_yes2 = _model_p_yes(
+                        strike_type=str(s.strike_type),
+                        strike=float(s.strike),
+                        strike_high=float(s.strike_high) if s.strike_high is not None else None,
+                        spot=float(px),
+                        t_years=float(s.t_years),
+                        sigma_annual=float(s.sigma_annual),
+                    )
+                except Exception:
+                    p_yes2 = None
+                if p_yes2 is None:
+                    p_yes2 = float(s.p_yes)
+
+                p = float(p_yes2) if side == "yes" else (1.0 - float(p_yes2))
                 edge2 = (p - float(ask2)) * 10_000.0
                 eff2 = float(edge2) - float(args.uncertainty_bps)
                 if eff2 < float(args.min_edge_bps):
@@ -872,6 +938,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
                             "side": side,
                             "effective_edge_bps": float(eff2),
                             "ask": float(ask2),
+                            "ref_spot_live": float(spot_live) if isinstance(spot_live, (int, float)) else None,
+                            "ref_spot_live_err": spot_live_err[:120] if spot_live_err else "",
                         }
                     )
                     continue
@@ -915,6 +983,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
                         "p_no": 1.0 - float(s.p_yes),
                         "t_years": s.t_years,
                         "spot_ref": s.spot_ref,
+                        "ref_spot_live": float(spot_live) if isinstance(spot_live, (int, float)) else None,
+                        "ref_spot_live_err": spot_live_err[:120] if spot_live_err else "",
                         "sigma_annual": s.sigma_annual,
                         "strike": s.strike,
                         "strike_high": s.strike_high,
@@ -1145,6 +1215,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "allow_write": bool(args.allow_write),
             "risk": asdict(cfg),
         },
+        "live_spot_enabled": str(os.environ.get("KALSHI_ARB_LIVE_SPOT", "")).strip().lower() in ("1", "true", "yes", "y", "on"),
         "ref_spot": float(spot) if isinstance(spot, (int, float)) else None,
         "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
         "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,

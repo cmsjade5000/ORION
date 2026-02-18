@@ -52,6 +52,18 @@ def test_less_strike_uses_cap_strike(monkeypatch):
     import scripts.kalshi_ref_arb as mod
     from scripts.arb.kalshi import KalshiMarket
 
+    # Also cover the pure helper routing (no network).
+    seen = {}
+
+    def fake_prob(spot, strike, t_years, sigma_annual):
+        seen["spot"] = spot
+        seen["strike"] = strike
+        return 0.123
+
+    monkeypatch.setattr(mod, "prob_lognormal_less", fake_prob)
+    p = mod._model_p_yes(strike_type="less", strike=42.0, strike_high=None, spot=100.0, t_years=0.1, sigma_annual=0.5)
+    assert p == 0.123
+
     monkeypatch.setattr(mod, "ref_spot_btc_usd", lambda: 100.0)
 
     m = KalshiMarket(
