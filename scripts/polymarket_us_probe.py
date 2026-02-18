@@ -24,6 +24,37 @@ def _json(obj: Any) -> str:
     return json.dumps(obj, indent=2, sort_keys=True)
 
 
+def _load_dotenv(path: str) -> None:
+    # Minimal dotenv loader to support unattended runs (OpenClaw env).
+    def _try(p: str) -> bool:
+        try:
+            with open(os.path.expanduser(p), "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    if not k:
+                        continue
+                    if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
+                        v = v[1:-1]
+                    # Do not override explicit environment.
+                    if k not in os.environ or os.environ.get(k, "") == "":
+                        os.environ[k] = v
+            return True
+        except Exception:
+            return False
+
+    if _try(path):
+        return
+    if os.path.expanduser(path) != os.path.expanduser("~/.openclaw/.env"):
+        _try("~/.openclaw/.env")
+
+
 def cmd_health(_: argparse.Namespace) -> int:
     c = PolymarketUSClient()
     # Public endpoints should work without creds.
@@ -63,6 +94,8 @@ def cmd_positions(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    _load_dotenv(os.environ.get("OPENCLAW_ENV_PATH", "~/.openclaw/.env"))
+
     ap = argparse.ArgumentParser(description="Polymarket US probe (safe, read-only unless you call order endpoints directly).")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
