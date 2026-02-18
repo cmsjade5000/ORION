@@ -628,6 +628,12 @@ def _scan_series(
     out = obj if isinstance(obj, dict) else {"raw": obj}
     out["_rc"] = int(rc)
     out["_sigma_arg"] = str(sigma_arg)
+    try:
+        rs = out.get("raw_stderr")
+        if isinstance(rs, str) and rs.strip():
+            out["_stderr_head"] = rs.strip().replace("\n", " ")[:160]
+    except Exception:
+        pass
     out.setdefault("inputs", {})
     if isinstance(out.get("inputs"), dict):
         out["inputs"].setdefault("series", series)
@@ -833,6 +839,7 @@ def main() -> int:
                     "series": s,
                     "rc": int(sobj.get("_rc") or 0),
                     "rc_reason": str(sobj.get("_rc_reason") or ""),
+                    "stderr_head": str(sobj.get("_stderr_head") or ""),
                     "best": best,
                     "sigma_arg": str(sobj.get("_sigma_arg") or ""),
                     "spot_ok": bool(sobj.get("_spot_ok")),

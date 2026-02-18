@@ -1274,6 +1274,36 @@ def main() -> int:
         msg_lines.append(f"Errors: {stats.errors} (order_failed {stats.order_failed})")
     if int(stats.scan_failed or 0) > 0:
         msg_lines.append(f"Scan failures (window): {int(stats.scan_failed)}")
+        # Surface series-level scan failure reasons from the most recent scan_failed cycle (best-effort).
+        try:
+            last_sf = None
+            for o in reversed(run_objs):
+                t = o.get("trade") if isinstance(o.get("trade"), dict) else {}
+                if str(t.get("status") or "") == "refused" and str(t.get("reason") or "") == "scan_failed":
+                    last_sf = o
+                    break
+            if isinstance(last_sf, dict):
+                ci = last_sf.get("cycle_inputs") if isinstance(last_sf.get("cycle_inputs"), dict) else {}
+                ss = ci.get("scan_summary") if isinstance(ci.get("scan_summary"), dict) else {}
+                series = ss.get("series") if isinstance(ss.get("series"), list) else []
+                parts = []
+                for it in series[:6]:
+                    if not isinstance(it, dict):
+                        continue
+                    s = it.get("series")
+                    rc = int(it.get("rc") or 0)
+                    if rc == 0:
+                        continue
+                    rsn = str(it.get("rc_reason") or "")
+                    eh = str(it.get("stderr_head") or "")
+                    tail = f"({rsn})" if rsn else ""
+                    if eh:
+                        tail = (tail + " " + eh[:60]).strip()
+                    parts.append(f"{s}:rc={rc} {tail}".strip())
+                if parts:
+                    msg_lines.append("Scan failed details: " + " | ".join(parts[:3]))
+        except Exception:
+            pass
     if stats.kill_switch_seen or kill_on:
         msg_lines.append(f"Kill switch: {'ON' if kill_on else 'OFF'} (seen {stats.kill_switch_seen} cycles refused)")
     if avail_usd is not None:
