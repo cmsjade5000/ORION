@@ -589,6 +589,55 @@ def cmd_trade(args: argparse.Namespace) -> int:
         key=lambda s: max(float(s.edge_bps_buy_yes or -1e9), float(s.edge_bps_buy_no or -1e9)), reverse=True
     )
 
+    # Optional: diversify orders across time-to-expiry buckets so we don't only target the
+    # nearest microstructure-heavy markets.
+    #
+    # Env format: "30-90,90-180,180-360" in minutes.
+    def _parse_tte_buckets(raw: str) -> List[tuple[float, float]]:
+        out: List[tuple[float, float]] = []
+        for part in (raw or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" not in part:
+                continue
+            a, b = part.split("-", 1)
+            try:
+                lo = float(a.strip())
+                hi = float(b.strip())
+            except Exception:
+                continue
+            if hi <= lo or lo < 0:
+                continue
+            out.append((lo, hi))
+        return out
+
+    raw_buckets = (os.environ.get("KALSHI_ARB_TTE_BUCKETS_MIN") or "").strip()
+    buckets = _parse_tte_buckets(raw_buckets) if raw_buckets else []
+    if buckets and len(signals) > 1:
+        def _tte_min(s: Signal) -> float:
+            try:
+                return float(s.t_years) * 365.0 * 24.0 * 60.0
+            except Exception:
+                return 0.0
+
+        best_per_bucket: List[Signal] = []
+        used = set()
+        # Pick one best signal per bucket in bucket order.
+        for bi, (lo, hi) in enumerate(buckets):
+            for s in signals:
+                if s.ticker in used:
+                    continue
+                tte = _tte_min(s)
+                if tte >= float(lo) and tte < float(hi):
+                    best_per_bucket.append(s)
+                    used.add(s.ticker)
+                    break
+        # Then append remaining by edge.
+        if best_per_bucket:
+            tail = [s for s in signals if s.ticker not in used]
+            signals = best_per_bucket + tail
+
     placed: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
     total_notional = 0.0
@@ -883,6 +932,130 @@ def cmd_trade(args: argparse.Namespace) -> int:
                         "resp": resp,
                     }
                 )
+
+                # Optional paired hedge (second leg) to improve worst-case payout when a cheap
+                # monotonic ladder exists at the same expiry.
+                #
+                # This is best-effort and never increases risk if it doesn't fill: we only
+                # attempt it after the primary order succeeds, and it's capped to 1 contract.
+                try:
+                    if str(os.environ.get("KALSHI_ARB_PAIRED_HEDGE", "0")).strip().lower() in ("1", "true", "yes", "y", "on"):
+                        if order_count < cfg.max_orders_per_run:
+                            min_profit_bps = float(os.environ.get("KALSHI_ARB_PAIRED_MIN_PROFIT_BPS", "50") or 50.0)
+
+                            def _pick_pair() -> Optional[tuple[str, str, float]]:
+                                # Return (ticker, side, ask_price) for hedge, or None.
+                                st = str(s.strike_type or "")
+                                exp = str(s.expected_expiration_time or "")
+                                if st not in ("greater", "less") or not exp:
+                                    return None
+
+                                # Only hedge monotonic markets where the payoff dominance holds.
+                                primary_side = str(side)
+                                # Find candidates in the fetched market list.
+                                candidates: List[KalshiMarket] = []
+                                for m0 in markets:
+                                    if not isinstance(m0, KalshiMarket):
+                                        continue
+                                    if str(m0.expected_expiration_time or "") != exp:
+                                        continue
+                                    if str(m0.strike_type or "") != st:
+                                        continue
+                                    candidates.append(m0)
+
+                                if not candidates:
+                                    return None
+
+                                # For "greater": YES at lower strike + NO at higher strike guarantees >= $1 payout.
+                                # For "less":    YES at higher cap   + NO at lower cap   guarantees >= $1 payout.
+                                primary_strike = float(s.strike)
+                                if st == "greater":
+                                    if primary_side == "yes":
+                                        # Need NO at a higher strike.
+                                        higher = [m for m in candidates if m.floor_strike is not None and float(m.floor_strike) > primary_strike]
+                                        higher.sort(key=lambda m: float(m.floor_strike or 0.0))
+                                        for m in higher:
+                                            if m.no_ask is None:
+                                                continue
+                                            return (m.ticker, "no", float(m.no_ask))
+                                    else:
+                                        # primary is NO; need YES at lower strike.
+                                        lower = [m for m in candidates if m.floor_strike is not None and float(m.floor_strike) < primary_strike]
+                                        lower.sort(key=lambda m: float(m.floor_strike or 0.0), reverse=True)
+                                        for m in lower:
+                                            if m.yes_ask is None:
+                                                continue
+                                            return (m.ticker, "yes", float(m.yes_ask))
+                                else:  # less
+                                    if primary_side == "yes":
+                                        # Need NO at a lower cap.
+                                        lower = [m for m in candidates if m.cap_strike is not None and float(m.cap_strike) < primary_strike]
+                                        lower.sort(key=lambda m: float(m.cap_strike or 0.0), reverse=True)
+                                        for m in lower:
+                                            if m.no_ask is None:
+                                                continue
+                                            return (m.ticker, "no", float(m.no_ask))
+                                    else:
+                                        # primary is NO; need YES at higher cap.
+                                        higher = [m for m in candidates if m.cap_strike is not None and float(m.cap_strike) > primary_strike]
+                                        higher.sort(key=lambda m: float(m.cap_strike or 0.0))
+                                        for m in higher:
+                                            if m.yes_ask is None:
+                                                continue
+                                            return (m.ticker, "yes", float(m.yes_ask))
+                                return None
+
+                            pair = _pick_pair()
+                            if pair is not None:
+                                hedge_ticker, hedge_side, hedge_ask = pair
+                                # Compute worst-case profit (ignoring fees): min payout = 1 if both legs exist.
+                                combined_cost = float(price) + float(hedge_ask)
+                                profit_bps = (1.0 - float(combined_cost)) * 10_000.0
+                                if profit_bps >= float(min_profit_bps):
+                                    # Recheck the hedge market right before placing (freshness guard).
+                                    m3 = None
+                                    try:
+                                        m3 = kc.get_market(str(hedge_ticker))
+                                    except Exception:
+                                        m3 = None
+                                    if m3 is not None:
+                                        ask3 = m3.yes_ask if hedge_side == "yes" else m3.no_ask
+                                        bid3 = m3.yes_bid if hedge_side == "yes" else m3.no_bid
+                                        if ask3 is not None and float(args.min_price) <= float(ask3) <= float(args.max_price):
+                                            if bid3 is None or (float(ask3) - float(bid3)) <= float(args.max_spread):
+                                                # Ensure run/market caps allow the extra notional.
+                                                hedge_notional = float(ask3) * 1.0
+                                                if (total_notional + hedge_notional) <= float(cfg.max_notional_per_run_usd):
+                                                    # New order id.
+                                                    client_order_id2 = f"orion-refarb-{int(time.time()*1000)}-{order_count}-hedge-{uuid.uuid4().hex[:6]}"
+                                                    order2 = KalshiOrder(
+                                                        ticker=str(hedge_ticker),
+                                                        side=str(hedge_side),
+                                                        action="buy",
+                                                        count=1,
+                                                        price_dollars=f"{float(ask3):.4f}",
+                                                        client_order_id=client_order_id2,
+                                                    )
+                                                    order_count += 1
+                                                    try:
+                                                        resp2 = kc.create_order(order2)
+                                                        placed.append(
+                                                            {
+                                                                "mode": "live",
+                                                                "paired_hedge": True,
+                                                                "paired_profit_bps_worst_case": float(profit_bps),
+                                                                "order": asdict(order2),
+                                                                "notional_usd": hedge_notional,
+                                                                "resp": resp2,
+                                                            }
+                                                        )
+                                                        total_notional += hedge_notional
+                                                    except KalshiNoFillError:
+                                                        skipped.append({"ticker": str(hedge_ticker), "reason": "paired_no_fill", "side": hedge_side})
+                                                    except Exception as e:
+                                                        skipped.append({"ticker": str(hedge_ticker), "reason": "paired_order_failed", "error": str(e), "side": hedge_side})
+                except Exception:
+                    pass
 
                 # Track persistent notional only when we can confirm a fill. FOK orders often cancel.
                 filled_count = 0
