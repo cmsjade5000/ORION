@@ -632,6 +632,16 @@ def _scan_series(
     if isinstance(out.get("inputs"), dict):
         out["inputs"].setdefault("series", series)
         out["inputs"].setdefault("sigma_annual", sigma_arg)
+        # Spot is required for meaningful scan; capture it explicitly for diagnostics.
+        out["_spot_ref"] = out["inputs"].get("spot_ref")
+        out["_spot_ok"] = bool(isinstance(out.get("_spot_ref"), (int, float)) and float(out.get("_spot_ref")) > 0.0)
+    # If scan ran but had no spot, treat it as a soft failure so the cycle can skip series cleanly.
+    try:
+        if int(out.get("_rc") or 0) == 0 and (not bool(out.get("_spot_ok"))):
+            out["_rc"] = 1
+            out["_rc_reason"] = "missing_spot_ref"
+    except Exception:
+        pass
     return out
 
 
@@ -818,7 +828,16 @@ def main() -> int:
             rc = int(sobj.get("_rc") or 0) if isinstance(sobj, dict) else 1
             best = _best_candidate_from_scan(sobj) if rc == 0 else None
             scans_by_series[s] = sobj
-            scan_summary["series"].append({"series": s, "rc": int(sobj.get("_rc") or 0), "best": best, "sigma_arg": str(sobj.get("_sigma_arg") or "")})
+            scan_summary["series"].append(
+                {
+                    "series": s,
+                    "rc": int(sobj.get("_rc") or 0),
+                    "rc_reason": str(sobj.get("_rc_reason") or ""),
+                    "best": best,
+                    "sigma_arg": str(sobj.get("_sigma_arg") or ""),
+                    "spot_ok": bool(sobj.get("_spot_ok")),
+                }
+            )
             if best is not None:
                 eff_f = float(best.get("effective_edge_bps") or 0.0)
                 if selected_eff is None or eff_f > float(selected_eff):
@@ -846,6 +865,23 @@ def main() -> int:
             any_scan_ok = False
 
         if not any_scan_ok:
+            # Notify ORION on repeated scan failures (avoid silent death).
+            try:
+                lines = []
+                for it in (scan_summary.get("series") or [])[:10]:
+                    if not isinstance(it, dict):
+                        continue
+                    s = it.get("series")
+                    rc = int(it.get("rc") or 0)
+                    rsn = str(it.get("rc_reason") or "")
+                    if rc != 0:
+                        tail = f" ({rsn})" if rsn else ""
+                        lines.append(f"{s}: rc={rc}{tail}")
+                if lines:
+                    health_state["last_run_had_error"] = True
+                    _save_json(health_state_path, health_state)
+            except Exception:
+                pass
             post_rc, _, post = _run_cmd_json(
                 ["python3", "scripts/kalshi_ref_arb.py", "portfolio", "--hours", "1", "--limit", "50"],
                 cwd=root,

@@ -586,6 +586,7 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
         "placed_live": 0,
         "no_fill": 0,
         "recheck_failed": 0,
+        "two_tick_failed": 0,
         "live_spot_fail": 0,
         "cache_hits": 0,
     }
@@ -599,7 +600,7 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
         if ts < start:
             continue
         totals["cycles"] += 1
-        for k in ("signals_computed", "candidates_recommended", "placed_live", "no_fill", "recheck_failed", "live_spot_fail"):
+        for k in ("signals_computed", "candidates_recommended", "placed_live", "no_fill", "recheck_failed", "two_tick_failed", "live_spot_fail"):
             try:
                 totals_map = {
                     "signals_computed": "signals",
@@ -607,6 +608,7 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
                     "placed_live": "placed_live",
                     "no_fill": "no_fill",
                     "recheck_failed": "recheck_failed",
+                    "two_tick_failed": "two_tick_failed",
                     "live_spot_fail": "live_spot_fail",
                 }
                 totals[totals_map[k]] += int(it.get(k) or 0)
@@ -997,6 +999,7 @@ class DigestStats:
     errors: int
     order_failed: int
     kill_switch_seen: int
+    scan_failed: int
 
 
 def _extract_stats(run_objs: List[Dict[str, Any]]) -> DigestStats:
@@ -1011,6 +1014,7 @@ def _extract_stats(run_objs: List[Dict[str, Any]]) -> DigestStats:
             errors=0,
             order_failed=0,
             kill_switch_seen=0,
+            scan_failed=0,
         )
 
     from_ts = int(min(int(o.get("ts_unix") or 0) for o in run_objs))
@@ -1022,6 +1026,7 @@ def _extract_stats(run_objs: List[Dict[str, Any]]) -> DigestStats:
     errors = 0
     order_failed = 0
     kill_seen = 0
+    scan_failed = 0
 
     for o in run_objs:
         bal_rc = int(o.get("balance_rc") or 0)
@@ -1036,6 +1041,8 @@ def _extract_stats(run_objs: List[Dict[str, Any]]) -> DigestStats:
         gate_refused = refused and reason in ("kill_switch", "cooldown", "scan_failed", "daily_loss_limit")
         if kill_refused:
             kill_seen += 1
+        if refused and reason == "scan_failed":
+            scan_failed += 1
         if (trade_rc != 0) and (not gate_refused):
             errors += 1
 
@@ -1066,6 +1073,7 @@ def _extract_stats(run_objs: List[Dict[str, Any]]) -> DigestStats:
         errors=errors,
         order_failed=order_failed,
         kill_switch_seen=kill_seen,
+        scan_failed=scan_failed,
     )
 
 
@@ -1205,7 +1213,7 @@ def main() -> int:
     status = "OK"
     if kill_on or cooldown_on:
         status = "PAUSED"
-    elif int(stats.errors or 0) > 0 or int(stats.order_failed or 0) > 0:
+    elif int(stats.errors or 0) > 0 or int(stats.order_failed or 0) > 0 or int(stats.scan_failed or 0) > 0:
         status = "WARN"
 
     # Include whether an auto-pause might have triggered (best-effort).
@@ -1223,6 +1231,7 @@ def main() -> int:
             + f"recommended {int(sweep_roll.get('recommended') or 0)}, "
             + f"placed {int(sweep_roll.get('placed_live') or 0)}, "
             + f"no_fill {int(sweep_roll.get('no_fill') or 0)}, "
+            + f"two_tick {int(sweep_roll.get('two_tick_failed') or 0)}, "
             + f"live_spot_fail {int(sweep_roll.get('live_spot_fail') or 0)}, "
             + f"cache_hit {int(sweep_roll.get('cache_hits') or 0)}/{int(sweep_roll.get('cycles') or 0)}"
         )
@@ -1232,6 +1241,8 @@ def main() -> int:
         msg_lines.append(f"Sigma used (avg): {float(sigma_s['avg_sigma_arg']):.4f}{suffix}")
     if stats.errors:
         msg_lines.append(f"Errors: {stats.errors} (order_failed {stats.order_failed})")
+    if int(stats.scan_failed or 0) > 0:
+        msg_lines.append(f"Scan failures (window): {int(stats.scan_failed)}")
     if stats.kill_switch_seen or kill_on:
         msg_lines.append(f"Kill switch: {'ON' if kill_on else 'OFF'} (seen {stats.kill_switch_seen} cycles refused)")
     if avail_usd is not None:
@@ -1745,6 +1756,7 @@ def main() -> int:
             "errors": stats.errors,
             "order_failed": stats.order_failed,
             "kill_switch_seen": stats.kill_switch_seen,
+            "scan_failed": stats.scan_failed,
         },
         "cash_usd": avail_usd,
         "portfolio_value_usd": port_usd,
@@ -1774,6 +1786,7 @@ def main() -> int:
             "live_notional_usd": today_stats.live_notional_usd,
             "errors": today_stats.errors,
             "order_failed": today_stats.order_failed,
+            "scan_failed": today_stats.scan_failed,
             "realized_pnl_usd_settled": today_realized_pnl,
         },
         "no_trade": no_trade_diag if isinstance(no_trade_diag, dict) and no_trade_diag else {},

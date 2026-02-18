@@ -1092,6 +1092,76 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     )
                     continue
 
+                # Optional "two-tick" confirmation: wait a brief moment and ensure
+                # the price/edge persists before sending the order. This reduces
+                # flicker-driven entries at the cost of fewer fills.
+                try:
+                    two_tick = str(os.environ.get("KALSHI_ARB_TWO_TICK_CONFIRM", "0")).strip().lower() in (
+                        "1",
+                        "true",
+                        "yes",
+                        "y",
+                        "on",
+                    )
+                    delay_ms = int(os.environ.get("KALSHI_ARB_TWO_TICK_SLEEP_MS", "500") or 500)
+                except Exception:
+                    two_tick = False
+                    delay_ms = 500
+                if two_tick:
+                    time.sleep(max(0.05, min(2.0, float(delay_ms) / 1000.0)))
+                    try:
+                        m3 = kc.get_market(s.ticker)
+                    except Exception:
+                        m3 = None
+                    if m3 is None:
+                        skipped.append({"ticker": s.ticker, "reason": "recheck_failed", "detail": "two_tick_market_fetch_none", "side": side})
+                        continue
+                    ask3 = m3.yes_ask if side == "yes" else m3.no_ask
+                    bid3 = m3.yes_bid if side == "yes" else m3.no_bid
+                    if ask3 is None:
+                        skipped.append({"ticker": s.ticker, "reason": "recheck_failed", "detail": "two_tick_ask_missing", "side": side})
+                        continue
+                    # Re-apply spread guard
+                    if bid3 is not None:
+                        sp3 = float(ask3) - float(bid3)
+                        if sp3 > float(args.max_spread):
+                            skipped.append({"ticker": s.ticker, "reason": "recheck_failed", "detail": "two_tick_spread_too_wide", "side": side, "spread": float(sp3)})
+                            continue
+
+                    try:
+                        px3 = float(spot_live) if isinstance(spot_live, (int, float)) and float(spot_live) > 0 else float(s.spot_ref)
+                        p_yes3 = _model_p_yes(
+                            strike_type=str(s.strike_type),
+                            strike=float(s.strike),
+                            strike_high=float(s.strike_high) if s.strike_high is not None else None,
+                            spot=float(px3),
+                            t_years=float(s.t_years),
+                            sigma_annual=float(s.sigma_annual),
+                        )
+                    except Exception:
+                        p_yes3 = None
+                    if p_yes3 is None:
+                        p_yes3 = float(p_yes2)
+
+                    p3 = float(p_yes3) if side == "yes" else (1.0 - float(p_yes3))
+                    edge3 = (p3 - float(ask3)) * 10_000.0
+                    eff3 = float(edge3) - float(args.uncertainty_bps)
+                    if eff3 < float(args.min_edge_bps):
+                        skipped.append(
+                            {
+                                "ticker": s.ticker,
+                                "reason": "recheck_failed",
+                                "detail": "two_tick_effective_edge_below_min",
+                                "side": side,
+                                "effective_edge_bps": float(eff3),
+                                "ask": float(ask3),
+                            }
+                        )
+                        continue
+                    # If the ask improved, use it.
+                    if float(ask3) < float(ask2):
+                        ask2 = float(ask3)
+
                 # If the market moved favorably (lower ask), use the better price.
                 # If it moved unfavorably, we'd have skipped above.
                 if float(ask2) < float(price):
@@ -1386,6 +1456,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
         no_fill = 0
         recheck_failed = 0
         live_spot_fail = 0
+        two_tick_failed = 0
         if isinstance(skipped, list):
             for s in skipped:
                 if not isinstance(s, dict):
@@ -1396,6 +1467,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     no_fill += 1
                 if r == "recheck_failed":
                     recheck_failed += 1
+                if isinstance(d, str) and d.startswith("two_tick_"):
+                    two_tick_failed += 1
                 if d == "live_spot_required_failed":
                     live_spot_fail += 1
                 elif isinstance(s.get("ref_spot_live_err"), str) and str(s.get("ref_spot_live_err") or "").strip():
@@ -1413,6 +1486,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 "placed_live": int(placed_live),
                 "no_fill": int(no_fill),
                 "recheck_failed": int(recheck_failed),
+                "two_tick_failed": int(two_tick_failed),
                 "live_spot_fail": int(live_spot_fail),
             },
         )
