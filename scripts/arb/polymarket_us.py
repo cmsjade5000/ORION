@@ -58,8 +58,9 @@ class PolymarketUSClient:
         self.secret_key_b64 = secret_key_b64 or os.environ.get("POLY_US_SECRET_KEY_B64", "")
         self.private_key_path = private_key_path or os.environ.get("POLY_US_PRIVATE_KEY_PATH", "")
 
-        self.gateway_base_url = str(self.cfg.gateway_base_url).rstrip("/")
-        self.api_base_url = str(self.cfg.api_base_url).rstrip("/")
+        # Allow env overrides so users can switch between prod/sandbox if Polymarket exposes it.
+        self.gateway_base_url = (os.environ.get("POLY_US_GATEWAY_BASE_URL") or str(self.cfg.gateway_base_url)).rstrip("/")
+        self.api_base_url = (os.environ.get("POLY_US_API_BASE_URL") or str(self.cfg.api_base_url)).rstrip("/")
 
     # ----------------------------
     # Public market data (Gateway)

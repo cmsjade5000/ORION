@@ -98,6 +98,8 @@ def cmd_debug_auth(_: argparse.Namespace) -> int:
     api = os.environ.get("POLY_US_API_KEY_ID") or ""
     sec = os.environ.get("POLY_US_SECRET_KEY_B64") or ""
     pth = os.environ.get("POLY_US_PRIVATE_KEY_PATH") or ""
+    api_base = os.environ.get("POLY_US_API_BASE_URL") or ""
+    gw_base = os.environ.get("POLY_US_GATEWAY_BASE_URL") or ""
 
     def _looks_hex(s: str) -> bool:
         t = s.strip()
@@ -134,7 +136,18 @@ def cmd_debug_auth(_: argparse.Namespace) -> int:
         "secret_looks_hex": _looks_hex(sec),
         "secret_looks_base64ish": _looks_b64ish(sec),
         "private_key_path_set": bool(pth.strip()),
+        "api_base_override_set": bool(api_base.strip()),
+        "gateway_base_override_set": bool(gw_base.strip()),
     }
+    # Decode byte length (safe metadata) to help catch wrong "wallet private key" formats.
+    try:
+        if sec.strip() and not pth.strip():
+            from scripts.arb.polymarket_us import _decode_secret_key_bytes  # type: ignore
+
+            out["secret_decoded_len_bytes"] = len(_decode_secret_key_bytes(sec))
+    except Exception as e:
+        out["secret_decode_error"] = f"{type(e).__name__}"
+
     print(_json(out))
     return 0
 
