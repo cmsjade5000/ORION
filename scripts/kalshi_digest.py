@@ -589,7 +589,9 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
         "two_tick_failed": 0,
         "live_spot_fail": 0,
         "cache_hits": 0,
+        "best_eff_edge_bps_max": None,
     }
+    blocker_counts: Dict[str, int] = {}
     for it in entries:
         if not isinstance(it, dict):
             continue
@@ -600,6 +602,14 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
         if ts < start:
             continue
         totals["cycles"] += 1
+        try:
+            be = it.get("best_effective_edge_bps")
+            if isinstance(be, (int, float)):
+                cur = totals.get("best_eff_edge_bps_max")
+                if cur is None or float(be) > float(cur):
+                    totals["best_eff_edge_bps_max"] = float(be)
+        except Exception:
+            pass
         for k in ("signals_computed", "candidates_recommended", "placed_live", "no_fill", "recheck_failed", "two_tick_failed", "live_spot_fail"):
             try:
                 totals_map = {
@@ -616,6 +626,15 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
                 pass
         if bool(it.get("markets_cache_hit")):
             totals["cache_hits"] += 1
+        bt = it.get("blockers_top")
+        if isinstance(bt, list):
+            for r in bt:
+                if not isinstance(r, str) or not r:
+                    continue
+                blocker_counts[r] = blocker_counts.get(r, 0) + 1
+    if blocker_counts:
+        top = sorted(blocker_counts.items(), key=lambda kv: kv[1], reverse=True)[:6]
+        totals["top_blockers"] = [{"reason": k, "count": int(v)} for k, v in top]
     return totals
 
 
@@ -1235,6 +1254,18 @@ def main() -> int:
             + f"live_spot_fail {int(sweep_roll.get('live_spot_fail') or 0)}, "
             + f"cache_hit {int(sweep_roll.get('cache_hits') or 0)}/{int(sweep_roll.get('cycles') or 0)}"
         )
+        tb = sweep_roll.get("top_blockers")
+        if isinstance(tb, list) and tb:
+            parts = []
+            for it in tb[:3]:
+                if not isinstance(it, dict):
+                    continue
+                r = it.get("reason")
+                c = it.get("count")
+                if isinstance(r, str) and isinstance(c, int):
+                    parts.append(f"{r}={c}")
+            if parts:
+                msg_lines.append("Sweep blockers (24h): " + ", ".join(parts))
     if isinstance(sigma_s.get("avg_sigma_arg"), (int, float)):
         mode = sigma_s.get("mode") or ""
         suffix = f" ({mode})" if isinstance(mode, str) and mode else ""

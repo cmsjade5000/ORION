@@ -1488,6 +1488,22 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 "recheck_failed": int(recheck_failed),
                 "two_tick_failed": int(two_tick_failed),
                 "live_spot_fail": int(live_spot_fail),
+                "best_effective_edge_bps": (
+                    float((diagnostics.get("best_effective_edge_pass_filters") or {}).get("effective_edge_bps"))
+                    if isinstance(diagnostics.get("best_effective_edge_pass_filters"), dict)
+                    and (diagnostics.get("best_effective_edge_pass_filters") or {}).get("effective_edge_bps") is not None
+                    else (
+                        float((diagnostics.get("best_effective_edge_in_bounds") or {}).get("effective_edge_bps"))
+                        if isinstance(diagnostics.get("best_effective_edge_in_bounds"), dict)
+                        and (diagnostics.get("best_effective_edge_in_bounds") or {}).get("effective_edge_bps") is not None
+                        else None
+                    )
+                ),
+                "blockers_top": (
+                    [str(it.get("reason")) for it in (diagnostics.get("top_blockers") or [])[:3] if isinstance(it, dict) and it.get("reason")]
+                    if isinstance(diagnostics.get("top_blockers"), list)
+                    else []
+                ),
             },
         )
     except Exception:
