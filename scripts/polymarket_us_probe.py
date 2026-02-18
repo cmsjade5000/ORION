@@ -112,6 +112,16 @@ def cmd_debug_auth(_: argparse.Namespace) -> int:
         ok = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=_-")
         return all(c in ok for c in t)
 
+    def _looks_uuid(s: str) -> bool:
+        t = str(s or "").strip()
+        if len(t) != 36:
+            return False
+        parts = t.split("-")
+        if len(parts) != 5 or [len(x) for x in parts] != [8, 4, 4, 4, 12]:
+            return False
+        hx = "0123456789abcdefABCDEF"
+        return all(c in hx for c in "".join(parts))
+
     out: Dict[str, Any] = {
         "mode": "debug_auth",
         "ts_unix": int(time.time()),
