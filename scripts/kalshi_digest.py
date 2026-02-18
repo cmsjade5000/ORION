@@ -638,6 +638,53 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
     return totals
 
 
+def _stderr_head(payload: Any, *, limit: int = 180) -> str:
+    try:
+        if not isinstance(payload, dict):
+            return ""
+        s = payload.get("raw_stderr")
+        if not isinstance(s, str):
+            return ""
+        s = " ".join(s.strip().splitlines()).strip()
+        return s[: int(limit)]
+    except Exception:
+        return ""
+
+
+def _latest_issue(run_objs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Best-effort single-line issue summary for operator visibility."""
+    def _int0(x: Any) -> int:
+        try:
+            if x is None:
+                return 0
+            return int(x)
+        except Exception:
+            return 0
+
+    for o in reversed(run_objs):
+        if not isinstance(o, dict):
+            continue
+        bal_rc = _int0(o.get("balance_rc"))
+        trade_rc = _int0(o.get("trade_rc"))
+        post_rc = _int0(o.get("post_rc"))
+        trade = o.get("trade") if isinstance(o.get("trade"), dict) else {}
+        refused = bool(trade.get("status") == "refused")
+        reason = str(trade.get("reason") or "")
+        if refused and reason:
+            # For scan_failed, we already have specialized diagnostics elsewhere.
+            detail = ""
+            if reason != "scan_failed":
+                detail = _stderr_head(trade) or ""
+            return {"kind": "refused", "reason": reason, "detail": detail, "trade_rc": trade_rc}
+        if trade_rc != 0:
+            return {"kind": "trade", "rc": trade_rc, "detail": _stderr_head(trade)}
+        if bal_rc != 0:
+            return {"kind": "balance", "rc": bal_rc, "detail": _stderr_head(o.get("balance"))}
+        if post_rc != 0:
+            return {"kind": "post", "rc": post_rc, "detail": _stderr_head(o.get("post"))}
+    return {}
+
+
 def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], now_unix: int) -> str:
     # Email-client friendly HTML: table layout + inline styles, no external assets.
     dt_local = datetime.datetime.fromtimestamp(int(now_unix)).astimezone()
@@ -777,11 +824,14 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     if include_raw:
         last_cycle = summary.get("last_cycle_ts_et") if isinstance(summary.get("last_cycle_ts_et"), str) else ""
         last_issue = summary.get("last_issue") if isinstance(summary.get("last_issue"), str) else ""
+        last_detail = summary.get("last_issue_detail") if isinstance(summary.get("last_issue_detail"), str) else ""
         parts = []
         if last_cycle.strip():
             parts.append(f"<b>Last cycle:</b> {_escape_html(last_cycle.strip())}")
         if last_issue.strip():
             parts.append(f"<b>Last issue:</b> {_escape_html(last_issue.strip())}")
+        if last_detail.strip():
+            parts.append(f"<b>Detail:</b> {_escape_html(last_detail.strip())}")
         if parts:
             health_html = (
                 '<tr><td style="padding:0 0 14px 0;">'
@@ -1181,6 +1231,35 @@ def main() -> int:
     sigma_s = _sigma_summary(run_objs)
     sweep_stats = _load_sweep_stats(root)
     sweep_roll = _sweep_rollup_24h(sweep_stats, now_unix=now)
+
+    # Last cycle / issue summary (best-effort). Computed early so it can be used in message text.
+    last_cycle_ts_et = ""
+    last_issue = ""
+    last_issue_detail = ""
+    _iss_debug: Optional[Dict[str, Any]] = None
+    try:
+        if run_objs:
+            ts_last = int(run_objs[-1].get("ts_unix") or 0)
+            if ts_last > 0:
+                dt_et = datetime.datetime.fromtimestamp(ts_last, tz=ZoneInfo("America/New_York"))
+                last_cycle_ts_et = dt_et.strftime("%Y-%m-%d %I:%M %p ET")
+        iss = _latest_issue(run_objs)
+        _iss_debug = iss if isinstance(iss, dict) else None
+        if isinstance(iss, dict) and iss:
+            k = str(iss.get("kind") or "")
+            if k == "refused":
+                rsn = str(iss.get("reason") or "")
+                trc = iss.get("trade_rc")
+                last_issue = f"Cycle refused: {rsn} (trade_rc={trc})" if rsn else "Cycle refused"
+            elif k == "trade":
+                last_issue = f"Trade step failed (trade_rc={iss.get('rc')})"
+            elif k == "balance":
+                last_issue = f"Balance step failed (balance_rc={iss.get('rc')})"
+            elif k == "post":
+                last_issue = f"Post snapshot failed (post_rc={iss.get('rc')})"
+            last_issue_detail = str(iss.get("detail") or "")[:180]
+    except Exception as e:
+        _iss_debug = {"error": type(e).__name__, "msg": str(e)[:160]}
     # ET "today so far" run stats (helps answer: did it run today, and did it trade today?).
     today_start, _ = _day_bounds_unix(tz="America/New_York", now_unix=now)
     today_files = _list_run_files_since(runs_dir, today_start)
@@ -1304,6 +1383,14 @@ def main() -> int:
                     msg_lines.append("Scan failed details: " + " | ".join(parts[:3]))
         except Exception:
             pass
+
+    if status in ("WARN", "PAUSED"):
+        if last_cycle_ts_et:
+            msg_lines.append(f"Last cycle (ET): {last_cycle_ts_et}")
+        if last_issue:
+            msg_lines.append(f"Last issue: {last_issue}")
+        if last_issue_detail:
+            msg_lines.append(f"Issue detail: {last_issue_detail}")
     if stats.kill_switch_seen or kill_on:
         msg_lines.append(f"Kill switch: {'ON' if kill_on else 'OFF'} (seen {stats.kill_switch_seen} cycles refused)")
     if avail_usd is not None:
@@ -1774,38 +1861,6 @@ def main() -> int:
     fees_pct_window: Optional[float] = None
     # (Values get set above if we observed fills; otherwise stay None.)
 
-    # Last cycle / issue summary for WARN/PAUSED emails.
-    last_cycle_ts_et = ""
-    last_issue = ""
-    try:
-        if run_objs:
-            ts_last = int(run_objs[-1].get("ts_unix") or 0)
-            if ts_last > 0:
-                dt_et = datetime.datetime.fromtimestamp(ts_last, tz=ZoneInfo("America/New_York"))
-                last_cycle_ts_et = dt_et.strftime("%Y-%m-%d %I:%M %p ET")
-        for o in reversed(run_objs):
-            bal_rc = int(o.get("balance_rc") or 0)
-            trade_rc = int(o.get("trade_rc") or 0)
-            post_rc = int(o.get("post_rc") or 0)
-            if bal_rc == 0 and trade_rc == 0 and post_rc == 0:
-                continue
-            t = o.get("trade") if isinstance(o.get("trade"), dict) else {}
-            st = str(t.get("status") or "")
-            rsn = str(t.get("reason") or "")
-            if st == "refused" and rsn:
-                last_issue = f"Cycle refused: {rsn} (trade_rc={trade_rc})"
-            elif trade_rc != 0:
-                last_issue = f"Trade step failed (trade_rc={trade_rc})"
-            elif bal_rc != 0:
-                last_issue = f"Balance step failed (balance_rc={bal_rc})"
-            elif post_rc != 0:
-                last_issue = f"Post snapshot failed (post_rc={post_rc})"
-            else:
-                last_issue = "Non-zero cycle return code observed"
-            break
-    except Exception:
-        pass
-
     payload = {
         "mode": "kalshi_digest",
         "timestamp_unix": now,
@@ -1839,6 +1894,7 @@ def main() -> int:
             "cooldown_on": bool(cooldown_on),
             "last_cycle_ts_et": last_cycle_ts_et,
             "last_issue": last_issue,
+            "last_issue_detail": last_issue_detail,
             "positions_top": positions_top,
         },
         "today": {
@@ -1855,6 +1911,13 @@ def main() -> int:
         "param_recommendations": param_recs,
         "message": "\n".join(msg_lines),
     }
+    if str(os.environ.get("KALSHI_ARB_DIGEST_DEBUG", "0")).strip().lower() in ("1", "true", "yes", "y", "on"):
+        payload["debug"] = {
+            "latest_issue": _iss_debug,
+            "computed_last_issue": last_issue,
+            "computed_last_issue_detail": last_issue_detail,
+            "computed_last_cycle_ts_et": last_cycle_ts_et,
+        }
 
     # Persist payload for audit/learning (gitignored tmp/).
     try:
@@ -1903,8 +1966,6 @@ def main() -> int:
             print("ERROR: missing --email-to (or env KALSHI_ARB_DIGEST_EMAIL_TO/AGENTMAIL_TO).", file=os.sys.stderr)
             return 4
         try:
-            import datetime
-
             subj_ts = datetime.datetime.fromtimestamp(now).astimezone().strftime("%Y-%m-%d %H:%M %Z")
         except Exception:
             subj_ts = str(now)
