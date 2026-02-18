@@ -93,6 +93,42 @@ def cmd_positions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_debug_auth(_: argparse.Namespace) -> int:
+    # Print safe metadata only (no secrets).
+    api = os.environ.get("POLY_US_API_KEY_ID") or ""
+    sec = os.environ.get("POLY_US_SECRET_KEY_B64") or ""
+    pth = os.environ.get("POLY_US_PRIVATE_KEY_PATH") or ""
+
+    def _looks_hex(s: str) -> bool:
+        t = s.strip()
+        if t.lower().startswith("0x"):
+            t = t[2:]
+        return bool(t) and all(c in "0123456789abcdefABCDEF" for c in t)
+
+    def _looks_b64ish(s: str) -> bool:
+        t = "".join(str(s).split())
+        if not t:
+            return False
+        ok = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=_-")
+        return all(c in ok for c in t)
+
+    out: Dict[str, Any] = {
+        "mode": "debug_auth",
+        "ts_unix": int(time.time()),
+        "api_key_id_present": bool(api.strip()),
+        "api_key_id_len": len(api.strip()),
+        "api_key_id_looks_uuid": _looks_uuid(api),
+        "secret_present": bool(sec.strip()),
+        "secret_len": len("".join(sec.split())),
+        "secret_mod4": len("".join(sec.split())) % 4 if sec.strip() else None,
+        "secret_looks_hex": _looks_hex(sec),
+        "secret_looks_base64ish": _looks_b64ish(sec),
+        "private_key_path_set": bool(pth.strip()),
+    }
+    print(_json(out))
+    return 0
+
+
 def main() -> int:
     _load_dotenv(os.environ.get("OPENCLAW_ENV_PATH", "~/.openclaw/.env"))
 
@@ -118,9 +154,22 @@ def main() -> int:
     p.add_argument("--limit", type=int, default=50)
     p.set_defaults(func=cmd_positions)
 
+    p = sub.add_parser("debug-auth", help="Print safe auth metadata (no secrets).")
+    p.set_defaults(func=cmd_debug_auth)
+
     args = ap.parse_args()
     return int(args.func(args))
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+    def _looks_uuid(s: str) -> bool:
+        t = s.strip()
+        if len(t) != 36:
+            return False
+        # 8-4-4-4-12 with hex + dashes
+        parts = t.split("-")
+        if len(parts) != 5 or [len(x) for x in parts] != [8, 4, 4, 4, 12]:
+            return False
+        hx = "0123456789abcdefABCDEF"
+        return all(c in hx for c in "".join(parts))

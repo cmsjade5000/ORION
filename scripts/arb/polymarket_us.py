@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import os
 import subprocess
@@ -140,8 +141,30 @@ class PolymarketUSClient:
     def _get_json_authed(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         hdrs = self._auth_headers(method="GET", path=path)
         url = f"{self.api_base_url}{path}"
-        obj = self.http.get_json(url, params=params, headers=hdrs)
-        return obj if isinstance(obj, dict) else {"raw": obj}
+        final_url = HttpClient._build_url(url, params=params)  # type: ignore[attr-defined]
+        # Use urllib directly so HTTPError includes response bodies (useful for auth debugging).
+        req = urllib.request.Request(
+            final_url,
+            headers={"User-Agent": self.http._cfg.user_agent, **hdrs},  # type: ignore[attr-defined]
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20.0) as resp:
+                raw = resp.read()
+            obj = json.loads(raw.decode("utf-8"))
+            return obj if isinstance(obj, dict) else {"raw": obj}
+        except urllib.error.HTTPError as e:
+            try:
+                b = e.read()
+                detail = b.decode("utf-8", errors="replace").strip()
+            except Exception:
+                detail = ""
+            if len(detail) > 1200:
+                detail = detail[:1200] + "...(truncated)"
+            extra = f" body={detail!r}" if detail else ""
+            raise RuntimeError(f"PolymarketUS GET failed: {path} (HTTP {getattr(e, 'code', '?')}){extra}")
+        except Exception as e:
+            raise RuntimeError(f"PolymarketUS GET failed: {path} ({e})")
 
     def _post_json_authed(self, path: str, *, body: Dict[str, Any]) -> Dict[str, Any]:
         hdrs = self._auth_headers(method="POST", path=path)
@@ -197,7 +220,7 @@ _ED25519_PKCS8_PREFIX = bytes.fromhex("302e020100300506032b657004220420")
 
 
 def ed25519_pkcs8_pem_from_secret_b64(secret_b64: str) -> str:
-    raw = base64.b64decode(str(secret_b64).strip())
+    raw = _decode_secret_key_bytes(secret_b64)
     if len(raw) < 32:
         raise ValueError("secret_b64 is too short; expected at least 32 bytes.")
     seed = raw[:32]
@@ -206,6 +229,45 @@ def ed25519_pkcs8_pem_from_secret_b64(secret_b64: str) -> str:
     # 64-char lines for PEM readability.
     lines = [b64[i : i + 64] for i in range(0, len(b64), 64)]
     return "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
+
+
+def _decode_secret_key_bytes(secret: str) -> bytes:
+    """Decode the Polymarket US secret key into raw bytes.
+
+    The docs advertise base64, but in practice we want to be resilient to:
+    - missing padding
+    - urlsafe base64
+    - accidental whitespace/newlines
+    - hex strings (e.g. 0x...)
+    """
+    s = str(secret or "").strip()
+    if not s:
+        raise ValueError("secret is empty")
+    # Remove any whitespace that might have come from copy/paste.
+    s = "".join(s.split())
+
+    # Hex support (some UIs present wallet private keys as hex).
+    hx = s[2:] if s.lower().startswith("0x") else s
+    if hx and all(c in "0123456789abcdefABCDEF" for c in hx) and (len(hx) % 2 == 0) and len(hx) >= 64:
+        try:
+            return bytes.fromhex(hx)
+        except Exception:
+            pass
+
+    # Normalize urlsafe alphabet.
+    s = s.replace("-", "+").replace("_", "/")
+    # Fix padding to a multiple of 4.
+    pad = (-len(s)) % 4
+    if pad:
+        s = s + ("=" * pad)
+    try:
+        return base64.b64decode(s, validate=True)
+    except binascii.Error:
+        # Retry permissive decode (some implementations include non-canonical padding).
+        try:
+            return base64.b64decode(s, validate=False)
+        except Exception as e:
+            raise ValueError(f"secret is not valid base64/hex ({type(e).__name__})") from e
 
 
 def best_bid_ask_from_us_book(book: Dict[str, Any]) -> tuple[Optional[float], Optional[float]]:
