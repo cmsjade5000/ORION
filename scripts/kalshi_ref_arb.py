@@ -852,6 +852,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 live = None
                 spot_live = None
                 spot_live_err = ""
+                live_required = str(os.environ.get("KALSHI_ARB_LIVE_SPOT_REQUIRED", "0")).strip().lower() in ("1", "true", "yes", "y", "on")
                 # Optional: use a sub-second live ref spot (WS) to reprice p and edge right before ordering.
                 try:
                     live = live_spot(args.series)
@@ -864,6 +865,18 @@ def cmd_trade(args: argparse.Namespace) -> int:
                         spot_live = None
                 elif live is not None:
                     spot_live_err = str(getattr(live, "error", "") or "")
+
+                if live_required and not (isinstance(spot_live, (int, float)) and float(spot_live) > 0.0):
+                    skipped.append(
+                        {
+                            "ticker": s.ticker,
+                            "reason": "recheck_failed",
+                            "detail": "live_spot_required_failed",
+                            "side": side,
+                            "ref_spot_live_err": spot_live_err[:120] if spot_live_err else "",
+                        }
+                    )
+                    continue
 
                 # Freshness / recheck guard: refetch the market right before sending a live order
                 # and ensure the edge + microstructure filters still hold.
@@ -1216,6 +1229,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "risk": asdict(cfg),
         },
         "live_spot_enabled": str(os.environ.get("KALSHI_ARB_LIVE_SPOT", "")).strip().lower() in ("1", "true", "yes", "y", "on"),
+        "live_spot_required": str(os.environ.get("KALSHI_ARB_LIVE_SPOT_REQUIRED", "0")).strip().lower() in ("1", "true", "yes", "y", "on"),
         "ref_spot": float(spot) if isinstance(spot, (int, float)) else None,
         "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
         "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,

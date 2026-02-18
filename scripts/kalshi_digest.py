@@ -493,6 +493,67 @@ def _render_positions_table(items: List[Dict[str, Any]]) -> str:
     )
 
 
+def _top_k_counts(items: List[str], *, k: int = 8) -> List[Tuple[str, int]]:
+    counts: Dict[str, int] = {}
+    for it in items:
+        s = str(it or "").strip()
+        if not s:
+            continue
+        counts[s] = int(counts.get(s, 0)) + 1
+    out = sorted(counts.items(), key=lambda kv: (-int(kv[1]), kv[0]))
+    return out[: int(k)]
+
+
+def _summarize_skips_and_live_spot(run_objs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate skip reasons + live-spot issues across the digest window."""
+    skip_keys: List[str] = []
+    live_errs: List[str] = []
+    live_ok = 0
+    live_seen = 0
+
+    for o in run_objs:
+        trade = o.get("trade") if isinstance(o.get("trade"), dict) else {}
+        skipped = trade.get("skipped") or []
+        if isinstance(skipped, list):
+            for s in skipped:
+                if not isinstance(s, dict):
+                    continue
+                detail = s.get("detail")
+                reason = s.get("reason")
+                key = None
+                if isinstance(detail, str) and detail.strip():
+                    key = detail.strip()
+                elif isinstance(reason, str) and reason.strip():
+                    key = reason.strip()
+                if key:
+                    skip_keys.append(key)
+                le = s.get("ref_spot_live_err")
+                if isinstance(le, str) and le.strip():
+                    live_errs.append(le.strip()[:80])
+
+        placed = trade.get("placed") or []
+        if isinstance(placed, list):
+            for p in placed:
+                if not isinstance(p, dict):
+                    continue
+                if p.get("ref_spot_live") is not None or p.get("ref_spot_live_err"):
+                    live_seen += 1
+                if isinstance(p.get("ref_spot_live"), (int, float)):
+                    live_ok += 1
+                le = p.get("ref_spot_live_err")
+                if isinstance(le, str) and le.strip():
+                    live_errs.append(le.strip()[:80])
+
+    return {
+        "top_skips": [{"reason": r, "count": c} for r, c in _top_k_counts(skip_keys, k=8)],
+        "live_spot": {
+            "attempts_with_fields": int(live_seen),
+            "ok_prices": int(live_ok),
+            "top_errors": [{"error": r, "count": c} for r, c in _top_k_counts(live_errs, k=5)],
+        },
+    }
+
+
 def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], now_unix: int) -> str:
     # Email-client friendly HTML: table layout + inline styles, no external assets.
     dt_local = datetime.datetime.fromtimestamp(int(now_unix)).astimezone()
@@ -550,12 +611,25 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
             if isinstance(r, str) and isinstance(c, int):
                 blockers_items.append((r, c))
 
+    skips_items: List[Tuple[str, int]] = []
+    ts = no_trade.get("top_skips")
+    if isinstance(ts, list):
+        for it in ts:
+            if not isinstance(it, dict):
+                continue
+            r = it.get("reason")
+            c = it.get("count")
+            if isinstance(r, str) and isinstance(c, int):
+                skips_items.append((r, c))
+
+    live_spot_s = no_trade.get("live_spot") if isinstance(no_trade.get("live_spot"), dict) else {}
+
     raw_message = payload.get("message") if isinstance(payload.get("message"), str) else ""
     include_raw = status in ("WARN", "PAUSED")
 
     commands = [
-        "python3 /Users/corystoner/src/ORION/scripts/kalshi_ref_arb.py balance",
-        f"python3 /Users/corystoner/src/ORION/scripts/kalshi_digest.py --window-hours {int(window_hours)} --send-email --email-html",
+        "python3 /Users/corystoner/Desktop/ORION/scripts/kalshi_ref_arb.py balance",
+        f"python3 /Users/corystoner/Desktop/ORION/scripts/kalshi_digest.py --window-hours {int(window_hours)} --send-email --email-html",
     ]
 
     why_lines: List[str] = []
@@ -570,8 +644,17 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
         if tmo or err:
             why_lines.append(f"Scans: timeouts {tmo}, errors {err}")
 
+    try:
+        if isinstance(live_spot_s, dict) and live_spot_s:
+            okp = int(live_spot_s.get("ok_prices") or 0)
+            att = int(live_spot_s.get("attempts_with_fields") or 0)
+            if att > 0:
+                why_lines.append(f"Live spot: ok {okp}/{att}")
+    except Exception:
+        pass
+
     why_html = ""
-    if why_lines or blockers_items:
+    if why_lines or blockers_items or skips_items:
         why_html = (
             '<tr><td style="padding:0 0 14px 0;">'
             '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
@@ -584,6 +667,23 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
             ) + "</div>"
         if blockers_items:
             why_html += '<div style="height:10px;"></div>' + _render_bar_table(blockers_items)
+        if skips_items:
+            why_html += '<div style="height:10px;"></div><div style="color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;margin:2px 0 8px 0;">Skips (window)</div>' + _render_bar_table(skips_items)
+        try:
+            te = live_spot_s.get("top_errors") if isinstance(live_spot_s, dict) else None
+            if isinstance(te, list) and te:
+                parts = []
+                for it in te[:3]:
+                    if not isinstance(it, dict):
+                        continue
+                    e = it.get("error")
+                    c = it.get("count")
+                    if isinstance(e, str) and isinstance(c, int):
+                        parts.append(f"{e}={c}")
+                if parts:
+                    why_html += '<div style="height:10px;"></div><div style="color:#94a3b8;font-size:13px;">Live spot errors: ' + _escape_html(", ".join(parts)) + "</div>"
+        except Exception:
+            pass
         why_html += "</td></tr></table></td></tr>"
 
     pre = _escape_html(raw_message)
@@ -1076,6 +1176,8 @@ def main() -> int:
         except Exception:
             pass
 
+    skip_live = _summarize_skips_and_live_spot(run_objs)
+
     # If we didn't place trades, explain why (from latest cycle diagnostics).
     no_trade_diag: Dict[str, Any] = {}
     try:
@@ -1179,6 +1281,31 @@ def main() -> int:
                             no_trade_diag["totals"] = {"quotes_present": qp, "pass_non_edge_filters": pn}
                         except Exception:
                             pass
+
+                # Window-level skip + live-spot diagnostics (complements per-cycle blockers).
+                try:
+                    ts = skip_live.get("top_skips")
+                    if isinstance(ts, list) and ts:
+                        parts = []
+                        for it in ts[:5]:
+                            if not isinstance(it, dict):
+                                continue
+                            r = it.get("reason")
+                            c = it.get("count")
+                            if isinstance(r, str) and isinstance(c, int):
+                                parts.append(f"{r}={c}")
+                        if parts:
+                            msg_lines.append(f"Skips (window): {', '.join(parts)}")
+                            no_trade_diag["top_skips"] = ts[:10]
+                    ls = skip_live.get("live_spot")
+                    if isinstance(ls, dict):
+                        okp = int(ls.get("ok_prices") or 0)
+                        att = int(ls.get("attempts_with_fields") or 0)
+                        if att > 0:
+                            msg_lines.append(f"Live spot (window): ok {okp}/{att}")
+                            no_trade_diag["live_spot"] = ls
+                except Exception:
+                    pass
     except Exception:
         pass
 
