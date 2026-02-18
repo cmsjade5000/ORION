@@ -110,32 +110,39 @@ def _telegram_chat_id() -> Optional[int]:
 
 def _load_dotenv(path: str) -> None:
     # Minimal dotenv loader to support unattended cron runs (OpenClaw env).
-    try:
-        with open(os.path.expanduser(path), "r", encoding="utf-8") as f:
-            for raw in f:
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                k = k.strip()
-                v = v.strip()
-                if not k:
-                    continue
-                # Strip optional quotes.
-                if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
-                    v = v[1:-1]
-                # For strategy parameters, ~/.openclaw/.env should be the source of truth
-                # even if the gateway process already has older exported values.
-                if k.startswith("KALSHI_ARB_"):
-                    os.environ[k] = v
-                    continue
-                # Do not override explicit environment for other keys.
-                if k not in os.environ or os.environ.get(k, "") == "":
-                    os.environ[k] = v
-    except Exception:
+    def _try(p: str) -> bool:
+        try:
+            with open(os.path.expanduser(p), "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    if not k:
+                        continue
+                    # Strip optional quotes.
+                    if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
+                        v = v[1:-1]
+                    # For strategy parameters, ~/.openclaw/.env should be the source of truth
+                    # even if the gateway process already has older exported values.
+                    if k.startswith("KALSHI_ARB_"):
+                        os.environ[k] = v
+                        continue
+                    # Do not override explicit environment for other keys.
+                    if k not in os.environ or os.environ.get(k, "") == "":
+                        os.environ[k] = v
+            return True
+        except Exception:
+            return False
+
+    if _try(path):
         return
+    if os.path.expanduser(path) != os.path.expanduser("~/.openclaw/.env"):
+        _try("~/.openclaw/.env")
 
 
 def _load_json(path: str, default: Dict[str, Any]) -> Dict[str, Any]:

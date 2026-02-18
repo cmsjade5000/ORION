@@ -47,30 +47,38 @@ def _repo_root() -> str:
 
 def _load_dotenv(path: str) -> None:
     # Minimal dotenv loader to support unattended cron runs (OpenClaw env).
-    try:
-        with open(os.path.expanduser(path), "r", encoding="utf-8") as f:
-            for raw in f:
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                k = k.strip()
-                v = v.strip()
-                if not k:
-                    continue
-                if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
-                    v = v[1:-1]
-                # Keep strategy params consistent with ~/.openclaw/.env even if the
-                # gateway process already has older exported values.
-                if k.startswith("KALSHI_ARB_"):
-                    os.environ[k] = v
-                    continue
-                if k not in os.environ or os.environ.get(k, "") == "":
-                    os.environ[k] = v
-    except Exception:
+    def _try(p: str) -> bool:
+        try:
+            with open(os.path.expanduser(p), "r", encoding="utf-8") as f:
+                for raw in f:
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    if not k:
+                        continue
+                    if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
+                        v = v[1:-1]
+                    # Keep strategy params consistent with ~/.openclaw/.env even if the
+                    # gateway process already has older exported values.
+                    if k.startswith("KALSHI_ARB_"):
+                        os.environ[k] = v
+                        continue
+                    if k not in os.environ or os.environ.get(k, "") == "":
+                        os.environ[k] = v
+            return True
+        except Exception:
+            return False
+
+    if _try(path):
         return
+    # If OPENCLAW_ENV_PATH is mis-set, fall back to the default location.
+    if os.path.expanduser(path) != os.path.expanduser("~/.openclaw/.env"):
+        _try("~/.openclaw/.env")
 
 
 def _param_recommendations(cl: Dict[str, Any], current_inputs: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
