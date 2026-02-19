@@ -161,6 +161,24 @@ If this server runs on the same machine as OpenClaw, you can have `/api/command`
 
 When enabled, the server will call `openclaw agent ... --deliver --reply-channel telegram` targeting the originating Telegram chat/user (from verified `initData`).
 
+## Optional: Command Relay Queue (Fly -> ORION host)
+
+If the deployed miniapp server cannot execute `openclaw` locally (common on Fly), enable a relay queue:
+
+- Server env:
+  - `COMMAND_RELAY_ENABLED=1`
+  - `COMMAND_RELAY_TOKEN=<shared secret>` (or it will fall back to `INGEST_TOKEN`)
+- Worker (run on ORION host where `openclaw` is installed):
+  - `MINIAPP_COMMAND_RELAY_URL=https://<miniapp-host>`
+  - `MINIAPP_COMMAND_RELAY_TOKEN=<same shared secret>`
+  - `python3 scripts/miniapp_command_relay.py`
+
+Flow:
+1. Miniapp `POST /api/command` enqueues a relay command.
+2. ORION host worker claims it via `POST /api/relay/claim`.
+3. Worker executes `openclaw agent ... --deliver ...`.
+4. Worker reports completion via `POST /api/relay/:id/result`.
+
 ## Production Deployment Options
 
 ### Option A (simplest): Single Node service (Express serves the built React app)

@@ -97,6 +97,31 @@ INGEST_TOKEN=... ./scripts/miniapp_upload_artifact.sh https://<miniapp-host> ./o
 
 ---
 
+## miniapp_command_relay.py
+
+### Purpose
+Claims queued Mini App commands from `/api/relay/claim`, executes them with local `openclaw`, and reports completion back to `/api/relay/:id/result`.
+
+Use this when the Mini App server is deployed remotely (for example Fly) and cannot run `openclaw` itself.
+
+### Usage
+
+```bash
+MINIAPP_COMMAND_RELAY_URL=https://<miniapp-host> \
+MINIAPP_COMMAND_RELAY_TOKEN=... \
+python3 scripts/miniapp_command_relay.py
+```
+
+One-shot mode:
+
+```bash
+MINIAPP_COMMAND_RELAY_URL=https://<miniapp-host> \
+MINIAPP_COMMAND_RELAY_TOKEN=... \
+python3 scripts/miniapp_command_relay.py --once
+```
+
+---
+
 ## telegram_open_miniapp.sh
 
 ### Purpose

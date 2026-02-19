@@ -467,6 +467,12 @@ const PREVIEW_RESPONSES_ENABLED =
     : process.env.PREVIEW_RESPONSES_ENABLED === "0"
       ? false
       : !IS_PROD;
+// Optional relay queue for deployments where this server cannot run `openclaw` locally
+// (for example Fly). A worker on the ORION host can claim commands and execute them.
+const COMMAND_RELAY_ENABLED = process.env.COMMAND_RELAY_ENABLED === "1";
+const COMMAND_RELAY_TOKEN = String(process.env.COMMAND_RELAY_TOKEN || process.env.INGEST_TOKEN || "").trim();
+const COMMAND_RELAY_LEASE_MS = Number(process.env.COMMAND_RELAY_LEASE_MS || 90_000);
+const COMMAND_RELAY_TTL_MS = Number(process.env.COMMAND_RELAY_TTL_MS || 10 * 60_000);
 
 const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const STALE_MS = Number(process.env.STALE_MS || 20_000); // clear agent activity if no updates
@@ -525,6 +531,7 @@ const RL_STATE = createFixedWindowLimiter({ name: "state", windowMs: 60_000, max
 const RL_COMMAND_IP = createFixedWindowLimiter({ name: "cmd_ip", windowMs: 60_000, max: 30 });
 const RL_COMMAND_USER = createFixedWindowLimiter({ name: "cmd_user", windowMs: 60_000, max: 12 });
 const RL_INGEST = createFixedWindowLimiter({ name: "ingest", windowMs: 10_000, max: 60 });
+const RL_RELAY = createFixedWindowLimiter({ name: "relay", windowMs: 10_000, max: 80 });
 
 function createStore() {
   const agents = new Map();
@@ -573,6 +580,76 @@ function createStore() {
     feedById: new Map(), // id -> record
     workflow: null,
   };
+}
+
+const RELAY_QUEUE = [];
+const RELAY_BY_ID = new Map();
+
+function shortText(s, max = 320) {
+  const raw = String(s || "").trim();
+  const flat = raw.replace(/```/g, "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  if (flat.length <= max) return flat;
+  return `${flat.slice(0, max)}…`;
+}
+
+function relayAuthOk(req) {
+  if (!COMMAND_RELAY_TOKEN) return false;
+  const auth = String(req.header("authorization") || "").trim();
+  return auth === `Bearer ${COMMAND_RELAY_TOKEN}`;
+}
+
+function pruneRelayQueue(now = Date.now()) {
+  const keep = [];
+  for (const rec of RELAY_QUEUE) {
+    if (!rec || typeof rec.id !== "string") continue;
+    const acceptedAt = Number(rec.acceptedAt) || 0;
+    if (acceptedAt > 0 && now - acceptedAt > Math.max(60_000, COMMAND_RELAY_TTL_MS)) {
+      RELAY_BY_ID.delete(rec.id);
+      continue;
+    }
+    keep.push(rec);
+  }
+  RELAY_QUEUE.length = 0;
+  RELAY_QUEUE.push(...keep);
+}
+
+function enqueueRelayCommand(rec) {
+  if (!rec || typeof rec.id !== "string") return null;
+  pruneRelayQueue(Date.now());
+  RELAY_BY_ID.set(rec.id, rec);
+  RELAY_QUEUE.push(rec);
+  return rec;
+}
+
+function claimRelayCommand(workerId) {
+  const now = Date.now();
+  pruneRelayQueue(now);
+  for (const rec of RELAY_QUEUE) {
+    if (!rec || rec.status === "done" || rec.status === "failed") continue;
+    if (rec.status === "claimed" && Number(rec.leaseUntil || 0) > now) continue;
+    rec.status = "claimed";
+    rec.claimedBy = String(workerId || "relay-worker");
+    rec.claimedAt = now;
+    rec.leaseUntil = now + Math.max(20_000, COMMAND_RELAY_LEASE_MS);
+    rec.attempts = Math.max(0, Number(rec.attempts) || 0) + 1;
+    return rec;
+  }
+  return null;
+}
+
+function completeRelayCommand(id, body) {
+  const rec = RELAY_BY_ID.get(String(id || ""));
+  if (!rec) return null;
+  const now = Date.now();
+  const ok = Boolean(body && body.ok);
+  rec.status = ok ? "done" : "failed";
+  rec.completedAt = now;
+  rec.leaseUntil = 0;
+  rec.error = !ok ? shortText(body?.error || "relay_failed", 500) : "";
+  rec.responseText = shortText(body?.responseText || "", 500);
+  rec.resultCode = typeof body?.code === "number" ? body.code : null;
+  return rec;
 }
 
 function safeFilename(name) {
@@ -2242,6 +2319,7 @@ app.post("/api/command", (req, res) => {
   const deliverTargetRaw = ctx.verified ? String(ctx.userId ?? ctx.chatId ?? "").trim() : "";
   const deliverTarget = /^[0-9]+$/.test(deliverTargetRaw) ? deliverTargetRaw : "";
   const canRouteLive = shouldRoute && Boolean(deliverTarget);
+  const canRelayLive = !canRouteLive && COMMAND_RELAY_ENABLED && Boolean(deliverTarget);
   const shouldSimulateWorkflow = !canRouteLive || sequence.length > 1;
   const shouldSimulatePreviewArtifacts = !canRouteLive && PREVIEW_ARTIFACTS_ENABLED;
   const shouldSimulatePreviewResponse = !canRouteLive && PREVIEW_RESPONSES_ENABLED;
@@ -2254,6 +2332,30 @@ app.post("/api/command", (req, res) => {
         : !deliverTarget
           ? "Live routing is unavailable: missing Telegram delivery target."
           : "";
+
+  let relayQueued = null;
+  if (canRelayLive) {
+    relayQueued = enqueueRelayCommand({
+      id: acceptedId,
+      requestId,
+      text,
+      acceptedAt: Date.now(),
+      deliverTarget,
+      agentId: process.env.OPENCLAW_AGENT_ID?.trim() || "main",
+      targetAgent,
+      sequence: Array.isArray(sequence) ? [...sequence] : [targetAgent],
+      activity,
+      status: "pending",
+      leaseUntil: 0,
+      attempts: 0,
+      claimedBy: "",
+      claimedAt: 0,
+      completedAt: 0,
+      error: "",
+      responseText: "",
+      resultCode: null,
+    });
+  }
 
   // Simulated hop progression:
   // - When not routing, this is the primary demo behavior (including a fake reply/artifact).
@@ -2308,9 +2410,11 @@ app.post("/api/command", (req, res) => {
             applyEventToStore({
               type: "response.created",
               agentId: "ORION",
-              text: shouldSimulatePreviewResponse
-                ? (preview ? `Preview generated for: "${preview}"` : "Preview generated.")
-                : (routingUnavailableReason || "Live routing is unavailable in this deployment."),
+              text: canRelayLive
+                ? "Queued for ORION relay. Executing on host…"
+                : shouldSimulatePreviewResponse
+                  ? (preview ? `Preview generated for: "${preview}"` : "Preview generated.")
+                  : (routingUnavailableReason || "Live routing is unavailable in this deployment."),
             });
             if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
           }
@@ -2339,14 +2443,6 @@ app.post("/api/command", (req, res) => {
       deliverTarget,
       "--json",
     ];
-
-    const shortText = (s) => {
-      const raw = String(s || "").trim();
-      const flat = raw.replace(/```/g, "").replace(/\s+/g, " ").trim();
-      if (!flat) return "";
-      if (flat.length <= 320) return flat;
-      return `${flat.slice(0, 320)}…`;
-    };
 
     const extractReplyText = (stdoutRaw) => {
       const s = String(stdoutRaw || "").trim();
@@ -2484,15 +2580,120 @@ app.post("/api/command", (req, res) => {
     routing: {
       // Placeholder: ORION will eventually produce concrete IDs (task packet, session, etc.)
       target: "ORION",
-      mode: "task_packet",
+      mode: canRelayLive ? "relay_queue" : "task_packet",
       taskPacketId: null,
       sessionId: null,
       live: canRouteLive,
+      relay: Boolean(relayQueued),
+      relayId: relayQueued?.id || null,
       unavailableReason: canRouteLive ? null : routingUnavailableReason,
       previewArtifactsEnabled: shouldSimulatePreviewArtifacts,
       previewResponsesEnabled: shouldSimulatePreviewResponse,
     },
   });
+});
+
+// Relay queue claim endpoint:
+// A trusted worker on the ORION host claims pending miniapp commands and executes them.
+app.post("/api/relay/claim", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const rl = RL_RELAY.hit(req.ip || "unknown");
+  if (!rl.ok) {
+    return res.status(429).json({
+      ok: false,
+      error: { code: "RATE_LIMITED", message: "Too many requests" },
+      retryAfterSec: rl.retryAfterSec,
+    });
+  }
+  if (!COMMAND_RELAY_ENABLED) {
+    return res.status(503).json({
+      ok: false,
+      error: { code: "DISABLED", message: "Command relay is disabled" },
+    });
+  }
+  if (!relayAuthOk(req)) {
+    return res.status(401).json({
+      ok: false,
+      error: { code: "UNAUTHORIZED", message: "Bad relay token" },
+    });
+  }
+
+  const workerId = shortText(req.body?.workerId || "relay-worker", 64) || "relay-worker";
+  const rec = claimRelayCommand(workerId);
+  if (!rec) return res.json({ ok: true, command: null });
+
+  return res.json({
+    ok: true,
+    command: {
+      id: rec.id,
+      requestId: rec.requestId || null,
+      text: rec.text,
+      deliverTarget: rec.deliverTarget,
+      agentId: rec.agentId || "main",
+      targetAgent: rec.targetAgent || null,
+      sequence: Array.isArray(rec.sequence) ? rec.sequence : null,
+      activity: rec.activity || null,
+      acceptedAt: rec.acceptedAt || Date.now(),
+      leaseUntil: rec.leaseUntil || Date.now() + Math.max(20_000, COMMAND_RELAY_LEASE_MS),
+    },
+  });
+});
+
+// Relay completion endpoint:
+// Worker reports final result after executing an /api/relay/claim command.
+app.post("/api/relay/:id/result", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const rl = RL_RELAY.hit(req.ip || "unknown");
+  if (!rl.ok) {
+    return res.status(429).json({
+      ok: false,
+      error: { code: "RATE_LIMITED", message: "Too many requests" },
+      retryAfterSec: rl.retryAfterSec,
+    });
+  }
+  if (!COMMAND_RELAY_ENABLED) {
+    return res.status(503).json({
+      ok: false,
+      error: { code: "DISABLED", message: "Command relay is disabled" },
+    });
+  }
+  if (!relayAuthOk(req)) {
+    return res.status(401).json({
+      ok: false,
+      error: { code: "UNAUTHORIZED", message: "Bad relay token" },
+    });
+  }
+
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    return res.status(400).json({
+      ok: false,
+      error: { code: "BAD_REQUEST", message: "Missing relay command id" },
+    });
+  }
+  const rec = completeRelayCommand(id, req.body || {});
+  if (!rec) {
+    return res.status(404).json({
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Unknown relay command id" },
+    });
+  }
+
+  const ok = rec.status === "done";
+  const focusId = String(rec.targetAgent || "ORION");
+  applyEventToStore({ type: ok ? "task.completed" : "task.failed", agentId: focusId });
+
+  if (rec.responseText) {
+    applyEventToStore({ type: "response.created", agentId: "ORION", text: rec.responseText });
+  } else if (!ok) {
+    const err = shortText(rec.error || "Relay execution failed.", 280) || "Relay execution failed.";
+    applyEventToStore({ type: "response.created", agentId: "ORION", text: `Relay failed: ${err}` });
+  } else {
+    applyEventToStore({ type: "response.created", agentId: "ORION", text: "Completed via live relay." });
+  }
+
+  if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
+  return res.json({ ok: true });
 });
 
 // Share a response back into Telegram (DM to the verified user by default).
