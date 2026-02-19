@@ -70,7 +70,13 @@ export default function App() {
   const effectiveStartParam = startParam || urlStartParam;
 
   const parseStart = (raw: string) => {
-    const s = String(raw || "").trim();
+    let s = String(raw || "").trim();
+    // Telegram start params may arrive URL-encoded in some launch paths.
+    try {
+      if (/%[0-9a-f]{2}/i.test(s)) s = decodeURIComponent(s);
+    } catch {
+      // ignore malformed encodings
+    }
     if (!s) return { compact: false as const, open: null as null | "aegis" | "files" | "activity" };
     // Accept forms like:
     // - "compact"
@@ -579,7 +585,7 @@ export default function App() {
         title="Activity"
         subtitle={
           activitySplit
-            ? "Workflow + Responses"
+            ? "Workflow + Responses + Events"
             : (activityTab === "workflow"
               ? "Workflow"
               : activityTab === "events"
@@ -647,9 +653,10 @@ export default function App() {
                 unreadCount={0}
                 variant="overlay"
                 maxItems={30}
-                onRerun={() => { setDraft(lastPrompt || ""); setFocusSignal((n) => n + 1); }}
+                onRerun={!compactMode ? ((t) => { setDraft(lastPrompt || t || ""); setFocusSignal((n) => n + 1); }) : undefined}
                 onShare={(t) => shareToTelegram(t)}
               />
+              <FeedPanel items={eventsFeed} open={true} onToggle={() => null} unreadCount={0} variant="overlay" maxItems={40} />
             </>
           ) : activityTab === "workflow" ? (
             <WorkflowPanel workflow={state.workflow || null} open={true} onToggle={() => null} variant="overlay" />
@@ -663,7 +670,7 @@ export default function App() {
               unreadCount={0}
               variant="overlay"
               maxItems={30}
-              onRerun={() => { setDraft(lastPrompt || ""); setFocusSignal((n) => n + 1); }}
+              onRerun={!compactMode ? ((t) => { setDraft(lastPrompt || t || ""); setFocusSignal((n) => n + 1); }) : undefined}
               onShare={(t) => shareToTelegram(t)}
             />
           )}
