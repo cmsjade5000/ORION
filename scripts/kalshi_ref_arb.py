@@ -15,8 +15,13 @@ from typing import Any, Dict, List, Optional
 # When executed as `python3 scripts/kalshi_ref_arb.py`, sys.path[0] is the scripts/
 # directory and the repo root may not be importable as a package. Fix up path.
 try:
-    from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
+    from scripts.arb.exchanges import (  # type: ignore
+        latest_binance_funding_rate_bps,
+        parse_ref_feeds,
+        ref_spot_snapshot,
+    )
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
     from scripts.arb.live_spot import live_spot  # type: ignore
     from scripts.arb.momentum import momentum_pct, update_ref_spot_history  # type: ignore
     from scripts.arb.prob import (  # type: ignore
@@ -33,8 +38,13 @@ except ModuleNotFoundError:
     repo_root = os.path.abspath(os.path.join(here, ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
-    from scripts.arb.exchanges import ref_spot_btc_usd, ref_spot_doge_usd, ref_spot_eth_usd, ref_spot_xrp_usd  # type: ignore
+    from scripts.arb.exchanges import (  # type: ignore
+        latest_binance_funding_rate_bps,
+        parse_ref_feeds,
+        ref_spot_snapshot,
+    )
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
+    from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
     from scripts.arb.live_spot import live_spot  # type: ignore
     from scripts.arb.momentum import momentum_pct, update_ref_spot_history  # type: ignore
     from scripts.arb.prob import (  # type: ignore
@@ -256,17 +266,13 @@ def _model_p_yes(
     return None
 
 
-def _ref_spot_for_series(series: str) -> Optional[float]:
-    s = (series or "").upper()
-    if "BTC" in s or s.startswith("KXBTC") or s.startswith("BTC"):
-        return ref_spot_btc_usd()
-    if "ETH" in s or s.startswith("KXETH") or s.startswith("ETH"):
-        return ref_spot_eth_usd()
-    if "XRP" in s or s.startswith("KXXRP") or s.startswith("XRP"):
-        return ref_spot_xrp_usd()
-    if "DOGE" in s or s.startswith("KXDOGE") or s.startswith("DOGE"):
-        return ref_spot_doge_usd()
-    return None
+def _ref_spot_for_series(series: str, *, feeds: Optional[List[str]] = None) -> tuple[Optional[float], Dict[str, Any]]:
+    snap = ref_spot_snapshot(series, feeds=feeds or parse_ref_feeds(os.environ.get("KALSHI_ARB_REF_FEEDS", "coinbase,kraken,binance")))
+    m = snap.get("median") if isinstance(snap, dict) else None
+    try:
+        return (float(m), snap if isinstance(snap, dict) else {})
+    except Exception:
+        return (None, snap if isinstance(snap, dict) else {})
 
 
 def _signal_for_market(
@@ -287,6 +293,13 @@ def _signal_for_market(
     bayes_prior_k: float = 20.0,
     bayes_obs_k_max: float = 30.0,
     vol_anomaly_ratio: Optional[float] = None,
+    max_vol_anomaly_ratio: float = 1.8,
+    cross_venue_dispersion_bps: Optional[float] = None,
+    max_dispersion_bps: float = 35.0,
+    enable_regime_filter: bool = False,
+    funding_rate_bps: Optional[float] = None,
+    enable_funding_filter: bool = False,
+    funding_abs_bps_max: float = 3.0,
     momentum_15m_pct: Optional[float] = None,
     momentum_60m_pct: Optional[float] = None,
 ) -> Optional[Signal]:
@@ -295,7 +308,15 @@ def _signal_for_market(
     if not m.expected_expiration_time:
         return None
 
-    spot_ref = float(spot) if isinstance(spot, (int, float)) else _ref_spot_for_series(series)
+    if isinstance(spot, (int, float)):
+        spot_ref = float(spot)
+    else:
+        rr = _ref_spot_for_series(series)
+        if isinstance(rr, tuple):
+            spot_ref = rr[0]
+        else:
+            # Backward-compatible fallback for tests/mocks that return float directly.
+            spot_ref = rr  # type: ignore[assignment]
     if spot_ref is None:
         return None
 
@@ -308,6 +329,16 @@ def _signal_for_market(
     # Avoid trading extremely near expiry; spreads widen and fills get random.
     if tte_s < float(min_seconds_to_expiry):
         base_rejected.append("too_close_to_expiry")
+
+    if bool(enable_regime_filter):
+        if isinstance(vol_anomaly_ratio, (int, float)) and float(vol_anomaly_ratio) > float(max_vol_anomaly_ratio):
+            base_rejected.append("vol_regime_too_hot")
+        if isinstance(cross_venue_dispersion_bps, (int, float)) and float(cross_venue_dispersion_bps) > float(max_dispersion_bps):
+            base_rejected.append("cross_venue_dispersion_too_wide")
+
+    if bool(enable_funding_filter):
+        if isinstance(funding_rate_bps, (int, float)) and abs(float(funding_rate_bps)) > float(funding_abs_bps_max):
+            base_rejected.append("funding_too_extreme")
 
     # Prefer more liquid markets; thin books are mostly noise.
     if (m.liquidity_dollars is not None) and (float(m.liquidity_dollars) < float(min_liquidity_usd)):
@@ -492,6 +523,14 @@ def _signal_for_market(
             "yes_spread": yes_spread,
             "no_spread": no_spread,
             "strike_high": float(strike_high) if strike_high is not None else None,
+            "enable_regime_filter": bool(enable_regime_filter),
+            "cross_venue_dispersion_bps": float(cross_venue_dispersion_bps) if isinstance(cross_venue_dispersion_bps, (int, float)) else None,
+            "max_dispersion_bps": float(max_dispersion_bps),
+            "vol_anomaly_ratio": float(vol_anomaly_ratio) if isinstance(vol_anomaly_ratio, (int, float)) else None,
+            "max_vol_anomaly_ratio": float(max_vol_anomaly_ratio),
+            "enable_funding_filter": bool(enable_funding_filter),
+            "funding_rate_bps": float(funding_rate_bps) if isinstance(funding_rate_bps, (int, float)) else None,
+            "funding_abs_bps_max": float(funding_abs_bps_max),
         },
         rejected_reasons=sorted(list(dict.fromkeys(rejected))) if rejected else [],
     )
@@ -499,6 +538,7 @@ def _signal_for_market(
 
 def cmd_scan(args: argparse.Namespace) -> int:
     repo_root = _repo_root()
+    rt_cfg, rt_errs = load_runtime_from_env(repo_root=repo_root)
     kc = KalshiClient(base_url=args.kalshi_base_url)
     try:
         cache_s = int(os.environ.get("KALSHI_ARB_MARKETS_CACHE_S", "900") or 900)
@@ -512,9 +552,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         limit=args.limit,
         cache_s=cache_s,
     )
-    # Fetch spot once per scan. Previously this was done per-market, which is slow and can
-    # trigger scan timeouts.
-    spot = _ref_spot_for_series(args.series)
+    # Fetch reference spot once per scan from configured read-only feeds.
+    spot, spot_diag = _ref_spot_for_series(args.series, feeds=rt_cfg.ref_feeds)
     if spot is not None:
         try:
             update_ref_spot_history(repo_root, series=args.series, spot_ref=float(spot), ts_unix=int(time.time()))
@@ -530,17 +569,28 @@ def cmd_scan(args: argparse.Namespace) -> int:
         m15 = None
         m60 = None
     vol_ratio = None
-    if bool(getattr(args, "vol_anomaly", False)):
+    if bool(getattr(args, "vol_anomaly", False)) or bool(rt_cfg.enable_regime_filter):
         try:
             short = conservative_sigma_auto(args.series, window_hours=int(args.vol_anomaly_window_h))
         except Exception:
             short = None
         try:
-            base = float(args.sigma_annual)
+            base_auto = conservative_sigma_auto(args.series, window_hours=7 * 24)
+        except Exception:
+            base_auto = None
+        try:
+            base = float(base_auto) if isinstance(base_auto, (int, float)) else float(args.sigma_annual)
         except Exception:
             base = None
         if short is not None and base and base > 0:
             vol_ratio = float(short) / float(base)
+    funding_bps = None
+    if bool(rt_cfg.enable_funding_filter):
+        try:
+            funding_bps = latest_binance_funding_rate_bps(args.series)
+        except Exception:
+            funding_bps = None
+    dispersion_bps = spot_diag.get("dispersion_bps") if isinstance(spot_diag, dict) else None
 
     sigs: List[Dict[str, Any]] = []
     for m in markets:
@@ -561,6 +611,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
             bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
             bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
             vol_anomaly_ratio=vol_ratio,
+            max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
+            cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
+            enable_regime_filter=bool(rt_cfg.enable_regime_filter),
+            funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+            enable_funding_filter=bool(rt_cfg.enable_funding_filter),
+            funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
             momentum_15m_pct=m15,
             momentum_60m_pct=m60,
         )
@@ -590,7 +647,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "max_price": args.max_price,
             "min_notional_usd": args.min_notional_usd,
             "min_notional_bypass_edge_bps": args.min_notional_bypass_edge_bps,
+            "runtime_config_errors": rt_errs,
+            "ref_feeds": list(rt_cfg.ref_feeds),
+            "enable_funding_filter": bool(rt_cfg.enable_funding_filter),
+            "enable_regime_filter": bool(rt_cfg.enable_regime_filter),
+            "funding_rate_bps": float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+            "cross_venue_dispersion_bps": float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            "max_dispersion_bps": float(rt_cfg.max_dispersion_bps),
+            "max_vol_anomaly_ratio": float(rt_cfg.max_vol_anomaly_ratio),
             "spot_ref": float(spot) if isinstance(spot, (int, float)) else None,
+            "spot_quotes": (spot_diag.get("quotes") if isinstance(spot_diag, dict) else []),
             "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
             "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,
         },
@@ -602,6 +668,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 def cmd_trade(args: argparse.Namespace) -> int:
     repo_root = _repo_root()
+    rt_cfg, rt_errs = load_runtime_from_env(repo_root=repo_root)
     cfg = RiskConfig(
         max_orders_per_run=args.max_orders_per_run,
         max_contracts_per_order=args.max_contracts_per_order,
@@ -680,8 +747,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
         limit=args.limit,
         cache_s=cache_s,
     )
-    # Fetch spot once per run (instead of per-market).
-    spot = _ref_spot_for_series(args.series)
+    # Fetch spot once per run from configured read-only venues.
+    spot, spot_diag = _ref_spot_for_series(args.series, feeds=rt_cfg.ref_feeds)
     if spot is not None:
         try:
             update_ref_spot_history(repo_root, series=args.series, spot_ref=float(spot), ts_unix=int(time.time()))
@@ -697,17 +764,28 @@ def cmd_trade(args: argparse.Namespace) -> int:
         m15 = None
         m60 = None
     vol_ratio = None
-    if bool(getattr(args, "vol_anomaly", False)):
+    if bool(getattr(args, "vol_anomaly", False)) or bool(rt_cfg.enable_regime_filter):
         try:
             short = conservative_sigma_auto(args.series, window_hours=int(args.vol_anomaly_window_h))
         except Exception:
             short = None
         try:
-            base = float(args.sigma_annual)
+            base_auto = conservative_sigma_auto(args.series, window_hours=7 * 24)
+        except Exception:
+            base_auto = None
+        try:
+            base = float(base_auto) if isinstance(base_auto, (int, float)) else float(args.sigma_annual)
         except Exception:
             base = None
         if short is not None and base and base > 0:
             vol_ratio = float(short) / float(base)
+    funding_bps = None
+    if bool(rt_cfg.enable_funding_filter):
+        try:
+            funding_bps = latest_binance_funding_rate_bps(args.series)
+        except Exception:
+            funding_bps = None
+    dispersion_bps = spot_diag.get("dispersion_bps") if isinstance(spot_diag, dict) else None
 
     all_signals: List[Signal] = []
     signals: List[Signal] = []
@@ -729,6 +807,13 @@ def cmd_trade(args: argparse.Namespace) -> int:
             bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
             bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
             vol_anomaly_ratio=vol_ratio,
+            max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
+            cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
+            enable_regime_filter=bool(rt_cfg.enable_regime_filter),
+            funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+            enable_funding_filter=bool(rt_cfg.enable_funding_filter),
+            funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
             momentum_15m_pct=m15,
             momentum_60m_pct=m60,
         )
@@ -863,8 +948,26 @@ def cmd_trade(args: argparse.Namespace) -> int:
             )
             continue
 
+        # Concentration cap: do not let one ticker exceed a fixed bankroll fraction.
+        try:
+            bankroll = float(cash_usd) if isinstance(cash_usd, (int, float)) and float(cash_usd) > 0 else float(cfg.max_notional_per_run_usd)
+        except Exception:
+            bankroll = float(cfg.max_notional_per_run_usd)
+        max_conc_notional = max(0.0, float(bankroll) * float(getattr(args, "max_market_concentration_fraction", 0.35)))
+        remaining_conc = max(0.0, float(max_conc_notional) - float(market_notional))
+        if remaining_conc <= 0.0:
+            skipped.append(
+                {
+                    "ticker": s.ticker,
+                    "reason": "market_concentration_cap",
+                    "market_notional_usd": market_notional,
+                    "max_market_notional_usd": float(max_conc_notional),
+                }
+            )
+            continue
+
         # Contracts cost ~= price * count (payout $1).
-        max_count_budget = int(budget / max(0.0001, price))
+        max_count_budget = int(min(float(budget), float(remaining_conc)) / max(0.0001, price))
         count = min(cfg.max_contracts_per_order, max_count_budget)
         if count <= 0:
             skipped.append({"ticker": s.ticker, "reason": "budget_too_small", "budget_usd": budget})
@@ -1432,12 +1535,22 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "max_price": args.max_price,
             "min_notional_usd": args.min_notional_usd,
             "min_notional_bypass_edge_bps": args.min_notional_bypass_edge_bps,
+            "runtime_config_errors": rt_errs,
+            "ref_feeds": list(rt_cfg.ref_feeds),
+            "enable_funding_filter": bool(rt_cfg.enable_funding_filter),
+            "enable_regime_filter": bool(rt_cfg.enable_regime_filter),
+            "funding_rate_bps": float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+            "cross_venue_dispersion_bps": float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            "max_dispersion_bps": float(rt_cfg.max_dispersion_bps),
+            "max_vol_anomaly_ratio": float(rt_cfg.max_vol_anomaly_ratio),
             "allow_write": bool(args.allow_write),
+            "max_market_concentration_fraction": float(getattr(args, "max_market_concentration_fraction", 0.35) or 0.35),
             "risk": asdict(cfg),
         },
         "live_spot_enabled": str(os.environ.get("KALSHI_ARB_LIVE_SPOT", "")).strip().lower() in ("1", "true", "yes", "y", "on"),
         "live_spot_required": str(os.environ.get("KALSHI_ARB_LIVE_SPOT_REQUIRED", "0")).strip().lower() in ("1", "true", "yes", "y", "on"),
         "ref_spot": float(spot) if isinstance(spot, (int, float)) else None,
+        "ref_spot_quotes": (spot_diag.get("quotes") if isinstance(spot_diag, dict) else []),
         "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
         "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,
         "placed": placed,
@@ -1667,6 +1780,35 @@ def _compute_trade_diagnostics(
     return diagnostics
 
 
+def cmd_healthcheck(args: argparse.Namespace) -> int:
+    repo_root = _repo_root()
+    rt_cfg, rt_errs = load_runtime_from_env(repo_root=repo_root)
+    out: Dict[str, Any] = {
+        "mode": "healthcheck",
+        "timestamp_unix": int(time.time()),
+        "runtime": rt_cfg.as_dict(),
+        "runtime_errors": list(rt_errs),
+        "checks": {
+            "kalshi_api_key_id_present": bool(os.environ.get("KALSHI_API_KEY_ID")),
+            "kalshi_private_key_path_present": bool(os.environ.get("KALSHI_PRIVATE_KEY_PATH")),
+        },
+    }
+    rc = 0
+    if bool(getattr(args, "check_auth", False)):
+        kc = KalshiClient(base_url=args.kalshi_base_url)
+        try:
+            bal = kc.get_balance()
+            out["auth"] = {"ok": True, "balance_keys": sorted(list(bal.keys())) if isinstance(bal, dict) else []}
+        except Exception as e:
+            out["auth"] = {"ok": False, "error": str(e)[:300]}
+            rc = 2
+    if rt_errs:
+        rc = max(rc, 1)
+    out["status"] = "ok" if rc == 0 else "warn"
+    sys.stdout.write(_json(out) + "\n")
+    return int(rc)
+
+
 def cmd_balance(args: argparse.Namespace) -> int:
     kc = KalshiClient(base_url=args.kalshi_base_url)
     out = {
@@ -1773,8 +1915,19 @@ def main() -> int:
         default=2,
         help="Cap stacking into the same market ticker (abs open contracts). Set 0 to disable.",
     )
+    trade.add_argument(
+        "--max-market-concentration-fraction",
+        type=float,
+        default=0.35,
+        help="Cap per-ticker tracked notional as a fraction of bankroll (cash or run cap).",
+    )
     trade.add_argument("--kill-switch-path", default="tmp/kalshi_ref_arb.KILL")
     trade.set_defaults(func=cmd_trade)
+
+    hc = sub.add_parser("healthcheck", help="Validate runtime config and optionally verify Kalshi auth.")
+    hc.add_argument("--kalshi-base-url", default="https://api.elections.kalshi.com")
+    hc.add_argument("--check-auth", action="store_true", help="Attempt authenticated balance call.")
+    hc.set_defaults(func=cmd_healthcheck)
 
     bal = sub.add_parser("balance", help="Authenticated: fetch Kalshi portfolio balance (requires env creds).")
     bal.add_argument("--kalshi-base-url", default="https://api.elections.kalshi.com")
