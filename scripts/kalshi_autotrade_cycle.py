@@ -498,6 +498,91 @@ def _is_transient_http_err_payload(payload: Any) -> bool:
     )
 
 
+def _cycle_outcome_flags(*, bal_rc: int, bal: Any, post_rc: int, post: Any, trade_rc: int, trade: Any) -> Dict[str, bool]:
+    kill_refused = (
+        isinstance(trade, dict)
+        and trade.get("status") == "refused"
+        and trade.get("reason") in ("kill_switch", "cooldown")
+    )
+    bal_hard_err = (int(bal_rc) != 0) and (not _is_transient_http_err_payload(bal))
+    post_hard_err = (int(post_rc) != 0) and (not _is_transient_http_err_payload(post))
+    trade_hard_err = (int(trade_rc) != 0) and (not kill_refused)
+    any_error = bool(bal_hard_err or post_hard_err or trade_hard_err)
+    any_soft_err = bool((int(bal_rc) != 0) or (int(post_rc) != 0)) and (not any_error)
+    any_order_failed = any(
+        isinstance(x, dict) and x.get("reason") == "order_failed"
+        for x in ((trade.get("skipped") or []) if isinstance(trade, dict) else [])
+    )
+    return {
+        "kill_refused": bool(kill_refused),
+        "any_error": bool(any_error),
+        "any_soft_err": bool(any_soft_err),
+        "any_order_failed": bool(any_order_failed),
+    }
+
+
+def _milestone_notification_text(
+    *,
+    any_error: bool,
+    any_soft_err: bool,
+    any_order_failed: bool,
+    milestone_notify: bool,
+    notify_trades: bool,
+    live_orders: list[dict[str, Any]],
+    post: Any,
+    auto_paused: bool,
+) -> str:
+    parts: list[str] = []
+    if any_error:
+        parts = [
+            "Status: Testing",
+            "What changed:",
+            "- Cycle hit a hard error and entered cooldown protections.",
+            "Why it matters:",
+            "This prevents repeated bad writes during unstable API/network windows.",
+            "Risks / notes:",
+            "- Check tmp/kalshi_ref_arb/runs for exact command failure context.",
+            "Next step: I will retry on the next scheduled cycle.",
+        ]
+    elif any_soft_err:
+        parts = [
+            "Status: Testing",
+            "What changed:",
+            "- Transient Kalshi/API issue detected; no risky action taken.",
+            "Why it matters:",
+            "Bot stayed safe and preserved capital while connectivity recovered.",
+            "Risks / notes:",
+            "- If repeated, I will escalate to cooldown/kill-switch protections.",
+            "Next step: Retry automatically on next cycle.",
+        ]
+    elif any_order_failed:
+        parts = [
+            "Status: Testing",
+            "What changed:",
+            "- Order attempt failed validation/rejection path.",
+            "Why it matters:",
+            "Execution safeguards blocked a low-quality or invalid trade path.",
+            "Risks / notes:",
+            "- Review latest run artifact for reason=order_failed.",
+            "Next step: Continue scanning; trade only when constraints pass.",
+        ]
+    elif (not milestone_notify) and live_orders and notify_trades:
+        parts.append(_orion_order_sentence(live_orders[0], post))
+
+    if (not parts) and auto_paused:
+        parts = [
+            "Status: Testing",
+            "What changed:",
+            "- Kill switch auto-enabled after repeated error threshold.",
+            "Why it matters:",
+            "Trading is paused to contain risk and prevent cascading failures.",
+            "Risks / notes:",
+            "- Manual review needed before re-arming writes.",
+            "Next step: Investigate latest run artifacts and re-enable safely.",
+        ]
+    return "\n".join(parts)
+
+
 def _recent_run_health(runs_dir: str, *, lookback: int, min_ts_unix: int = 0) -> dict[str, int]:
     files = _list_run_files(runs_dir)
     if lookback > 0:
@@ -1312,19 +1397,16 @@ def main() -> int:
 
         # Safety: cooldown after unexpected behavior, even if we don't hard-stop with kill switch.
         # This reduces repeated retries into a degraded API / degraded market.
-        kill_refused = (
-            isinstance(trade, dict)
-            and trade.get("status") == "refused"
-            and trade.get("reason") in ("kill_switch", "cooldown")
+        outcome = _cycle_outcome_flags(
+            bal_rc=bal_rc,
+            bal=bal,
+            post_rc=post_rc,
+            post=post,
+            trade_rc=trade_rc,
+            trade=trade,
         )
-        bal_hard_err = (bal_rc != 0) and (not _is_transient_http_err_payload(bal))
-        post_hard_err = (post_rc != 0) and (not _is_transient_http_err_payload(post))
-        trade_hard_err = (trade_rc != 0) and (not kill_refused)
-        any_error = bool(bal_hard_err or post_hard_err or trade_hard_err)
-        any_order_failed = any(
-            isinstance(x, dict) and x.get("reason") == "order_failed"
-            for x in ((trade.get("skipped") or []) if isinstance(trade, dict) else [])
-        )
+        any_error = bool(outcome["any_error"])
+        any_order_failed = bool(outcome["any_order_failed"])
         if any_error or any_order_failed:
             cfg = RiskConfig()
             cd = cooldown_active(cfg, root)
@@ -1347,20 +1429,9 @@ def main() -> int:
 
         placed = (trade.get("placed") or []) if isinstance(trade, dict) else []
         live_orders = [p for p in placed if isinstance(p, dict) and p.get("mode") == "live"]
-        kill_refused = (
-            isinstance(trade, dict)
-            and trade.get("status") == "refused"
-            and trade.get("reason") in ("kill_switch", "cooldown")
-        )
-        bal_hard_err = (bal_rc != 0) and (not _is_transient_http_err_payload(bal))
-        post_hard_err = (post_rc != 0) and (not _is_transient_http_err_payload(post))
-        trade_hard_err = (trade_rc != 0) and (not kill_refused)
-        any_error = bool(bal_hard_err or post_hard_err or trade_hard_err)
-        any_soft_err = bool((bal_rc != 0) or (post_rc != 0)) and (not any_error)
-        any_order_failed = any(
-            isinstance(x, dict) and x.get("reason") == "order_failed"
-            for x in ((trade.get("skipped") or []) if isinstance(trade, dict) else [])
-        )
+        any_error = bool(outcome["any_error"])
+        any_soft_err = bool(outcome["any_soft_err"])
+        any_order_failed = bool(outcome["any_order_failed"])
 
         # Health window reset: once we recover from an error streak, don't let old transient errors re-trigger kill switch.
         prev_had_err = bool(health_state.get("last_run_had_error"))
@@ -1384,55 +1455,19 @@ def main() -> int:
         if not milestone_notify and notify_trades:
             should_notify = should_notify or bool(live_orders)
 
+        auto_paused = bool(kill_on and (health["runs"] >= lookback) and (health["errors"] >= max_err or health["order_failed"] >= max_of))
+
         if can_notify and allowed and should_notify:
-            parts = []
-            if any_error:
-                parts = [
-                    "Status: Testing",
-                    "What changed:",
-                    "- Cycle hit a hard error and entered cooldown protections.",
-                    "Why it matters:",
-                    "This prevents repeated bad writes during unstable API/network windows.",
-                    "Risks / notes:",
-                    "- Check tmp/kalshi_ref_arb/runs for exact command failure context.",
-                    "Next step: I will retry on the next scheduled cycle.",
-                ]
-            elif any_soft_err:
-                parts = [
-                    "Status: Testing",
-                    "What changed:",
-                    "- Transient Kalshi/API issue detected; no risky action taken.",
-                    "Why it matters:",
-                    "Bot stayed safe and preserved capital while connectivity recovered.",
-                    "Risks / notes:",
-                    "- If repeated, I will escalate to cooldown/kill-switch protections.",
-                    "Next step: Retry automatically on next cycle.",
-                ]
-            elif any_order_failed:
-                parts = [
-                    "Status: Testing",
-                    "What changed:",
-                    "- Order attempt failed validation/rejection path.",
-                    "Why it matters:",
-                    "Execution safeguards blocked a low-quality or invalid trade path.",
-                    "Risks / notes:",
-                    "- Review latest run artifact for reason=order_failed.",
-                    "Next step: Continue scanning; trade only when constraints pass.",
-                ]
-            elif (not milestone_notify) and live_orders and notify_trades:
-                parts.append(_orion_order_sentence(live_orders[0], post))
-            if not parts and kill_on and (health["runs"] >= lookback) and (health["errors"] >= max_err or health["order_failed"] >= max_of):
-                parts = [
-                    "Status: Testing",
-                    "What changed:",
-                    "- Kill switch auto-enabled after repeated error threshold.",
-                    "Why it matters:",
-                    "Trading is paused to contain risk and prevent cascading failures.",
-                    "Risks / notes:",
-                    "- Manual review needed before re-arming writes.",
-                    "Next step: Investigate latest run artifacts and re-enable safely.",
-                ]
-            msg = "\n".join(parts)
+            msg = _milestone_notification_text(
+                any_error=any_error,
+                any_soft_err=any_soft_err,
+                any_order_failed=any_order_failed,
+                milestone_notify=milestone_notify,
+                notify_trades=notify_trades,
+                live_orders=live_orders,
+                post=post,
+                auto_paused=auto_paused,
+            )
             _send_telegram(int(chat_id), msg, cwd=root)
             notify_state["last_notify_ts"] = now
             _save_json(notify_state_path, notify_state)

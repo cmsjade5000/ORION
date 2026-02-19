@@ -207,6 +207,40 @@ class TestKalshiLedger(unittest.TestCase):
             self.assertIsInstance(byv, dict)
             self.assertIn("challenger", byv)
 
+    def test_closed_loop_report_partial_settlement_fallback_uses_settled_qty(self) -> None:
+        from scripts.arb.kalshi_ledger import closed_loop_report, save_ledger
+
+        with tempfile.TemporaryDirectory() as td:
+            os.makedirs(os.path.join(td, "tmp", "kalshi_ref_arb"), exist_ok=True)
+            # No explicit cash_delta_usd in parsed settlement: report should use settled_count_total,
+            # not full fills count.
+            led = {
+                "version": 2,
+                "orders": {
+                    "OP": {
+                        "ts_unix": int(time.time()) - 10,
+                        "ticker": "TP",
+                        "side": "yes",
+                        "fills": {"count": 2, "avg_price_dollars": 0.40},
+                        "settlement": {
+                            "ts_last_seen": int(time.time()),
+                            "parsed": {"ticker": "TP", "side": "yes", "outcome_yes": True},
+                            "settled_count_total": 1,
+                            "settled_count": 1,
+                            "filled_count": 2,
+                            "fully_settled": False,
+                        },
+                    }
+                },
+                "unmatched_settlements": [],
+                "settlement_hashes": [],
+                "attribution_stats": {"attempted": 1, "matched": 1, "unmatched": 0, "partial_matches": 1, "last_ts": int(time.time())},
+            }
+            save_ledger(td, led)
+            rep = closed_loop_report(td, window_hours=24.0)
+            # If it had incorrectly used fills=2, pnl would be 1.20; correct is 0.60.
+            self.assertAlmostEqual(float(rep.get("realized_pnl_usd_approx") or 0.0), 0.60, places=9)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -730,9 +730,11 @@ def closed_loop_report(repo_root: str, *, window_hours: float = 8.0) -> Dict[str
             f = o.get("fills") if isinstance(o.get("fills"), dict) else {}
             fc = int(f.get("count") or 0) if isinstance(f, dict) else 0
             avg = _safe_float(f.get("avg_price_dollars")) if isinstance(f, dict) else None
-            if fc > 0 and avg is not None and isinstance(outcome_yes, bool) and side in ("yes", "no"):
-                payout = float(fc) * (1.0 if (bool(outcome_yes) if side == "yes" else (not bool(outcome_yes))) else 0.0)
-                pnl_i = payout - (float(avg) * float(fc))
+            settled_for_pnl = _order_settled_count(o)
+            qty = int(settled_for_pnl) if int(settled_for_pnl) > 0 else int(fc)
+            if qty > 0 and avg is not None and isinstance(outcome_yes, bool) and side in ("yes", "no"):
+                payout = float(qty) * (1.0 if (bool(outcome_yes) if side == "yes" else (not bool(outcome_yes))) else 0.0)
+                pnl_i = payout - (float(avg) * float(qty))
         if pnl_i is not None:
             realized_any = True
             realized_pnl += float(pnl_i)

@@ -338,6 +338,95 @@ def _build_portfolio_allocator_plan(
     )
 
 
+def _build_signals_for_markets(
+    markets: List[KalshiMarket],
+    *,
+    args: argparse.Namespace,
+    rt_cfg: Any,
+    spot: Optional[float],
+    vol_ratio: Optional[float],
+    regime: str,
+    dynamic_mult: float,
+    funding_bps: Optional[float],
+    dispersion_bps: Optional[float],
+    quote_age_s: Optional[float],
+    m15: Optional[float],
+    m60: Optional[float],
+) -> tuple[List[Signal], List[Signal]]:
+    all_signals, signals = _build_signals_for_markets(
+        markets,
+        args=args,
+        rt_cfg=rt_cfg,
+        spot=spot,
+        vol_ratio=vol_ratio,
+        regime=str(regime),
+        dynamic_mult=float(dynamic_mult),
+        funding_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+        dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+        quote_age_s=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+        m15=float(m15) if isinstance(m15, (int, float)) else None,
+        m60=float(m60) if isinstance(m60, (int, float)) else None,
+    )
+    return all_signals, signals
+
+
+def _record_persistence_observations(
+    *,
+    signals: List[Signal],
+    state: RiskState,
+    now_ts: int,
+) -> None:
+    _record_persistence_observations(signals=signals, state=state, now_ts=now_ts)
+
+
+def _parse_tte_buckets(raw: str) -> List[tuple[float, float]]:
+    out: List[tuple[float, float]] = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" not in part:
+            continue
+        a, b = part.split("-", 1)
+        try:
+            lo = float(a.strip())
+            hi = float(b.strip())
+        except Exception:
+            continue
+        if hi <= lo or lo < 0:
+            continue
+        out.append((lo, hi))
+    return out
+
+
+def _apply_tte_bucket_diversification(signals: List[Signal], raw_buckets: str) -> List[Signal]:
+    buckets = _parse_tte_buckets(raw_buckets) if (raw_buckets or "").strip() else []
+    if (not buckets) or len(signals) <= 1:
+        return signals
+
+    def _tte_min(s: Signal) -> float:
+        try:
+            return float(s.t_years) * 365.0 * 24.0 * 60.0
+        except Exception:
+            return 0.0
+
+    best_per_bucket: List[Signal] = []
+    used = set()
+    for lo, hi in buckets:
+        for s in signals:
+            if s.ticker in used:
+                continue
+            tte = _tte_min(s)
+            if tte >= float(lo) and tte < float(hi):
+                best_per_bucket.append(s)
+                used.add(s.ticker)
+                break
+    if not best_per_bucket:
+        return signals
+    tail = [s for s in signals if s.ticker not in used]
+    return best_per_bucket + tail
+
+
 def _parse_iso_z(ts: str) -> Optional[float]:
     # Minimal parser for "YYYY-MM-DDTHH:MM:SSZ"
     if not ts or not ts.endswith("Z"):
@@ -1016,54 +1105,10 @@ def cmd_trade(args: argparse.Namespace) -> int:
         key=lambda s: max(float(s.edge_bps_buy_yes or -1e9), float(s.edge_bps_buy_no or -1e9)), reverse=True
     )
 
-    # Optional: diversify orders across time-to-expiry buckets so we don't only target the
-    # nearest microstructure-heavy markets.
-    #
-    # Env format: "30-90,90-180,180-360" in minutes.
-    def _parse_tte_buckets(raw: str) -> List[tuple[float, float]]:
-        out: List[tuple[float, float]] = []
-        for part in (raw or "").split(","):
-            part = part.strip()
-            if not part:
-                continue
-            if "-" not in part:
-                continue
-            a, b = part.split("-", 1)
-            try:
-                lo = float(a.strip())
-                hi = float(b.strip())
-            except Exception:
-                continue
-            if hi <= lo or lo < 0:
-                continue
-            out.append((lo, hi))
-        return out
-
+    # Optional: diversify orders across time-to-expiry buckets so we don't only
+    # target nearest microstructure-heavy markets.
     raw_buckets = (os.environ.get("KALSHI_ARB_TTE_BUCKETS_MIN") or "").strip()
-    buckets = _parse_tte_buckets(raw_buckets) if raw_buckets else []
-    if buckets and len(signals) > 1:
-        def _tte_min(s: Signal) -> float:
-            try:
-                return float(s.t_years) * 365.0 * 24.0 * 60.0
-            except Exception:
-                return 0.0
-
-        best_per_bucket: List[Signal] = []
-        used = set()
-        # Pick one best signal per bucket in bucket order.
-        for bi, (lo, hi) in enumerate(buckets):
-            for s in signals:
-                if s.ticker in used:
-                    continue
-                tte = _tte_min(s)
-                if tte >= float(lo) and tte < float(hi):
-                    best_per_bucket.append(s)
-                    used.add(s.ticker)
-                    break
-        # Then append remaining by edge.
-        if best_per_bucket:
-            tail = [s for s in signals if s.ticker not in used]
-            signals = best_per_bucket + tail
+    signals = _apply_tte_bucket_diversification(signals, raw_buckets)
 
     placed: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []

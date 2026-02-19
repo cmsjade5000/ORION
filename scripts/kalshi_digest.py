@@ -1253,6 +1253,277 @@ def _tca_by_variant(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     return compact
 
 
+def _summarize_closed_loop_insights(
+    *,
+    root: str,
+    window_hours: float,
+    msg_lines: List[str],
+) -> tuple[Optional[Dict[str, Any]], Optional[float]]:
+    cl_report: Optional[Dict[str, Any]] = None
+    realized_pnl_usd_approx: Optional[float] = None
+    try:
+        cl = closed_loop_report(root, window_hours=float(window_hours))
+        cl_report = cl if isinstance(cl, dict) else None
+        if isinstance(cl.get("avg_effective_edge_bps"), (int, float)):
+            msg_lines.append(f"Avg effective edge (window): {float(cl['avg_effective_edge_bps']):.0f} bps")
+        if isinstance(cl.get("avg_implied_win_prob"), (int, float)):
+            msg_lines.append(f"Avg implied win prob (window): {float(cl['avg_implied_win_prob']):.2f}")
+        if isinstance(cl.get("settled_orders"), int) and int(cl["settled_orders"]) > 0:
+            wr = cl.get("win_rate")
+            if isinstance(wr, (int, float)):
+                msg_lines.append(f"Settled win-rate (window): {float(wr):.2f}")
+            ap = cl.get("avg_implied_win_prob_settled")
+            if isinstance(ap, (int, float)):
+                msg_lines.append(f"Avg implied win prob (settled): {float(ap):.2f}")
+            bd = cl.get("breakdowns")
+            if isinstance(bd, dict):
+                by_tte = bd.get("by_tte")
+                by_strike = bd.get("by_strike")
+                if isinstance(by_tte, dict) and by_tte:
+                    best = max(by_tte.items(), key=lambda kv: float((kv[1] or {}).get("pnl") or 0.0))
+                    try:
+                        msg_lines.append(f"Best TTE bucket: {best[0]} pnl {_format_usd(float(best[1]['pnl']))} (n {int(best[1]['n'])})")
+                    except Exception:
+                        pass
+                if isinstance(by_strike, dict) and by_strike:
+                    best = max(by_strike.items(), key=lambda kv: float((kv[1] or {}).get("pnl") or 0.0))
+                    try:
+                        msg_lines.append(f"Best strike bucket: {best[0]} pnl {_format_usd(float(best[1]['pnl']))} (n {int(best[1]['n'])})")
+                    except Exception:
+                        pass
+            sugg = cl.get("suggestions")
+            if isinstance(sugg, list) and sugg:
+                s0 = sugg[0]
+                if isinstance(s0, str) and s0.strip():
+                    msg_lines.append(f"Note: {s0.strip()}")
+        if isinstance(cl.get("realized_pnl_usd_approx"), (int, float)):
+            msg_lines.append(f"Realized P/L (settled, approx): {_format_usd(float(cl['realized_pnl_usd_approx']))}")
+            realized_pnl_usd_approx = float(cl["realized_pnl_usd_approx"])
+        mt = cl.get("market_type_counts")
+        if isinstance(mt, dict) and mt:
+            parts = []
+            for k, v in list(mt.items())[:3]:
+                try:
+                    parts.append(f"{k}:{int(v)}")
+                except Exception:
+                    continue
+            if parts:
+                msg_lines.append(f"Market mix (window): {', '.join(parts)}")
+        if isinstance(cl.get("avg_time_to_expiry_min"), (int, float)):
+            msg_lines.append(f"Avg time-to-expiry at entry: {float(cl['avg_time_to_expiry_min']):.0f} min")
+        if isinstance(cl.get("avg_abs_strike_distance_pct"), (int, float)):
+            msg_lines.append(f"Avg strike distance at entry: {float(cl['avg_abs_strike_distance_pct']):.2f}%")
+        ast = cl.get("attribution_stats") if isinstance(cl.get("attribution_stats"), dict) else {}
+        if isinstance(ast, dict) and int(ast.get("attempted") or 0) > 0:
+            attempted = int(ast.get("attempted") or 0)
+            matched = int(ast.get("matched") or 0)
+            partial = int(ast.get("partial_matches") or 0)
+            rate = (float(matched) / float(max(1, attempted))) * 100.0
+            msg_lines.append(f"Settlement attribution: {matched}/{attempted} ({rate:.0f}%), partial {partial}")
+        if isinstance(cl.get("unmatched_settlements_window"), int) and int(cl.get("unmatched_settlements_window") or 0) > 0:
+            msg_lines.append(
+                f"Unmatched settlements (window): {int(cl.get('unmatched_settlements_window') or 0)} (total {int(cl.get('unmatched_settlements_total') or 0)})"
+            )
+        bd = cl.get("breakdowns") if isinstance(cl.get("breakdowns"), dict) else {}
+        by_var = bd.get("by_variant") if isinstance(bd, dict) and isinstance(bd.get("by_variant"), dict) else {}
+        if isinstance(by_var, dict) and by_var:
+            for vk in ("champion", "challenger"):
+                row = by_var.get(vk)
+                if not isinstance(row, dict):
+                    continue
+                settled_vk = int(row.get("settled_orders") or 0)
+                if settled_vk <= 0:
+                    continue
+                pnl_vk = row.get("realized_pnl_usd_approx")
+                wr_vk = row.get("win_rate")
+                line = f"Closed-loop {vk}: settled {settled_vk}"
+                if isinstance(pnl_vk, (int, float)):
+                    line += f", pnl {_format_usd(float(pnl_vk))}"
+                if isinstance(wr_vk, (int, float)):
+                    line += f", wr {float(wr_vk):.2f}"
+                msg_lines.append(line)
+    except Exception:
+        pass
+    return cl_report, realized_pnl_usd_approx
+
+
+def _summarize_autotune_state(*, root: str, msg_lines: List[str]) -> Dict[str, Any]:
+    autotune_summary: Dict[str, Any] = {}
+    try:
+        tp = os.path.join(root, "tmp", "kalshi_ref_arb", "tune_state.json")
+        ts_obj = _load_json(tp, default={})
+        if isinstance(ts_obj, dict) and bool(ts_obj.get("enabled")):
+            st = str(ts_obj.get("status") or "unknown")
+            active = str(ts_obj.get("active_variant") or "").strip().lower()
+            if active not in ("champion", "challenger"):
+                challenger = ts_obj.get("challenger") if isinstance(ts_obj.get("challenger"), dict) else {}
+                cst = str(challenger.get("status") or "").strip().lower()
+                active = "challenger" if cst in ("evaluating", "applied") and int(ts_obj.get("last_apply_ts") or 0) > 0 else "champion"
+            msg_lines.append(f"Auto-tune: ON ({st}) active={active}")
+            champion = ts_obj.get("champion") if isinstance(ts_obj.get("champion"), dict) else {}
+            challenger = ts_obj.get("challenger") if isinstance(ts_obj.get("challenger"), dict) else {}
+            eval_p = ts_obj.get("eval_progress") if isinstance(ts_obj.get("eval_progress"), dict) else {}
+            cst = str(challenger.get("status") or "").strip().lower()
+            if cst in ("evaluating", "applied"):
+                have = int(eval_p.get("have") or 0)
+                target = int(eval_p.get("target") or int(ts_obj.get("eval_settled") or 0))
+                if target > 0:
+                    msg_lines.append(f"Auto-tune eval: challenger progress {have}/{target} settled")
+            autotune_summary = {
+                "enabled": True,
+                "status": st,
+                "active_variant": active,
+                "champion": champion,
+                "challenger": challenger,
+                "eval_progress": eval_p,
+            }
+        elif isinstance(ts_obj, dict):
+            autotune_summary = {"enabled": bool(ts_obj.get("enabled")), "status": str(ts_obj.get("status") or "disabled")}
+    except Exception:
+        autotune_summary = {}
+    return autotune_summary
+
+
+def _summarize_trade_quality(
+    *,
+    run_objs: List[Dict[str, Any]],
+    autotune_summary: Dict[str, Any],
+    msg_lines: List[str],
+) -> tuple[List[Dict[str, Any]], Optional[float], Optional[float], Dict[str, Dict[str, Any]]]:
+    fees_total_usd_window: Optional[float] = None
+    fees_pct_window: Optional[float] = None
+    placed_live: List[Dict[str, Any]] = []
+
+    def _run_variant(o: Dict[str, Any]) -> str:
+        ci = o.get("cycle_inputs") if isinstance(o.get("cycle_inputs"), dict) else {}
+        at = ci.get("autotune") if isinstance(ci, dict) and isinstance(ci.get("autotune"), dict) else {}
+        v = str(at.get("active_variant") or "").strip().lower()
+        if v in ("champion", "challenger"):
+            return v
+        return str((autotune_summary.get("active_variant") if isinstance(autotune_summary, dict) else "") or "champion").strip().lower()
+
+    for o in run_objs:
+        trade = o.get("trade")
+        if not isinstance(trade, dict):
+            continue
+        placed = trade.get("placed") or []
+        if not isinstance(placed, list):
+            continue
+        post = o.get("post") if isinstance(o.get("post"), dict) else {}
+        variant = _run_variant(o)
+        for p in placed:
+            if not isinstance(p, dict) or p.get("mode") != "live":
+                continue
+            order = p.get("order") if isinstance(p.get("order"), dict) else {}
+            order_id = p.get("order_id") if isinstance(p.get("order_id"), str) else ""
+            edge_bps = p.get("edge_bps")
+            try:
+                edge_bps_f = float(edge_bps) if edge_bps is not None else None
+            except Exception:
+                edge_bps_f = None
+            limit_px = None
+            try:
+                limit_px = float(order.get("price_dollars")) if isinstance(order.get("price_dollars"), str) else None
+            except Exception:
+                limit_px = None
+            fills = match_fills_for_order(post, order_id) if (order_id and isinstance(post, dict)) else {}
+            avg_fill = fills.get("avg_price_dollars")
+            fee_total = fills.get("fee_total_usd")
+            try:
+                avg_fill_f = float(avg_fill) if isinstance(avg_fill, (int, float)) else None
+            except Exception:
+                avg_fill_f = None
+            try:
+                fee_total_f = float(fee_total) if isinstance(fee_total, (int, float)) else None
+            except Exception:
+                fee_total_f = None
+            slippage_bps = None
+            if (limit_px is not None) and (avg_fill_f is not None):
+                slippage_bps = (avg_fill_f - limit_px) * 10_000.0
+            placed_live.append(
+                {
+                    "ticker": order.get("ticker"),
+                    "side": order.get("side"),
+                    "count": order.get("count"),
+                    "order_id": order_id,
+                    "edge_bps": edge_bps_f,
+                    "limit_price": limit_px,
+                    "fills_count": int(fills.get("fills_count") or 0),
+                    "avg_fill_price": avg_fill_f,
+                    "fee_total_usd": fee_total_f,
+                    "slippage_bps": slippage_bps,
+                    "t_years": p.get("t_years"),
+                    "variant": variant,
+                }
+            )
+
+    tca_by_variant: Dict[str, Dict[str, Any]] = {}
+    if placed_live:
+        n = len(placed_live)
+        filled_orders = sum(1 for x in placed_live if int(x.get("fills_count") or 0) > 0)
+        filled_ct = sum(int(x.get("fills_count") or 0) for x in placed_live)
+        msg_lines.append(f"Trades (window): placed {n}, filled {filled_orders} (contracts {filled_ct})")
+        edges = [float(x["edge_bps"]) for x in placed_live if isinstance(x.get("edge_bps"), (int, float))]
+        if edges:
+            msg_lines.append(f"Avg edge at entry: {sum(edges)/float(len(edges)):.0f} bps")
+        slips = [float(x["slippage_bps"]) for x in placed_live if isinstance(x.get("slippage_bps"), (int, float))]
+        if slips:
+            msg_lines.append(f"Avg fill slippage: {sum(slips)/float(len(slips)):.0f} bps (price-bps)")
+        fees = []
+        notionals = []
+        for x in placed_live:
+            try:
+                fc = int(x.get("fills_count") or 0)
+            except Exception:
+                fc = 0
+            if fc <= 0:
+                continue
+            try:
+                avgp = float(x.get("avg_fill_price"))
+            except Exception:
+                avgp = None
+            try:
+                ft = float(x.get("fee_total_usd"))
+            except Exception:
+                ft = None
+            if avgp is not None:
+                notionals.append(float(avgp) * float(fc))
+            if ft is not None:
+                fees.append(float(ft))
+        if notionals and fees:
+            nsum = sum(notionals)
+            fsum = sum(fees)
+            pct = (fsum / nsum) * 100.0 if nsum > 0 else None
+            if pct is not None:
+                msg_lines.append(f"Fees (window): {_format_usd(fsum)} on {_format_usd(nsum)} notional ({pct:.1f}%)")
+                fees_total_usd_window = float(fsum)
+                fees_pct_window = float(pct)
+        ttes = []
+        for x in placed_live:
+            try:
+                t = float(x.get("t_years"))
+                ttes.append(t * 365.0 * 24.0 * 60.0)
+            except Exception:
+                continue
+        if ttes:
+            msg_lines.append(f"Avg time-to-expiry: {sum(ttes)/float(len(ttes)):.0f} min")
+
+        tca_by_variant = _tca_by_variant(placed_live)
+        if tca_by_variant:
+            for vk in ("champion", "challenger"):
+                row = tca_by_variant.get(vk)
+                if not isinstance(row, dict):
+                    continue
+                msg = f"TCA {vk}: placed {int(row.get('placed_orders') or 0)}, filled {int(row.get('filled_orders') or 0)}"
+                if isinstance(row.get("avg_slippage_bps"), (int, float)):
+                    msg += f", slip {float(row['avg_slippage_bps']):.0f}bps"
+                if isinstance(row.get("fees_pct"), (int, float)):
+                    msg += f", fees {float(row['fees_pct']):.1f}%"
+                msg_lines.append(msg)
+
+    return placed_live, fees_total_usd_window, fees_pct_window, tca_by_variant
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Send a digest for Kalshi ref-arb bot runs.")
     ap.add_argument("--window-hours", type=float, default=8.0)
@@ -1623,93 +1894,11 @@ def main() -> int:
         pass
 
     # Closed-loop learning (persistent): entry quality vs (eventual) realized outcomes.
-    cl_report: Optional[Dict[str, Any]] = None
-    realized_pnl_usd_approx: Optional[float] = None
-    try:
-        cl = closed_loop_report(root, window_hours=float(args.window_hours))
-        cl_report = cl if isinstance(cl, dict) else None
-        if isinstance(cl.get("avg_effective_edge_bps"), (int, float)):
-            msg_lines.append(f"Avg effective edge (window): {float(cl['avg_effective_edge_bps']):.0f} bps")
-        if isinstance(cl.get("avg_implied_win_prob"), (int, float)):
-            msg_lines.append(f"Avg implied win prob (window): {float(cl['avg_implied_win_prob']):.2f}")
-        if isinstance(cl.get("settled_orders"), int) and int(cl["settled_orders"]) > 0:
-            wr = cl.get("win_rate")
-            if isinstance(wr, (int, float)):
-                msg_lines.append(f"Settled win-rate (window): {float(wr):.2f}")
-            ap = cl.get("avg_implied_win_prob_settled")
-            if isinstance(ap, (int, float)):
-                msg_lines.append(f"Avg implied win prob (settled): {float(ap):.2f}")
-            bd = cl.get("breakdowns")
-            if isinstance(bd, dict):
-                by_tte = bd.get("by_tte")
-                by_strike = bd.get("by_strike")
-                if isinstance(by_tte, dict) and by_tte:
-                    best = max(by_tte.items(), key=lambda kv: float((kv[1] or {}).get("pnl") or 0.0))
-                    try:
-                        msg_lines.append(f"Best TTE bucket: {best[0]} pnl {_format_usd(float(best[1]['pnl']))} (n {int(best[1]['n'])})")
-                    except Exception:
-                        pass
-                if isinstance(by_strike, dict) and by_strike:
-                    best = max(by_strike.items(), key=lambda kv: float((kv[1] or {}).get("pnl") or 0.0))
-                    try:
-                        msg_lines.append(f"Best strike bucket: {best[0]} pnl {_format_usd(float(best[1]['pnl']))} (n {int(best[1]['n'])})")
-                    except Exception:
-                        pass
-            sugg = cl.get("suggestions")
-            if isinstance(sugg, list) and sugg:
-                # Only include one short suggestion in Telegram digest to avoid spam.
-                s0 = sugg[0]
-                if isinstance(s0, str) and s0.strip():
-                    msg_lines.append(f"Note: {s0.strip()}")
-        if isinstance(cl.get("realized_pnl_usd_approx"), (int, float)):
-            msg_lines.append(f"Realized P/L (settled, approx): {_format_usd(float(cl['realized_pnl_usd_approx']))}")
-            realized_pnl_usd_approx = float(cl["realized_pnl_usd_approx"])
-        # Light breakdown hints.
-        mt = cl.get("market_type_counts")
-        if isinstance(mt, dict) and mt:
-            parts = []
-            for k, v in list(mt.items())[:3]:
-                try:
-                    parts.append(f"{k}:{int(v)}")
-                except Exception:
-                    continue
-            if parts:
-                msg_lines.append(f"Market mix (window): {', '.join(parts)}")
-        if isinstance(cl.get("avg_time_to_expiry_min"), (int, float)):
-            msg_lines.append(f"Avg time-to-expiry at entry: {float(cl['avg_time_to_expiry_min']):.0f} min")
-        if isinstance(cl.get("avg_abs_strike_distance_pct"), (int, float)):
-            msg_lines.append(f"Avg strike distance at entry: {float(cl['avg_abs_strike_distance_pct']):.2f}%")
-        ast = cl.get("attribution_stats") if isinstance(cl.get("attribution_stats"), dict) else {}
-        if isinstance(ast, dict) and int(ast.get("attempted") or 0) > 0:
-            attempted = int(ast.get("attempted") or 0)
-            matched = int(ast.get("matched") or 0)
-            partial = int(ast.get("partial_matches") or 0)
-            rate = (float(matched) / float(max(1, attempted))) * 100.0
-            msg_lines.append(f"Settlement attribution: {matched}/{attempted} ({rate:.0f}%), partial {partial}")
-        if isinstance(cl.get("unmatched_settlements_window"), int) and int(cl.get("unmatched_settlements_window") or 0) > 0:
-            msg_lines.append(
-                f"Unmatched settlements (window): {int(cl.get('unmatched_settlements_window') or 0)} (total {int(cl.get('unmatched_settlements_total') or 0)})"
-            )
-        bd = cl.get("breakdowns") if isinstance(cl.get("breakdowns"), dict) else {}
-        by_var = bd.get("by_variant") if isinstance(bd, dict) and isinstance(bd.get("by_variant"), dict) else {}
-        if isinstance(by_var, dict) and by_var:
-            for vk in ("champion", "challenger"):
-                row = by_var.get(vk)
-                if not isinstance(row, dict):
-                    continue
-                settled_vk = int(row.get("settled_orders") or 0)
-                if settled_vk <= 0:
-                    continue
-                pnl_vk = row.get("realized_pnl_usd_approx")
-                wr_vk = row.get("win_rate")
-                line = f"Closed-loop {vk}: settled {settled_vk}"
-                if isinstance(pnl_vk, (int, float)):
-                    line += f", pnl {_format_usd(float(pnl_vk))}"
-                if isinstance(wr_vk, (int, float)):
-                    line += f", wr {float(wr_vk):.2f}"
-                msg_lines.append(line)
-    except Exception:
-        pass
+    cl_report, realized_pnl_usd_approx = _summarize_closed_loop_insights(
+        root=root,
+        window_hours=float(args.window_hours),
+        msg_lines=msg_lines,
+    )
 
     # Ledger health: show whether we are seeing settlements we can't attribute/parse.
     try:
@@ -1756,40 +1945,7 @@ def main() -> int:
         param_recs = []
 
     # Auto-tune status (bounded auto-apply after enough settled trades, with rollback).
-    autotune_summary: Dict[str, Any] = {}
-    try:
-        tp = os.path.join(root, "tmp", "kalshi_ref_arb", "tune_state.json")
-        ts_obj = _load_json(tp, default={})
-        if isinstance(ts_obj, dict) and bool(ts_obj.get("enabled")):
-            st = str(ts_obj.get("status") or "unknown")
-            active = str(ts_obj.get("active_variant") or "").strip().lower()
-            if active not in ("champion", "challenger"):
-                # Best-effort fallback for older schemas.
-                challenger = ts_obj.get("challenger") if isinstance(ts_obj.get("challenger"), dict) else {}
-                cst = str(challenger.get("status") or "").strip().lower()
-                active = "challenger" if cst in ("evaluating", "applied") and int(ts_obj.get("last_apply_ts") or 0) > 0 else "champion"
-            msg_lines.append(f"Auto-tune: ON ({st}) active={active}")
-            champion = ts_obj.get("champion") if isinstance(ts_obj.get("champion"), dict) else {}
-            challenger = ts_obj.get("challenger") if isinstance(ts_obj.get("challenger"), dict) else {}
-            eval_p = ts_obj.get("eval_progress") if isinstance(ts_obj.get("eval_progress"), dict) else {}
-            cst = str(challenger.get("status") or "").strip().lower()
-            if cst in ("evaluating", "applied"):
-                have = int(eval_p.get("have") or 0)
-                target = int(eval_p.get("target") or int(ts_obj.get("eval_settled") or 0))
-                if target > 0:
-                    msg_lines.append(f"Auto-tune eval: challenger progress {have}/{target} settled")
-            autotune_summary = {
-                "enabled": True,
-                "status": st,
-                "active_variant": active,
-                "champion": champion,
-                "challenger": challenger,
-                "eval_progress": eval_p,
-            }
-        elif isinstance(ts_obj, dict):
-            autotune_summary = {"enabled": bool(ts_obj.get("enabled")), "status": str(ts_obj.get("status") or "disabled")}
-    except Exception:
-        autotune_summary = {}
+    autotune_summary = _summarize_autotune_state(root=root, msg_lines=msg_lines)
 
     # Deployed downside risk (approx): sum of our tracked notional per market (cost basis), from local state.
     rs = _load_risk_state_summary(state_path)
@@ -1825,136 +1981,11 @@ def main() -> int:
             msg_lines.append(f"Settlements cash delta (approx): {_format_usd(float(cd))}{tail}")
 
     # Entry-quality summary: edge-at-entry vs fill quality (from run artifacts).
-    fees_total_usd_window: Optional[float] = None
-    fees_pct_window: Optional[float] = None
-    placed_live: List[Dict[str, Any]] = []
-    def _run_variant(o: Dict[str, Any]) -> str:
-        ci = o.get("cycle_inputs") if isinstance(o.get("cycle_inputs"), dict) else {}
-        at = ci.get("autotune") if isinstance(ci, dict) and isinstance(ci.get("autotune"), dict) else {}
-        v = str(at.get("active_variant") or "").strip().lower()
-        if v in ("champion", "challenger"):
-            return v
-        return str((autotune_summary.get("active_variant") if isinstance(autotune_summary, dict) else "") or "champion").strip().lower()
-
-    for o in run_objs:
-        trade = o.get("trade")
-        if not isinstance(trade, dict):
-            continue
-        placed = trade.get("placed") or []
-        if not isinstance(placed, list):
-            continue
-        post = o.get("post") if isinstance(o.get("post"), dict) else {}
-        variant = _run_variant(o)
-        for p in placed:
-            if not isinstance(p, dict) or p.get("mode") != "live":
-                continue
-            order = p.get("order") if isinstance(p.get("order"), dict) else {}
-            order_id = p.get("order_id") if isinstance(p.get("order_id"), str) else ""
-            edge_bps = p.get("edge_bps")
-            try:
-                edge_bps_f = float(edge_bps) if edge_bps is not None else None
-            except Exception:
-                edge_bps_f = None
-            limit_px = None
-            try:
-                limit_px = float(order.get("price_dollars")) if isinstance(order.get("price_dollars"), str) else None
-            except Exception:
-                limit_px = None
-            fills = match_fills_for_order(post, order_id) if (order_id and isinstance(post, dict)) else {}
-            avg_fill = fills.get("avg_price_dollars")
-            fee_total = fills.get("fee_total_usd")
-            try:
-                avg_fill_f = float(avg_fill) if isinstance(avg_fill, (int, float)) else None
-            except Exception:
-                avg_fill_f = None
-            try:
-                fee_total_f = float(fee_total) if isinstance(fee_total, (int, float)) else None
-            except Exception:
-                fee_total_f = None
-            slippage_bps = None
-            if (limit_px is not None) and (avg_fill_f is not None):
-                slippage_bps = (avg_fill_f - limit_px) * 10_000.0
-            placed_live.append(
-                {
-                    "ticker": order.get("ticker"),
-                    "side": order.get("side"),
-                    "count": order.get("count"),
-                    "order_id": order_id,
-                    "edge_bps": edge_bps_f,
-                    "limit_price": limit_px,
-                    "fills_count": int(fills.get("fills_count") or 0),
-                    "avg_fill_price": avg_fill_f,
-                    "fee_total_usd": fee_total_f,
-                    "slippage_bps": slippage_bps,
-                    "t_years": p.get("t_years"),
-                    "variant": variant,
-                }
-            )
-
-    tca_by_variant: Dict[str, Dict[str, Any]] = {}
-    if placed_live:
-        n = len(placed_live)
-        filled_orders = sum(1 for x in placed_live if int(x.get("fills_count") or 0) > 0)
-        filled_ct = sum(int(x.get("fills_count") or 0) for x in placed_live)
-        msg_lines.append(f"Trades (window): placed {n}, filled {filled_orders} (contracts {filled_ct})")
-        edges = [float(x["edge_bps"]) for x in placed_live if isinstance(x.get("edge_bps"), (int, float))]
-        if edges:
-            msg_lines.append(f"Avg edge at entry: {sum(edges)/float(len(edges)):.0f} bps")
-        slips = [float(x["slippage_bps"]) for x in placed_live if isinstance(x.get("slippage_bps"), (int, float))]
-        if slips:
-            msg_lines.append(f"Avg fill slippage: {sum(slips)/float(len(slips)):.0f} bps (price-bps)")
-        # Fee awareness: show aggregate fees vs notional for fills in-window.
-        fees = []
-        notionals = []
-        for x in placed_live:
-            try:
-                fc = int(x.get("fills_count") or 0)
-            except Exception:
-                fc = 0
-            if fc <= 0:
-                continue
-            try:
-                avgp = float(x.get("avg_fill_price"))
-            except Exception:
-                avgp = None
-            try:
-                ft = float(x.get("fee_total_usd"))
-            except Exception:
-                ft = None
-            if avgp is not None:
-                notionals.append(float(avgp) * float(fc))
-            if ft is not None:
-                fees.append(float(ft))
-        if notionals and fees:
-            nsum = sum(notionals)
-            fsum = sum(fees)
-            pct = (fsum / nsum) * 100.0 if nsum > 0 else None
-            if pct is not None:
-                msg_lines.append(f"Fees (window): {_format_usd(fsum)} on {_format_usd(nsum)} notional ({pct:.1f}%)")
-                fees_total_usd_window = float(fsum)
-                fees_pct_window = float(pct)
-        ttes = []
-        for x in placed_live:
-            try:
-                t = float(x.get("t_years"))
-                ttes.append(t * 365.0 * 24.0 * 60.0)
-            except Exception:
-                continue
-        if ttes:
-            msg_lines.append(f"Avg time-to-expiry: {sum(ttes)/float(len(ttes)):.0f} min")
-
-        tca_by_variant = _tca_by_variant(placed_live)
-        if tca_by_variant:
-            for vk in ("champion", "challenger"):
-                row = tca_by_variant.get(vk)
-                if not isinstance(row, dict):
-                    continue
-                msg = f"TCA {vk}: placed {int(row.get('placed_orders') or 0)}, filled {int(row.get('filled_orders') or 0)}"
-                if isinstance(row.get("avg_slippage_bps"), (int, float)):
-                    msg += f", slip {float(row['avg_slippage_bps']):.0f}bps"
-                if isinstance(row.get("fees_pct"), (int, float)):
-                    msg += f", fees {float(row['fees_pct']):.1f}%"
-                msg_lines.append(msg)
+    placed_live, fees_total_usd_window, fees_pct_window, tca_by_variant = _summarize_trade_quality(
+        run_objs=run_objs,
+        autotune_summary=autotune_summary,
+        msg_lines=msg_lines,
+    )
 
     # Mark-to-market estimate from latest open positions (read-only public market quotes).
     mtm_liq_value_usd: Optional[float] = None
