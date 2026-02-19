@@ -92,6 +92,7 @@ def settled_rows(
                 "ts_unix": ts,
                 "order_id": o.get("order_id"),
                 "ticker": o.get("ticker"),
+                "series": (str(o.get("ticker") or "").split("-", 1)[0] if isinstance(o.get("ticker"), str) and "-" in str(o.get("ticker")) else None),
                 "side": o.get("side"),
                 "fill_count": fc,
                 "avg_fill_price": avg,
@@ -101,9 +102,31 @@ def settled_rows(
                 "slippage_cost_usd": float(slip_cost),
                 "pnl_adj_usd": float(pnl_adj),
                 "effective_edge_bps": _safe_float(o.get("effective_edge_bps") if o.get("effective_edge_bps") is not None else o.get("edge_bps")),
+                "edge_threshold_bps": _safe_float(o.get("edge_threshold_bps") or (o.get("recommended") or {}).get("edge_threshold_bps")),
+                "regime_bucket": (
+                    str(o.get("regime_bucket"))
+                    if isinstance(o.get("regime_bucket"), str)
+                    else (str((o.get("filters") or {}).get("regime_bucket")) if isinstance((o.get("filters") or {}).get("regime_bucket"), str) else None)
+                ),
+                "t_years": _safe_float(o.get("t_years")),
             }
         )
     return out
+
+
+def _max_drawdown_pct(rows: List[Dict[str, Any]]) -> Optional[float]:
+    if not rows:
+        return None
+    eq = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    for r in rows:
+        eq += float(r.get("pnl_adj_usd") or 0.0)
+        if eq > peak:
+            peak = eq
+        if peak > 0.0:
+            max_dd = max(max_dd, ((peak - eq) / peak) * 100.0)
+    return float(max_dd)
 
 
 def summarize_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -116,6 +139,7 @@ def summarize_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             "avg_pnl_adj_usd": None,
             "sum_pnl_raw_usd": 0.0,
             "sum_pnl_adj_usd": 0.0,
+            "max_drawdown_pct": None,
         }
     wins = 0
     raw_sum = 0.0
@@ -134,7 +158,52 @@ def summarize_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "avg_pnl_adj_usd": float(adj_sum) / float(n),
         "sum_pnl_raw_usd": float(raw_sum),
         "sum_pnl_adj_usd": float(adj_sum),
+        "max_drawdown_pct": _max_drawdown_pct(rows),
     }
+
+
+def summarize_by(rows: List[Dict[str, Any]], key: str) -> Dict[str, Any]:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        v = r.get(key)
+        k = str(v) if v not in (None, "", "None") else "unknown"
+        arr = groups.get(k)
+        if arr is None:
+            arr = []
+            groups[k] = arr
+        arr.append(r)
+    out: Dict[str, Any] = {}
+    for k, arr in groups.items():
+        out[k] = summarize_rows(arr)
+    return out
+
+
+def summarize_by_tte_bucket(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _bucket(t_years: Any) -> str:
+        ty = _safe_float(t_years)
+        if ty is None:
+            return "unknown"
+        mins = float(ty) * 365.0 * 24.0 * 60.0
+        if mins < 60.0:
+            return "<60m"
+        if mins < 6 * 60.0:
+            return "1h-6h"
+        if mins < 24 * 60.0:
+            return "6h-24h"
+        return ">=24h"
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        b = _bucket(r.get("t_years"))
+        arr = groups.get(b)
+        if arr is None:
+            arr = []
+            groups[b] = arr
+        arr.append(r)
+    out: Dict[str, Any] = {}
+    for k, arr in groups.items():
+        out[k] = summarize_rows(arr)
+    return out
 
 
 def walk_forward(rows: List[Dict[str, Any]], *, folds: int = 4) -> List[Dict[str, Any]]:
@@ -157,4 +226,3 @@ def walk_forward(rows: List[Dict[str, Any]], *, folds: int = 4) -> List[Dict[str
             }
         )
     return out
-

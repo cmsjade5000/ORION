@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime as _dt
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +13,24 @@ class SpotQuote:
     symbol: str
     venue: str
     price: float
+    observed_ts_unix: Optional[int] = None
+    quote_ts_unix: Optional[int] = None
+    quote_age_sec: Optional[float] = None
+
+
+def _parse_iso_ts_to_unix(x: Any) -> Optional[int]:
+    if not isinstance(x, str) or not x.strip():
+        return None
+    s = str(x).strip()
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = _dt.datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_dt.timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        return None
 
 
 class CoinbasePublic:
@@ -25,7 +45,10 @@ class CoinbasePublic:
         price = safe_float(obj.get("price") if isinstance(obj, dict) else None)
         if price is None:
             return None
-        return SpotQuote(symbol=product, venue="coinbase", price=price)
+        now = int(time.time())
+        qts = _parse_iso_ts_to_unix(obj.get("time") if isinstance(obj, dict) else None)
+        age = float(max(0.0, now - int(qts))) if isinstance(qts, int) else None
+        return SpotQuote(symbol=product, venue="coinbase", price=price, observed_ts_unix=now, quote_ts_unix=qts, quote_age_sec=age)
 
 
 class KrakenPublic:
@@ -51,7 +74,8 @@ class KrakenPublic:
         price = safe_float(c[0] if isinstance(c, list) and c else None)
         if price is None:
             return None
-        return SpotQuote(symbol=pair, venue="kraken", price=price)
+        now = int(time.time())
+        return SpotQuote(symbol=pair, venue="kraken", price=price, observed_ts_unix=now)
 
 
 class BitstampPublic:
@@ -65,7 +89,8 @@ class BitstampPublic:
         price = safe_float(obj.get("last") if isinstance(obj, dict) else None)
         if price is None:
             return None
-        return SpotQuote(symbol=pair, venue="bitstamp", price=price)
+        now = int(time.time())
+        return SpotQuote(symbol=pair, venue="bitstamp", price=price, observed_ts_unix=now)
 
 
 class BinancePublic:
@@ -79,7 +104,8 @@ class BinancePublic:
         price = safe_float(obj.get("price") if isinstance(obj, dict) else None)
         if price is None:
             return None
-        return SpotQuote(symbol=str(symbol), venue="binance", price=price)
+        now = int(time.time())
+        return SpotQuote(symbol=str(symbol), venue="binance", price=price, observed_ts_unix=now)
 
     def get_latest_funding_rate(self, symbol: str) -> Optional[float]:
         # USD-M futures funding rate; read-only signal source.
@@ -167,6 +193,10 @@ def ref_spot_snapshot(series: str, *, feeds: Optional[List[str]] = None) -> Dict
     prices = [float(q.price) for q in quotes]
     median = None
     dispersion_bps = None
+    max_quote_age_sec = None
+    quote_ages = [float(q.quote_age_sec) for q in quotes if isinstance(q.quote_age_sec, (int, float))]
+    if quote_ages:
+        max_quote_age_sec = max(quote_ages)
     if prices:
         prices_sorted = sorted(prices)
         median = prices_sorted[len(prices_sorted) // 2]
@@ -174,12 +204,25 @@ def ref_spot_snapshot(series: str, *, feeds: Optional[List[str]] = None) -> Dict
             lo = prices_sorted[0]
             hi = prices_sorted[-1]
             dispersion_bps = ((hi - lo) / median) * 10_000.0
+    now = int(time.time())
     return {
         "series": str(series),
         "feeds": list(use),
-        "quotes": [{"venue": q.venue, "symbol": q.symbol, "price": float(q.price)} for q in quotes],
+        "quotes": [
+            {
+                "venue": q.venue,
+                "symbol": q.symbol,
+                "price": float(q.price),
+                "observed_ts_unix": int(q.observed_ts_unix) if isinstance(q.observed_ts_unix, int) else None,
+                "quote_ts_unix": int(q.quote_ts_unix) if isinstance(q.quote_ts_unix, int) else None,
+                "quote_age_sec": float(q.quote_age_sec) if isinstance(q.quote_age_sec, (int, float)) else None,
+                "observed_age_sec": float(max(0.0, now - int(q.observed_ts_unix))) if isinstance(q.observed_ts_unix, int) else None,
+            }
+            for q in quotes
+        ],
         "median": float(median) if isinstance(median, (int, float)) else None,
         "dispersion_bps": float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+        "max_quote_age_sec": float(max_quote_age_sec) if isinstance(max_quote_age_sec, (int, float)) else None,
     }
 
 

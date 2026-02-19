@@ -10,13 +10,25 @@ import time
 from typing import Any, Dict
 
 try:
-    from scripts.arb.kalshi_backtest import settled_rows, summarize_rows, walk_forward  # type: ignore
+    from scripts.arb.kalshi_backtest import (  # type: ignore
+        settled_rows,
+        summarize_by,
+        summarize_by_tte_bucket,
+        summarize_rows,
+        walk_forward,
+    )
 except ModuleNotFoundError:
     here = os.path.abspath(os.path.dirname(__file__))
     repo_root = os.path.abspath(os.path.join(here, ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
-    from scripts.arb.kalshi_backtest import settled_rows, summarize_rows, walk_forward  # type: ignore
+    from scripts.arb.kalshi_backtest import (  # type: ignore
+        settled_rows,
+        summarize_by,
+        summarize_by_tte_bucket,
+        summarize_rows,
+        walk_forward,
+    )
 
 
 def _repo_root() -> str:
@@ -50,6 +62,12 @@ def main() -> int:
             "walk_forward_folds": int(args.walk_forward_folds),
         },
         "summary": summarize_rows(rows),
+        "breakdown": {
+            "by_series": summarize_by(rows, "series"),
+            "by_side": summarize_by(rows, "side"),
+            "by_regime_bucket": summarize_by(rows, "regime_bucket"),
+            "by_tte_bucket": summarize_by_tte_bucket(rows),
+        },
         "walk_forward": walk_forward(rows, folds=int(args.walk_forward_folds)),
         "rows": rows,
     }
@@ -59,4 +77,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

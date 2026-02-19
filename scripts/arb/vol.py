@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .http import HttpClient, HttpConfig, safe_float
 
@@ -251,3 +251,26 @@ def conservative_sigma_auto(series: str, *, window_hours: int = 24 * 7) -> Optio
     v = max(x.vol_annual for x in vols)
     # Clamp to sane bounds to avoid overreacting to bad data.
     return float(min(2.0, max(0.20, v)))
+
+
+def vol_regime_bucket(vol_ratio: Optional[float], *, calm_max: float = 0.95, hot_min: float = 1.15) -> str:
+    """Map short-vs-baseline vol ratio into a simple regime bucket."""
+    if not isinstance(vol_ratio, (int, float)):
+        return "normal"
+    vr = float(vol_ratio)
+    if vr <= float(calm_max):
+        return "calm"
+    if vr >= float(hot_min):
+        return "hot"
+    return "normal"
+
+
+def dynamic_edge_multiplier_for_bucket(bucket: str, mults: Dict[str, float]) -> float:
+    """Resolve dynamic min-edge multiplier from a bucket with safe fallbacks."""
+    b = str(bucket or "normal").strip().lower()
+    try:
+        if isinstance(mults, dict) and b in mults and float(mults[b]) > 0.0:
+            return float(mults[b])
+    except Exception:
+        pass
+    return 1.0

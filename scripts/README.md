@@ -216,11 +216,56 @@ Deterministic Kalshi autotrade cycle runner intended for OpenClaw cron (no manua
 ### Purpose
 Send a concise Telegram digest summarizing the last N hours of Kalshi arb activity:
 - cycles, live orders, errors
-- lifetime notional vs $50 budget
+- notional/cash/MTM summary
 - kill switch state
+- autotune champion/challenger status
+- TCA rollups (slippage/fees), including variant split when available
+- settlement attribution diagnostics (match-rate + unmatched window/total)
 
 ### Usage
 
 ```bash
 python3 scripts/kalshi_digest.py --window-hours 8 --send
+```
+
+---
+
+## polymarket_sports_paper.py
+
+### Purpose
+Paper-only Polymarket sports arb module (separate from crypto bot):
+- scans active **sports** binary markets
+- checks paired opportunities:
+- `YES(A)+YES(B) < threshold` (default `0.98`)
+- `NO(A)+NO(B) < threshold` (NO side proxied from top bids)
+- simulates near-simultaneous paired execution with FOK-style semantics
+- enforces independent paper risk caps and persists a local ledger
+
+### Usage
+
+```bash
+python3 scripts/polymarket_sports_paper.py scan
+python3 scripts/polymarket_sports_paper.py trade
+python3 scripts/polymarket_sports_paper.py status
+```
+
+Notes:
+- This module is hard paper-only. Passing `--allow-write` returns `paper_only_module`.
+- Artifacts/ledger live under `tmp/polymarket_sports_paper/`.
+
+---
+
+## polymarket_sports_paper_cycle.py
+
+### Purpose
+Single-cycle runner for unattended paper sports execution:
+- runs `polymarket_sports_paper.py trade`
+- writes artifacts to `tmp/polymarket_sports_paper/runs/`
+- updates `tmp/polymarket_sports_paper/last_cycle_status.json`
+- optionally notifies Telegram on errors only
+
+### Usage
+
+```bash
+python3 scripts/polymarket_sports_paper_cycle.py
 ```

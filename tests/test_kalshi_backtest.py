@@ -19,6 +19,7 @@ class TestKalshiBacktest(unittest.TestCase):
         s = summarize_rows(rows)
         self.assertEqual(s["count"], 4)
         self.assertIsInstance(s["win_rate"], float)
+        self.assertIn("max_drawdown_pct", s)
         wf = walk_forward(rows, folds=3)
         self.assertIsInstance(wf, list)
         self.assertTrue(wf)
@@ -53,4 +54,3 @@ class TestKalshiBacktest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

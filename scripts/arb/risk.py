@@ -6,6 +6,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+try:
+    from .kalshi_ledger import load_ledger  # type: ignore
+except Exception:  # pragma: no cover - optional import path safety
+    load_ledger = None  # type: ignore
+
 
 @dataclass(frozen=True)
 class RiskConfig:
@@ -143,3 +148,63 @@ def set_cooldown(cfg: RiskConfig, repo_root: str, *, seconds: int, reason: str) 
         return True
     except Exception:
         return False
+
+
+def ledger_drawdown_pct(repo_root: str, *, lookback_days: int = 60) -> float:
+    """Best-effort realized drawdown from settled cash deltas in the closed-loop ledger.
+
+    Returns drawdown percent from the running peak equity over the lookback window.
+    """
+    if load_ledger is None:
+        return 0.0
+    try:
+        led = load_ledger(repo_root)  # type: ignore[misc]
+    except Exception:
+        return 0.0
+    orders = led.get("orders") if isinstance(led, dict) else None
+    if not isinstance(orders, dict):
+        return 0.0
+    now = int(time.time())
+    start_ts = now - int(max(1, int(lookback_days)) * 24 * 3600)
+    events = []
+    for _, o in orders.items():
+        if not isinstance(o, dict):
+            continue
+        st = o.get("settlement") if isinstance(o.get("settlement"), dict) else None
+        if not isinstance(st, dict):
+            continue
+        ts = int(st.get("ts_seen") or o.get("ts_unix") or 0)
+        if ts < start_ts:
+            continue
+        parsed = st.get("parsed") if isinstance(st.get("parsed"), dict) else {}
+        cd = parsed.get("cash_delta_usd")
+        if not isinstance(cd, (int, float)):
+            continue
+        events.append((ts, float(cd)))
+    if not events:
+        return 0.0
+    events.sort(key=lambda x: x[0])
+    equity = 0.0
+    peak = 0.0
+    dd = 0.0
+    for _, delta in events:
+        equity += float(delta)
+        if equity > peak:
+            peak = equity
+        if peak > 0.0:
+            dd = max(dd, (peak - equity) / peak * 100.0)
+    return float(max(0.0, dd))
+
+
+def drawdown_throttle_multiplier(drawdown_pct: float, *, throttle_pct: float) -> float:
+    """Map drawdown into a conservative [0.25, 1.0] sizing multiplier."""
+    try:
+        dd = max(0.0, float(drawdown_pct))
+        gate = max(0.0, float(throttle_pct))
+    except Exception:
+        return 1.0
+    if gate <= 0.0 or dd < gate:
+        return 1.0
+    # Linear decay after threshold; never drop below 0.25 via this throttle alone.
+    over = min(1.0, (dd - gate) / max(1.0, gate))
+    return float(max(0.25, 1.0 - 0.75 * over))

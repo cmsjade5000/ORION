@@ -54,6 +54,16 @@ class TestVol(unittest.TestCase):
             if orig_doge is not None:
                 vol.realized_vol_doge_usd_annual = orig_doge  # type: ignore[attr-defined]
 
+    def test_vol_regime_bucket_and_dynamic_multiplier(self) -> None:
+        from scripts.arb.vol import dynamic_edge_multiplier_for_bucket, vol_regime_bucket
+
+        self.assertEqual(vol_regime_bucket(0.8), "calm")
+        self.assertEqual(vol_regime_bucket(1.3), "hot")
+        self.assertEqual(vol_regime_bucket(1.0), "normal")
+        mults = {"calm": 0.9, "normal": 1.0, "hot": 1.2}
+        self.assertAlmostEqual(dynamic_edge_multiplier_for_bucket("hot", mults), 1.2, places=9)
+        self.assertAlmostEqual(dynamic_edge_multiplier_for_bucket("unknown", mults), 1.0, places=9)
+
 
 if __name__ == "__main__":
     unittest.main()

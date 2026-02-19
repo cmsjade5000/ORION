@@ -20,6 +20,7 @@ class TestExchangeRefFeeds(unittest.TestCase):
         self.assertEqual(snap["median"], 100.0)
         self.assertIsInstance(snap["dispersion_bps"], float)
         self.assertEqual(len(snap["quotes"]), 3)
+        self.assertIn("max_quote_age_sec", snap)
 
     def test_latest_binance_funding_rate_bps(self) -> None:
         import scripts.arb.exchanges as ex
@@ -31,4 +32,3 @@ class TestExchangeRefFeeds(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
