@@ -231,7 +231,9 @@ let commandIdx = 0;
 let ledgerPulseIdx = 0;
 
 const ACTIVITY_RULES = [
-  { activity: "error", match: /(?:error|fail|failed|panic|broken|crash)/i },
+  // Reserve "error" for explicit debugging/outage intent. Avoid false positives
+  // on normal analysis prompts that mention words like "failure patterns".
+  { activity: "error", match: /(?:\berror\b|panic|broken|crash|exception|stack\s*trace|debug|outage|incident)/i },
   { activity: "search", match: /(?:search|find|lookup|research|scan)/i },
   { activity: "files", match: /(?:file|files|docs?|read|summarize|note|notes)/i },
   { activity: "tooling", match: /(?:tool|run|exec|execute|command|script|deploy|build)/i },
