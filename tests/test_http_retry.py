@@ -30,16 +30,39 @@ class TestHttpRetry(unittest.TestCase):
     def test_retryable_http_codes(self) -> None:
         from scripts.arb.http import HttpClient
 
-        self.assertTrue(HttpClient._is_retryable(_http_err(429)))
-        self.assertTrue(HttpClient._is_retryable(_http_err(503)))
-        self.assertFalse(HttpClient._is_retryable(_http_err(401)))
+        e1 = _http_err(429)
+        e2 = _http_err(503)
+        e3 = _http_err(401)
+        try:
+            self.assertTrue(HttpClient._is_retryable(e1))
+            self.assertTrue(HttpClient._is_retryable(e2))
+            self.assertFalse(HttpClient._is_retryable(e3))
+        finally:
+            try:
+                e1.close()
+            except Exception:
+                pass
+            try:
+                e2.close()
+            except Exception:
+                pass
+            try:
+                e3.close()
+            except Exception:
+                pass
 
     def test_retry_after_header_is_honored(self) -> None:
         from scripts.arb.http import HttpClient
 
         e = _http_err(429, retry_after="2")
-        d = HttpClient._retry_delay_seconds(e, attempt=0, base=0.25)
-        self.assertAlmostEqual(d, 2.0, places=9)
+        try:
+            d = HttpClient._retry_delay_seconds(e, attempt=0, base=0.25)
+            self.assertAlmostEqual(d, 2.0, places=9)
+        finally:
+            try:
+                e.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
