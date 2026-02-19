@@ -453,6 +453,20 @@ function markRealEvent() {
 
 // Mock motion is now opt-in (off by default). Set MOCK_STATE=1 to enable.
 const MOCK_STATE = process.env.MOCK_STATE === "1";
+// Preview-only behavior (fake artifacts/replies) is useful in local development,
+// but should be off in production unless explicitly enabled.
+const PREVIEW_ARTIFACTS_ENABLED =
+  process.env.PREVIEW_ARTIFACTS_ENABLED === "1"
+    ? true
+    : process.env.PREVIEW_ARTIFACTS_ENABLED === "0"
+      ? false
+      : !IS_PROD;
+const PREVIEW_RESPONSES_ENABLED =
+  process.env.PREVIEW_RESPONSES_ENABLED === "1"
+    ? true
+    : process.env.PREVIEW_RESPONSES_ENABLED === "0"
+      ? false
+      : !IS_PROD;
 
 const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 const STALE_MS = Number(process.env.STALE_MS || 20_000); // clear agent activity if no updates
@@ -2227,9 +2241,19 @@ app.post("/api/command", (req, res) => {
   // Prefer DM replies (userId) to avoid spamming groups when a miniapp is opened from a group context.
   const deliverTargetRaw = ctx.verified ? String(ctx.userId ?? ctx.chatId ?? "").trim() : "";
   const deliverTarget = /^[0-9]+$/.test(deliverTargetRaw) ? deliverTargetRaw : "";
+  const canRouteLive = shouldRoute && Boolean(deliverTarget);
+  const shouldSimulateWorkflow = !canRouteLive || sequence.length > 1;
+  const shouldSimulatePreviewArtifacts = !canRouteLive && PREVIEW_ARTIFACTS_ENABLED;
+  const shouldSimulatePreviewResponse = !canRouteLive && PREVIEW_RESPONSES_ENABLED;
 
-  const shouldSimulateReply = !shouldRoute || !deliverTarget;
-  const shouldSimulateWorkflow = shouldSimulateReply || sequence.length > 1;
+  const routingUnavailableReason =
+    !ctx.verified
+      ? "Live routing is unavailable: Telegram init data is not verified."
+      : process.env.OPENCLAW_ROUTE_COMMANDS !== "1"
+        ? "Live routing is unavailable: command routing is disabled on this deployment."
+        : !deliverTarget
+          ? "Live routing is unavailable: missing Telegram delivery target."
+          : "";
 
   // Simulated hop progression:
   // - When not routing, this is the primary demo behavior (including a fake reply/artifact).
@@ -2273,18 +2297,20 @@ app.post("/api/command", (req, res) => {
         if (i === sequence.length - 1) {
           const focusId = ATLAS_SUBAGENTS_SET.has(agentId) ? "ATLAS" : agentId;
           setLink(focusId, "in", gapMs + 200);
-          if (shouldSimulateReply) {
-            // Demo behavior: if the user asked for files, generate small valid artifacts
-            // and surface them as floating bubbles in the Mini App.
-            simulateArtifactsFromText({ text, agentId: focusId });
-            // Resolve pending placeholder with a concise preview response when live routing
-            // is not available in this runtime.
+          if (!canRouteLive) {
+            // Optional local preview behavior for development.
+            if (shouldSimulatePreviewArtifacts) {
+              simulateArtifactsFromText({ text, agentId: focusId });
+            }
+
             const flat = String(text || "").replace(/\s+/g, " ").trim();
             const preview = flat.length > 220 ? `${flat.slice(0, 220)}…` : flat;
             applyEventToStore({
               type: "response.created",
               agentId: "ORION",
-              text: preview ? `Preview generated for: "${preview}"` : "Preview generated.",
+              text: shouldSimulatePreviewResponse
+                ? (preview ? `Preview generated for: "${preview}"` : "Preview generated.")
+                : (routingUnavailableReason || "Live routing is unavailable in this deployment."),
             });
             if (STREAM_CLIENTS.size > 0) scheduleStateBroadcast();
           }
@@ -2296,7 +2322,7 @@ app.post("/api/command", (req, res) => {
     run(0);
   }
 
-  if (shouldRoute && deliverTarget) {
+  if (canRouteLive) {
     const agentId = process.env.OPENCLAW_AGENT_ID?.trim() || "main";
     const args = [
       "agent",
@@ -2461,6 +2487,10 @@ app.post("/api/command", (req, res) => {
       mode: "task_packet",
       taskPacketId: null,
       sessionId: null,
+      live: canRouteLive,
+      unavailableReason: canRouteLive ? null : routingUnavailableReason,
+      previewArtifactsEnabled: shouldSimulatePreviewArtifacts,
+      previewResponsesEnabled: shouldSimulatePreviewResponse,
     },
   });
 });

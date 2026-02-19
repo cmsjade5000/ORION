@@ -32,7 +32,9 @@ The SSE endpoint (`GET /api/events`) emits:
 Notes:
 - The server will also emit some extra convenience events (for example `command.accepted`) during development.
 - `state` frames are the authoritative UI state; the fine-grained events exist for low-latency UX and future replay/debugging.
-- Dev convenience: when `/api/command` is running in simulated mode (OpenClaw routing disabled) and the command text includes `pdf`, the server generates a small valid PDF and surfaces it via `artifact.created` so you can test the UI without wiring ORION yet.
+- Dev convenience: when `/api/command` is running in simulated mode (OpenClaw routing disabled), the server can generate preview artifacts/replies for local testing.
+  - In production, preview artifacts/replies are disabled by default to avoid fake outputs.
+  - Override with `PREVIEW_ARTIFACTS_ENABLED=1` and/or `PREVIEW_RESPONSES_ENABLED=1` if you intentionally want demo behavior.
 
 ## ORION -> Mini App Ingest (v0)
 
@@ -153,6 +155,9 @@ If this server runs on the same machine as OpenClaw, you can have `/api/command`
 
 - `OPENCLAW_ROUTE_COMMANDS=1`
 - `OPENCLAW_AGENT_ID=main` (default `main`)
+- Optional preview toggles:
+  - `PREVIEW_ARTIFACTS_ENABLED=0|1` (default: `1` in dev, `0` in production)
+  - `PREVIEW_RESPONSES_ENABLED=0|1` (default: `1` in dev, `0` in production)
 
 When enabled, the server will call `openclaw agent ... --deliver --reply-channel telegram` targeting the originating Telegram chat/user (from verified `initData`).
 

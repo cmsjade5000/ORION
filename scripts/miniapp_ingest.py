@@ -13,6 +13,7 @@ Endpoint contract (server):
 from __future__ import annotations
 
 import json
+import mimetypes
 import os
 import time
 import urllib.error
@@ -73,6 +74,16 @@ def _normalize_ingest_url(base_or_full: str) -> str:
     if s.endswith("/api/ingest"):
         return s
     return f"{s}/api/ingest"
+
+
+def _to_artifacts_url(ingest_url: str) -> str:
+    s = (ingest_url or "").strip()
+    if not s:
+        return ""
+    suffix = "/api/ingest"
+    if s.endswith(suffix):
+        return s[: -len(suffix)] + "/api/artifacts"
+    return s.rstrip("/") + "/api/artifacts"
 
 
 def _derive_ingest_from_miniapp_url(miniapp_url: str) -> str:
@@ -177,3 +188,55 @@ def emit(
         body.update(extra)
     return emit_event(body)
 
+
+def upload_artifact(
+    file_path: str | Path,
+    *,
+    name: str | None = None,
+    mime: str | None = None,
+    agent_id: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    Best-effort upload of a local file to the Mini App artifact endpoint.
+
+    Returns the `artifact` object from the server response on success, else None.
+    """
+    ingest_url = _get_ingest_url()
+    if not ingest_url:
+        return None
+    url = _to_artifacts_url(ingest_url)
+    if not url:
+        return None
+
+    p = Path(file_path)
+    if not p.exists() or not p.is_file():
+        return None
+
+    data = p.read_bytes()
+    fname = (name or p.name or "artifact.bin").strip() or "artifact.bin"
+    guessed_mime, _ = mimetypes.guess_type(fname)
+    content_type = (mime or guessed_mime or "application/octet-stream").strip() or "application/octet-stream"
+
+    headers: dict[str, str] = {
+        "content-type": content_type,
+        "x-artifact-name": fname,
+    }
+    if agent_id:
+        headers["x-agent-id"] = str(agent_id).strip()
+    tok = _get_ingest_token()
+    if tok:
+        headers["authorization"] = f"Bearer {tok}"
+
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            raw = resp.read()
+            if not (200 <= int(resp.status) < 300):
+                return None
+            obj = json.loads(raw.decode("utf-8", errors="replace"))
+            if not isinstance(obj, dict) or obj.get("ok") is not True:
+                return None
+            art = obj.get("artifact")
+            return art if isinstance(art, dict) else None
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, Exception):
+        return None

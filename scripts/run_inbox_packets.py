@@ -34,14 +34,16 @@ try:
     # Optional dependency: Mini App dashboard progress visibility.
     # When executed as `python3 scripts/run_inbox_packets.py`, sys.path[0] is `scripts/`,
     # so `miniapp_ingest` is importable as a sibling module.
-    from miniapp_ingest import emit as miniapp_emit
+    from miniapp_ingest import emit as miniapp_emit, upload_artifact as miniapp_upload_artifact
 except Exception:  # pragma: no cover
     try:  # pragma: no cover
         # When executed in other ways (e.g. `python3 -c ...` from repo root).
-        from scripts.miniapp_ingest import emit as miniapp_emit  # type: ignore
+        from scripts.miniapp_ingest import emit as miniapp_emit, upload_artifact as miniapp_upload_artifact  # type: ignore
     except Exception:  # pragma: no cover
         def miniapp_emit(*args, **kwargs):  # type: ignore[no-redef]
             return False
+        def miniapp_upload_artifact(*args, **kwargs):  # type: ignore[no-redef]
+            return None
 
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
@@ -386,6 +388,22 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     artifact = _write_artifact(repo_root, owner, pref.packet_start_line, stdout, stderr)
     findings = _extract_findings(stdout, stderr)
     artifact_rel = str(artifact.relative_to(repo_root))
+
+    # Best-effort: publish a real artifact bubble in the Mini App when ingest/upload
+    # credentials are configured in this runtime.
+    uploaded = miniapp_upload_artifact(
+        artifact,
+        name=artifact.name,
+        mime="text/plain",
+        agent_id=owner,
+    )
+    if isinstance(uploaded, dict):
+        miniapp_emit(
+            "artifact.created",
+            agentId=owner,
+            extra={"artifact": uploaded, "source": "inbox_runner"},
+        )
+
     result_block = _format_result_block(ok=ok, findings=findings, artifact_rel=artifact_rel)
 
     # Insert/replace the Result block.
