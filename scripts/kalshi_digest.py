@@ -565,7 +565,8 @@ def _summarize_skips_and_live_spot(run_objs: List[Dict[str, Any]]) -> Dict[str, 
 def _load_sweep_stats(root: str) -> Optional[Dict[str, Any]]:
     p = os.path.join(root, "tmp", "kalshi_ref_arb", "sweep_stats.json")
     try:
-        obj = json.load(open(p, "r", encoding="utf-8"))
+        with open(p, "r", encoding="utf-8") as f:
+            obj = json.load(f)
         return obj if isinstance(obj, dict) else None
     except Exception:
         return None
@@ -1152,7 +1153,8 @@ def _format_usd(x: float) -> str:
 
 def _load_risk_state_summary(state_path: str) -> Dict[str, Any]:
     try:
-        obj = json.load(open(state_path, "r", encoding="utf-8"))
+        with open(state_path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
     except Exception:
         return {"markets": 0, "deployed_notional_usd": None}
     markets = obj.get("markets") or {}
@@ -1209,6 +1211,7 @@ def main() -> int:
 
     root = _repo_root()
     runs_dir = os.path.join(root, "tmp", "kalshi_ref_arb", "runs")
+    last_cycle_status_path = os.path.join(root, "tmp", "kalshi_ref_arb", "last_cycle_status.json")
     state_path = os.path.join(root, "tmp", "kalshi_ref_arb", "state.json")
     kill_path = os.path.join(root, "tmp", "kalshi_ref_arb.KILL")
     cooldown_path = os.path.join(root, "tmp", "kalshi_ref_arb", "cooldown.json")
@@ -1221,7 +1224,8 @@ def main() -> int:
     run_objs: List[Dict[str, Any]] = []
     for p in run_files:
         try:
-            obj = json.load(open(p, "r", encoding="utf-8"))
+            with open(p, "r", encoding="utf-8") as f:
+                obj = json.load(f)
             if isinstance(obj, dict) and int(obj.get("ts_unix") or 0) >= start:
                 run_objs.append(obj)
         except Exception:
@@ -1236,6 +1240,16 @@ def main() -> int:
     last_cycle_ts_et = ""
     last_issue = ""
     last_issue_detail = ""
+    lock_skip_recent = False
+    last_cycle_status = _load_json(last_cycle_status_path, default={})
+    if isinstance(last_cycle_status, dict):
+        try:
+            st = str(last_cycle_status.get("status") or "")
+            ts_s = int(last_cycle_status.get("ts_unix") or 0)
+            if st == "skipped_lock" and ts_s >= int(start):
+                lock_skip_recent = True
+        except Exception:
+            lock_skip_recent = False
     _iss_debug: Optional[Dict[str, Any]] = None
     try:
         if run_objs:
@@ -1266,7 +1280,8 @@ def main() -> int:
     today_objs: List[Dict[str, Any]] = []
     for p in today_files:
         try:
-            obj = json.load(open(p, "r", encoding="utf-8"))
+            with open(p, "r", encoding="utf-8") as f:
+                obj = json.load(f)
             if isinstance(obj, dict):
                 today_objs.append(obj)
         except Exception:
@@ -1302,7 +1317,8 @@ def main() -> int:
     cooldown_on = False
     try:
         if os.path.exists(cooldown_path):
-            cd = json.load(open(cooldown_path, "r", encoding="utf-8"))
+            with open(cooldown_path, "r", encoding="utf-8") as f:
+                cd = json.load(f)
             until_ts = int((cd or {}).get("until_ts") or 0) if isinstance(cd, dict) else 0
             cooldown_on = until_ts > now
     except Exception:
@@ -1311,6 +1327,8 @@ def main() -> int:
     status = "OK"
     if kill_on or cooldown_on:
         status = "PAUSED"
+    elif lock_skip_recent:
+        status = "WARN"
     elif int(stats.errors or 0) > 0 or int(stats.order_failed or 0) > 0 or int(stats.scan_failed or 0) > 0:
         status = "WARN"
 
@@ -1383,10 +1401,14 @@ def main() -> int:
                     msg_lines.append("Scan failed details: " + " | ".join(parts[:3]))
         except Exception:
             pass
+    if lock_skip_recent:
+        msg_lines.append("Cycle skips (window): lock contention detected")
 
     if status in ("WARN", "PAUSED"):
         if last_cycle_ts_et:
             msg_lines.append(f"Last cycle (ET): {last_cycle_ts_et}")
+        if lock_skip_recent:
+            msg_lines.append("Last issue: cycle skipped because another run still held the lock")
         if last_issue:
             msg_lines.append(f"Last issue: {last_issue}")
         if last_issue_detail:
@@ -1873,6 +1895,7 @@ def main() -> int:
             "order_failed": stats.order_failed,
             "kill_switch_seen": stats.kill_switch_seen,
             "scan_failed": stats.scan_failed,
+            "lock_skip_recent": bool(lock_skip_recent),
         },
         "cash_usd": avail_usd,
         "portfolio_value_usd": port_usd,
@@ -1895,6 +1918,7 @@ def main() -> int:
             "last_cycle_ts_et": last_cycle_ts_et,
             "last_issue": last_issue,
             "last_issue_detail": last_issue_detail,
+            "lock_skip_recent": bool(lock_skip_recent),
             "positions_top": positions_top,
         },
         "today": {

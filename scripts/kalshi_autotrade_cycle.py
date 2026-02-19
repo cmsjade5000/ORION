@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 try:
     from scripts.arb.kalshi_analytics import match_fills_for_order  # type: ignore
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
+    from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
     from scripts.arb.kalshi_autotune import apply_overrides_to_environ, load_overrides, maybe_autotune  # type: ignore
@@ -26,6 +27,7 @@ except ModuleNotFoundError:
         sys.path.insert(0, repo_root)
     from scripts.arb.kalshi_analytics import match_fills_for_order  # type: ignore
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
+    from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
     from scripts.arb.vol import conservative_sigma_auto  # type: ignore
     from scripts.arb.kalshi_ledger import update_from_run  # type: ignore
     from scripts.arb.kalshi_autotune import apply_overrides_to_environ, load_overrides, maybe_autotune  # type: ignore
@@ -176,6 +178,161 @@ def _save_json(path: str, obj: Dict[str, Any]) -> None:
             os.remove(tmp)
         except Exception:
             pass
+
+
+def _write_cycle_status(root: str, *, status: str, detail: str = "", extra: Optional[Dict[str, Any]] = None) -> None:
+    path = os.path.join(root, "tmp", "kalshi_ref_arb", "last_cycle_status.json")
+    payload: Dict[str, Any] = {
+        "ts_unix": int(time.time()),
+        "status": str(status),
+        "detail": str(detail),
+    }
+    if isinstance(extra, dict):
+        payload.update(extra)
+    _save_json(path, payload)
+
+
+def _build_trade_argv(
+    *,
+    selected_series: str,
+    sigma_arg: str,
+    min_edge: str,
+    uncertainty: str,
+    min_liq: str,
+    max_spread: str,
+    min_tte: str,
+    min_px: str,
+    max_px: str,
+    min_notional: str,
+    min_notional_bypass: str,
+    persist: str,
+    persist_win: str,
+    sizing_mode: str,
+    kelly_fraction: str,
+    kelly_cap_fraction: str,
+    bayes_prior_k: str,
+    bayes_obs_k_max: str,
+    vol_anomaly: str,
+    vol_anomaly_window_h: str,
+    max_market_concentration_fraction: str,
+    allow_live_writes: bool,
+) -> list[str]:
+    argv = [
+        "python3",
+        "scripts/kalshi_ref_arb.py",
+        "trade",
+        "--series",
+        selected_series,
+        "--limit",
+        os.environ.get("KALSHI_ARB_LIMIT", "20"),
+        "--sigma-annual",
+        str(sigma_arg),
+        "--min-edge-bps",
+        min_edge,
+        "--uncertainty-bps",
+        uncertainty,
+        "--min-liquidity-usd",
+        min_liq,
+        "--max-spread",
+        max_spread,
+        "--min-seconds-to-expiry",
+        min_tte,
+        "--min-price",
+        min_px,
+        "--max-price",
+        max_px,
+        "--min-notional-usd",
+        min_notional,
+        "--min-notional-bypass-edge-bps",
+        min_notional_bypass,
+        "--persistence-cycles",
+        persist,
+        "--persistence-window-min",
+        persist_win,
+        "--sizing-mode",
+        sizing_mode,
+        "--kelly-fraction",
+        kelly_fraction,
+        "--kelly-cap-fraction",
+        kelly_cap_fraction,
+        "--bayes-prior-k",
+        bayes_prior_k,
+        "--bayes-obs-k-max",
+        bayes_obs_k_max,
+        "--max-orders-per-run",
+        os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "1"),
+        "--max-contracts-per-order",
+        os.environ.get("KALSHI_ARB_MAX_CONTRACTS_PER_ORDER", "1"),
+        "--max-notional-per-run-usd",
+        os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "2"),
+        "--max-notional-per-market-usd",
+        os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "5"),
+        "--max-open-contracts-per-ticker",
+        os.environ.get("KALSHI_ARB_MAX_OPEN_CONTRACTS_PER_TICKER", "2"),
+        "--max-market-concentration-fraction",
+        str(max_market_concentration_fraction),
+    ]
+    if allow_live_writes:
+        argv.append("--allow-write")
+    if str(vol_anomaly).strip().lower() in ("1", "true", "yes", "y", "on"):
+        argv.extend(["--vol-anomaly", "--vol-anomaly-window-h", str(vol_anomaly_window_h)])
+    return argv
+
+
+def _write_prom_metrics(root: str, *, metrics_path: str, enabled: bool, artifact: Dict[str, Any]) -> None:
+    if not enabled:
+        return
+    path = str(metrics_path).strip()
+    if not path:
+        return
+    if not os.path.isabs(path):
+        path = os.path.join(root, path)
+    try:
+        ts = int(artifact.get("ts_unix") or int(time.time()))
+        bal_rc = int(artifact.get("balance_rc") or 0)
+        trade_rc = int(artifact.get("trade_rc") or 0)
+        post_rc = int(artifact.get("post_rc") or 0)
+        trade = artifact.get("trade") if isinstance(artifact.get("trade"), dict) else {}
+        placed = trade.get("placed") if isinstance(trade.get("placed"), list) else []
+        live_orders = sum(1 for p in placed if isinstance(p, dict) and p.get("mode") == "live")
+        skipped = trade.get("skipped") if isinstance(trade.get("skipped"), list) else []
+        order_failed = sum(1 for s in skipped if isinstance(s, dict) and s.get("reason") == "order_failed")
+        scan_failed = 1 if (str(trade.get("status") or "") == "refused" and str(trade.get("reason") or "") == "scan_failed") else 0
+        allow_write = 1 if bool(((artifact.get("cycle_inputs") or {}).get("allow_live_writes"))) else 0
+
+        lines = [
+            "# HELP kalshi_cycle_last_ts_unix Last cycle timestamp.",
+            "# TYPE kalshi_cycle_last_ts_unix gauge",
+            f"kalshi_cycle_last_ts_unix {ts}",
+            "# HELP kalshi_cycle_balance_rc Last balance command rc.",
+            "# TYPE kalshi_cycle_balance_rc gauge",
+            f"kalshi_cycle_balance_rc {bal_rc}",
+            "# HELP kalshi_cycle_trade_rc Last trade command rc.",
+            "# TYPE kalshi_cycle_trade_rc gauge",
+            f"kalshi_cycle_trade_rc {trade_rc}",
+            "# HELP kalshi_cycle_post_rc Last post snapshot rc.",
+            "# TYPE kalshi_cycle_post_rc gauge",
+            f"kalshi_cycle_post_rc {post_rc}",
+            "# HELP kalshi_cycle_live_orders Last cycle live orders count.",
+            "# TYPE kalshi_cycle_live_orders gauge",
+            f"kalshi_cycle_live_orders {int(live_orders)}",
+            "# HELP kalshi_cycle_order_failed Last cycle order_failed skips.",
+            "# TYPE kalshi_cycle_order_failed gauge",
+            f"kalshi_cycle_order_failed {int(order_failed)}",
+            "# HELP kalshi_cycle_scan_failed Last cycle scan_failed indicator.",
+            "# TYPE kalshi_cycle_scan_failed gauge",
+            f"kalshi_cycle_scan_failed {int(scan_failed)}",
+            "# HELP kalshi_cycle_allow_live_writes Last cycle write-arm state.",
+            "# TYPE kalshi_cycle_allow_live_writes gauge",
+            f"kalshi_cycle_allow_live_writes {int(allow_write)}",
+        ]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp, path)
+    except Exception:
+        return
 
 
 def _maybe_reconcile_risk_state(root: str, post: Dict[str, Any]) -> None:
@@ -684,12 +841,28 @@ def main() -> int:
 
     # Ensure unattended runs can see OpenClaw env vars (Kalshi creds, etc).
     _load_dotenv(os.environ.get("OPENCLAW_ENV_PATH", "~/.openclaw/.env"))
+    rt_cfg, rt_errs = load_runtime_from_env(repo_root=root)
 
     if not _acquire_lock(root, ttl_s=int(os.environ.get("KALSHI_ARB_LOCK_TTL_S", "240"))):
+        _write_cycle_status(
+            root,
+            status="skipped_lock",
+            detail="cycle lock held by another run",
+            extra={
+                "runtime": rt_cfg.as_dict(),
+                "runtime_errors": rt_errs,
+            },
+        )
         return 0
 
     try:
         ts = int(time.time())
+        _write_cycle_status(
+            root,
+            status="running",
+            detail="cycle started",
+            extra={"runtime": rt_cfg.as_dict(), "runtime_errors": rt_errs},
+        )
         # Auto-tune status is captured into run artifacts for visibility.
         autotune_status: Optional[Dict[str, Any]] = None
 
@@ -729,7 +902,13 @@ def main() -> int:
                 _maybe_reconcile_risk_state(root, post)
             artifact = {
                 "ts_unix": ts,
-                "cycle_inputs": {"cooldown_active": True, "autotune": autotune_status},
+                "cycle_inputs": {
+                    "cooldown_active": True,
+                    "autotune": autotune_status,
+                    "runtime": rt_cfg.as_dict(),
+                    "runtime_errors": rt_errs,
+                    "allow_live_writes": bool(rt_cfg.allow_live_writes),
+                },
                 "balance_rc": bal_rc,
                 "balance": bal,
                 "trade_rc": 2,
@@ -739,6 +918,8 @@ def main() -> int:
             }
             artifact_path = os.path.join(out_dir, f"{ts}.json")
             _save_json(artifact_path, artifact)
+            _write_prom_metrics(root, metrics_path=rt_cfg.metrics_path, enabled=bool(rt_cfg.metrics_enabled), artifact=artifact)
+            _write_cycle_status(root, status="cooldown_active", detail="trade refused due to cooldown", extra={"artifact": artifact_path})
             return 0
 
         # Run balance first (auth check). If this fails, we want to know.
@@ -772,6 +953,9 @@ def main() -> int:
                         "daily_loss_limit_usd": float(limit),
                         "pnl_today_usd_approx": float(pnl_today),
                         "autotune": autotune_status,
+                        "runtime": rt_cfg.as_dict(),
+                        "runtime_errors": rt_errs,
+                        "allow_live_writes": bool(rt_cfg.allow_live_writes),
                     },
                     "balance_rc": bal_rc,
                     "balance": bal,
@@ -782,6 +966,8 @@ def main() -> int:
                 }
                 artifact_path = os.path.join(out_dir, f"{ts}.json")
                 _save_json(artifact_path, artifact)
+                _write_prom_metrics(root, metrics_path=rt_cfg.metrics_path, enabled=bool(rt_cfg.metrics_enabled), artifact=artifact)
+                _write_cycle_status(root, status="daily_loss_limit", detail="trade refused by daily loss gate", extra={"artifact": artifact_path})
                 return 0
         else:
             pnl_today = None
@@ -809,6 +995,7 @@ def main() -> int:
         vol_anomaly = os.environ.get("KALSHI_ARB_VOL_ANOMALY", "0")
         vol_anomaly_window_h = os.environ.get("KALSHI_ARB_VOL_ANOMALY_WINDOW_H", "24")
         sigma_window_h = int(os.environ.get("KALSHI_ARB_SIGMA_WINDOW_H", "168"))
+        max_market_concentration_fraction = str(rt_cfg.max_market_concentration_fraction)
 
         # Scan each series once, pick the best, then trade only the selected series.
         scans_by_series: Dict[str, Any] = {}
@@ -904,6 +1091,9 @@ def main() -> int:
                     "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
                     "pnl_today_usd_approx": float(pnl_today) if isinstance(pnl_today, (int, float)) else None,
                     "autotune": autotune_status,
+                    "runtime": rt_cfg.as_dict(),
+                    "runtime_errors": rt_errs,
+                    "allow_live_writes": bool(rt_cfg.allow_live_writes),
                 },
                 "balance_rc": bal_rc,
                 "balance": bal,
@@ -918,6 +1108,8 @@ def main() -> int:
             }
             artifact_path = os.path.join(out_dir, f"{ts}.json")
             _save_json(artifact_path, artifact)
+            _write_prom_metrics(root, metrics_path=rt_cfg.metrics_path, enabled=bool(rt_cfg.metrics_enabled), artifact=artifact)
+            _write_cycle_status(root, status="scan_failed", detail="all series scans failed", extra={"artifact": artifact_path})
             return 0
 
         sigma_arg = sigma
@@ -934,6 +1126,10 @@ def main() -> int:
             "series_list": series_list,
             "scan_summary": scan_summary,
             "autotune": autotune_status,
+            "runtime": rt_cfg.as_dict(),
+            "runtime_errors": rt_errs,
+            "execution_mode": str(rt_cfg.execution_mode),
+            "allow_live_writes": bool(rt_cfg.allow_live_writes),
             "sigma": str(sigma),
             "sigma_arg": str(sigma_arg),
             "sigma_window_h": int(sigma_window_h),
@@ -946,6 +1142,7 @@ def main() -> int:
             "max_price": float(max_px),
             "min_notional_usd": float(min_notional),
             "min_notional_bypass_edge_bps": float(min_notional_bypass),
+            "max_market_concentration_fraction": float(rt_cfg.max_market_concentration_fraction),
             "persistence_cycles": int(persist),
             "persistence_window_min": float(persist_win),
             "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
@@ -961,62 +1158,30 @@ def main() -> int:
             pass
 
         # Trade only the selected series (live), still guarded by kill switch + risk caps.
-        trade_argv = [
-            "python3",
-            "scripts/kalshi_ref_arb.py",
-            "trade",
-            "--series",
-            selected_series,
-            "--limit",
-            os.environ.get("KALSHI_ARB_LIMIT", "20"),
-            "--sigma-annual",
-            str(sigma_arg),
-            "--min-edge-bps",
-            min_edge,
-            "--uncertainty-bps",
-            uncertainty,
-            "--min-liquidity-usd",
-            min_liq,
-            "--max-spread",
-            max_spread,
-            "--min-seconds-to-expiry",
-            min_tte,
-            "--min-price",
-            min_px,
-            "--max-price",
-            max_px,
-            "--min-notional-usd",
-            min_notional,
-            "--min-notional-bypass-edge-bps",
-            min_notional_bypass,
-            "--persistence-cycles",
-            persist,
-            "--persistence-window-min",
-            persist_win,
-            "--sizing-mode",
-            sizing_mode,
-            "--kelly-fraction",
-            kelly_fraction,
-            "--kelly-cap-fraction",
-            kelly_cap_fraction,
-            "--bayes-prior-k",
-            bayes_prior_k,
-            "--bayes-obs-k-max",
-            bayes_obs_k_max,
-            "--allow-write",
-            "--max-orders-per-run",
-            os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "1"),
-            "--max-contracts-per-order",
-            os.environ.get("KALSHI_ARB_MAX_CONTRACTS_PER_ORDER", "1"),
-            "--max-notional-per-run-usd",
-            os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "2"),
-            "--max-notional-per-market-usd",
-            os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "5"),
-            "--max-open-contracts-per-ticker",
-            os.environ.get("KALSHI_ARB_MAX_OPEN_CONTRACTS_PER_TICKER", "2"),
-        ]
-        if str(vol_anomaly).strip().lower() in ("1", "true", "yes", "y", "on"):
-            trade_argv.extend(["--vol-anomaly", "--vol-anomaly-window-h", str(vol_anomaly_window_h)])
+        trade_argv = _build_trade_argv(
+            selected_series=selected_series,
+            sigma_arg=str(sigma_arg),
+            min_edge=str(min_edge),
+            uncertainty=str(uncertainty),
+            min_liq=str(min_liq),
+            max_spread=str(max_spread),
+            min_tte=str(min_tte),
+            min_px=str(min_px),
+            max_px=str(max_px),
+            min_notional=str(min_notional),
+            min_notional_bypass=str(min_notional_bypass),
+            persist=str(persist),
+            persist_win=str(persist_win),
+            sizing_mode=str(sizing_mode),
+            kelly_fraction=str(kelly_fraction),
+            kelly_cap_fraction=str(kelly_cap_fraction),
+            bayes_prior_k=str(bayes_prior_k),
+            bayes_obs_k_max=str(bayes_obs_k_max),
+            vol_anomaly=str(vol_anomaly),
+            vol_anomaly_window_h=str(vol_anomaly_window_h),
+            max_market_concentration_fraction=str(max_market_concentration_fraction),
+            allow_live_writes=bool(rt_cfg.allow_live_writes),
+        )
         trade_rc, _, trade = _run_cmd_json(trade_argv, cwd=root, timeout_s=90)
         trade = trade if isinstance(trade, dict) else {"mode": "trade", "status": "error", "reason": "bad_json"}
         # Expose scan context per series in the run artifact for status/digests.
@@ -1058,6 +1223,7 @@ def main() -> int:
         }
         artifact_path = os.path.join(out_dir, f"{ts}.json")
         _save_json(artifact_path, artifact)
+        _write_prom_metrics(root, metrics_path=rt_cfg.metrics_path, enabled=bool(rt_cfg.metrics_enabled), artifact=artifact)
 
         # Closed-loop learning: persist entry features + fills + settlements to a rolling ledger.
         try:
@@ -1092,7 +1258,7 @@ def main() -> int:
                     reason=("cycle_error" if any_error else "order_failed"),
                 )
 
-        # Notify only on material events (orders placed or errors), rate-limited.
+        # Notify only on material milestone events (errors / pauses by default), rate-limited.
         chat_id = _telegram_chat_id()
         can_notify = chat_id is not None
         now = ts
@@ -1134,28 +1300,84 @@ def main() -> int:
         # If we just auto-paused, notify once (rate-limited like other messages).
         kill_on = os.path.exists(_kill_switch_path(root))
 
-        # Default: alert-only. Don't spam on every trade unless explicitly enabled.
+        milestone_notify = bool(rt_cfg.milestone_notify)
+        # Default: milestone-only alerts.
         should_notify = bool(any_error or any_soft_err or any_order_failed)
-        if notify_trades:
+        if not milestone_notify and notify_trades:
             should_notify = should_notify or bool(live_orders)
 
         if can_notify and allowed and should_notify:
             parts = []
             if any_error:
-                parts.append("ORION: I hit an error during the Kalshi cycle. I’ll pause and retry safely.")
+                parts = [
+                    "Status: Testing",
+                    "What changed:",
+                    "- Cycle hit a hard error and entered cooldown protections.",
+                    "Why it matters:",
+                    "This prevents repeated bad writes during unstable API/network windows.",
+                    "Risks / notes:",
+                    "- Check tmp/kalshi_ref_arb/runs for exact command failure context.",
+                    "Next step: I will retry on the next scheduled cycle.",
+                ]
             elif any_soft_err:
-                parts.append("ORION: Transient Kalshi/API issue detected. I’ll retry next cycle.")
-            if live_orders:
-                if notify_trades:
-                    parts.append(_orion_order_sentence(live_orders[0], post))
-            if not parts and any_order_failed:
-                parts.append("ORION: I attempted an order, but it failed validation or was rejected. See tmp/kalshi_ref_arb/runs for details.")
+                parts = [
+                    "Status: Testing",
+                    "What changed:",
+                    "- Transient Kalshi/API issue detected; no risky action taken.",
+                    "Why it matters:",
+                    "Bot stayed safe and preserved capital while connectivity recovered.",
+                    "Risks / notes:",
+                    "- If repeated, I will escalate to cooldown/kill-switch protections.",
+                    "Next step: Retry automatically on next cycle.",
+                ]
+            elif any_order_failed:
+                parts = [
+                    "Status: Testing",
+                    "What changed:",
+                    "- Order attempt failed validation/rejection path.",
+                    "Why it matters:",
+                    "Execution safeguards blocked a low-quality or invalid trade path.",
+                    "Risks / notes:",
+                    "- Review latest run artifact for reason=order_failed.",
+                    "Next step: Continue scanning; trade only when constraints pass.",
+                ]
+            elif (not milestone_notify) and live_orders and notify_trades:
+                parts.append(_orion_order_sentence(live_orders[0], post))
             if not parts and kill_on and (health["runs"] >= lookback) and (health["errors"] >= max_err or health["order_failed"] >= max_of):
-                parts.append("ORION: I auto-paused trading (kill switch ON) due to repeated errors/order failures. I’ll wait for you to review.")
+                parts = [
+                    "Status: Testing",
+                    "What changed:",
+                    "- Kill switch auto-enabled after repeated error threshold.",
+                    "Why it matters:",
+                    "Trading is paused to contain risk and prevent cascading failures.",
+                    "Risks / notes:",
+                    "- Manual review needed before re-arming writes.",
+                    "Next step: Investigate latest run artifacts and re-enable safely.",
+                ]
             msg = "\n".join(parts)
             _send_telegram(int(chat_id), msg, cwd=root)
             notify_state["last_notify_ts"] = now
             _save_json(notify_state_path, notify_state)
+        no_trade_reason = ""
+        try:
+            if isinstance(trade, dict):
+                dg = trade.get("diagnostics") if isinstance(trade.get("diagnostics"), dict) else {}
+                top = dg.get("top_blockers") if isinstance(dg, dict) else []
+                if isinstance(top, list) and top and isinstance(top[0], dict):
+                    no_trade_reason = str(top[0].get("reason") or "")
+        except Exception:
+            no_trade_reason = ""
+        _write_cycle_status(
+            root,
+            status="completed",
+            detail="cycle complete",
+            extra={
+                "artifact": artifact_path,
+                "allow_live_writes": bool(rt_cfg.allow_live_writes),
+                "live_orders": len(live_orders),
+                "no_trade_reason": no_trade_reason,
+            },
+        )
         return 0
     finally:
         _release_lock(root)

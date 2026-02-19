@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -19,7 +20,48 @@ class HttpConfig:
 
 class HttpClient:
     def __init__(self, cfg: Optional[HttpConfig] = None):
-        self._cfg = cfg or HttpConfig()
+        cfg0 = cfg or HttpConfig()
+        # Runtime overrides for retry behavior (safe defaults when unset).
+        try:
+            ma = int(str(os.environ.get("KALSHI_ARB_RETRY_MAX_ATTEMPTS", "")).strip() or 0)
+        except Exception:
+            ma = 0
+        if ma <= 0:
+            ma = int(cfg0.max_retries) + 1
+        try:
+            base_ms = int(str(os.environ.get("KALSHI_ARB_RETRY_BASE_MS", "")).strip() or 0)
+        except Exception:
+            base_ms = 0
+        if base_ms <= 0:
+            base_ms = int(float(cfg0.retry_backoff_seconds) * 1000.0)
+        retries = max(0, int(ma) - 1)
+        self._cfg = HttpConfig(
+            timeout_seconds=float(cfg0.timeout_seconds),
+            user_agent=str(cfg0.user_agent),
+            max_retries=int(retries),
+            retry_backoff_seconds=max(0.05, float(base_ms) / 1000.0),
+        )
+
+    @staticmethod
+    def _retry_delay_seconds(e: BaseException, *, attempt: int, base: float) -> float:
+        # Honor Retry-After for HTTP 429/503 when present.
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                ra = e.headers.get("Retry-After")
+                if ra is not None:
+                    return max(0.05, float(str(ra).strip()))
+            except Exception:
+                pass
+        return max(0.05, float(base) * (2**int(attempt)))
+
+    @staticmethod
+    def _is_retryable(e: BaseException) -> bool:
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                return int(e.code) in (429, 500, 502, 503, 504)
+            except Exception:
+                return False
+        return isinstance(e, (urllib.error.URLError, TimeoutError))
 
     def get_json(
         self,
@@ -42,9 +84,11 @@ class HttpClient:
                 return json.loads(raw.decode("utf-8"))
             except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
                 last_err = e
+                if not self._is_retryable(e):
+                    break
                 if attempt >= self._cfg.max_retries:
                     break
-                time.sleep(self._cfg.retry_backoff_seconds * (2**attempt))
+                time.sleep(self._retry_delay_seconds(e, attempt=attempt, base=self._cfg.retry_backoff_seconds))
         raise RuntimeError(f"HTTP GET failed: {final_url} ({last_err})")
 
     @staticmethod
@@ -87,4 +131,3 @@ def best_bid_ask_from_book(book: Dict[str, Any]) -> Tuple[Optional[float], Optio
         best_ask = p if best_ask is None else min(best_ask, p)
 
     return best_bid, best_ask
-
