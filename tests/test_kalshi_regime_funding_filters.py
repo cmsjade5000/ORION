@@ -74,7 +74,53 @@ class TestKalshiRegimeFundingFilters(unittest.TestCase):
         self.assertIsNotNone(s)
         self.assertIn("funding_too_extreme", (s.rejected_reasons or []))
 
+    def test_ref_quote_stale_blocks_signal(self) -> None:
+        import scripts.kalshi_ref_arb as mod
+
+        s = mod._signal_for_market(
+            _mkt(),
+            series="KXBTC",
+            spot=105.0,
+            sigma_annual=0.6,
+            min_edge_bps=5.0,
+            uncertainty_bps=0.0,
+            min_liquidity_usd=10.0,
+            max_spread=0.2,
+            min_seconds_to_expiry=10,
+            min_price=0.01,
+            max_price=0.99,
+            min_notional_usd=0.0,
+            min_notional_bypass_edge_bps=0.0,
+            ref_quote_age_sec=10.0,
+            max_ref_quote_age_sec=3.0,
+        )
+        self.assertIsNotNone(s)
+        self.assertIn("ref_quote_stale", (s.rejected_reasons or []))
+
+    def test_dynamic_edge_threshold_reflected(self) -> None:
+        import scripts.kalshi_ref_arb as mod
+
+        s = mod._signal_for_market(
+            _mkt(),
+            series="KXBTC",
+            spot=105.0,
+            sigma_annual=0.6,
+            min_edge_bps=5.0,
+            uncertainty_bps=0.0,
+            min_liquidity_usd=10.0,
+            max_spread=0.2,
+            min_seconds_to_expiry=10,
+            min_price=0.01,
+            max_price=0.99,
+            min_notional_usd=0.0,
+            min_notional_bypass_edge_bps=0.0,
+            dynamic_edge_enabled=True,
+            dynamic_edge_multiplier=2.0,
+            regime_bucket="hot",
+        )
+        self.assertIsNotNone(s)
+        self.assertAlmostEqual(float(s.edge_threshold_bps or 0.0), 10.0, places=9)
+
 
 if __name__ == "__main__":
     unittest.main()
-

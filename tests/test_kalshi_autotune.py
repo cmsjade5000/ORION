@@ -42,6 +42,9 @@ def test_autotune_applies_after_min_settled(tmp_path, monkeypatch):
     st = maybe_autotune(repo_root)
     assert st.get("enabled") is True
     assert st.get("status") in ("applied", "no_change")
+    assert st.get("active_variant") in ("champion", "challenger")
+    assert isinstance(st.get("champion"), dict)
+    assert isinstance(st.get("challenger"), dict)
 
     # If applied, override file should exist and contain bounded params.
     ovp = os.path.join(repo_root, "tmp", "kalshi_ref_arb", "params_override.json")
@@ -53,4 +56,4 @@ def test_autotune_applies_after_min_settled(tmp_path, monkeypatch):
         # Should never set nonsensical values outside bounds.
         assert 80 <= int(float(params.get("KALSHI_ARB_MIN_EDGE_BPS", 120))) <= 250
         assert 20 <= int(float(params.get("KALSHI_ARB_UNCERTAINTY_BPS", 50))) <= 140
-
+        assert st.get("active_variant") == "challenger"

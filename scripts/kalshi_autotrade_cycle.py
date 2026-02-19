@@ -813,25 +813,41 @@ def _best_candidate_from_scan(scan_obj: Dict[str, Any]) -> Optional[Dict[str, An
     sigs = scan_obj.get("signals") if isinstance(scan_obj, dict) else None
     if not isinstance(sigs, list):
         return None
+    recommended_count = 0
     for it in sigs:
         if not isinstance(it, dict):
             continue
         rec = it.get("recommended")
         if not isinstance(rec, dict):
             continue
+        recommended_count += 1
         eff = rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps")
         try:
             eff_f = float(eff)
         except Exception:
             continue
+        filters = it.get("filters") if isinstance(it.get("filters"), dict) else {}
+        t_years = it.get("t_years")
+        try:
+            tte_s = float(t_years) * 365.0 * 24.0 * 3600.0 if isinstance(t_years, (int, float)) else None
+        except Exception:
+            tte_s = None
         cand = {
             "ticker": it.get("ticker"),
             "side": rec.get("side"),
             "limit_price": rec.get("limit_price"),
             "effective_edge_bps": eff_f,
+            "edge_threshold_bps": rec.get("edge_threshold_bps"),
+            "liquidity_dollars": filters.get("liquidity_dollars"),
+            "spread": filters.get("yes_spread" if rec.get("side") == "yes" else "no_spread"),
+            "tte_s": tte_s,
+            "regime_bucket": it.get("regime_bucket"),
+            "ref_quote_age_sec": filters.get("ref_quote_age_sec"),
         }
         if best is None or float(cand["effective_edge_bps"]) > float(best.get("effective_edge_bps") or -1e9):
             best = cand
+    if isinstance(best, dict):
+        best["recommended_count"] = int(recommended_count)
     return best
 
 
@@ -996,12 +1012,34 @@ def main() -> int:
         vol_anomaly_window_h = os.environ.get("KALSHI_ARB_VOL_ANOMALY_WINDOW_H", "24")
         sigma_window_h = int(os.environ.get("KALSHI_ARB_SIGMA_WINDOW_H", "168"))
         max_market_concentration_fraction = str(rt_cfg.max_market_concentration_fraction)
+        try:
+            select_min_liq = float(os.environ.get("KALSHI_ARB_SCAN_SELECT_MIN_LIQUIDITY_USD", min_liq) or min_liq)
+        except Exception:
+            select_min_liq = float(min_liq)
+        try:
+            select_max_spread = float(os.environ.get("KALSHI_ARB_SCAN_SELECT_MAX_SPREAD", max_spread) or max_spread)
+        except Exception:
+            select_max_spread = float(max_spread)
+        try:
+            select_min_tte = float(os.environ.get("KALSHI_ARB_SCAN_SELECT_MIN_TTE_S", min_tte) or min_tte)
+        except Exception:
+            select_min_tte = float(min_tte)
+        try:
+            select_min_candidates = int(os.environ.get("KALSHI_ARB_SCAN_SELECT_MIN_CANDIDATES", "1") or 1)
+        except Exception:
+            select_min_candidates = 1
+        try:
+            select_depth_weight = float(os.environ.get("KALSHI_ARB_SCAN_SELECT_DEPTH_WEIGHT", "5.0") or 5.0)
+        except Exception:
+            select_depth_weight = 5.0
 
         # Scan each series once, pick the best, then trade only the selected series.
         scans_by_series: Dict[str, Any] = {}
         scan_summary: Dict[str, Any] = {"series": []}
         selected_series = series_list[0]
         selected_eff = None
+        selected_score = None
+        selected_eligible = False
         for s in series_list:
             sobj = _scan_series(
                 root,
@@ -1021,6 +1059,25 @@ def main() -> int:
             rc = int(sobj.get("_rc") or 0) if isinstance(sobj, dict) else 1
             best = _best_candidate_from_scan(sobj) if rc == 0 else None
             scans_by_series[s] = sobj
+            rec_count = int(best.get("recommended_count") or 0) if isinstance(best, dict) else 0
+            liq = float(best.get("liquidity_dollars") or 0.0) if isinstance(best, dict) and best.get("liquidity_dollars") is not None else None
+            spr = float(best.get("spread")) if isinstance(best, dict) and best.get("spread") is not None else None
+            tte = float(best.get("tte_s")) if isinstance(best, dict) and best.get("tte_s") is not None else None
+            eligible = bool(best is not None)
+            if eligible and rec_count < int(select_min_candidates):
+                eligible = False
+            if eligible and isinstance(liq, (int, float)) and float(liq) < float(select_min_liq):
+                eligible = False
+            if eligible and isinstance(spr, (int, float)) and float(spr) > float(select_max_spread):
+                eligible = False
+            if eligible and isinstance(tte, (int, float)) and float(tte) < float(select_min_tte):
+                eligible = False
+            score = None
+            if isinstance(best, dict):
+                try:
+                    score = float(best.get("effective_edge_bps") or 0.0) + float(select_depth_weight) * (float(rec_count) ** 0.5)
+                except Exception:
+                    score = None
             scan_summary["series"].append(
                 {
                     "series": s,
@@ -1028,17 +1085,33 @@ def main() -> int:
                     "rc_reason": str(sobj.get("_rc_reason") or ""),
                     "stderr_head": str(sobj.get("_stderr_head") or ""),
                     "best": best,
+                    "eligible_for_selection": bool(eligible),
+                    "selection_score": float(score) if isinstance(score, (int, float)) else None,
+                    "selection_filters": {
+                        "min_liquidity_usd": float(select_min_liq),
+                        "max_spread": float(select_max_spread),
+                        "min_tte_s": float(select_min_tte),
+                        "min_candidates": int(select_min_candidates),
+                    },
                     "sigma_arg": str(sobj.get("_sigma_arg") or ""),
                     "spot_ok": bool(sobj.get("_spot_ok")),
                 }
             )
-            if best is not None:
+            if best is not None and not selected_eligible:
                 eff_f = float(best.get("effective_edge_bps") or 0.0)
                 if selected_eff is None or eff_f > float(selected_eff):
                     selected_eff = eff_f
                     selected_series = s
+            if bool(eligible) and isinstance(score, (int, float)):
+                if (not selected_eligible) or (selected_score is None) or (float(score) > float(selected_score)):
+                    selected_eligible = True
+                    selected_score = float(score)
+                    selected_eff = float(best.get("effective_edge_bps") or 0.0)
+                    selected_series = s
         scan_summary["selected_series"] = selected_series
         scan_summary["selected_effective_edge_bps"] = selected_eff
+        scan_summary["selected_score"] = selected_score
+        scan_summary["selected_eligible"] = bool(selected_eligible)
 
         # If *all* scans failed (timeouts/errors), skip trading this cycle rather than
         # blindly defaulting to the first series.
@@ -1143,6 +1216,11 @@ def main() -> int:
             "min_notional_usd": float(min_notional),
             "min_notional_bypass_edge_bps": float(min_notional_bypass),
             "max_market_concentration_fraction": float(rt_cfg.max_market_concentration_fraction),
+            "scan_select_min_liquidity_usd": float(select_min_liq),
+            "scan_select_max_spread": float(select_max_spread),
+            "scan_select_min_tte_s": float(select_min_tte),
+            "scan_select_min_candidates": int(select_min_candidates),
+            "scan_select_depth_weight": float(select_depth_weight),
             "persistence_cycles": int(persist),
             "persistence_window_min": float(persist_win),
             "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,
@@ -1228,7 +1306,7 @@ def main() -> int:
         # Closed-loop learning: persist entry features + fills + settlements to a rolling ledger.
         try:
             if isinstance(trade, dict) and isinstance(post, dict):
-                update_from_run(root, ts_unix=ts, trade=trade, post=post)
+                update_from_run(root, ts_unix=ts, trade=trade, post=post, cycle_inputs=cycle_inputs)
         except Exception:
             pass
 

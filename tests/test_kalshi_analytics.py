@@ -1,11 +1,42 @@
 from __future__ import annotations
 
+import argparse
+import os
+import tempfile
 import time
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 
 class TestKalshiAnalytics(unittest.TestCase):
+    def _mk_signal(self, mod, ticker: str, eff_edge: float, edge_threshold: float = 120.0):
+        return mod.Signal(
+            ticker=ticker,
+            strike_type="greater",
+            strike=1.0,
+            expected_expiration_time="2030-01-01T00:00:00Z",
+            spot_ref=50_000.0,
+            t_years=0.01,
+            sigma_annual=0.8,
+            p_yes=0.55,
+            yes_bid=0.49,
+            yes_ask=0.50,
+            no_bid=0.49,
+            no_ask=0.50,
+            edge_bps_buy_yes=eff_edge,
+            edge_bps_buy_no=-50.0,
+            recommended={
+                "side": "yes",
+                "limit_price": 0.50,
+                "edge_bps": eff_edge + 20.0,
+                "effective_edge_bps": eff_edge,
+                "edge_threshold_bps": edge_threshold,
+            },
+            filters={},
+            rejected_reasons=[],
+        )
+
     def test_extract_market_position_counts_handles_common_shapes(self) -> None:
         from scripts.arb.kalshi_analytics import extract_market_position_counts
 
@@ -204,6 +235,76 @@ class TestKalshiAnalytics(unittest.TestCase):
             self.assertIsNotNone(s2)
             assert s2 is not None
             self.assertIsNone(s2.recommended)
+
+    def test_portfolio_allocator_prefers_stronger_signal(self) -> None:
+        import scripts.kalshi_ref_arb as mod
+        from scripts.arb.risk import RiskConfig, RiskState
+
+        with tempfile.TemporaryDirectory() as td:
+            state = RiskState(os.path.join(td, "state.json"))
+            cfg = RiskConfig(
+                max_orders_per_run=2,
+                max_contracts_per_order=10,
+                max_notional_per_run_usd=10.0,
+                max_notional_per_market_usd=10.0,
+                kill_switch_path="tmp/kalshi_ref_arb.KILL",
+            )
+            args = argparse.Namespace(min_edge_bps=120.0, max_market_concentration_fraction=0.8)
+            rt = SimpleNamespace(
+                portfolio_allocator_enabled=True,
+                portfolio_allocator_min_signal_fraction=0.05,
+                portfolio_allocator_edge_power=1.0,
+                portfolio_allocator_confidence_power=1.0,
+            )
+            signals = [
+                self._mk_signal(mod, "T_STRONG", 280.0),
+                self._mk_signal(mod, "T_WEAK", 140.0),
+            ]
+            plan = mod._build_portfolio_allocator_plan(
+                signals=signals,
+                state=state,
+                cfg=cfg,
+                args=args,
+                rt_cfg=rt,
+                cash_usd=100.0,
+                drawdown_mult=1.0,
+            )
+            self.assertTrue(plan.enabled)
+            self.assertAlmostEqual(float(plan.run_budget_usd), 10.0, places=9)
+            self.assertGreater(float(plan.per_ticker_target_usd.get("T_STRONG") or 0.0), float(plan.per_ticker_target_usd.get("T_WEAK") or 0.0))
+
+    def test_portfolio_allocator_respects_existing_market_notional_cap(self) -> None:
+        import scripts.kalshi_ref_arb as mod
+        from scripts.arb.risk import RiskConfig, RiskState
+
+        with tempfile.TemporaryDirectory() as td:
+            state = RiskState(os.path.join(td, "state.json"))
+            state.add_market_notional_usd("T_CAPPED", 9.6)
+            cfg = RiskConfig(
+                max_orders_per_run=2,
+                max_contracts_per_order=10,
+                max_notional_per_run_usd=12.0,
+                max_notional_per_market_usd=10.0,
+                kill_switch_path="tmp/kalshi_ref_arb.KILL",
+            )
+            args = argparse.Namespace(min_edge_bps=120.0, max_market_concentration_fraction=0.9)
+            rt = SimpleNamespace(
+                portfolio_allocator_enabled=True,
+                portfolio_allocator_min_signal_fraction=0.05,
+                portfolio_allocator_edge_power=1.0,
+                portfolio_allocator_confidence_power=1.0,
+            )
+            signals = [self._mk_signal(mod, "T_CAPPED", 300.0)]
+            plan = mod._build_portfolio_allocator_plan(
+                signals=signals,
+                state=state,
+                cfg=cfg,
+                args=args,
+                rt_cfg=rt,
+                cash_usd=100.0,
+                drawdown_mult=1.0,
+            )
+            self.assertLessEqual(float(plan.per_ticker_target_usd.get("T_CAPPED") or 0.0), 0.4 + 1e-9)
 
 
 if __name__ == "__main__":

@@ -1197,6 +1197,62 @@ def _sigma_summary(run_objs: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"avg_sigma_arg": avg, "mode": mode, "samples": len(sigmas)}
 
 
+def _tca_by_variant(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for x in rows:
+        if not isinstance(x, dict):
+            continue
+        variant = str(x.get("variant") or "unknown").strip().lower() or "unknown"
+        g = out.setdefault(
+            variant,
+            {
+                "placed_orders": 0,
+                "filled_orders": 0,
+                "filled_contracts": 0,
+                "edge_sum": 0.0,
+                "edge_n": 0,
+                "slippage_sum": 0.0,
+                "slippage_n": 0,
+                "fee_sum_usd": 0.0,
+                "notional_sum_usd": 0.0,
+            },
+        )
+        g["placed_orders"] = int(g["placed_orders"]) + 1
+        fc = int(x.get("fills_count") or 0)
+        if fc > 0:
+            g["filled_orders"] = int(g["filled_orders"]) + 1
+            g["filled_contracts"] = int(g["filled_contracts"]) + int(fc)
+        if isinstance(x.get("edge_bps"), (int, float)):
+            g["edge_sum"] = float(g["edge_sum"]) + float(x.get("edge_bps") or 0.0)
+            g["edge_n"] = int(g["edge_n"]) + 1
+        if isinstance(x.get("slippage_bps"), (int, float)):
+            g["slippage_sum"] = float(g["slippage_sum"]) + float(x.get("slippage_bps") or 0.0)
+            g["slippage_n"] = int(g["slippage_n"]) + 1
+        fee_total = x.get("fee_total_usd")
+        avg_fill = x.get("avg_fill_price")
+        if isinstance(fee_total, (int, float)):
+            g["fee_sum_usd"] = float(g["fee_sum_usd"]) + float(fee_total)
+        if isinstance(avg_fill, (int, float)) and fc > 0:
+            g["notional_sum_usd"] = float(g["notional_sum_usd"]) + (float(avg_fill) * float(fc))
+
+    compact: Dict[str, Dict[str, Any]] = {}
+    for k, g in out.items():
+        edge_n = int(g.get("edge_n") or 0)
+        sl_n = int(g.get("slippage_n") or 0)
+        notional_sum = float(g.get("notional_sum_usd") or 0.0)
+        fee_sum = float(g.get("fee_sum_usd") or 0.0)
+        compact[k] = {
+            "placed_orders": int(g.get("placed_orders") or 0),
+            "filled_orders": int(g.get("filled_orders") or 0),
+            "filled_contracts": int(g.get("filled_contracts") or 0),
+            "avg_edge_bps": (float(g.get("edge_sum") or 0.0) / float(edge_n)) if edge_n > 0 else None,
+            "avg_slippage_bps": (float(g.get("slippage_sum") or 0.0) / float(sl_n)) if sl_n > 0 else None,
+            "fees_total_usd": fee_sum if fee_sum > 0.0 else None,
+            "fees_pct": ((fee_sum / notional_sum) * 100.0) if notional_sum > 0.0 and fee_sum > 0.0 else None,
+        }
+    return compact
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Send a digest for Kalshi ref-arb bot runs.")
     ap.add_argument("--window-hours", type=float, default=8.0)
@@ -1623,22 +1679,59 @@ def main() -> int:
             msg_lines.append(f"Avg time-to-expiry at entry: {float(cl['avg_time_to_expiry_min']):.0f} min")
         if isinstance(cl.get("avg_abs_strike_distance_pct"), (int, float)):
             msg_lines.append(f"Avg strike distance at entry: {float(cl['avg_abs_strike_distance_pct']):.2f}%")
+        ast = cl.get("attribution_stats") if isinstance(cl.get("attribution_stats"), dict) else {}
+        if isinstance(ast, dict) and int(ast.get("attempted") or 0) > 0:
+            attempted = int(ast.get("attempted") or 0)
+            matched = int(ast.get("matched") or 0)
+            partial = int(ast.get("partial_matches") or 0)
+            rate = (float(matched) / float(max(1, attempted))) * 100.0
+            msg_lines.append(f"Settlement attribution: {matched}/{attempted} ({rate:.0f}%), partial {partial}")
+        if isinstance(cl.get("unmatched_settlements_window"), int) and int(cl.get("unmatched_settlements_window") or 0) > 0:
+            msg_lines.append(
+                f"Unmatched settlements (window): {int(cl.get('unmatched_settlements_window') or 0)} (total {int(cl.get('unmatched_settlements_total') or 0)})"
+            )
+        bd = cl.get("breakdowns") if isinstance(cl.get("breakdowns"), dict) else {}
+        by_var = bd.get("by_variant") if isinstance(bd, dict) and isinstance(bd.get("by_variant"), dict) else {}
+        if isinstance(by_var, dict) and by_var:
+            for vk in ("champion", "challenger"):
+                row = by_var.get(vk)
+                if not isinstance(row, dict):
+                    continue
+                settled_vk = int(row.get("settled_orders") or 0)
+                if settled_vk <= 0:
+                    continue
+                pnl_vk = row.get("realized_pnl_usd_approx")
+                wr_vk = row.get("win_rate")
+                line = f"Closed-loop {vk}: settled {settled_vk}"
+                if isinstance(pnl_vk, (int, float)):
+                    line += f", pnl {_format_usd(float(pnl_vk))}"
+                if isinstance(wr_vk, (int, float)):
+                    line += f", wr {float(wr_vk):.2f}"
+                msg_lines.append(line)
     except Exception:
         pass
 
     # Ledger health: show whether we are seeing settlements we can't attribute/parse.
     try:
-        led = load_ledger(root)
-        um = led.get("unmatched_settlements") if isinstance(led, dict) else None
-        if isinstance(um, list) and um:
-            now = int(time.time())
-            start = now - int(max(60.0, float(args.window_hours) * 3600.0))
-            recent = 0
-            for it in um:
-                if isinstance(it, dict) and int(it.get("ts_unix") or 0) >= start:
-                    recent += 1
-            if recent:
-                msg_lines.append(f"Unmatched settlements (window): {recent} (total {len(um)})")
+        already = bool(
+            isinstance(cl_report, dict)
+            and (
+                isinstance(cl_report.get("unmatched_settlements_window"), int)
+                or isinstance(cl_report.get("attribution_stats"), dict)
+            )
+        )
+        if not already:
+            led = load_ledger(root)
+            um = led.get("unmatched_settlements") if isinstance(led, dict) else None
+            if isinstance(um, list) and um:
+                now = int(time.time())
+                start = now - int(max(60.0, float(args.window_hours) * 3600.0))
+                recent = 0
+                for it in um:
+                    if isinstance(it, dict) and int(it.get("ts_unix") or 0) >= start:
+                        recent += 1
+                if recent:
+                    msg_lines.append(f"Unmatched settlements (window): {recent} (total {len(um)})")
     except Exception:
         pass
 
@@ -1663,14 +1756,40 @@ def main() -> int:
         param_recs = []
 
     # Auto-tune status (bounded auto-apply after enough settled trades, with rollback).
+    autotune_summary: Dict[str, Any] = {}
     try:
         tp = os.path.join(root, "tmp", "kalshi_ref_arb", "tune_state.json")
         ts_obj = _load_json(tp, default={})
         if isinstance(ts_obj, dict) and bool(ts_obj.get("enabled")):
             st = str(ts_obj.get("status") or "unknown")
-            msg_lines.append(f"Auto-tune: ON ({st})")
+            active = str(ts_obj.get("active_variant") or "").strip().lower()
+            if active not in ("champion", "challenger"):
+                # Best-effort fallback for older schemas.
+                challenger = ts_obj.get("challenger") if isinstance(ts_obj.get("challenger"), dict) else {}
+                cst = str(challenger.get("status") or "").strip().lower()
+                active = "challenger" if cst in ("evaluating", "applied") and int(ts_obj.get("last_apply_ts") or 0) > 0 else "champion"
+            msg_lines.append(f"Auto-tune: ON ({st}) active={active}")
+            champion = ts_obj.get("champion") if isinstance(ts_obj.get("champion"), dict) else {}
+            challenger = ts_obj.get("challenger") if isinstance(ts_obj.get("challenger"), dict) else {}
+            eval_p = ts_obj.get("eval_progress") if isinstance(ts_obj.get("eval_progress"), dict) else {}
+            cst = str(challenger.get("status") or "").strip().lower()
+            if cst in ("evaluating", "applied"):
+                have = int(eval_p.get("have") or 0)
+                target = int(eval_p.get("target") or int(ts_obj.get("eval_settled") or 0))
+                if target > 0:
+                    msg_lines.append(f"Auto-tune eval: challenger progress {have}/{target} settled")
+            autotune_summary = {
+                "enabled": True,
+                "status": st,
+                "active_variant": active,
+                "champion": champion,
+                "challenger": challenger,
+                "eval_progress": eval_p,
+            }
+        elif isinstance(ts_obj, dict):
+            autotune_summary = {"enabled": bool(ts_obj.get("enabled")), "status": str(ts_obj.get("status") or "disabled")}
     except Exception:
-        pass
+        autotune_summary = {}
 
     # Deployed downside risk (approx): sum of our tracked notional per market (cost basis), from local state.
     rs = _load_risk_state_summary(state_path)
@@ -1706,7 +1825,17 @@ def main() -> int:
             msg_lines.append(f"Settlements cash delta (approx): {_format_usd(float(cd))}{tail}")
 
     # Entry-quality summary: edge-at-entry vs fill quality (from run artifacts).
+    fees_total_usd_window: Optional[float] = None
+    fees_pct_window: Optional[float] = None
     placed_live: List[Dict[str, Any]] = []
+    def _run_variant(o: Dict[str, Any]) -> str:
+        ci = o.get("cycle_inputs") if isinstance(o.get("cycle_inputs"), dict) else {}
+        at = ci.get("autotune") if isinstance(ci, dict) and isinstance(ci.get("autotune"), dict) else {}
+        v = str(at.get("active_variant") or "").strip().lower()
+        if v in ("champion", "challenger"):
+            return v
+        return str((autotune_summary.get("active_variant") if isinstance(autotune_summary, dict) else "") or "champion").strip().lower()
+
     for o in run_objs:
         trade = o.get("trade")
         if not isinstance(trade, dict):
@@ -1715,6 +1844,7 @@ def main() -> int:
         if not isinstance(placed, list):
             continue
         post = o.get("post") if isinstance(o.get("post"), dict) else {}
+        variant = _run_variant(o)
         for p in placed:
             if not isinstance(p, dict) or p.get("mode") != "live":
                 continue
@@ -1757,9 +1887,11 @@ def main() -> int:
                     "fee_total_usd": fee_total_f,
                     "slippage_bps": slippage_bps,
                     "t_years": p.get("t_years"),
+                    "variant": variant,
                 }
             )
 
+    tca_by_variant: Dict[str, Dict[str, Any]] = {}
     if placed_live:
         n = len(placed_live)
         filled_orders = sum(1 for x in placed_live if int(x.get("fills_count") or 0) > 0)
@@ -1810,6 +1942,19 @@ def main() -> int:
                 continue
         if ttes:
             msg_lines.append(f"Avg time-to-expiry: {sum(ttes)/float(len(ttes)):.0f} min")
+
+        tca_by_variant = _tca_by_variant(placed_live)
+        if tca_by_variant:
+            for vk in ("champion", "challenger"):
+                row = tca_by_variant.get(vk)
+                if not isinstance(row, dict):
+                    continue
+                msg = f"TCA {vk}: placed {int(row.get('placed_orders') or 0)}, filled {int(row.get('filled_orders') or 0)}"
+                if isinstance(row.get("avg_slippage_bps"), (int, float)):
+                    msg += f", slip {float(row['avg_slippage_bps']):.0f}bps"
+                if isinstance(row.get("fees_pct"), (int, float)):
+                    msg += f", fees {float(row['fees_pct']):.1f}%"
+                msg_lines.append(msg)
 
     # Mark-to-market estimate from latest open positions (read-only public market quotes).
     mtm_liq_value_usd: Optional[float] = None
@@ -1878,11 +2023,6 @@ def main() -> int:
         except Exception:
             pass
 
-    # Track window fee totals (best-effort), so HTML can show them even if message parsing changes.
-    fees_total_usd_window: Optional[float] = None
-    fees_pct_window: Optional[float] = None
-    # (Values get set above if we observed fills; otherwise stay None.)
-
     payload = {
         "mode": "kalshi_digest",
         "timestamp_unix": now,
@@ -1930,8 +2070,31 @@ def main() -> int:
             "scan_failed": today_stats.scan_failed,
             "realized_pnl_usd_settled": today_realized_pnl,
         },
+        "closed_loop": {
+            "settled_orders": (cl_report.get("settled_orders") if isinstance(cl_report, dict) else None),
+            "settled_orders_full": (cl_report.get("settled_orders_full") if isinstance(cl_report, dict) else None),
+            "settled_orders_partial": (cl_report.get("settled_orders_partial") if isinstance(cl_report, dict) else None),
+            "attribution_stats": (
+                cl_report.get("attribution_stats")
+                if isinstance(cl_report, dict) and isinstance(cl_report.get("attribution_stats"), dict)
+                else {}
+            ),
+            "unmatched_settlements_window": (
+                cl_report.get("unmatched_settlements_window") if isinstance(cl_report, dict) else None
+            ),
+            "unmatched_settlements_total": (
+                cl_report.get("unmatched_settlements_total") if isinstance(cl_report, dict) else None
+            ),
+            "by_variant": (
+                ((cl_report.get("breakdowns") or {}).get("by_variant"))
+                if isinstance(cl_report, dict) and isinstance(cl_report.get("breakdowns"), dict)
+                else {}
+            ),
+        },
         "no_trade": no_trade_diag if isinstance(no_trade_diag, dict) and no_trade_diag else {},
         "sweep_rollup_24h": sweep_roll if isinstance(sweep_roll, dict) else None,
+        "autotune": autotune_summary if isinstance(autotune_summary, dict) else {},
+        "tca_by_variant": tca_by_variant if isinstance(tca_by_variant, dict) else {},
         "param_recommendations": param_recs,
         "message": "\n".join(msg_lines),
     }

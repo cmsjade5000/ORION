@@ -38,6 +38,18 @@ def _float_env(name: str, default: float, *, min_v: float | None = None, max_v: 
     return out, None
 
 
+def _float_raw(name: str, raw: Any, default: float, *, min_v: float | None = None, max_v: float | None = None) -> tuple[float, str | None]:
+    try:
+        out = float(str(raw).strip())
+    except Exception:
+        return float(default), f"{name} must be a number (got {raw!r})"
+    if min_v is not None and out < float(min_v):
+        return float(default), f"{name} must be >= {float(min_v)} (got {out})"
+    if max_v is not None and out > float(max_v):
+        return float(default), f"{name} must be <= {float(max_v)} (got {out})"
+    return out, None
+
+
 def _feeds(raw: str) -> List[str]:
     allowed = {"coinbase", "kraken", "binance", "bitstamp"}
     out: List[str] = []
@@ -55,6 +67,31 @@ def _feeds(raw: str) -> List[str]:
     return out
 
 
+def _parse_regime_mults(raw: str) -> tuple[Dict[str, float], str | None]:
+    base = {"calm": 0.9, "normal": 1.0, "hot": 1.2}
+    txt = str(raw or "").strip()
+    if not txt:
+        return base, None
+    out = dict(base)
+    allowed = {"calm", "normal", "hot"}
+    for part in txt.split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        k, v = part.split(":", 1)
+        key = str(k or "").strip().lower()
+        if key not in allowed:
+            continue
+        try:
+            fv = float(str(v).strip())
+        except Exception:
+            return base, f"KALSHI_ARB_DYNAMIC_EDGE_REGIME_MULTS invalid value for {key}: {v!r}"
+        if fv <= 0.0 or fv > 10.0:
+            return base, f"KALSHI_ARB_DYNAMIC_EDGE_REGIME_MULTS out of range for {key}: {fv}"
+        out[key] = float(fv)
+    return out, None
+
+
 @dataclass(frozen=True)
 class KalshiArbRuntime:
     execution_mode: str
@@ -67,10 +104,23 @@ class KalshiArbRuntime:
     milestone_notify: bool
     metrics_enabled: bool
     metrics_path: str
+    max_ref_quote_age_sec: float
     max_dispersion_bps: float
     max_vol_anomaly_ratio: float
     funding_abs_bps_max: float
     max_market_concentration_fraction: float
+    dynamic_edge_enabled: bool
+    dynamic_edge_regime_mults: Dict[str, float]
+    reinvest_enabled: bool
+    reinvest_max_fraction: float
+    drawdown_throttle_pct: float
+    paper_exec_emulator: bool
+    paper_exec_latency_ms: int
+    paper_exec_slippage_bps: float
+    portfolio_allocator_enabled: bool
+    portfolio_allocator_min_signal_fraction: float
+    portfolio_allocator_edge_power: float
+    portfolio_allocator_confidence_power: float
 
     @property
     def allow_live_writes(self) -> bool:
@@ -102,7 +152,16 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
     retry_base_ms, e = _int_env("KALSHI_ARB_RETRY_BASE_MS", 250, min_v=50)
     if e:
         errs.append(e)
-    max_dispersion_bps, e = _float_env("KALSHI_ARB_MAX_DISPERSION_BPS", 35.0, min_v=1.0)
+    max_ref_quote_age_sec, e = _float_env("KALSHI_ARB_MAX_REF_QUOTE_AGE_SEC", 3.0, min_v=0.1, max_v=60.0)
+    if e:
+        errs.append(e)
+    # Backward compatibility:
+    # - preferred: KALSHI_ARB_MAX_REF_DISPERSION_BPS
+    # - legacy:    KALSHI_ARB_MAX_DISPERSION_BPS
+    disp_raw = os.environ.get("KALSHI_ARB_MAX_REF_DISPERSION_BPS")
+    if disp_raw is None or str(disp_raw).strip() == "":
+        disp_raw = os.environ.get("KALSHI_ARB_MAX_DISPERSION_BPS", "35.0")
+    max_dispersion_bps, e = _float_raw("KALSHI_ARB_MAX_REF_DISPERSION_BPS", disp_raw, 35.0, min_v=1.0)
     if e:
         errs.append(e)
     max_vol_anomaly_ratio, e = _float_env("KALSHI_ARB_MAX_VOL_ANOMALY_RATIO", 1.8, min_v=1.0)
@@ -116,6 +175,40 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
         0.35,
         min_v=0.05,
         max_v=1.0,
+    )
+    if e:
+        errs.append(e)
+    dynamic_edge_regime_mults, e = _parse_regime_mults(os.environ.get("KALSHI_ARB_DYNAMIC_EDGE_REGIME_MULTS", "calm:0.9,normal:1.0,hot:1.2"))
+    if e:
+        errs.append(e)
+    reinvest_max_fraction, e = _float_env("KALSHI_ARB_REINVEST_MAX_FRACTION", 0.08, min_v=0.0, max_v=1.0)
+    if e:
+        errs.append(e)
+    drawdown_throttle_pct, e = _float_env("KALSHI_ARB_DRAWDOWN_THROTTLE_PCT", 5.0, min_v=0.0, max_v=95.0)
+    if e:
+        errs.append(e)
+    paper_exec_latency_ms, e = _int_env("KALSHI_ARB_PAPER_EXEC_LATENCY_MS", 250, min_v=0)
+    if e:
+        errs.append(e)
+    paper_exec_slippage_bps, e = _float_env("KALSHI_ARB_PAPER_EXEC_SLIPPAGE_BPS", 5.0, min_v=0.0, max_v=1000.0)
+    if e:
+        errs.append(e)
+    portfolio_allocator_min_signal_fraction, e = _float_env(
+        "KALSHI_ARB_PORTFOLIO_ALLOCATOR_MIN_SIGNAL_FRACTION",
+        0.05,
+        min_v=0.0,
+        max_v=0.5,
+    )
+    if e:
+        errs.append(e)
+    portfolio_allocator_edge_power, e = _float_env("KALSHI_ARB_PORTFOLIO_ALLOCATOR_EDGE_POWER", 1.0, min_v=0.2, max_v=4.0)
+    if e:
+        errs.append(e)
+    portfolio_allocator_confidence_power, e = _float_env(
+        "KALSHI_ARB_PORTFOLIO_ALLOCATOR_CONFIDENCE_POWER",
+        1.0,
+        min_v=0.2,
+        max_v=4.0,
     )
     if e:
         errs.append(e)
@@ -140,10 +233,22 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
         milestone_notify=_truthy(os.environ.get("KALSHI_ARB_MILESTONE_NOTIFY", "1"), default=True),
         metrics_enabled=_truthy(os.environ.get("KALSHI_ARB_METRICS_ENABLED", "1"), default=True),
         metrics_path=str(metrics_path),
+        max_ref_quote_age_sec=float(max_ref_quote_age_sec),
         max_dispersion_bps=float(max_dispersion_bps),
         max_vol_anomaly_ratio=float(max_vol_anomaly_ratio),
         funding_abs_bps_max=float(funding_abs_bps_max),
         max_market_concentration_fraction=float(max_market_concentration_fraction),
+        dynamic_edge_enabled=_truthy(os.environ.get("KALSHI_ARB_DYNAMIC_EDGE_ENABLED", "1"), default=True),
+        dynamic_edge_regime_mults=dict(dynamic_edge_regime_mults),
+        reinvest_enabled=_truthy(os.environ.get("KALSHI_ARB_REINVEST_ENABLED", "1"), default=True),
+        reinvest_max_fraction=float(reinvest_max_fraction),
+        drawdown_throttle_pct=float(drawdown_throttle_pct),
+        paper_exec_emulator=_truthy(os.environ.get("KALSHI_ARB_PAPER_EXEC_EMULATOR", "1"), default=True),
+        paper_exec_latency_ms=int(paper_exec_latency_ms),
+        paper_exec_slippage_bps=float(paper_exec_slippage_bps),
+        portfolio_allocator_enabled=_truthy(os.environ.get("KALSHI_ARB_PORTFOLIO_ALLOCATOR_ENABLED", "1"), default=True),
+        portfolio_allocator_min_signal_fraction=float(portfolio_allocator_min_signal_fraction),
+        portfolio_allocator_edge_power=float(portfolio_allocator_edge_power),
+        portfolio_allocator_confidence_power=float(portfolio_allocator_confidence_power),
     )
     return cfg, errs
-

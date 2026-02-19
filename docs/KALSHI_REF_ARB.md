@@ -112,11 +112,28 @@ This means cron can run continuously without accidentally placing live orders.
 - `KALSHI_ARB_REF_FEEDS=coinbase,kraken,binance` (read-only)
 - `KALSHI_ARB_ENABLE_FUNDING_FILTER=1`
 - `KALSHI_ARB_ENABLE_REGIME_FILTER=1`
-- `KALSHI_ARB_MAX_DISPERSION_BPS=35`
+- `KALSHI_ARB_MAX_REF_QUOTE_AGE_SEC=3.0`
+- `KALSHI_ARB_MAX_REF_DISPERSION_BPS=35` (legacy alias still accepted: `KALSHI_ARB_MAX_DISPERSION_BPS`)
 - `KALSHI_ARB_MAX_VOL_ANOMALY_RATIO=1.8`
 - `KALSHI_ARB_FUNDING_ABS_BPS_MAX=3.0`
 
 These filters reduce low-quality entries during unstable regimes.
+
+Dynamic edge / sizing controls:
+- `KALSHI_ARB_DYNAMIC_EDGE_ENABLED=1`
+- `KALSHI_ARB_DYNAMIC_EDGE_REGIME_MULTS=calm:0.9,normal:1.0,hot:1.2`
+- `KALSHI_ARB_REINVEST_ENABLED=1`
+- `KALSHI_ARB_REINVEST_MAX_FRACTION=0.08`
+- `KALSHI_ARB_DRAWDOWN_THROTTLE_PCT=5.0`
+- `KALSHI_ARB_PORTFOLIO_ALLOCATOR_ENABLED=1`
+- `KALSHI_ARB_PORTFOLIO_ALLOCATOR_MIN_SIGNAL_FRACTION=0.05`
+- `KALSHI_ARB_PORTFOLIO_ALLOCATOR_EDGE_POWER=1.0`
+- `KALSHI_ARB_PORTFOLIO_ALLOCATOR_CONFIDENCE_POWER=1.0`
+
+Paper execution emulator (paper mode only):
+- `KALSHI_ARB_PAPER_EXEC_EMULATOR=1`
+- `KALSHI_ARB_PAPER_EXEC_LATENCY_MS=250`
+- `KALSHI_ARB_PAPER_EXEC_SLIPPAGE_BPS=5`
 
 ## Reliability / Ops Knobs
 
@@ -133,6 +150,30 @@ Metrics file is emitted in Prometheus textfile format each cycle.
 - `KALSHI_ARB_MAX_MARKET_CONCENTRATION_FRACTION=0.35`
 
 Caps per-ticker notional concentration relative to bankroll/cycle budget.
+Allocator mode pre-distributes cycle notional across candidate tickers by edge/confidence,
+then still enforces the same per-market/per-run and concentration hard caps.
+
+## Autotune Visibility
+
+`tmp/kalshi_ref_arb/tune_state.json` now tracks:
+- `champion` params/metrics (current baseline policy)
+- `challenger` params/metrics (currently evaluated policy)
+- `active_variant` and eval progress
+
+Digest output surfaces this plus TCA by variant (champion vs challenger) to make
+promotion/rollback decisions auditable.
+
+## Ledger Attribution Diagnostics
+
+`tmp/kalshi_ref_arb/closed_loop_ledger.json` now includes attribution diagnostics:
+- `attribution_stats.attempted|matched|unmatched|partial_matches|last_ts`
+- settlement records are incremental (`events`) and support partial fills
+- per-order settlement carries `settled_count_total`, `filled_count`, and `fully_settled`
+
+Closed-loop reports and digest payloads now surface:
+- settlement attribution match-rate
+- unmatched settlements (window + total)
+- closed-loop `by_variant` (champion/challenger) performance breakdown
 
 ## Paper Backtest Harness
 

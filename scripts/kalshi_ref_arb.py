@@ -32,7 +32,8 @@ try:
         prob_lognormal_less,
     )
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, kill_switch_tripped  # type: ignore
-    from scripts.arb.vol import conservative_sigma_auto  # type: ignore
+    from scripts.arb.risk import drawdown_throttle_multiplier, ledger_drawdown_pct  # type: ignore
+    from scripts.arb.vol import conservative_sigma_auto, dynamic_edge_multiplier_for_bucket, vol_regime_bucket  # type: ignore
 except ModuleNotFoundError:
     here = os.path.abspath(os.path.dirname(__file__))
     repo_root = os.path.abspath(os.path.join(here, ".."))
@@ -55,7 +56,8 @@ except ModuleNotFoundError:
         prob_lognormal_less,
     )
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, kill_switch_tripped  # type: ignore
-    from scripts.arb.vol import conservative_sigma_auto  # type: ignore
+    from scripts.arb.risk import drawdown_throttle_multiplier, ledger_drawdown_pct  # type: ignore
+    from scripts.arb.vol import conservative_sigma_auto, dynamic_edge_multiplier_for_bucket, vol_regime_bucket  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,18 @@ class Signal:
     vol_anomaly_ratio: Optional[float] = None
     momentum_15m_pct: Optional[float] = None
     momentum_60m_pct: Optional[float] = None
+    regime_bucket: Optional[str] = None
+    edge_threshold_bps: Optional[float] = None
+    ref_quote_age_sec: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class PortfolioAllocatorPlan:
+    enabled: bool
+    run_budget_usd: float
+    per_ticker_target_usd: Dict[str, float]
+    per_ticker_score: Dict[str, float]
+    per_ticker_hard_cap_usd: Dict[str, float]
 
 
 def _json(obj: Any) -> str:
@@ -206,6 +220,124 @@ def _update_sweep_stats(repo_root: str, entry: Dict[str, Any], *, window_s: int 
     _atomic_write_json(path, out)
 
 
+def _signal_trade_confidence(rec: Dict[str, Any], min_edge_bps: float) -> float:
+    """Map edge strength to [0.25, 1.0] confidence for sizing/allocation."""
+    try:
+        eff_edge = float(rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps"))
+    except Exception:
+        eff_edge = float(min_edge_bps)
+    try:
+        edge_req = float(rec.get("edge_threshold_bps") if rec.get("edge_threshold_bps") is not None else min_edge_bps)
+    except Exception:
+        edge_req = float(min_edge_bps)
+    return max(0.25, min(1.0, float(eff_edge) / max(1.0, float(edge_req) * 2.0)))
+
+
+def _build_portfolio_allocator_plan(
+    *,
+    signals: List[Signal],
+    state: RiskState,
+    cfg: RiskConfig,
+    args: argparse.Namespace,
+    rt_cfg: Any,
+    cash_usd: Optional[float],
+    drawdown_mult: float,
+) -> PortfolioAllocatorPlan:
+    enabled = bool(getattr(rt_cfg, "portfolio_allocator_enabled", True))
+
+    run_budget = max(0.0, float(cfg.max_notional_per_run_usd) * max(0.0, float(drawdown_mult)))
+    if isinstance(cash_usd, (int, float)):
+        run_budget = min(float(run_budget), max(0.0, float(cash_usd)))
+    if (not enabled) or run_budget <= 0.0:
+        return PortfolioAllocatorPlan(
+            enabled=bool(enabled),
+            run_budget_usd=float(run_budget),
+            per_ticker_target_usd={},
+            per_ticker_score={},
+            per_ticker_hard_cap_usd={},
+        )
+
+    try:
+        bankroll = float(cash_usd) if isinstance(cash_usd, (int, float)) and float(cash_usd) > 0 else float(cfg.max_notional_per_run_usd)
+    except Exception:
+        bankroll = float(cfg.max_notional_per_run_usd)
+    max_conc_notional = max(0.0, float(bankroll) * float(getattr(args, "max_market_concentration_fraction", 0.35) or 0.35))
+
+    edge_power = float(getattr(rt_cfg, "portfolio_allocator_edge_power", 1.0) or 1.0)
+    conf_power = float(getattr(rt_cfg, "portfolio_allocator_confidence_power", 1.0) or 1.0)
+
+    per_ticker_score: Dict[str, float] = {}
+    per_ticker_hard_cap: Dict[str, float] = {}
+    for s in signals:
+        rec = s.recommended if isinstance(s.recommended, dict) else {}
+        side = rec.get("side")
+        if side not in ("yes", "no"):
+            continue
+        ticker = str(s.ticker or "").strip()
+        if not ticker:
+            continue
+
+        market_notional = float(state.market_notional_usd(ticker))
+        remaining_market = max(0.0, float(cfg.max_notional_per_market_usd) - market_notional)
+        remaining_conc = max(0.0, float(max_conc_notional) - market_notional)
+        hard_cap = min(float(remaining_market), float(remaining_conc), float(run_budget))
+        if hard_cap <= 0.0:
+            continue
+
+        try:
+            eff_edge = float(rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps"))
+        except Exception:
+            eff_edge = 0.0
+        try:
+            edge_req = float(rec.get("edge_threshold_bps") if rec.get("edge_threshold_bps") is not None else args.min_edge_bps)
+        except Exception:
+            edge_req = float(args.min_edge_bps)
+        confidence = _signal_trade_confidence(rec, float(args.min_edge_bps))
+        edge_ratio = max(0.0, float(eff_edge) / max(1.0, float(edge_req)))
+        score = (max(0.01, float(edge_ratio)) ** max(0.2, float(edge_power))) * (
+            max(0.05, float(confidence)) ** max(0.2, float(conf_power))
+        )
+
+        prev = per_ticker_score.get(ticker)
+        if (prev is None) or (float(score) > float(prev)):
+            per_ticker_score[ticker] = float(score)
+        per_ticker_hard_cap[ticker] = max(float(per_ticker_hard_cap.get(ticker, 0.0)), float(hard_cap))
+
+    if not per_ticker_score:
+        return PortfolioAllocatorPlan(
+            enabled=True,
+            run_budget_usd=float(run_budget),
+            per_ticker_target_usd={},
+            per_ticker_score={},
+            per_ticker_hard_cap_usd=per_ticker_hard_cap,
+        )
+
+    tickers = list(per_ticker_score.keys())
+    n = max(1, len(tickers))
+    min_signal_fraction = float(getattr(rt_cfg, "portfolio_allocator_min_signal_fraction", 0.05) or 0.05)
+    min_signal_fraction = max(0.0, min(float(min_signal_fraction), 1.0 / float(n)))
+    residual = max(0.0, 1.0 - (float(min_signal_fraction) * float(n)))
+    total_score = sum(float(v) for v in per_ticker_score.values())
+
+    per_ticker_target: Dict[str, float] = {}
+    for t in tickers:
+        w = float(per_ticker_score.get(t, 0.0))
+        frac = float(min_signal_fraction)
+        if total_score > 0.0:
+            frac += float(residual) * (float(w) / float(total_score))
+        target = float(run_budget) * float(frac)
+        hard_cap = float(per_ticker_hard_cap.get(t, 0.0))
+        per_ticker_target[t] = max(0.0, min(float(target), float(hard_cap)))
+
+    return PortfolioAllocatorPlan(
+        enabled=True,
+        run_budget_usd=float(run_budget),
+        per_ticker_target_usd=per_ticker_target,
+        per_ticker_score=per_ticker_score,
+        per_ticker_hard_cap_usd=per_ticker_hard_cap,
+    )
+
+
 def _parse_iso_z(ts: str) -> Optional[float]:
     # Minimal parser for "YYYY-MM-DDTHH:MM:SSZ"
     if not ts or not ts.endswith("Z"):
@@ -294,9 +426,14 @@ def _signal_for_market(
     bayes_obs_k_max: float = 30.0,
     vol_anomaly_ratio: Optional[float] = None,
     max_vol_anomaly_ratio: float = 1.8,
+    ref_quote_age_sec: Optional[float] = None,
+    max_ref_quote_age_sec: float = 3.0,
     cross_venue_dispersion_bps: Optional[float] = None,
     max_dispersion_bps: float = 35.0,
     enable_regime_filter: bool = False,
+    dynamic_edge_enabled: bool = False,
+    dynamic_edge_multiplier: float = 1.0,
+    regime_bucket: str = "normal",
     funding_rate_bps: Optional[float] = None,
     enable_funding_filter: bool = False,
     funding_abs_bps_max: float = 3.0,
@@ -321,6 +458,7 @@ def _signal_for_market(
         return None
 
     base_rejected: List[str] = []
+    eff_min_edge_bps = float(min_edge_bps) * float(dynamic_edge_multiplier if bool(dynamic_edge_enabled) else 1.0)
 
     t_years = _t_years_until(m.expected_expiration_time)
     if t_years is None:
@@ -333,8 +471,10 @@ def _signal_for_market(
     if bool(enable_regime_filter):
         if isinstance(vol_anomaly_ratio, (int, float)) and float(vol_anomaly_ratio) > float(max_vol_anomaly_ratio):
             base_rejected.append("vol_regime_too_hot")
-        if isinstance(cross_venue_dispersion_bps, (int, float)) and float(cross_venue_dispersion_bps) > float(max_dispersion_bps):
-            base_rejected.append("cross_venue_dispersion_too_wide")
+    if isinstance(cross_venue_dispersion_bps, (int, float)) and float(cross_venue_dispersion_bps) > float(max_dispersion_bps):
+        base_rejected.append("cross_venue_dispersion_too_wide")
+    if isinstance(ref_quote_age_sec, (int, float)) and float(ref_quote_age_sec) > float(max_ref_quote_age_sec):
+        base_rejected.append("ref_quote_stale")
 
     if bool(enable_funding_filter):
         if isinstance(funding_rate_bps, (int, float)) and abs(float(funding_rate_bps)) > float(funding_abs_bps_max):
@@ -432,7 +572,7 @@ def _signal_for_market(
     recommended = None
     rejected: List[str] = []
     # Recommend buy at ask if edge clears threshold.
-    if edge_yes is not None and edge_yes >= min_edge_bps:
+    if edge_yes is not None and edge_yes >= eff_min_edge_bps:
         reasons = list(base_rejected)
         eff = float(edge_yes) - float(uncertainty_bps)
         if not (yes_ask is not None and (yes_ask >= min_price) and (yes_ask <= max_price)):
@@ -444,10 +584,10 @@ def _signal_for_market(
                 reasons.append("yes_notional_below_min")
         if (yes_spread is not None) and (yes_spread > max_spread):
             reasons.append("yes_spread_too_wide")
-        if eff < float(min_edge_bps):
+        if eff < float(eff_min_edge_bps):
             reasons.append("yes_effective_edge_below_min")
         if not reasons:
-            if eff >= float(min_edge_bps):
+            if eff >= float(eff_min_edge_bps):
                 recommended = {
                     "action": "buy",
                     "side": "yes",
@@ -458,10 +598,12 @@ def _signal_for_market(
                     "p_yes_model": float(p_yes_model),
                     "p_yes_posterior": float(p_yes_post) if isinstance(p_yes_post, (int, float)) else None,
                     "posterior_k_obs": float(k_obs) if isinstance(k_obs, (int, float)) else None,
+                    "edge_threshold_bps": float(eff_min_edge_bps),
+                    "regime_bucket": str(regime_bucket),
                 }
         else:
             rejected.extend(reasons)
-    if edge_no is not None and edge_no >= min_edge_bps:
+    if edge_no is not None and edge_no >= eff_min_edge_bps:
         reasons = list(base_rejected)
         eff = float(edge_no) - float(uncertainty_bps)
         if not (no_ask is not None and (no_ask >= min_price) and (no_ask <= max_price)):
@@ -473,7 +615,7 @@ def _signal_for_market(
                 reasons.append("no_notional_below_min")
         if (no_spread is not None) and (no_spread > max_spread):
             reasons.append("no_spread_too_wide")
-        if eff < float(min_edge_bps):
+        if eff < float(eff_min_edge_bps):
             reasons.append("no_effective_edge_below_min")
         if not reasons:
             rec2 = {"action": "buy", "side": "no", "limit_price": f"{no_ask:.4f}", "edge_bps": edge_no}
@@ -482,8 +624,10 @@ def _signal_for_market(
             rec2["p_no_model"] = float(p_no)
             rec2["p_no_posterior"] = float(p_no_post) if isinstance(p_no_post, (int, float)) else None
             rec2["posterior_k_obs"] = float(k_obs) if isinstance(k_obs, (int, float)) else None
+            rec2["edge_threshold_bps"] = float(eff_min_edge_bps)
+            rec2["regime_bucket"] = str(regime_bucket)
             # Prefer larger edge.
-            if eff >= float(min_edge_bps):
+            if eff >= float(eff_min_edge_bps):
                 if recommended is None or float(rec2["effective_edge_bps"]) > float(recommended.get("effective_edge_bps") or -1e9):
                     recommended = rec2
         else:
@@ -504,6 +648,9 @@ def _signal_for_market(
         vol_anomaly_ratio=float(vol_anomaly_ratio) if isinstance(vol_anomaly_ratio, (int, float)) else None,
         momentum_15m_pct=float(momentum_15m_pct) if isinstance(momentum_15m_pct, (int, float)) else None,
         momentum_60m_pct=float(momentum_60m_pct) if isinstance(momentum_60m_pct, (int, float)) else None,
+        regime_bucket=str(regime_bucket),
+        edge_threshold_bps=float(eff_min_edge_bps),
+        ref_quote_age_sec=float(ref_quote_age_sec) if isinstance(ref_quote_age_sec, (int, float)) else None,
         yes_bid=m.yes_bid,
         yes_ask=m.yes_ask,
         no_bid=m.no_bid,
@@ -526,8 +673,14 @@ def _signal_for_market(
             "enable_regime_filter": bool(enable_regime_filter),
             "cross_venue_dispersion_bps": float(cross_venue_dispersion_bps) if isinstance(cross_venue_dispersion_bps, (int, float)) else None,
             "max_dispersion_bps": float(max_dispersion_bps),
+            "ref_quote_age_sec": float(ref_quote_age_sec) if isinstance(ref_quote_age_sec, (int, float)) else None,
+            "max_ref_quote_age_sec": float(max_ref_quote_age_sec),
             "vol_anomaly_ratio": float(vol_anomaly_ratio) if isinstance(vol_anomaly_ratio, (int, float)) else None,
             "max_vol_anomaly_ratio": float(max_vol_anomaly_ratio),
+            "dynamic_edge_enabled": bool(dynamic_edge_enabled),
+            "dynamic_edge_multiplier": float(dynamic_edge_multiplier),
+            "regime_bucket": str(regime_bucket),
+            "edge_threshold_bps": float(eff_min_edge_bps),
             "enable_funding_filter": bool(enable_funding_filter),
             "funding_rate_bps": float(funding_rate_bps) if isinstance(funding_rate_bps, (int, float)) else None,
             "funding_abs_bps_max": float(funding_abs_bps_max),
@@ -591,6 +744,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
         except Exception:
             funding_bps = None
     dispersion_bps = spot_diag.get("dispersion_bps") if isinstance(spot_diag, dict) else None
+    quote_age_s = spot_diag.get("max_quote_age_sec") if isinstance(spot_diag, dict) else None
+    regime = vol_regime_bucket(vol_ratio)
+    dynamic_mult = dynamic_edge_multiplier_for_bucket(regime, dict(getattr(rt_cfg, "dynamic_edge_regime_mults", {})))
 
     sigs: List[Dict[str, Any]] = []
     for m in markets:
@@ -612,9 +768,14 @@ def cmd_scan(args: argparse.Namespace) -> int:
             bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
             vol_anomaly_ratio=vol_ratio,
             max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
+            ref_quote_age_sec=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+            max_ref_quote_age_sec=float(rt_cfg.max_ref_quote_age_sec),
             cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
             max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
             enable_regime_filter=bool(rt_cfg.enable_regime_filter),
+            dynamic_edge_enabled=bool(rt_cfg.dynamic_edge_enabled),
+            dynamic_edge_multiplier=float(dynamic_mult),
+            regime_bucket=str(regime),
             funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
             enable_funding_filter=bool(rt_cfg.enable_funding_filter),
             funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
@@ -653,8 +814,14 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "enable_regime_filter": bool(rt_cfg.enable_regime_filter),
             "funding_rate_bps": float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
             "cross_venue_dispersion_bps": float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            "ref_quote_age_sec": float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+            "max_ref_quote_age_sec": float(rt_cfg.max_ref_quote_age_sec),
             "max_dispersion_bps": float(rt_cfg.max_dispersion_bps),
             "max_vol_anomaly_ratio": float(rt_cfg.max_vol_anomaly_ratio),
+            "dynamic_edge_enabled": bool(rt_cfg.dynamic_edge_enabled),
+            "dynamic_edge_regime_mults": dict(rt_cfg.dynamic_edge_regime_mults),
+            "regime_bucket": str(regime),
+            "dynamic_edge_multiplier": float(dynamic_mult),
             "spot_ref": float(spot) if isinstance(spot, (int, float)) else None,
             "spot_quotes": (spot_diag.get("quotes") if isinstance(spot_diag, dict) else []),
             "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
@@ -786,6 +953,9 @@ def cmd_trade(args: argparse.Namespace) -> int:
         except Exception:
             funding_bps = None
     dispersion_bps = spot_diag.get("dispersion_bps") if isinstance(spot_diag, dict) else None
+    quote_age_s = spot_diag.get("max_quote_age_sec") if isinstance(spot_diag, dict) else None
+    regime = vol_regime_bucket(vol_ratio)
+    dynamic_mult = dynamic_edge_multiplier_for_bucket(regime, dict(getattr(rt_cfg, "dynamic_edge_regime_mults", {})))
 
     all_signals: List[Signal] = []
     signals: List[Signal] = []
@@ -808,9 +978,14 @@ def cmd_trade(args: argparse.Namespace) -> int:
             bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
             vol_anomaly_ratio=vol_ratio,
             max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
+            ref_quote_age_sec=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+            max_ref_quote_age_sec=float(rt_cfg.max_ref_quote_age_sec),
             cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
             max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
             enable_regime_filter=bool(rt_cfg.enable_regime_filter),
+            dynamic_edge_enabled=bool(rt_cfg.dynamic_edge_enabled),
+            dynamic_edge_multiplier=float(dynamic_mult),
+            regime_bucket=str(regime),
             funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
             enable_funding_filter=bool(rt_cfg.enable_funding_filter),
             funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
@@ -914,6 +1089,33 @@ def cmd_trade(args: argparse.Namespace) -> int:
     except Exception:
         settled_gate_ok = False if int(args.min_settled_for_scaling) > 0 else True
 
+    drawdown_pct = 0.0
+    drawdown_mult = 1.0
+    try:
+        drawdown_pct = float(ledger_drawdown_pct(repo_root, lookback_days=60))
+    except Exception:
+        drawdown_pct = 0.0
+    try:
+        drawdown_mult = float(
+            drawdown_throttle_multiplier(
+                float(drawdown_pct),
+                throttle_pct=float(getattr(rt_cfg, "drawdown_throttle_pct", 5.0)),
+            )
+        )
+    except Exception:
+        drawdown_mult = 1.0
+
+    allocator_plan = _build_portfolio_allocator_plan(
+        signals=signals,
+        state=state,
+        cfg=cfg,
+        args=args,
+        rt_cfg=rt_cfg,
+        cash_usd=cash_usd,
+        drawdown_mult=float(drawdown_mult),
+    )
+    allocator_remaining: Dict[str, float] = dict(allocator_plan.per_ticker_target_usd)
+
     for s in signals:
         if order_count >= cfg.max_orders_per_run:
             break
@@ -934,7 +1136,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
         # Risk: per-market cap.
         market_notional = state.market_notional_usd(s.ticker)
         remaining_market = max(0.0, cfg.max_notional_per_market_usd - market_notional)
-        remaining_run = max(0.0, cfg.max_notional_per_run_usd - total_notional)
+        remaining_run = max(0.0, (float(cfg.max_notional_per_run_usd) * float(drawdown_mult)) - total_notional)
         if cash_usd is not None:
             remaining_run = min(remaining_run, max(0.0, cash_usd - total_notional))
         budget = min(remaining_market, remaining_run)
@@ -965,6 +1167,21 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 }
             )
             continue
+
+        # Portfolio allocator overlay: pre-distribute run budget across candidates so
+        # one ticker cannot consume the full run unless it clearly dominates score/caps.
+        if bool(allocator_plan.enabled):
+            alloc_rem = max(0.0, float(allocator_remaining.get(s.ticker, 0.0)))
+            if alloc_rem <= 0.0:
+                skipped.append({"ticker": s.ticker, "reason": "allocator_budget_exhausted"})
+                continue
+            budget = min(float(budget), float(alloc_rem))
+
+        # Reinvest sizing overlay (confidence-weighted, capped).
+        if bool(getattr(rt_cfg, "reinvest_enabled", False)):
+            confidence = _signal_trade_confidence(rec, float(args.min_edge_bps))
+            reinvest_cap = float(bankroll) * float(getattr(rt_cfg, "reinvest_max_fraction", 0.08)) * float(confidence) * float(drawdown_mult)
+            budget = min(float(budget), max(0.0, float(reinvest_cap)))
 
         # Contracts cost ~= price * count (payout $1).
         max_count_budget = int(min(float(budget), float(remaining_conc)) / max(0.0001, price))
@@ -1065,26 +1282,82 @@ def cmd_trade(args: argparse.Namespace) -> int:
         order_count += 1
 
         if not args.allow_write:
-            placed.append(
-                {
-                    "mode": "dry_run",
-                    "order": asdict(order),
-                    "notional_usd": notional,
-                    "edge_bps": rec.get("edge_bps"),
-                    "effective_edge_bps": rec.get("effective_edge_bps"),
-                    "uncertainty_bps": rec.get("uncertainty_bps"),
-                    "p_yes": s.p_yes,
-                    "p_no": 1.0 - float(s.p_yes),
-                    "t_years": s.t_years,
-                    "spot_ref": s.spot_ref,
-                    "sigma_annual": s.sigma_annual,
-                    "strike": s.strike,
-                    "strike_high": s.strike_high,
-                    "strike_type": s.strike_type,
-                    "expected_expiration_time": s.expected_expiration_time,
-                    "filters": s.filters,
-                }
-            )
+            if bool(getattr(rt_cfg, "paper_exec_emulator", False)):
+                lat_ms = int(getattr(rt_cfg, "paper_exec_latency_ms", 250) or 250)
+                slip_bps = float(getattr(rt_cfg, "paper_exec_slippage_bps", 5.0) or 5.0)
+                latency_penalty_bps = max(0.0, float(lat_ms) * 0.02)  # 250ms -> +5bps adverse selection proxy
+                adverse_bps = float(slip_bps) + float(latency_penalty_bps)
+                emu_price = min(0.9999, max(0.0001, float(price) + (float(adverse_bps) / 10_000.0)))
+                p_win = float(s.p_yes) if side == "yes" else (1.0 - float(s.p_yes))
+                edge_emu = (float(p_win) - float(emu_price)) * 10_000.0
+                eff_emu = float(edge_emu) - float(args.uncertainty_bps)
+                edge_req = float(rec.get("edge_threshold_bps") if rec.get("edge_threshold_bps") is not None else args.min_edge_bps)
+                if float(eff_emu) < float(edge_req):
+                    skipped.append(
+                        {
+                            "ticker": s.ticker,
+                            "reason": "paper_exec_rejected",
+                            "detail": "effective_edge_after_emulation_below_min",
+                            "side": side,
+                            "effective_edge_bps_after_emulation": float(eff_emu),
+                            "edge_threshold_bps": float(edge_req),
+                            "simulated_price": float(emu_price),
+                        }
+                    )
+                    continue
+                emu_notional = float(emu_price) * float(count)
+                placed.append(
+                    {
+                        "mode": "paper_emulated",
+                        "order": asdict(order),
+                        "notional_usd": emu_notional,
+                        "edge_bps": rec.get("edge_bps"),
+                        "effective_edge_bps": rec.get("effective_edge_bps"),
+                        "effective_edge_bps_after_emulation": float(eff_emu),
+                        "uncertainty_bps": rec.get("uncertainty_bps"),
+                        "p_yes": s.p_yes,
+                        "p_no": 1.0 - float(s.p_yes),
+                        "t_years": s.t_years,
+                        "spot_ref": s.spot_ref,
+                        "sigma_annual": s.sigma_annual,
+                        "strike": s.strike,
+                        "strike_high": s.strike_high,
+                        "strike_type": s.strike_type,
+                        "expected_expiration_time": s.expected_expiration_time,
+                        "regime_bucket": s.regime_bucket,
+                        "filters": s.filters,
+                        "execution_emulator": {
+                            "enabled": True,
+                            "latency_ms": int(lat_ms),
+                            "slippage_bps": float(slip_bps),
+                            "latency_penalty_bps": float(latency_penalty_bps),
+                            "simulated_price": float(emu_price),
+                        },
+                    }
+                )
+                notional = float(emu_notional)
+            else:
+                placed.append(
+                    {
+                        "mode": "dry_run",
+                        "order": asdict(order),
+                        "notional_usd": notional,
+                        "edge_bps": rec.get("edge_bps"),
+                        "effective_edge_bps": rec.get("effective_edge_bps"),
+                        "uncertainty_bps": rec.get("uncertainty_bps"),
+                        "p_yes": s.p_yes,
+                        "p_no": 1.0 - float(s.p_yes),
+                        "t_years": s.t_years,
+                        "spot_ref": s.spot_ref,
+                        "sigma_annual": s.sigma_annual,
+                        "strike": s.strike,
+                        "strike_high": s.strike_high,
+                        "strike_type": s.strike_type,
+                        "expected_expiration_time": s.expected_expiration_time,
+                        "regime_bucket": s.regime_bucket,
+                        "filters": s.filters,
+                    }
+                )
         else:
             try:
                 live = None
@@ -1482,6 +1755,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 continue
 
         total_notional += notional
+        if bool(allocator_plan.enabled):
+            allocator_remaining[s.ticker] = max(0.0, float(allocator_remaining.get(s.ticker, 0.0)) - float(notional))
 
     # Diagnostics: if no trades placed, explain why.
     diagnostics: Dict[str, Any] = _compute_trade_diagnostics(all_signals, args, markets_fetched=len(markets), candidates_recommended=len(signals))
@@ -1541,10 +1816,26 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "enable_regime_filter": bool(rt_cfg.enable_regime_filter),
             "funding_rate_bps": float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
             "cross_venue_dispersion_bps": float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            "ref_quote_age_sec": float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+            "max_ref_quote_age_sec": float(rt_cfg.max_ref_quote_age_sec),
             "max_dispersion_bps": float(rt_cfg.max_dispersion_bps),
             "max_vol_anomaly_ratio": float(rt_cfg.max_vol_anomaly_ratio),
+            "dynamic_edge_enabled": bool(rt_cfg.dynamic_edge_enabled),
+            "dynamic_edge_regime_mults": dict(rt_cfg.dynamic_edge_regime_mults),
+            "regime_bucket": str(regime),
+            "dynamic_edge_multiplier": float(dynamic_mult),
             "allow_write": bool(args.allow_write),
             "max_market_concentration_fraction": float(getattr(args, "max_market_concentration_fraction", 0.35) or 0.35),
+            "reinvest_enabled": bool(rt_cfg.reinvest_enabled),
+            "reinvest_max_fraction": float(rt_cfg.reinvest_max_fraction),
+            "drawdown_throttle_pct": float(rt_cfg.drawdown_throttle_pct),
+            "paper_exec_emulator": bool(rt_cfg.paper_exec_emulator),
+            "paper_exec_latency_ms": int(rt_cfg.paper_exec_latency_ms),
+            "paper_exec_slippage_bps": float(rt_cfg.paper_exec_slippage_bps),
+            "portfolio_allocator_enabled": bool(rt_cfg.portfolio_allocator_enabled),
+            "portfolio_allocator_min_signal_fraction": float(rt_cfg.portfolio_allocator_min_signal_fraction),
+            "portfolio_allocator_edge_power": float(rt_cfg.portfolio_allocator_edge_power),
+            "portfolio_allocator_confidence_power": float(rt_cfg.portfolio_allocator_confidence_power),
             "risk": asdict(cfg),
         },
         "live_spot_enabled": str(os.environ.get("KALSHI_ARB_LIVE_SPOT", "")).strip().lower() in ("1", "true", "yes", "y", "on"),
@@ -1553,6 +1844,17 @@ def cmd_trade(args: argparse.Namespace) -> int:
         "ref_spot_quotes": (spot_diag.get("quotes") if isinstance(spot_diag, dict) else []),
         "momentum_15m_pct": float(m15) if isinstance(m15, (int, float)) else None,
         "momentum_60m_pct": float(m60) if isinstance(m60, (int, float)) else None,
+        "regime_bucket": str(regime),
+        "drawdown_pct": float(drawdown_pct),
+        "drawdown_multiplier": float(drawdown_mult),
+        "portfolio_allocator": {
+            "enabled": bool(allocator_plan.enabled),
+            "run_budget_usd": float(allocator_plan.run_budget_usd),
+            "target_notional_by_ticker": {str(k): float(v) for k, v in allocator_plan.per_ticker_target_usd.items()},
+            "remaining_notional_by_ticker": {str(k): float(v) for k, v in allocator_remaining.items()},
+            "score_by_ticker": {str(k): float(v) for k, v in allocator_plan.per_ticker_score.items()},
+            "hard_cap_by_ticker": {str(k): float(v) for k, v in allocator_plan.per_ticker_hard_cap_usd.items()},
+        },
         "placed": placed,
         "skipped": skipped,
         "total_notional_usd": total_notional,
@@ -1570,6 +1872,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
         recheck_failed = 0
         live_spot_fail = 0
         two_tick_failed = 0
+        paper_exec_rejected = 0
         if isinstance(skipped, list):
             for s in skipped:
                 if not isinstance(s, dict):
@@ -1582,6 +1885,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     recheck_failed += 1
                 if isinstance(d, str) and d.startswith("two_tick_"):
                     two_tick_failed += 1
+                if r == "paper_exec_rejected":
+                    paper_exec_rejected += 1
                 if d == "live_spot_required_failed":
                     live_spot_fail += 1
                 elif isinstance(s.get("ref_spot_live_err"), str) and str(s.get("ref_spot_live_err") or "").strip():
@@ -1600,6 +1905,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 "no_fill": int(no_fill),
                 "recheck_failed": int(recheck_failed),
                 "two_tick_failed": int(two_tick_failed),
+                "paper_exec_rejected": int(paper_exec_rejected),
                 "live_spot_fail": int(live_spot_fail),
                 "best_effective_edge_bps": (
                     float((diagnostics.get("best_effective_edge_pass_filters") or {}).get("effective_edge_bps"))
@@ -1656,6 +1962,11 @@ def _compute_trade_diagnostics(
         edge = s.edge_bps_buy_yes if side == "yes" else s.edge_bps_buy_no
         if ask is None or edge is None:
             return None
+        edge_thr = (
+            _safe_float((s.recommended or {}).get("edge_threshold_bps"))
+            or _safe_float(s.edge_threshold_bps)
+            or float(args.min_edge_bps)
+        )
         eff = float(edge) - float(args.uncertainty_bps)
         return {
             "ticker": s.ticker,
@@ -1663,6 +1974,7 @@ def _compute_trade_diagnostics(
             "ask": float(ask),
             "edge_bps": float(edge),
             "effective_edge_bps": float(eff),
+            "edge_threshold_bps": float(edge_thr),
             "tte_min": float(s.t_years) * 365.0 * 24.0 * 60.0,
             "liquidity_dollars": (s.filters or {}).get("liquidity_dollars"),
             "spread": (s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"),
@@ -1680,6 +1992,14 @@ def _compute_trade_diagnostics(
             return False
         sp = _safe_float((s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"))
         if sp is not None and sp > float(args.max_spread):
+            return False
+        rqa = _safe_float((s.filters or {}).get("ref_quote_age_sec"))
+        rqa_max = _safe_float((s.filters or {}).get("max_ref_quote_age_sec"))
+        if rqa is not None and rqa_max is not None and rqa > rqa_max:
+            return False
+        disp = _safe_float((s.filters or {}).get("cross_venue_dispersion_bps"))
+        disp_max = _safe_float((s.filters or {}).get("max_dispersion_bps"))
+        if disp is not None and disp_max is not None and disp > disp_max:
             return False
         if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
             return False
@@ -1747,6 +2067,14 @@ def _compute_trade_diagnostics(
                     reasons.append("liquidity_below_min")
                 if spread is not None and spread > float(args.max_spread):
                     reasons.append(f"{side}_spread_too_wide")
+                rqa = _safe_float((s.filters or {}).get("ref_quote_age_sec"))
+                rqa_max = _safe_float((s.filters or {}).get("max_ref_quote_age_sec"))
+                if rqa is not None and rqa_max is not None and rqa > rqa_max:
+                    reasons.append("ref_quote_stale")
+                disp = _safe_float((s.filters or {}).get("cross_venue_dispersion_bps"))
+                disp_max = _safe_float((s.filters or {}).get("max_dispersion_bps"))
+                if disp is not None and disp_max is not None and disp > disp_max:
+                    reasons.append("cross_venue_dispersion_too_wide")
                 if float(ask) < float(args.min_price) or float(ask) > float(args.max_price):
                     reasons.append(f"{side}_price_out_of_bounds")
                 # Fee-aware: low-notional orders (per 1 contract) require huge edge.
@@ -1759,9 +2087,10 @@ def _compute_trade_diagnostics(
                 if _passes_non_edge_filters(s, side):
                     totals["pass_non_edge_filters"] += 1
                 # Edge thresholds last (least "structural").
-                if float(edge) < float(args.min_edge_bps):
+                edge_thr = _safe_float((s.recommended or {}).get("edge_threshold_bps")) or _safe_float(s.edge_threshold_bps) or float(args.min_edge_bps)
+                if float(edge) < float(edge_thr):
                     reasons.append(f"{side}_edge_below_min")
-                if eff < float(args.min_edge_bps):
+                if eff < float(edge_thr):
                     reasons.append(f"{side}_effective_edge_below_min")
                 if not reasons:
                     totals["pass_all_filters"] += 1

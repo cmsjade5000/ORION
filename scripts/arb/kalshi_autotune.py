@@ -269,10 +269,10 @@ def recommend_params(*, baseline: Dict[str, Any], current: Dict[str, str]) -> Li
 
 def _load_tune_state(repo_root: str) -> Dict[str, Any]:
     p = _repo_path(repo_root, TUNE_STATE_PATH_REL)
-    return _load_json(
+    state = _load_json(
         p,
         default={
-            "version": 1,
+            "version": 2,
             "enabled": False,
             "min_settled": 20,
             "eval_settled": 10,
@@ -281,8 +281,60 @@ def _load_tune_state(repo_root: str) -> Dict[str, Any]:
             "current_params": {},
             "prev_params": {},
             "baseline": {},
+            "champion": {"name": "champion", "params": {}, "baseline": {}, "applied_ts": 0},
+            "challenger": {
+                "name": "challenger",
+                "status": "idle",
+                "params": {},
+                "baseline": {},
+                "eval_metrics": {},
+                "applied_ts": 0,
+                "completed_ts": 0,
+            },
         },
     )
+    if not isinstance(state.get("champion"), dict):
+        state["champion"] = {"name": "champion", "params": {}, "baseline": {}, "applied_ts": 0}
+    if not isinstance(state.get("challenger"), dict):
+        state["challenger"] = {
+            "name": "challenger",
+            "status": "idle",
+            "params": {},
+            "baseline": {},
+            "eval_metrics": {},
+            "applied_ts": 0,
+            "completed_ts": 0,
+        }
+
+    # Backward-compat: lift old current/prev schema into champion/challenger fields.
+    cur = state.get("current_params") if isinstance(state.get("current_params"), dict) else {}
+    prev = state.get("prev_params") if isinstance(state.get("prev_params"), dict) else {}
+    baseline = state.get("baseline") if isinstance(state.get("baseline"), dict) else {}
+    champion = state.get("champion") if isinstance(state.get("champion"), dict) else {}
+    challenger = state.get("challenger") if isinstance(state.get("challenger"), dict) else {}
+
+    if not isinstance(champion.get("params"), dict) or not champion.get("params"):
+        champion["params"] = dict(prev if prev else cur)
+    if not isinstance(champion.get("baseline"), dict) or not champion.get("baseline"):
+        champion["baseline"] = dict(baseline)
+    champion.setdefault("name", "champion")
+    champion["applied_ts"] = int(champion.get("applied_ts") or 0)
+
+    challenger.setdefault("name", "challenger")
+    challenger.setdefault("status", "idle")
+    if not isinstance(challenger.get("params"), dict):
+        challenger["params"] = {}
+    if not isinstance(challenger.get("baseline"), dict):
+        challenger["baseline"] = {}
+    if not isinstance(challenger.get("eval_metrics"), dict):
+        challenger["eval_metrics"] = {}
+    challenger["applied_ts"] = int(challenger.get("applied_ts") or 0)
+    challenger["completed_ts"] = int(challenger.get("completed_ts") or 0)
+
+    state["champion"] = champion
+    state["challenger"] = challenger
+    state.setdefault("version", 2)
+    return state
 
 
 def _save_tune_state(repo_root: str, state: Dict[str, Any]) -> None:
@@ -300,6 +352,51 @@ def _save_override_obj(repo_root: str, obj: Dict[str, Any]) -> None:
     _save_json_atomic(p, obj)
 
 
+def _variant_payload(obj: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "name": str(obj.get("name") or ""),
+        "status": str(obj.get("status") or ""),
+        "params": dict(obj.get("params") or {}) if isinstance(obj.get("params"), dict) else {},
+        "baseline": dict(obj.get("baseline") or {}) if isinstance(obj.get("baseline"), dict) else {},
+        "eval_metrics": dict(obj.get("eval_metrics") or {}) if isinstance(obj.get("eval_metrics"), dict) else {},
+        "applied_ts": int(obj.get("applied_ts") or 0),
+        "completed_ts": int(obj.get("completed_ts") or 0),
+    }
+
+
+def _active_variant(state: Dict[str, Any]) -> str:
+    challenger = state.get("challenger") if isinstance(state.get("challenger"), dict) else {}
+    ch_status = str(challenger.get("status") or "").strip().lower()
+    if int(state.get("last_apply_ts") or 0) > 0 and ch_status in ("evaluating", "applied"):
+        return "challenger"
+    return "champion"
+
+
+def _status_payload(
+    state: Dict[str, Any],
+    *,
+    settled_total: Optional[int],
+    recs: Optional[List[Dict[str, Any]]] = None,
+    eval_progress: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    out: Dict[str, Any] = {
+        "enabled": bool(state.get("enabled")),
+        "status": str(state.get("status") or "unknown"),
+        "settled_total": int(settled_total) if isinstance(settled_total, int) else None,
+        "active_variant": _active_variant(state),
+        "champion": _variant_payload(state.get("champion") if isinstance(state.get("champion"), dict) else {}),
+        "challenger": _variant_payload(state.get("challenger") if isinstance(state.get("challenger"), dict) else {}),
+    }
+    if isinstance(recs, list) and recs:
+        out["recs"] = recs
+    if isinstance(eval_progress, dict) and eval_progress:
+        out["eval_progress"] = {
+            "have": int(eval_progress.get("have") or 0),
+            "target": int(eval_progress.get("target") or 0),
+        }
+    return out
+
+
 def maybe_autotune(repo_root: str) -> Dict[str, Any]:
     """Auto-apply bounded param changes after enough settled data; rollback if worse."""
     enabled = str(os.environ.get("KALSHI_ARB_TUNE_ENABLED") or "").strip().lower() in ("1", "true", "yes", "on")
@@ -309,8 +406,9 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
     state["eval_settled"] = int(_get_env_int("KALSHI_ARB_TUNE_EVAL_SETTLED", int(state.get("eval_settled") or 10)))
 
     if not enabled:
+        state["status"] = "disabled"
         _save_tune_state(repo_root, state)
-        return {"enabled": False, "status": "disabled"}
+        return _status_payload(state, settled_total=None)
 
     led = load_ledger(repo_root)
     settled_all = _settled_orders(led)
@@ -319,21 +417,49 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
     eval_settled = int(state.get("eval_settled") or 10)
     now = int(time.time())
 
-    # Rollback check.
-    last_apply = int(state.get("last_apply_ts") or 0)
-    cur_params = state.get("current_params") if isinstance(state.get("current_params"), dict) else {}
-    prev_params = state.get("prev_params") if isinstance(state.get("prev_params"), dict) else {}
-    baseline = state.get("baseline") if isinstance(state.get("baseline"), dict) else {}
+    champion = state.get("champion") if isinstance(state.get("champion"), dict) else {"name": "champion", "params": {}, "baseline": {}}
+    challenger = state.get("challenger") if isinstance(state.get("challenger"), dict) else {"name": "challenger", "status": "idle", "params": {}}
 
-    if last_apply and cur_params and prev_params:
+    # Backward compatibility fields stay updated.
+    if not isinstance(champion.get("params"), dict) or not champion.get("params"):
+        champion["params"] = _bounded(_current_params_from_env())
+    if not isinstance(champion.get("baseline"), dict):
+        champion["baseline"] = {}
+    champion.setdefault("name", "champion")
+    champion["applied_ts"] = int(champion.get("applied_ts") or 0)
+    challenger.setdefault("name", "challenger")
+    challenger.setdefault("status", "idle")
+    if not isinstance(challenger.get("params"), dict):
+        challenger["params"] = {}
+    if not isinstance(challenger.get("baseline"), dict):
+        challenger["baseline"] = {}
+    if not isinstance(challenger.get("eval_metrics"), dict):
+        challenger["eval_metrics"] = {}
+    challenger["applied_ts"] = int(challenger.get("applied_ts") or 0)
+    challenger["completed_ts"] = int(challenger.get("completed_ts") or 0)
+
+    state["champion"] = champion
+    state["challenger"] = challenger
+    state["current_params"] = dict(champion.get("params") if isinstance(champion.get("params"), dict) else {})
+    state["prev_params"] = {}
+    state["baseline"] = dict(champion.get("baseline") if isinstance(champion.get("baseline"), dict) else {})
+
+    # Challenger evaluation / rollback gate.
+    last_apply = int(state.get("last_apply_ts") or 0)
+    ch_status = str(challenger.get("status") or "").strip().lower()
+    if last_apply and ch_status in ("evaluating", "applied") and isinstance(challenger.get("params"), dict) and challenger.get("params"):
         post_orders = [o for o in settled_all if int(o.get("ts_unix") or 0) >= last_apply]
+        eval_have = len(post_orders)
         if len(post_orders) >= eval_settled:
             post_metrics = _metrics_for_orders(post_orders[-eval_settled:])
-            base_ppt = baseline.get("realized_pnl_per_trade_usd_approx")
+            baseline = challenger.get("baseline") if isinstance(challenger.get("baseline"), dict) else {}
+            if not baseline:
+                baseline = champion.get("baseline") if isinstance(champion.get("baseline"), dict) else {}
+            base_ppt = baseline.get("realized_pnl_per_trade_usd_approx") if isinstance(baseline, dict) else None
             post_ppt = post_metrics.get("realized_pnl_per_trade_usd_approx")
-            base_wr = baseline.get("win_rate")
+            base_wr = baseline.get("win_rate") if isinstance(baseline, dict) else None
             post_wr = post_metrics.get("win_rate")
-            base_brier = baseline.get("brier_score_settled")
+            base_brier = baseline.get("brier_score_settled") if isinstance(baseline, dict) else None
             post_brier = post_metrics.get("brier_score_settled")
 
             worse = False
@@ -351,35 +477,68 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
             if worse:
                 ov = _load_override_obj(repo_root)
                 ov["applied_ts"] = int(now)
-                ov["params"] = dict(prev_params)
+                champion_params = champion.get("params") if isinstance(champion.get("params"), dict) else {}
+                ov["params"] = dict(champion_params)
                 ov["meta"] = {
                     "action": "rollback",
-                    "rolled_back_from": dict(cur_params),
+                    "rolled_back_from": dict(challenger.get("params") if isinstance(challenger.get("params"), dict) else {}),
                     "baseline": baseline,
                     "post_metrics": post_metrics,
                 }
                 _save_override_obj(repo_root, ov)
                 state["status"] = "rolled_back"
-                state["current_params"] = dict(prev_params)
+                state["current_params"] = dict(champion_params)
                 state["prev_params"] = {}
                 state["last_apply_ts"] = 0
+                state["baseline"] = dict(champion.get("baseline") if isinstance(champion.get("baseline"), dict) else {})
+                challenger["status"] = "rejected"
+                challenger["eval_metrics"] = dict(post_metrics)
+                challenger["completed_ts"] = int(now)
                 _save_tune_state(repo_root, state)
-                apply_overrides_to_environ(dict(prev_params))
-                return {"enabled": True, "status": "rolled_back", "settled_total": settled_n}
+                apply_overrides_to_environ(dict(champion_params))
+                return _status_payload(state, settled_total=settled_n, eval_progress={"have": eval_have, "target": eval_settled})
 
+            # Promote challenger to champion.
+            challenger_params = challenger.get("params") if isinstance(challenger.get("params"), dict) else {}
+            champion["params"] = dict(challenger_params)
+            champion["baseline"] = dict(post_metrics)
+            champion["applied_ts"] = int(last_apply or now)
+            champion["status"] = "active"
+            challenger["status"] = "promoted"
+            challenger["eval_metrics"] = dict(post_metrics)
+            challenger["completed_ts"] = int(now)
             state["status"] = "stable"
             state["post_metrics"] = post_metrics
+            state["current_params"] = dict(champion.get("params") if isinstance(champion.get("params"), dict) else {})
+            state["prev_params"] = {}
+            state["baseline"] = dict(champion.get("baseline") if isinstance(champion.get("baseline"), dict) else {})
+            state["last_apply_ts"] = 0
+
+            ov = _load_override_obj(repo_root)
+            ov["applied_ts"] = int(now)
+            ov["params"] = dict(champion.get("params") if isinstance(champion.get("params"), dict) else {})
+            ov["meta"] = {"action": "promote", "post_metrics": post_metrics}
+            _save_override_obj(repo_root, ov)
             _save_tune_state(repo_root, state)
+            apply_overrides_to_environ(dict(champion.get("params") if isinstance(champion.get("params"), dict) else {}))
+            return _status_payload(state, settled_total=settled_n, eval_progress={"have": eval_have, "target": eval_settled})
+
+        state["status"] = "evaluating"
+        state["settled_total"] = settled_n
+        _save_tune_state(repo_root, state)
+        return _status_payload(state, settled_total=settled_n, eval_progress={"have": eval_have, "target": eval_settled})
 
     # Apply check: at most once per 24h.
     if settled_n < min_settled:
         state["status"] = "waiting_sample"
         state["settled_total"] = settled_n
         _save_tune_state(repo_root, state)
-        return {"enabled": True, "status": "waiting_sample", "settled_total": settled_n}
+        return _status_payload(state, settled_total=settled_n)
 
     if int(state.get("last_apply_ts") or 0) and (now - int(state.get("last_apply_ts") or 0)) < 24 * 3600:
-        return {"enabled": True, "status": "cooldown", "settled_total": settled_n}
+        state["status"] = "cooldown"
+        _save_tune_state(repo_root, state)
+        return _status_payload(state, settled_total=settled_n)
 
     base_orders = settled_all[-min_settled:]
     base_metrics = _metrics_for_orders(base_orders)
@@ -388,14 +547,17 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
     if not recs:
         state["status"] = "no_change"
         state["settled_total"] = settled_n
-        state["baseline"] = base_metrics
+        champion["params"] = dict(cur)
+        champion["baseline"] = dict(base_metrics)
+        champion["status"] = "active"
+        state["baseline"] = dict(base_metrics)
+        state["current_params"] = dict(cur)
         _save_tune_state(repo_root, state)
-        return {"enabled": True, "status": "no_change", "settled_total": settled_n}
+        return _status_payload(state, settled_total=settled_n)
 
     ov = _load_override_obj(repo_root)
-    prev = ov.get("params") if isinstance(ov.get("params"), dict) else {}
-    prev = {k: str(v) for k, v in prev.items() if isinstance(k, str) and k.startswith("KALSHI_ARB_")}
-    newp = dict(prev)
+    prev = dict(cur)
+    newp = dict(cur)
     for r in recs:
         e = r.get("env")
         v = r.get("value")
@@ -412,9 +574,19 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
     state["last_apply_ts"] = int(now)
     state["prev_params"] = dict(prev)
     state["current_params"] = dict(newp)
-    state["baseline"] = base_metrics
+    state["baseline"] = dict(base_metrics)
+    champion["name"] = "champion"
+    champion["params"] = dict(prev)
+    champion["baseline"] = dict(base_metrics)
+    champion["status"] = "active"
+    challenger["name"] = "challenger"
+    challenger["status"] = "evaluating"
+    challenger["params"] = dict(newp)
+    challenger["baseline"] = dict(base_metrics)
+    challenger["eval_metrics"] = {}
+    challenger["applied_ts"] = int(now)
+    challenger["completed_ts"] = 0
     _save_tune_state(repo_root, state)
 
     apply_overrides_to_environ(newp)
-    return {"enabled": True, "status": "applied", "settled_total": settled_n, "recs": recs}
-
+    return _status_payload(state, settled_total=settled_n, recs=recs, eval_progress={"have": 0, "target": eval_settled})

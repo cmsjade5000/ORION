@@ -24,7 +24,13 @@ class TestRiskPersistence(unittest.TestCase):
             n = st2.count_observations("T:yes", min_ts_unix=now - 300, min_edge_bps=120.0)
             self.assertEqual(n, 2)
 
+    def test_drawdown_throttle_multiplier(self) -> None:
+        from scripts.arb.risk import drawdown_throttle_multiplier
+
+        self.assertAlmostEqual(drawdown_throttle_multiplier(0.0, throttle_pct=5.0), 1.0, places=9)
+        self.assertAlmostEqual(drawdown_throttle_multiplier(4.0, throttle_pct=5.0), 1.0, places=9)
+        self.assertLess(drawdown_throttle_multiplier(10.0, throttle_pct=5.0), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
-
