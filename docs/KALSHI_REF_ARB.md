@@ -64,6 +64,13 @@ Trade mode defaults to dry-run unless `--allow-write` is set:
 python3 scripts/kalshi_ref_arb.py trade --series KXBTC --limit 10
 ```
 
+Runtime healthcheck (config + optional auth):
+
+```bash
+python3 scripts/kalshi_ref_arb.py healthcheck
+python3 scripts/kalshi_ref_arb.py healthcheck --check-auth
+```
+
 Enable live order placement (requires credentials + explicit flag):
 
 ```bash
@@ -90,6 +97,50 @@ Before enabling `--allow-write`:
 - create a kill switch file path you can toggle quickly
 
 The bot will refuse writes if a kill-switch file exists (see CLI `--kill-switch-path`).
+
+## Paper-First Safety Gate
+
+Cycle runner now defaults to paper mode unless explicitly armed:
+
+- `KALSHI_ARB_EXECUTION_MODE=paper|live` (default: `paper`)
+- `KALSHI_ARB_LIVE_ARMED=0|1` (must be `1` with `live` to send writes)
+
+This means cron can run continuously without accidentally placing live orders.
+
+## Read-Only Reference Feed Controls
+
+- `KALSHI_ARB_REF_FEEDS=coinbase,kraken,binance` (read-only)
+- `KALSHI_ARB_ENABLE_FUNDING_FILTER=1`
+- `KALSHI_ARB_ENABLE_REGIME_FILTER=1`
+- `KALSHI_ARB_MAX_DISPERSION_BPS=35`
+- `KALSHI_ARB_MAX_VOL_ANOMALY_RATIO=1.8`
+- `KALSHI_ARB_FUNDING_ABS_BPS_MAX=3.0`
+
+These filters reduce low-quality entries during unstable regimes.
+
+## Reliability / Ops Knobs
+
+- `KALSHI_ARB_RETRY_MAX_ATTEMPTS=4`
+- `KALSHI_ARB_RETRY_BASE_MS=250`
+- `KALSHI_ARB_MILESTONE_NOTIFY=1` (milestone/error style Telegram updates only)
+- `KALSHI_ARB_METRICS_ENABLED=1`
+- `KALSHI_ARB_METRICS_PATH=/Users/corystoner/Desktop/ORION/tmp/kalshi_ref_arb/metrics.prom`
+
+Metrics file is emitted in Prometheus textfile format each cycle.
+
+## Sizing / Concentration
+
+- `KALSHI_ARB_MAX_MARKET_CONCENTRATION_FRACTION=0.35`
+
+Caps per-ticker notional concentration relative to bankroll/cycle budget.
+
+## Paper Backtest Harness
+
+Use closed-loop ledger data with configurable fee/slippage assumptions:
+
+```bash
+python3 scripts/kalshi_backtest.py --window-hours 336 --fee-bps 5 --slippage-bps 8 --walk-forward-folds 4
+```
 
 ## Autopilot (ORION, Every 5 Minutes)
 
