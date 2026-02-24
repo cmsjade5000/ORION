@@ -1909,10 +1909,18 @@ def cmd_trade(args: argparse.Namespace) -> int:
     # Rolling sweep stats (helps explain "why not trading" over time).
     try:
         placed_live = 0
+        placed_paper = 0
+        placed_total = 0
         if isinstance(placed, list):
             for p in placed:
-                if isinstance(p, dict) and p.get("mode") == "live":
+                if not isinstance(p, dict):
+                    continue
+                placed_total += 1
+                mode = str(p.get("mode") or "").strip().lower()
+                if mode == "live":
                     placed_live += 1
+                elif mode == "paper":
+                    placed_paper += 1
         no_fill = 0
         recheck_failed = 0
         live_spot_fail = 0
@@ -1947,6 +1955,8 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 "signals_computed": int(len(all_signals)),
                 "candidates_recommended": int(len(signals)),
                 "placed_live": int(placed_live),
+                "placed_paper": int(placed_paper),
+                "placed_total": int(placed_total),
                 "no_fill": int(no_fill),
                 "recheck_failed": int(recheck_failed),
                 "two_tick_failed": int(two_tick_failed),

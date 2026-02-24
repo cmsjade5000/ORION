@@ -275,6 +275,34 @@ Deterministic Kalshi autotrade cycle runner intended for OpenClaw cron (no manua
 - writes artifacts under `tmp/kalshi_ref_arb/runs/`
 - sends Telegram notifications only on live orders or errors (rate-limited)
 
+### Grouped-Round Gate Tuning (paper mode)
+`kalshi_autotune.py` now supports grouped round-by-round gate adaptation from sweep stats:
+- evaluate the latest `round_cycles * groups_lookback` cycles
+- score multiple gate-change options from blocker mix
+- apply bounded changes at most once per completed round
+- continue nudging until opportunity flow is in-range
+
+Key env knobs:
+- `KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES` (default `12`)
+- `KALSHI_ARB_TUNE_SWEEP_GROUPS_LOOKBACK` (default `3`)
+- `KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS` (default `2`)
+- `KALSHI_ARB_TUNE_SWEEP_MAX_CHANGES_PER_ROUND` (default `2`)
+- `KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED` (default `1`)
+- `KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED` (default `8`)
+- `KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_PLACED` (default `1`)
+- `KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_PLACED` (default `6`)
+- `KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S` (default `7200`)
+
+Dryness/stuck observability knobs:
+- `KALSHI_ARB_SERIES_ROTATION_ENABLED` (default `1`)
+- `KALSHI_ARB_SERIES_ROTATION_DRY_ROUNDS` (default `3`)
+- `KALSHI_ARB_SERIES_ROTATION_MIN_BLOCKER_SHARE` (default `0.60`)
+- `KALSHI_ARB_SERIES_FALLBACKS` (default `KXETH`)
+- `KALSHI_ARB_STUCK_ENABLED` (default `1`)
+- `KALSHI_ARB_STUCK_WINDOW_S` (default `86400`)
+- `KALSHI_ARB_STUCK_MIN_CYCLES` (default `24`)
+- `KALSHI_ARB_STUCK_DOMINANT_BLOCKER_SHARE` (default `0.70`)
+
 ---
 
 ## kalshi_digest.py

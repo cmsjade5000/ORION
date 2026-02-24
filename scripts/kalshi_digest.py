@@ -657,6 +657,8 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
         "signals": 0,
         "recommended": 0,
         "placed_live": 0,
+        "placed_paper": 0,
+        "placed_total": 0,
         "no_fill": 0,
         "recheck_failed": 0,
         "two_tick_failed": 0,
@@ -683,18 +685,25 @@ def _sweep_rollup_24h(obj: Optional[Dict[str, Any]], *, now_unix: int) -> Option
                     totals["best_eff_edge_bps_max"] = float(be)
         except Exception:
             pass
-        for k in ("signals_computed", "candidates_recommended", "placed_live", "no_fill", "recheck_failed", "two_tick_failed", "live_spot_fail"):
+        for k in ("signals_computed", "candidates_recommended", "placed_live", "placed_paper", "placed_total", "no_fill", "recheck_failed", "two_tick_failed", "live_spot_fail"):
             try:
                 totals_map = {
                     "signals_computed": "signals",
                     "candidates_recommended": "recommended",
                     "placed_live": "placed_live",
+                    "placed_paper": "placed_paper",
+                    "placed_total": "placed_total",
                     "no_fill": "no_fill",
                     "recheck_failed": "recheck_failed",
                     "two_tick_failed": "two_tick_failed",
                     "live_spot_fail": "live_spot_fail",
                 }
                 totals[totals_map[k]] += int(it.get(k) or 0)
+            except Exception:
+                pass
+        if "placed_total" not in it:
+            try:
+                totals["placed_total"] += int(it.get("placed_live") or 0) + int(it.get("placed_paper") or 0)
             except Exception:
                 pass
         if bool(it.get("markets_cache_hit")):
@@ -1565,6 +1574,48 @@ def _summarize_autotune_state(*, root: str, msg_lines: List[str]) -> Dict[str, A
                 "challenger": challenger,
                 "eval_progress": eval_p,
             }
+            stn = ts_obj.get("sweep_tune") if isinstance(ts_obj.get("sweep_tune"), dict) else {}
+            if isinstance(stn, dict) and stn:
+                autotune_summary["sweep_tune"] = dict(stn)
+                try:
+                    rid = int(stn.get("last_completed_round_id") or -1)
+                    rc = int(stn.get("round_cycles") or 0)
+                    rr = int(stn.get("round_recommended") or 0)
+                    rp = int(stn.get("round_placed_total") or 0)
+                    if rc > 0:
+                        msg_lines.append(f"Auto-tune rounds: id {rid}, round_cycles {rc}, round_recommended {rr}, round_placed {rp}")
+                except Exception:
+                    pass
+                try:
+                    la = int(stn.get("last_apply_ts") or 0)
+                    if la > 0:
+                        dt = datetime.datetime.fromtimestamp(int(la), tz=ZoneInfo("America/New_York"))
+                        msg_lines.append(f"Last gate change: {dt.strftime('%Y-%m-%d %I:%M %p ET')}")
+                except Exception:
+                    pass
+                try:
+                    ne = int(stn.get("next_eligible_ts") or 0)
+                    if ne > 0:
+                        dt = datetime.datetime.fromtimestamp(int(ne), tz=ZoneInfo("America/New_York"))
+                        rsn = str(stn.get("next_eligible_reason") or "")
+                        tail = f" ({rsn})" if rsn else ""
+                        msg_lines.append(f"Next gate review: {dt.strftime('%Y-%m-%d %I:%M %p ET')}{tail}")
+                except Exception:
+                    pass
+                try:
+                    recs = stn.get("candidate_recs") if isinstance(stn.get("candidate_recs"), list) else []
+                    parts: List[str] = []
+                    for r in recs[:2]:
+                        if not isinstance(r, dict):
+                            continue
+                        env = r.get("env")
+                        val = r.get("value")
+                        if isinstance(env, str) and isinstance(val, str):
+                            parts.append(f"{env}={val}")
+                    if parts:
+                        msg_lines.append("Auto-tune candidates: " + "; ".join(parts))
+                except Exception:
+                    pass
         elif isinstance(ts_obj, dict):
             autotune_summary = {"enabled": bool(ts_obj.get("enabled")), "status": str(ts_obj.get("status") or "disabled")}
     except Exception:
@@ -1857,7 +1908,8 @@ def main() -> int:
             + f"cycles {int(sweep_roll.get('cycles') or 0)}, "
             + f"signals {int(sweep_roll.get('signals') or 0)}, "
             + f"recommended {int(sweep_roll.get('recommended') or 0)}, "
-            + f"placed {int(sweep_roll.get('placed_live') or 0)}, "
+            + f"placed_total {int(sweep_roll.get('placed_total') or 0)} "
+            + f"(live {int(sweep_roll.get('placed_live') or 0)}, paper {int(sweep_roll.get('placed_paper') or 0)}), "
             + f"no_fill {int(sweep_roll.get('no_fill') or 0)}, "
             + f"two_tick {int(sweep_roll.get('two_tick_failed') or 0)}, "
             + f"live_spot_fail {int(sweep_roll.get('live_spot_fail') or 0)}, "

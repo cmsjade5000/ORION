@@ -294,6 +294,8 @@ def _load_sweep_rollup(repo_root: str, *, window_s: int) -> Dict[str, Any]:
     cycles = 0
     recommended = 0
     placed_live = 0
+    placed_paper = 0
+    placed_total = 0
     blocker_counts: Dict[str, int] = {}
     for it in entries:
         if not isinstance(it, dict):
@@ -313,6 +315,20 @@ def _load_sweep_rollup(repo_root: str, *, window_s: int) -> Dict[str, Any]:
             placed_live += int(it.get("placed_live") or 0)
         except Exception:
             pass
+        try:
+            placed_paper += int(it.get("placed_paper") or 0)
+        except Exception:
+            pass
+        try:
+            placed_total += int(it.get("placed_total") or 0)
+        except Exception:
+            pass
+        if "placed_total" not in it:
+            # Backward compatibility with older sweep entries.
+            try:
+                placed_total += int(it.get("placed_live") or 0) + int(it.get("placed_paper") or 0)
+            except Exception:
+                pass
         bt = it.get("blockers_top")
         if isinstance(bt, list):
             for r in bt:
@@ -326,8 +342,161 @@ def _load_sweep_rollup(repo_root: str, *, window_s: int) -> Dict[str, Any]:
         "cycles": int(cycles),
         "recommended": int(recommended),
         "placed_live": int(placed_live),
+        "placed_paper": int(placed_paper),
+        "placed_total": int(placed_total),
         "blocker_counts": blocker_counts,
     }
+
+
+def _load_sweep_group_rollup(
+    repo_root: str,
+    *,
+    round_cycles: int,
+    groups_lookback: int,
+    window_s_fallback: int,
+) -> Dict[str, Any]:
+    """Grouped-round sweep aggregation for round-by-round gate tuning.
+
+    - Uses the latest N entries where N = round_cycles * groups_lookback.
+    - Falls back to a time window when too few entries are present.
+    - Exposes round boundary metadata so we can tune at most once per round.
+    """
+    p = _repo_path(repo_root, SWEEP_STATS_PATH_REL)
+    try:
+        obj = _load_json(p, default={})
+    except Exception:
+        return {}
+
+    entries = obj.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return {}
+
+    all_entries: List[Dict[str, Any]] = []
+    for it in entries:
+        if not isinstance(it, dict):
+            continue
+        try:
+            ts = int(it.get("ts_unix") or 0)
+        except Exception:
+            ts = 0
+        if ts <= 0:
+            continue
+        row = dict(it)
+        row["ts_unix"] = ts
+        all_entries.append(row)
+
+    if not all_entries:
+        return {}
+
+    all_entries.sort(key=lambda x: int(x.get("ts_unix") or 0))
+    tail_n = max(1, int(round_cycles) * max(1, int(groups_lookback)))
+    recent = all_entries[-tail_n:]
+
+    # Fallback to time-window slice when an early run has very few entries.
+    if len(recent) < max(4, int(round_cycles)):
+        now = int(time.time())
+        start = int(now - max(60, int(window_s_fallback)))
+        recent = [x for x in all_entries if int(x.get("ts_unix") or 0) >= start]
+        if not recent:
+            recent = all_entries[-max(1, int(round_cycles)) :]
+
+    cycles = 0
+    recommended = 0
+    placed_live = 0
+    placed_paper = 0
+    placed_total = 0
+    best_eff_edge_bps_max: float | None = None
+    blocker_counts: Dict[str, int] = {}
+    for it in recent:
+        cycles += 1
+        try:
+            recommended += int(it.get("candidates_recommended") or 0)
+        except Exception:
+            pass
+        try:
+            placed_live += int(it.get("placed_live") or 0)
+        except Exception:
+            pass
+        try:
+            placed_paper += int(it.get("placed_paper") or 0)
+        except Exception:
+            pass
+        try:
+            placed_total += int(it.get("placed_total") or 0)
+        except Exception:
+            pass
+        if "placed_total" not in it:
+            try:
+                placed_total += int(it.get("placed_live") or 0) + int(it.get("placed_paper") or 0)
+            except Exception:
+                pass
+        try:
+            be = float(it.get("best_effective_edge_bps")) if it.get("best_effective_edge_bps") is not None else None
+        except Exception:
+            be = None
+        if isinstance(be, float):
+            if best_eff_edge_bps_max is None or be > best_eff_edge_bps_max:
+                best_eff_edge_bps_max = float(be)
+        bt = it.get("blockers_top")
+        if isinstance(bt, list):
+            for r in bt:
+                if not isinstance(r, str) or not r:
+                    continue
+                blocker_counts[r] = blocker_counts.get(r, 0) + 1
+
+    rc = max(1, int(round_cycles))
+    entries_total = len(all_entries)
+    completed_rounds = int(entries_total // rc)
+    last_completed_round_id = int(completed_rounds - 1) if completed_rounds > 0 else -1
+    current_round = all_entries[-rc:] if len(all_entries) >= rc else all_entries
+    round_recommended = 0
+    round_placed_live = 0
+    round_placed_paper = 0
+    round_placed_total = 0
+    for it in current_round:
+        try:
+            round_recommended += int(it.get("candidates_recommended") or 0)
+        except Exception:
+            pass
+        try:
+            round_placed_live += int(it.get("placed_live") or 0)
+        except Exception:
+            pass
+        try:
+            round_placed_paper += int(it.get("placed_paper") or 0)
+        except Exception:
+            pass
+        try:
+            round_placed_total += int(it.get("placed_total") or 0)
+        except Exception:
+            pass
+        if "placed_total" not in it:
+            try:
+                round_placed_total += int(it.get("placed_live") or 0) + int(it.get("placed_paper") or 0)
+            except Exception:
+                pass
+
+    out = {
+        "window_s": int(window_s_fallback),
+        "cycles": int(cycles),
+        "recommended": int(recommended),
+        "placed_live": int(placed_live),
+        "placed_paper": int(placed_paper),
+        "placed_total": int(placed_total),
+        "blocker_counts": blocker_counts,
+        "entries_total": int(entries_total),
+        "completed_rounds": int(completed_rounds),
+        "last_completed_round_id": int(last_completed_round_id),
+        "round_cycles": int(rc),
+        "groups_lookback": int(max(1, int(groups_lookback))),
+        "round_recommended": int(round_recommended),
+        "round_placed_live": int(round_placed_live),
+        "round_placed_paper": int(round_placed_paper),
+        "round_placed_total": int(round_placed_total),
+    }
+    if best_eff_edge_bps_max is not None:
+        out["best_eff_edge_bps_max"] = float(best_eff_edge_bps_max)
+    return out
 
 
 def _recommend_params_from_sweep(
@@ -336,12 +505,19 @@ def _recommend_params_from_sweep(
     sweep: Dict[str, Any],
     target_min_recommended: int,
     target_max_recommended: int,
+    target_min_placed: int,
+    target_max_placed: int,
+    max_changes: int = 2,
 ) -> List[Dict[str, Any]]:
     cycles = int(sweep.get("cycles") or 0)
     if cycles <= 0:
         return []
     rec_n = int(sweep.get("recommended") or 0)
     placed_live = int(sweep.get("placed_live") or 0)
+    placed_total = int(sweep.get("placed_total") or 0)
+    round_recommended = int(sweep.get("round_recommended") or 0)
+    round_placed_live = int(sweep.get("round_placed_live") or 0)
+    round_placed_total = int(sweep.get("round_placed_total") or 0)
     bc = sweep.get("blocker_counts") if isinstance(sweep.get("blocker_counts"), dict) else {}
 
     def _share(reason: str) -> float:
@@ -358,71 +534,125 @@ def _recommend_params_from_sweep(
     except Exception:
         cur_notional = 0.20
 
-    out: List[Dict[str, Any]] = []
-    if rec_n < int(target_min_recommended) and placed_live <= 0:
-        # Not enough opportunities: loosen slowly based on dominant blockers.
-        if _share("liquidity_below_min") >= 0.20:
-            nxt = _clamp_int(cur_liq - 2, *BOUNDS.min_liquidity_usd)
-            if nxt != cur_liq:
-                out.append(
-                    {
-                        "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
-                        "value": str(nxt),
-                        "why": "Low opportunity flow with frequent liquidity blocker; slightly lower liquidity floor.",
-                    }
-                )
-        if _share("too_close_to_expiry") >= 0.20:
-            nxt = _clamp_int(cur_tte - 120, *BOUNDS.min_seconds_to_expiry)
-            if nxt != cur_tte:
-                out.append(
-                    {
-                        "env": "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY",
-                        "value": str(nxt),
-                        "why": "Low opportunity flow with frequent expiry blocker; slightly allow closer expiries.",
-                    }
-                )
-        no_notional = max(_share("yes_notional_below_min"), _share("no_notional_below_min"))
-        if no_notional >= 0.10:
-            nxt = _clamp_float(cur_notional - 0.05, *BOUNDS.min_notional_usd)
-            if abs(nxt - cur_notional) > 1e-9:
-                out.append(
-                    {
-                        "env": "KALSHI_ARB_MIN_NOTIONAL_USD",
-                        "value": f"{nxt:.2f}",
-                        "why": "Low opportunity flow with notional blocker; slightly lower probe notional floor.",
-                    }
-                )
-        if not out:
-            nxt = _clamp_int(cur_edge - 5, *BOUNDS.min_edge_bps)
-            if nxt != cur_edge:
-                out.append(
+    scored: List[Tuple[float, Dict[str, Any]]] = []
+    # If live placements happened in the round, avoid paper auto-tuning decisions.
+    if round_placed_live > 0:
+        return []
+    if (
+        int(target_min_recommended) <= round_recommended <= int(target_max_recommended)
+        and int(target_min_placed) <= round_placed_total <= int(target_max_placed)
+    ):
+        return []
+
+    high_flow = (
+        rec_n > int(target_max_recommended)
+        or placed_total > int(target_max_placed)
+        or round_recommended > int(target_max_recommended)
+        or round_placed_total > int(target_max_placed)
+    )
+
+    if high_flow:
+        # Too many opportunities: score tighten-options by overflow severity.
+        overflow_rec = max(
+            float(max(0, rec_n - int(target_max_recommended))) / float(max(1, int(target_max_recommended))),
+            float(max(0, round_recommended - int(target_max_recommended))) / float(max(1, int(target_max_recommended))),
+        )
+        overflow_placed = max(
+            float(max(0, placed_total - int(target_max_placed))) / float(max(1, int(target_max_placed))),
+            float(max(0, round_placed_total - int(target_max_placed))) / float(max(1, int(target_max_placed))),
+        )
+        overflow = max(overflow_rec, overflow_placed)
+        nxt = _clamp_int(cur_edge + 5, *BOUNDS.min_edge_bps)
+        if nxt != cur_edge:
+            scored.append(
+                (
+                    0.20 + overflow,
                     {
                         "env": "KALSHI_ARB_MIN_EDGE_BPS",
                         "value": str(nxt),
-                        "why": "Low opportunity flow; slightly lower min-edge to admit near-threshold setups.",
-                    }
+                        "why": "Opportunity flow is high; slightly tighten min-edge to preserve quality.",
+                    },
                 )
-    elif rec_n > int(target_max_recommended):
-        # Too many opportunities: tighten slightly to keep quality high.
-        nxt = _clamp_int(cur_edge + 5, *BOUNDS.min_edge_bps)
-        if nxt != cur_edge:
-            out.append(
-                {
-                    "env": "KALSHI_ARB_MIN_EDGE_BPS",
-                    "value": str(nxt),
-                    "why": "Opportunity flow is high; slightly tighten min-edge to preserve quality.",
-                }
             )
         if rec_n > int(target_max_recommended) * 2:
             nxt_liq = _clamp_int(cur_liq + 2, *BOUNDS.min_liquidity_usd)
             if nxt_liq != cur_liq:
-                out.append(
-                    {
-                        "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
-                        "value": str(nxt_liq),
-                        "why": "Opportunity flow far above target; modestly raise liquidity floor.",
-                    }
+                scored.append(
+                    (
+                        0.12 + overflow,
+                        {
+                            "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
+                            "value": str(nxt_liq),
+                            "why": "Opportunity flow far above target; modestly raise liquidity floor.",
+                        },
+                    )
                 )
+    elif rec_n < int(target_min_recommended) and round_recommended < int(target_min_recommended):
+        # Not enough opportunities: score loosen-options by blocker dominance.
+        scarcity = max(
+            float(max(0, int(target_min_recommended) - int(round_recommended))) / float(max(1, int(target_min_recommended))),
+            float(max(0, int(target_min_placed) - int(round_placed_total))) / float(max(1, int(target_min_placed))),
+        )
+        liq_share = _share("liquidity_below_min")
+        if liq_share >= 0.05:
+            nxt = _clamp_int(cur_liq - 2, *BOUNDS.min_liquidity_usd)
+            if nxt != cur_liq:
+                scored.append(
+                    (
+                        0.10 + liq_share + 0.10 * scarcity,
+                        {
+                            "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
+                            "value": str(nxt),
+                            "why": "Low opportunity flow with frequent liquidity blocker; slightly lower liquidity floor.",
+                        },
+                    )
+                )
+
+        tte_share = _share("too_close_to_expiry")
+        if tte_share >= 0.05:
+            nxt = _clamp_int(cur_tte - 120, *BOUNDS.min_seconds_to_expiry)
+            if nxt != cur_tte:
+                scored.append(
+                    (
+                        0.08 + tte_share + 0.08 * scarcity,
+                        {
+                            "env": "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY",
+                            "value": str(nxt),
+                            "why": "Low opportunity flow with frequent expiry blocker; slightly allow closer expiries.",
+                        },
+                    )
+                )
+
+        no_notional = max(_share("yes_notional_below_min"), _share("no_notional_below_min"))
+        if no_notional >= 0.05:
+            nxt = _clamp_float(cur_notional - 0.05, *BOUNDS.min_notional_usd)
+            if abs(nxt - cur_notional) > 1e-9:
+                scored.append(
+                    (
+                        0.06 + no_notional + 0.06 * scarcity,
+                        {
+                            "env": "KALSHI_ARB_MIN_NOTIONAL_USD",
+                            "value": f"{nxt:.2f}",
+                            "why": "Low opportunity flow with notional blocker; slightly lower probe notional floor.",
+                        },
+                    )
+                )
+
+        # Generic edge loosen fallback if blocker-specific options are weak.
+        edge_miss = max(_share("yes_edge_below_min"), _share("no_edge_below_min"))
+        nxt_edge = _clamp_int(cur_edge - 5, *BOUNDS.min_edge_bps)
+        if nxt_edge != cur_edge:
+            scored.append(
+                (
+                    0.04 + max(0.02, edge_miss) + 0.05 * scarcity,
+                    {
+                        "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                        "value": str(nxt_edge),
+                        "why": "Low opportunity flow; slightly lower min-edge to admit near-threshold setups.",
+                    },
+                )
+            )
+    out: List[Dict[str, Any]] = [r for _, r in sorted(scored, key=lambda x: x[0], reverse=True)]
 
     seen: set[str] = set()
     dedup: List[Dict[str, Any]] = []
@@ -432,7 +662,7 @@ def _recommend_params_from_sweep(
             continue
         seen.add(e)
         dedup.append(r)
-        if len(dedup) >= 2:
+        if len(dedup) >= int(max(1, int(max_changes))):
             break
     return dedup
 
@@ -475,8 +705,35 @@ def _maybe_apply_sweep_tune(
     cooldown_s = max(900, _get_env_int("KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S", 2 * 3600))
     target_min = max(0, _get_env_int("KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED", 1))
     target_max = max(target_min + 1, _get_env_int("KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED", 8))
+    target_min_placed = max(0, _get_env_int("KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_PLACED", 1))
+    target_max_placed = max(target_min_placed + 1, _get_env_int("KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_PLACED", 6))
+    round_cycles = max(6, _get_env_int("KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES", 12))
+    groups_lookback = max(1, _get_env_int("KALSHI_ARB_TUNE_SWEEP_GROUPS_LOOKBACK", 3))
+    min_rounds = max(1, _get_env_int("KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS", 2))
+    max_changes = max(1, _get_env_int("KALSHI_ARB_TUNE_SWEEP_MAX_CHANGES_PER_ROUND", 2))
 
-    sweep = _load_sweep_rollup(repo_root, window_s=window_s)
+    sweep = _load_sweep_group_rollup(
+        repo_root,
+        round_cycles=round_cycles,
+        groups_lookback=groups_lookback,
+        window_s_fallback=window_s,
+    )
+    if not sweep:
+        # Compatibility fallback.
+        sweep = _load_sweep_rollup(repo_root, window_s=window_s)
+        if isinstance(sweep, dict) and sweep:
+            sweep.setdefault("entries_total", int(sweep.get("cycles") or 0))
+            sweep.setdefault("completed_rounds", 0)
+            sweep.setdefault("last_completed_round_id", -1)
+            sweep.setdefault("round_cycles", int(round_cycles))
+            sweep.setdefault("groups_lookback", int(groups_lookback))
+            sweep.setdefault("round_recommended", int(sweep.get("recommended") or 0))
+            sweep.setdefault("round_placed_live", int(sweep.get("placed_live") or 0))
+            sweep.setdefault("placed_paper", int(sweep.get("placed_paper") or 0))
+            sweep.setdefault("placed_total", int(sweep.get("placed_total") or sweep.get("placed_live") or 0))
+            sweep.setdefault("round_placed_paper", int(sweep.get("round_placed_paper") or 0))
+            sweep.setdefault("round_placed_total", int(sweep.get("round_placed_total") or sweep.get("round_placed_live") or 0))
+
     stn = state.get("sweep_tune") if isinstance(state.get("sweep_tune"), dict) else {}
     if not isinstance(stn, dict):
         stn = {}
@@ -484,27 +741,75 @@ def _maybe_apply_sweep_tune(
     stn["cycles"] = int(sweep.get("cycles") or 0) if isinstance(sweep, dict) else 0
     stn["recommended"] = int(sweep.get("recommended") or 0) if isinstance(sweep, dict) else 0
     stn["placed_live"] = int(sweep.get("placed_live") or 0) if isinstance(sweep, dict) else 0
+    stn["placed_paper"] = int(sweep.get("placed_paper") or 0) if isinstance(sweep, dict) else 0
+    stn["placed_total"] = int(sweep.get("placed_total") or 0) if isinstance(sweep, dict) else 0
+    stn["entries_total"] = int(sweep.get("entries_total") or 0) if isinstance(sweep, dict) else 0
+    stn["completed_rounds"] = int(sweep.get("completed_rounds") or 0) if isinstance(sweep, dict) else 0
+    stn["last_completed_round_id"] = int(sweep.get("last_completed_round_id") or -1) if isinstance(sweep, dict) else -1
+    stn["round_cycles"] = int(sweep.get("round_cycles") or round_cycles) if isinstance(sweep, dict) else int(round_cycles)
+    stn["groups_lookback"] = int(sweep.get("groups_lookback") or groups_lookback) if isinstance(sweep, dict) else int(groups_lookback)
+    stn["round_recommended"] = int(sweep.get("round_recommended") or 0) if isinstance(sweep, dict) else 0
+    stn["round_placed_live"] = int(sweep.get("round_placed_live") or 0) if isinstance(sweep, dict) else 0
+    stn["round_placed_paper"] = int(sweep.get("round_placed_paper") or 0) if isinstance(sweep, dict) else 0
+    stn["round_placed_total"] = int(sweep.get("round_placed_total") or 0) if isinstance(sweep, dict) else 0
+    stn["target_min_placed"] = int(target_min_placed)
+    stn["target_max_placed"] = int(target_max_placed)
+    stn["target_min_recommended"] = int(target_min)
+    stn["target_max_recommended"] = int(target_max)
     state["sweep_tune"] = stn
+
+    # Always compute top candidate moves for operator visibility, even when gated.
+    candidate_recs = _recommend_params_from_sweep(
+        current=current,
+        sweep=sweep,
+        target_min_recommended=int(target_min),
+        target_max_recommended=int(target_max),
+        target_min_placed=int(target_min_placed),
+        target_max_placed=int(target_max_placed),
+        max_changes=2,
+    )
+    stn["candidate_recs"] = [r for r in candidate_recs if isinstance(r, dict)][:2]
+    stn["next_eligible_ts"] = 0
+    stn["next_eligible_reason"] = ""
 
     if int(stn.get("cycles") or 0) < int(min_cycles):
         stn["status"] = "insufficient_cycles"
+        stn["next_eligible_reason"] = "need_more_cycles"
         state["sweep_tune"] = stn
         return "insufficient_cycles", []
+    if int(stn.get("completed_rounds") or 0) < int(min_rounds):
+        stn["status"] = "insufficient_rounds"
+        stn["next_eligible_reason"] = "need_more_rounds"
+        state["sweep_tune"] = stn
+        return "insufficient_rounds", []
 
     last_sw = int(stn.get("last_apply_ts") or 0)
     if last_sw and (int(now) - last_sw) < cooldown_s:
         stn["status"] = "cooldown"
+        stn["next_eligible_ts"] = int(last_sw + cooldown_s)
+        stn["next_eligible_reason"] = "cooldown"
         state["sweep_tune"] = stn
         return "cooldown", []
+    last_round_applied = int(stn.get("last_round_id_applied") or -1)
+    current_round = int(stn.get("last_completed_round_id") or -1)
+    if current_round >= 0 and current_round <= last_round_applied:
+        stn["status"] = "round_wait"
+        stn["next_eligible_reason"] = "await_next_round"
+        state["sweep_tune"] = stn
+        return "round_wait", []
 
     recs = _recommend_params_from_sweep(
         current=current,
         sweep=sweep,
         target_min_recommended=int(target_min),
         target_max_recommended=int(target_max),
+        target_min_placed=int(target_min_placed),
+        target_max_placed=int(target_max_placed),
+        max_changes=int(max_changes),
     )
     if not recs:
-        stn["status"] = "no_change"
+        stn["status"] = "target_met_or_no_change"
+        stn["next_eligible_reason"] = "targets_met_or_no_change"
         state["sweep_tune"] = stn
         return "no_change", []
 
@@ -538,6 +843,9 @@ def _maybe_apply_sweep_tune(
     champion["params"] = dict(newp)
     champion["status"] = "active"
     stn["last_apply_ts"] = int(now)
+    stn["last_round_id_applied"] = int(current_round)
+    stn["next_eligible_ts"] = int(now + cooldown_s)
+    stn["next_eligible_reason"] = "cooldown_after_apply"
     stn["status"] = "applied"
     state["sweep_tune"] = stn
     return "applied", recs
@@ -569,11 +877,30 @@ def _load_tune_state(repo_root: str) -> Dict[str, Any]:
             },
             "sweep_tune": {
                 "last_apply_ts": 0,
+                "last_round_id_applied": -1,
                 "status": "idle",
                 "window_s": 0,
                 "cycles": 0,
                 "recommended": 0,
                 "placed_live": 0,
+                "placed_paper": 0,
+                "placed_total": 0,
+                "entries_total": 0,
+                "completed_rounds": 0,
+                "last_completed_round_id": -1,
+                "round_cycles": 0,
+                "groups_lookback": 0,
+                "round_recommended": 0,
+                "round_placed_live": 0,
+                "round_placed_paper": 0,
+                "round_placed_total": 0,
+                "target_min_placed": 0,
+                "target_max_placed": 0,
+                "target_min_recommended": 0,
+                "target_max_recommended": 0,
+                "candidate_recs": [],
+                "next_eligible_ts": 0,
+                "next_eligible_reason": "",
             },
         },
     )
@@ -620,11 +947,30 @@ def _load_tune_state(repo_root: str) -> Dict[str, Any]:
     if not isinstance(state.get("sweep_tune"), dict):
         state["sweep_tune"] = {
             "last_apply_ts": 0,
+            "last_round_id_applied": -1,
             "status": "idle",
             "window_s": 0,
             "cycles": 0,
             "recommended": 0,
             "placed_live": 0,
+            "placed_paper": 0,
+            "placed_total": 0,
+            "entries_total": 0,
+            "completed_rounds": 0,
+            "last_completed_round_id": -1,
+            "round_cycles": 0,
+            "groups_lookback": 0,
+            "round_recommended": 0,
+            "round_placed_live": 0,
+            "round_placed_paper": 0,
+            "round_placed_total": 0,
+            "target_min_placed": 0,
+            "target_max_placed": 0,
+            "target_min_recommended": 0,
+            "target_max_recommended": 0,
+            "candidate_recs": [],
+            "next_eligible_ts": 0,
+            "next_eligible_reason": "",
         }
     state.setdefault("version", 2)
     return state
@@ -691,11 +1037,30 @@ def _status_payload(
     if isinstance(st, dict) and st:
         out["sweep_tune"] = {
             "last_apply_ts": int(st.get("last_apply_ts") or 0),
+            "last_round_id_applied": int(st.get("last_round_id_applied") or -1),
             "status": str(st.get("status") or ""),
             "window_s": int(st.get("window_s") or 0),
             "cycles": int(st.get("cycles") or 0),
             "recommended": int(st.get("recommended") or 0),
             "placed_live": int(st.get("placed_live") or 0),
+            "placed_paper": int(st.get("placed_paper") or 0),
+            "placed_total": int(st.get("placed_total") or 0),
+            "entries_total": int(st.get("entries_total") or 0),
+            "completed_rounds": int(st.get("completed_rounds") or 0),
+            "last_completed_round_id": int(st.get("last_completed_round_id") or -1),
+            "round_cycles": int(st.get("round_cycles") or 0),
+            "groups_lookback": int(st.get("groups_lookback") or 0),
+            "round_recommended": int(st.get("round_recommended") or 0),
+            "round_placed_live": int(st.get("round_placed_live") or 0),
+            "round_placed_paper": int(st.get("round_placed_paper") or 0),
+            "round_placed_total": int(st.get("round_placed_total") or 0),
+            "target_min_placed": int(st.get("target_min_placed") or 0),
+            "target_max_placed": int(st.get("target_max_placed") or 0),
+            "target_min_recommended": int(st.get("target_min_recommended") or 0),
+            "target_max_recommended": int(st.get("target_max_recommended") or 0),
+            "candidate_recs": (st.get("candidate_recs") if isinstance(st.get("candidate_recs"), list) else []),
+            "next_eligible_ts": int(st.get("next_eligible_ts") or 0),
+            "next_eligible_reason": str(st.get("next_eligible_reason") or ""),
         }
     return out
 
@@ -850,6 +1215,14 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
             state["status"] = "sweep_cooldown"
             _save_tune_state(repo_root, state)
             return _status_payload(state, settled_total=settled_n)
+        if sweep_action == "round_wait":
+            state["status"] = "sweep_round_wait"
+            _save_tune_state(repo_root, state)
+            return _status_payload(state, settled_total=settled_n)
+        if sweep_action == "insufficient_rounds":
+            state["status"] = "sweep_insufficient_rounds"
+            _save_tune_state(repo_root, state)
+            return _status_payload(state, settled_total=settled_n)
 
         state["status"] = "waiting_sample"
         _save_tune_state(repo_root, state)
@@ -880,7 +1253,14 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
             _save_tune_state(repo_root, state)
             return _status_payload(state, settled_total=settled_n, recs=sweep_recs)
 
-        state["status"] = "no_change" if sweep_action != "cooldown" else "sweep_cooldown"
+        if sweep_action == "cooldown":
+            state["status"] = "sweep_cooldown"
+        elif sweep_action == "round_wait":
+            state["status"] = "sweep_round_wait"
+        elif sweep_action == "insufficient_rounds":
+            state["status"] = "sweep_insufficient_rounds"
+        else:
+            state["status"] = "no_change"
         state["settled_total"] = settled_n
         champion["params"] = dict(cur)
         champion["baseline"] = dict(base_metrics)

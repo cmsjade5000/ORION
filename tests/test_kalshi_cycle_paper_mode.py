@@ -84,6 +84,81 @@ class TestKalshiCyclePaperMode(unittest.TestCase):
             self.assertFalse(os.path.exists(bad))
             self.assertTrue(os.path.isdir(os.path.join(td, "tmp", "kalshi_ref_arb", "runs_bad")))
 
+    def test_series_rotation_triggers_on_dry_primary_rounds(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "tmp", "kalshi_ref_arb", "sweep_stats.json")
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            now = int(time.time())
+            entries = []
+            for i in range(36):
+                entries.append(
+                    {
+                        "ts_unix": now - (36 - i) * 60,
+                        "series": "KXBTC",
+                        "candidates_recommended": 0,
+                        "placed_total": 0,
+                        "blockers_top": ["liquidity_below_min"],
+                    }
+                )
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"window_s": 24 * 3600, "entries": entries}, f)
+
+            old_env = dict(os.environ)
+            try:
+                os.environ["KALSHI_ARB_SERIES_ROTATION_ENABLED"] = "1"
+                os.environ["KALSHI_ARB_SERIES_ROTATION_DRY_ROUNDS"] = "3"
+                os.environ["KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES"] = "12"
+                os.environ["KALSHI_ARB_SERIES_FALLBACKS"] = "KXETH"
+                out, meta = cyc._maybe_expand_series_with_rotation(td, ["KXBTC"])
+            finally:
+                os.environ.clear()
+                os.environ.update(old_env)
+
+            self.assertIn("KXETH", out)
+            self.assertTrue(bool(meta.get("triggered")))
+
+    def test_detect_stuck_state_zero_placements(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "tmp", "kalshi_ref_arb", "sweep_stats.json")
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            now = int(time.time())
+            entries = []
+            for i in range(30):
+                entries.append(
+                    {
+                        "ts_unix": now - (30 - i) * 60,
+                        "series": "KXBTC",
+                        "candidates_recommended": 0,
+                        "placed_total": 0,
+                        "blockers_top": ["liquidity_below_min"],
+                    }
+                )
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"window_s": 24 * 3600, "entries": entries}, f)
+
+            old_env = dict(os.environ)
+            try:
+                os.environ["KALSHI_ARB_STUCK_ENABLED"] = "1"
+                os.environ["KALSHI_ARB_STUCK_MIN_CYCLES"] = "24"
+                os.environ["KALSHI_ARB_STUCK_DOMINANT_BLOCKER_SHARE"] = "0.70"
+                st = cyc._detect_stuck_state(td, now_unix=int(now))
+            finally:
+                os.environ.clear()
+                os.environ.update(old_env)
+
+            self.assertTrue(bool(st.get("active")))
+            self.assertEqual(str(st.get("dominant_blocker") or ""), "liquidity_below_min")
+
+    def test_sum_entry_placed_total_backcompat(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        self.assertEqual(cyc._sum_entry_placed_total({"placed_total": 3, "placed_live": 1, "placed_paper": 1}), 3)
+        self.assertEqual(cyc._sum_entry_placed_total({"placed_live": 1, "placed_paper": 2}), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

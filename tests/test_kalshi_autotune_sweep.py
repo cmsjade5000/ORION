@@ -51,6 +51,8 @@ class TestKalshiAutotuneSweep(unittest.TestCase):
                 "KALSHI_ARB_MIN_EDGE_BPS": "170",
                 "KALSHI_ARB_MIN_NOTIONAL_USD": "0.50",
                 "KALSHI_ARB_TUNE_SWEEP_MIN_CYCLES": "24",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS": "1",
+                "KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES": "12",
                 "KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED": "1",
                 "KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED": "8",
                 "KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S": "1",
@@ -93,8 +95,156 @@ class TestKalshiAutotuneSweep(unittest.TestCase):
                 "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY": "900",
                 "KALSHI_ARB_MIN_NOTIONAL_USD": "0.50",
                 "KALSHI_ARB_TUNE_SWEEP_MIN_CYCLES": "24",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS": "1",
+                "KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES": "12",
                 "KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED": "1",
                 "KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED": "8",
+                "KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S": "1",
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                st = maybe_autotune(td)
+
+            self.assertEqual(st.get("status"), "sweep_applied")
+            ovp = os.path.join(td, "tmp", "kalshi_ref_arb", "params_override.json")
+            with open(ovp, "r", encoding="utf-8") as f:
+                ov = json.load(f)
+            params = ov.get("params") or {}
+            self.assertGreater(int(float(params.get("KALSHI_ARB_MIN_EDGE_BPS", 170))), 170)
+
+    def test_sweep_tune_waits_until_next_completed_round(self) -> None:
+        from scripts.arb.kalshi_autotune import maybe_autotune
+
+        with tempfile.TemporaryDirectory() as td:
+            _write_ledger(td, {})
+            now = int(time.time())
+            entries = [
+                {
+                    "ts_unix": now - (24 - i) * 60,
+                    "candidates_recommended": 0,
+                    "placed_live": 0,
+                    "blockers_top": ["liquidity_below_min"],
+                }
+                for i in range(24)
+            ]
+            _write_sweep(td, entries)
+
+            env = {
+                "KALSHI_ARB_TUNE_ENABLED": "1",
+                "KALSHI_ARB_TUNE_MIN_SETTLED": "20",
+                "KALSHI_ARB_EXECUTION_MODE": "paper",
+                "KALSHI_ARB_LIVE_ARMED": "0",
+                "KALSHI_ARB_MIN_LIQUIDITY_USD": "20",
+                "KALSHI_ARB_MIN_EDGE_BPS": "170",
+                "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY": "900",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_CYCLES": "12",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS": "1",
+                "KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES": "12",
+                "KALSHI_ARB_TUNE_SWEEP_GROUPS_LOOKBACK": "2",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED": "1",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED": "8",
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                st1 = maybe_autotune(td)
+            self.assertEqual(st1.get("status"), "sweep_applied")
+
+            # Force cooldown bypass while preserving round id: should wait for next round boundary.
+            tsp = os.path.join(td, "tmp", "kalshi_ref_arb", "tune_state.json")
+            with open(tsp, "r", encoding="utf-8") as f:
+                ts = json.load(f)
+            stn = ts.get("sweep_tune") if isinstance(ts.get("sweep_tune"), dict) else {}
+            stn["last_apply_ts"] = 0
+            ts["sweep_tune"] = stn
+            with open(tsp, "w", encoding="utf-8") as f:
+                json.dump(ts, f)
+
+            with mock.patch.dict(os.environ, env, clear=False):
+                st2 = maybe_autotune(td)
+            self.assertEqual(st2.get("status"), "sweep_round_wait")
+            self.assertEqual((st2.get("sweep_tune") or {}).get("status"), "round_wait")
+
+    def test_weighted_selection_prefers_dominant_blocker(self) -> None:
+        from scripts.arb.kalshi_autotune import maybe_autotune
+
+        with tempfile.TemporaryDirectory() as td:
+            _write_ledger(td, {})
+            now = int(time.time())
+            entries = []
+            for i in range(30):
+                blockers = ["liquidity_below_min"]
+                if i % 6 == 0:
+                    blockers = ["too_close_to_expiry"]
+                entries.append(
+                    {
+                        "ts_unix": now - (30 - i) * 60,
+                        "candidates_recommended": 0,
+                        "placed_live": 0,
+                        "blockers_top": blockers,
+                    }
+                )
+            _write_sweep(td, entries)
+
+            env = {
+                "KALSHI_ARB_TUNE_ENABLED": "1",
+                "KALSHI_ARB_TUNE_MIN_SETTLED": "20",
+                "KALSHI_ARB_EXECUTION_MODE": "paper",
+                "KALSHI_ARB_LIVE_ARMED": "0",
+                "KALSHI_ARB_MIN_LIQUIDITY_USD": "20",
+                "KALSHI_ARB_MIN_EDGE_BPS": "170",
+                "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY": "900",
+                "KALSHI_ARB_MIN_NOTIONAL_USD": "0.50",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_CYCLES": "24",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS": "1",
+                "KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES": "12",
+                "KALSHI_ARB_TUNE_SWEEP_GROUPS_LOOKBACK": "3",
+                "KALSHI_ARB_TUNE_SWEEP_MAX_CHANGES_PER_ROUND": "1",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED": "1",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED": "8",
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                st = maybe_autotune(td)
+
+            self.assertEqual(st.get("status"), "sweep_applied")
+            ovp = os.path.join(td, "tmp", "kalshi_ref_arb", "params_override.json")
+            with open(ovp, "r", encoding="utf-8") as f:
+                ov = json.load(f)
+            recs = (((ov.get("meta") or {}).get("recs")) or [])
+            self.assertTrue(recs)
+            self.assertEqual(recs[0].get("env"), "KALSHI_ARB_MIN_LIQUIDITY_USD")
+
+    def test_sweep_tune_tightens_when_placements_exceed_target(self) -> None:
+        from scripts.arb.kalshi_autotune import maybe_autotune
+
+        with tempfile.TemporaryDirectory() as td:
+            _write_ledger(td, {})
+            now = int(time.time())
+            entries = [
+                {
+                    "ts_unix": now - (30 - i) * 60,
+                    "candidates_recommended": 0,
+                    "placed_live": 0,
+                    "placed_paper": 1,
+                    "blockers_top": [],
+                }
+                for i in range(30)
+            ]
+            _write_sweep(td, entries)
+
+            env = {
+                "KALSHI_ARB_TUNE_ENABLED": "1",
+                "KALSHI_ARB_TUNE_MIN_SETTLED": "20",
+                "KALSHI_ARB_EXECUTION_MODE": "paper",
+                "KALSHI_ARB_LIVE_ARMED": "0",
+                "KALSHI_ARB_MIN_EDGE_BPS": "170",
+                "KALSHI_ARB_MIN_LIQUIDITY_USD": "13",
+                "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY": "900",
+                "KALSHI_ARB_MIN_NOTIONAL_USD": "0.50",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_CYCLES": "24",
+                "KALSHI_ARB_TUNE_SWEEP_MIN_ROUNDS": "1",
+                "KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES": "12",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED": "1",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED": "8",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_PLACED": "1",
+                "KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_PLACED": "2",
                 "KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S": "1",
             }
             with mock.patch.dict(os.environ, env, clear=False):

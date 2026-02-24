@@ -99,6 +99,28 @@ class TestKalshiDigestStats(unittest.TestCase):
             self.assertTrue(os.path.isdir(bad_dir))
             self.assertTrue(any(name.endswith(".json") for name in os.listdir(bad_dir)))
 
+    def test_sweep_rollup_fallback_counts_paper_when_placed_total_missing(self) -> None:
+        from scripts.kalshi_digest import _sweep_rollup_24h
+
+        now = int(time.time())
+        obj = {
+            "window_s": 3600,
+            "entries": [
+                {
+                    "ts_unix": now - 30,
+                    "signals_computed": 5,
+                    "candidates_recommended": 1,
+                    "placed_live": 0,
+                    "placed_paper": 1,
+                    "blockers_top": [],
+                }
+            ],
+        }
+        roll = _sweep_rollup_24h(obj, now_unix=now)
+        self.assertIsInstance(roll, dict)
+        self.assertEqual(int((roll or {}).get("placed_paper") or 0), 1)
+        self.assertEqual(int((roll or {}).get("placed_total") or 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -761,6 +761,189 @@ def _parse_series_list(raw: str) -> list[str]:
     return out
 
 
+def _load_sweep_entries(root: str, *, window_s: int) -> list[dict[str, Any]]:
+    path = os.path.join(root, "tmp", "kalshi_ref_arb", "sweep_stats.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+    except Exception:
+        return []
+    entries = obj.get("entries") if isinstance(obj, dict) else None
+    if not isinstance(entries, list):
+        return []
+    now = int(time.time())
+    start = int(now - max(60, int(window_s)))
+    out: list[dict[str, Any]] = []
+    for it in entries:
+        if not isinstance(it, dict):
+            continue
+        try:
+            ts = int(it.get("ts_unix") or 0)
+        except Exception:
+            ts = 0
+        if ts < start:
+            continue
+        row = dict(it)
+        row["ts_unix"] = ts
+        out.append(row)
+    out.sort(key=lambda x: int(x.get("ts_unix") or 0))
+    return out
+
+
+def _sum_entry_placed_total(it: Dict[str, Any]) -> int:
+    try:
+        if "placed_total" in it:
+            return int(it.get("placed_total") or 0)
+        return int(it.get("placed_live") or 0) + int(it.get("placed_paper") or 0)
+    except Exception:
+        return 0
+
+
+def _maybe_expand_series_with_rotation(root: str, series_list: list[str]) -> tuple[list[str], Dict[str, Any]]:
+    """Optionally expand series candidates when primary series is dry for consecutive rounds."""
+    meta: Dict[str, Any] = {
+        "enabled": False,
+        "triggered": False,
+        "primary_series": series_list[0] if series_list else "KXBTC",
+        "fallbacks_added": [],
+    }
+    if not series_list:
+        return (["KXBTC"], meta)
+
+    enabled = _truthy_env("KALSHI_ARB_SERIES_ROTATION_ENABLED", default="1")
+    meta["enabled"] = bool(enabled)
+    if not enabled:
+        return (series_list, meta)
+
+    primary = series_list[0]
+    round_cycles = max(6, int(os.environ.get("KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES", "12") or 12))
+    dry_rounds = max(2, int(os.environ.get("KALSHI_ARB_SERIES_ROTATION_DRY_ROUNDS", "3") or 3))
+    min_blocker_share = float(os.environ.get("KALSHI_ARB_SERIES_ROTATION_MIN_BLOCKER_SHARE", "0.60") or 0.60)
+    lookback_cycles = int(round_cycles * dry_rounds)
+
+    entries = _load_sweep_entries(root, window_s=max(6 * 3600, lookback_cycles * 360))
+    if not entries:
+        return (series_list, meta)
+
+    primary_entries = [e for e in entries if str(e.get("series") or "") == str(primary)]
+    if len(primary_entries) < lookback_cycles:
+        return (series_list, meta)
+    sample = primary_entries[-lookback_cycles:]
+
+    placed_total = sum(_sum_entry_placed_total(it) for it in sample)
+    blocker_counts: Dict[str, int] = {}
+    for it in sample:
+        bt = it.get("blockers_top")
+        if not isinstance(bt, list):
+            continue
+        for r in bt:
+            if not isinstance(r, str) or not r:
+                continue
+            blocker_counts[r] = blocker_counts.get(r, 0) + 1
+    dominant_reason = ""
+    dominant_share = 0.0
+    if blocker_counts:
+        dominant_reason, dominant_count = sorted(blocker_counts.items(), key=lambda kv: kv[1], reverse=True)[0]
+        dominant_share = float(dominant_count) / float(max(1, len(sample)))
+
+    meta.update(
+        {
+            "round_cycles": int(round_cycles),
+            "dry_rounds": int(dry_rounds),
+            "lookback_cycles": int(lookback_cycles),
+            "sample_cycles": int(len(sample)),
+            "placed_total": int(placed_total),
+            "dominant_blocker": str(dominant_reason or ""),
+            "dominant_blocker_share": float(dominant_share),
+        }
+    )
+    if int(placed_total) > 0:
+        return (series_list, meta)
+    if float(dominant_share) < float(min_blocker_share):
+        return (series_list, meta)
+
+    fallback_raw = os.environ.get("KALSHI_ARB_SERIES_FALLBACKS", "KXETH")
+    fallbacks = _parse_series_list(fallback_raw)
+    if not fallbacks:
+        return (series_list, meta)
+
+    expanded = list(series_list)
+    added: list[str] = []
+    for s in fallbacks:
+        if s not in expanded:
+            expanded.append(s)
+            added.append(s)
+    if added:
+        meta["triggered"] = True
+        meta["fallbacks_added"] = added
+    return (expanded, meta)
+
+
+def _detect_stuck_state(root: str, *, now_unix: int) -> Dict[str, Any]:
+    """Detect prolonged no-placement behavior with a dominant blocker."""
+    enabled = _truthy_env("KALSHI_ARB_STUCK_ENABLED", default="1")
+    out: Dict[str, Any] = {"enabled": bool(enabled), "active": False}
+    if not enabled:
+        return out
+
+    window_s = max(3600, int(os.environ.get("KALSHI_ARB_STUCK_WINDOW_S", str(24 * 3600)) or (24 * 3600)))
+    min_cycles = max(12, int(os.environ.get("KALSHI_ARB_STUCK_MIN_CYCLES", "24") or 24))
+    min_share = float(os.environ.get("KALSHI_ARB_STUCK_DOMINANT_BLOCKER_SHARE", "0.70") or 0.70)
+    entries = _load_sweep_entries(root, window_s=int(window_s))
+    out["cycles"] = int(len(entries))
+    if len(entries) < min_cycles:
+        out["reason"] = "insufficient_cycles"
+        return out
+
+    placed_total = 0
+    blocker_counts: Dict[str, int] = {}
+    for it in entries:
+        placed_total += _sum_entry_placed_total(it)
+        bt = it.get("blockers_top")
+        if not isinstance(bt, list):
+            continue
+        for r in bt:
+            if not isinstance(r, str) or not r:
+                continue
+            blocker_counts[r] = blocker_counts.get(r, 0) + 1
+    out["placed_total"] = int(placed_total)
+    if int(placed_total) > 0:
+        out["reason"] = "placements_present"
+        return out
+
+    dom_reason = ""
+    dom_share = 0.0
+    if blocker_counts:
+        dom_reason, dom_count = sorted(blocker_counts.items(), key=lambda kv: kv[1], reverse=True)[0]
+        dom_share = float(dom_count) / float(max(1, len(entries)))
+    out["dominant_blocker"] = str(dom_reason or "")
+    out["dominant_share"] = float(dom_share)
+    out["window_s"] = int(window_s)
+
+    if dom_reason and dom_share >= float(min_share):
+        out["active"] = True
+        out["reason"] = "zero_placements_dominant_blocker"
+    else:
+        out["reason"] = "no_dominant_blocker"
+    return out
+
+
+def _stuck_notification_text(stuck: Dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "Status: Testing",
+            "What changed:",
+            f"- Stuck detector active: zero placements over last {int(stuck.get('window_s') or 0) // 3600}h.",
+            "Why it matters:",
+            "The bot is running but not converting opportunities into paper entries.",
+            "Risks / notes:",
+            f"- Dominant blocker: {str(stuck.get('dominant_blocker') or 'unknown')} (share {float(stuck.get('dominant_share') or 0.0):.2f})",
+            "- Auto-tune and series rotation remain active; live writes remain guarded.",
+            "Next step: Continue grouped-round tuning and re-evaluate after next rounds.",
+        ]
+    )
+
+
 def _best_series_from_scan(root: str, series_list: list[str], *, sigma: str, sigma_window_h: int, min_edge: str, uncertainty: str, min_liq: str, max_spread: str, min_tte: str, min_px: str, max_px: str) -> tuple[str, dict[str, Any]]:
     """Pick a single series to trade this cycle based on scan results (no state writes)."""
     best_series = series_list[0] if series_list else "KXBTC"
@@ -1106,7 +1289,8 @@ def main() -> int:
 
         # Live trade (user-authorized) but still guarded by kill switch + risk caps in the bot.
         series_raw = os.environ.get("KALSHI_ARB_SERIES", "KXBTC")
-        series_list = _parse_series_list(series_raw) or ["KXBTC"]
+        series_list_base = _parse_series_list(series_raw) or ["KXBTC"]
+        series_list, series_rotation = _maybe_expand_series_with_rotation(root, series_list_base)
         sigma = os.environ.get("KALSHI_ARB_SIGMA", "auto")
         min_edge = os.environ.get("KALSHI_ARB_MIN_EDGE_BPS", "120")
         uncertainty = os.environ.get("KALSHI_ARB_UNCERTAINTY_BPS", "50")
@@ -1312,7 +1496,9 @@ def main() -> int:
 
         cycle_inputs = {
             "series": selected_series,
+            "series_list_base": series_list_base,
             "series_list": series_list,
+            "series_rotation": series_rotation,
             "scan_summary": scan_summary,
             "autotune": autotune_status,
             "runtime": rt_cfg.as_dict(),
@@ -1488,6 +1674,32 @@ def main() -> int:
 
         auto_paused = bool(kill_on and (health["runs"] >= lookback) and (health["errors"] >= max_err or health["order_failed"] >= max_of))
 
+        # Stuck detector: repeated no-placement windows with dominant blocker.
+        stuck = _detect_stuck_state(root, now_unix=int(ts))
+        stuck_state_path = os.path.join(root, "tmp", "kalshi_ref_arb", "stuck_state.json")
+        prev_stuck = _load_json(stuck_state_path, default={"active": False, "last_alert_ts": 0, "dominant_blocker": ""})
+        stuck_alert = False
+        if isinstance(stuck, dict) and bool(stuck.get("active")):
+            prev_active = bool(prev_stuck.get("active"))
+            prev_reason = str(prev_stuck.get("dominant_blocker") or "")
+            cur_reason = str(stuck.get("dominant_blocker") or "")
+            if (not prev_active) or (cur_reason and cur_reason != prev_reason):
+                stuck_alert = True
+        _save_json(
+            stuck_state_path,
+            {
+                "ts_unix": int(ts),
+                "active": bool(stuck.get("active")) if isinstance(stuck, dict) else False,
+                "reason": str(stuck.get("reason") or "") if isinstance(stuck, dict) else "",
+                "dominant_blocker": str(stuck.get("dominant_blocker") or "") if isinstance(stuck, dict) else "",
+                "dominant_share": float(stuck.get("dominant_share") or 0.0) if isinstance(stuck, dict) else 0.0,
+                "cycles": int(stuck.get("cycles") or 0) if isinstance(stuck, dict) else 0,
+                "placed_total": int(stuck.get("placed_total") or 0) if isinstance(stuck, dict) else 0,
+                "window_s": int(stuck.get("window_s") or 0) if isinstance(stuck, dict) else 0,
+                "last_alert_ts": int(ts) if stuck_alert else int(prev_stuck.get("last_alert_ts") or 0),
+            },
+        )
+
         if can_notify and allowed and should_notify:
             msg = _milestone_notification_text(
                 any_error=any_error,
@@ -1500,6 +1712,10 @@ def main() -> int:
                 auto_paused=auto_paused,
             )
             _send_telegram(int(chat_id), msg, cwd=root)
+            notify_state["last_notify_ts"] = now
+            _save_json(notify_state_path, notify_state)
+        elif can_notify and allowed and stuck_alert:
+            _send_telegram(int(chat_id), _stuck_notification_text(stuck), cwd=root)
             notify_state["last_notify_ts"] = now
             _save_json(notify_state_path, notify_state)
         no_trade_reason = ""
@@ -1520,6 +1736,7 @@ def main() -> int:
                 "allow_live_writes": bool(rt_cfg.allow_live_writes),
                 "live_orders": len(live_orders),
                 "no_trade_reason": no_trade_reason,
+                "stuck": stuck if isinstance(stuck, dict) else {},
             },
         )
         return 0
