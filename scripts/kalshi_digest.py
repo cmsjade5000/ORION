@@ -81,7 +81,12 @@ def _load_dotenv(path: str) -> None:
         _try("~/.openclaw/.env")
 
 
-def _param_recommendations(cl: Dict[str, Any], current_inputs: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _param_recommendations(
+    cl: Dict[str, Any],
+    current_inputs: Optional[Dict[str, Any]],
+    *,
+    sweep_roll: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
     """Produce conservative, non-auto-applied parameter recommendations from closed-loop stats."""
 
     def _num(x: Any) -> Optional[float]:
@@ -100,9 +105,76 @@ def _param_recommendations(cl: Dict[str, Any], current_inputs: Optional[Dict[str
         except Exception:
             return None
 
+    def _param_recommendations_from_sweep(
+        sweep_roll: Optional[Dict[str, Any]],
+        *,
+        current_inputs: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if not isinstance(sweep_roll, dict):
+            return []
+        cycles = _int(sweep_roll.get("cycles")) or 0
+        if cycles < 60:
+            return []
+        placed_live = _int(sweep_roll.get("placed_live")) or 0
+        if placed_live > 0:
+            return []
+
+        blocker_counts: Dict[str, int] = {}
+        tb = sweep_roll.get("top_blockers")
+        if isinstance(tb, list):
+            for it in tb:
+                if not isinstance(it, dict):
+                    continue
+                r = it.get("reason")
+                c = _int(it.get("count"))
+                if isinstance(r, str) and r and c is not None and c > 0:
+                    blocker_counts[r] = int(c)
+
+        def _share(reason: str) -> float:
+            c = float(blocker_counts.get(reason) or 0.0)
+            return c / float(max(1, cycles))
+
+        recs: List[Dict[str, Any]] = []
+
+        cur_min_liq = _num((current_inputs or {}).get("min_liquidity_usd"))
+        if cur_min_liq is not None and cur_min_liq > 5.0 and _share("liquidity_below_min") >= 0.20:
+            target = max(5.0, float(cur_min_liq) * 0.80)
+            recs.append(
+                {
+                    "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
+                    "value": str(int(round(target))),
+                    "why": "Blocker mix is dominated by liquidity filter with zero placements; slightly loosen min liquidity to increase candidate coverage.",
+                }
+            )
+
+        cur_edge = _num((current_inputs or {}).get("min_edge_bps"))
+        best_eff = _num(sweep_roll.get("best_eff_edge_bps_max"))
+        if cur_edge is not None and cur_edge > 50.0 and _share("no_edge_below_min") >= 0.10:
+            if (best_eff is None) or (best_eff + 15.0 >= float(cur_edge)):
+                target = max(50.0, float(cur_edge) - 10.0)
+                recs.append(
+                    {
+                        "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                        "value": str(int(round(target))),
+                        "why": "Edge misses are frequent and near threshold; small min-edge reduction may admit only borderline opportunities without removing core guardrails.",
+                    }
+                )
+
+        cur_notional = _num((current_inputs or {}).get("min_notional_usd"))
+        if cur_notional is not None and cur_notional > 0.10 and _share("yes_notional_below_min") >= 0.10:
+            target = max(0.10, float(cur_notional) * 0.75)
+            recs.append(
+                {
+                    "env": "KALSHI_ARB_MIN_NOTIONAL_USD",
+                    "value": f"{target:.2f}",
+                    "why": "Notional gate rejects many candidates; modestly lower floor to allow small probes while keeping sizing caps.",
+                }
+            )
+
+        return recs
+
     settled = _int(cl.get("settled_orders")) or 0
-    if settled < 5:
-        return []
+    recs: List[Dict[str, Any]] = []
 
     cur_unc = _num((current_inputs or {}).get("uncertainty_bps"))
     cur_edge = _num((current_inputs or {}).get("min_edge_bps"))
@@ -112,50 +184,50 @@ def _param_recommendations(cl: Dict[str, Any], current_inputs: Optional[Dict[str
     ap = _num(cl.get("avg_implied_win_prob_settled"))
     brier = _num(cl.get("brier_score_settled"))
     pnl = _num(cl.get("realized_pnl_usd_approx"))
+    if settled >= 5:
+        # If we underperform implied probability or calibration is bad, increase conservatism.
+        if wr is not None and ap is not None and wr + 0.05 < ap:
+            target = 75.0 if cur_unc is None else min(200.0, float(cur_unc) + 25.0)
+            recs.append(
+                {
+                    "env": "KALSHI_ARB_UNCERTAINTY_BPS",
+                    "value": str(int(round(target))),
+                    "why": "Win-rate is materially below implied probability; add buffer to reduce false positives.",
+                }
+            )
 
-    recs: List[Dict[str, Any]] = []
+        if brier is not None and brier > 0.25:
+            target = 100.0 if cur_unc is None else min(250.0, float(cur_unc) + 25.0)
+            recs.append(
+                {
+                    "env": "KALSHI_ARB_UNCERTAINTY_BPS",
+                    "value": str(int(round(target))),
+                    "why": "Poor calibration (high Brier); add uncertainty buffer and keep sigma=auto.",
+                }
+            )
 
-    # If we underperform implied probability or calibration is bad, increase conservatism.
-    if wr is not None and ap is not None and wr + 0.05 < ap:
-        target = 75.0 if cur_unc is None else min(200.0, float(cur_unc) + 25.0)
-        recs.append(
-            {
-                "env": "KALSHI_ARB_UNCERTAINTY_BPS",
-                "value": str(int(round(target))),
-                "why": "Win-rate is materially below implied probability; add buffer to reduce false positives.",
-            }
-        )
+        if pnl is not None and pnl < 0.0:
+            # Trade less frequently by requiring persistence.
+            target = 2 if cur_pers is None else min(4, int(cur_pers) + 1)
+            recs.append(
+                {
+                    "env": "KALSHI_ARB_PERSISTENCE_CYCLES",
+                    "value": str(int(target)),
+                    "why": "Negative realized P/L; require edge persistence across more cycles before entering.",
+                }
+            )
 
-    if brier is not None and brier > 0.25:
-        target = 100.0 if cur_unc is None else min(250.0, float(cur_unc) + 25.0)
-        recs.append(
-            {
-                "env": "KALSHI_ARB_UNCERTAINTY_BPS",
-                "value": str(int(round(target))),
-                "why": "Poor calibration (high Brier); add uncertainty buffer and keep sigma=auto.",
-            }
-        )
+        if cur_edge is not None and pnl is not None and pnl < 0.0:
+            target = min(400.0, float(cur_edge) + 20.0)
+            recs.append(
+                {
+                    "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                    "value": str(int(round(target))),
+                    "why": "Negative realized P/L; tighten min-edge to trade less and only take clearer mispricings.",
+                }
+            )
 
-    if pnl is not None and pnl < 0.0:
-        # Trade less frequently by requiring persistence.
-        target = 2 if cur_pers is None else min(4, int(cur_pers) + 1)
-        recs.append(
-            {
-                "env": "KALSHI_ARB_PERSISTENCE_CYCLES",
-                "value": str(int(target)),
-                "why": "Negative realized P/L; require edge persistence across more cycles before entering.",
-            }
-        )
-
-    if cur_edge is not None and pnl is not None and pnl < 0.0:
-        target = min(400.0, float(cur_edge) + 20.0)
-        recs.append(
-            {
-                "env": "KALSHI_ARB_MIN_EDGE_BPS",
-                "value": str(int(round(target))),
-                "why": "Negative realized P/L; tighten min-edge to trade less and only take clearer mispricings.",
-            }
-        )
+    recs.extend(_param_recommendations_from_sweep(sweep_roll, current_inputs=current_inputs))
 
     # Deduplicate by env; keep first (most relevant).
     seen: set[str] = set()
@@ -789,7 +861,7 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     if why_lines or blockers_items or skips_items:
         why_html = (
             '<tr><td style="padding:0 0 14px 0;">'
-            '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
+            '<table role="presentation" cellpadding="0" cellspacing="0" class="oc-card mobile-hide" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
             '<tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Why No Trades</td></tr>'
             '<tr><td style="padding:0 14px 14px 14px;">'
         )
@@ -817,6 +889,45 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
         except Exception:
             pass
         why_html += "</td></tr></table></td></tr>"
+
+    mobile_compact_lines: List[str] = [
+        f"Status: {status}",
+        f"Cash: {_fmt_usd_opt(summary.get('cash_usd'))}",
+        f"Portfolio: {_fmt_usd_opt(summary.get('portfolio_value_usd'))}",
+        f"Live orders ({window_hours:.1f}h): {_fmt_int_opt(stats.get('live_orders'))}",
+        f"Cycles ({window_hours:.1f}h): {_fmt_int_opt(stats.get('cycles'))}",
+    ]
+    head = no_trade.get("headline")
+    if isinstance(head, str) and head.strip():
+        mobile_compact_lines.append(f"Why no trades: {head.strip()}")
+    elif blockers_items:
+        b0 = blockers_items[0]
+        mobile_compact_lines.append(f"Top blocker: {b0[0]} ({b0[1]})")
+
+    mobile_compact_html = (
+        '<tr class="mobile-only" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
+        '<td style="padding:0 0 14px 0;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" class="oc-card" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
+        '<tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Quick Mobile Summary</td></tr>'
+        '<tr><td style="padding:0 14px 14px 14px;color:#e2e8f0;font-size:14px;line-height:1.5;">'
+        + "".join(f'<div style="padding:2px 0;">• {_escape_html(x)}</div>' for x in mobile_compact_lines[:6])
+        + "</td></tr></table></td></tr>"
+    )
+
+    mobile_why_html = ""
+    if blockers_items or skips_items:
+        top_blocker = f"{blockers_items[0][0]} ({blockers_items[0][1]})" if blockers_items else "none"
+        top_skip = f"{skips_items[0][0]} ({skips_items[0][1]})" if skips_items else "none"
+        mobile_why_html = (
+            '<tr class="mobile-only" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
+            '<td style="padding:0 0 14px 0;">'
+            '<table role="presentation" cellpadding="0" cellspacing="0" class="oc-card" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
+            '<tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Filters Snapshot</td></tr>'
+            '<tr><td style="padding:0 14px 14px 14px;color:#e2e8f0;font-size:14px;line-height:1.5;">'
+            f'<div style="padding:2px 0;">• Top blocker: {_escape_html(top_blocker)}</div>'
+            f'<div style="padding:2px 0;">• Top skip: {_escape_html(top_skip)}</div>'
+            "</td></tr></table></td></tr>"
+        )
 
     pre = _escape_html(raw_message)
     cmd_html = "<br/>".join(f"<code>{_escape_html(c)}</code>" for c in commands)
@@ -848,7 +959,7 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     if isinstance(pts, list) and pts:
         positions_html = (
             '<tr><td style="padding:0 0 14px 0;">'
-            '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
+            '<table role="presentation" cellpadding="0" cellspacing="0" class="oc-card mobile-hide" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">'
             '<tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Exposure (Top Positions)</td></tr>'
             '<tr><td style="padding:0 14px 14px 14px;">'
             + _render_positions_table([x for x in pts if isinstance(x, dict)])
@@ -858,9 +969,9 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     raw_html = ""
     if include_raw:
         raw_html = f"""
-            <tr>
+            <tr class="mobile-hide">
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" class="oc-card" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
                   <tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Raw Details</td></tr>
                   <tr>
                     <td style="padding:0 14px 14px 14px;">
@@ -878,18 +989,53 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{_escape_html(subject)}</title>
+    <style>
+      .mobile-only {{
+        display: none;
+        max-height: 0;
+        overflow: hidden;
+        mso-hide: all;
+      }}
+      @media only screen and (max-width: 640px) {{
+        .oc-wrap {{
+          width: 100% !important;
+          max-width: 100% !important;
+        }}
+        .oc-card {{
+          border-radius: 12px !important;
+        }}
+        .oc-title {{
+          font-size: 16px !important;
+          line-height: 1.3 !important;
+        }}
+        .oc-meta {{
+          font-size: 12px !important;
+        }}
+        .mobile-hide {{
+          display: none !important;
+          max-height: 0 !important;
+          overflow: hidden !important;
+          mso-hide: all !important;
+        }}
+        .mobile-only {{
+          display: table-row !important;
+          max-height: none !important;
+          overflow: visible !important;
+        }}
+      }}
+    </style>
   </head>
   <body style="margin:0;padding:0;background:#05070d;background-image:radial-gradient(900px 700px at 18% 10%, rgba(56,189,248,0.14), transparent 60%),radial-gradient(700px 600px at 82% 18%, rgba(167,139,250,0.12), transparent 58%),radial-gradient(900px 900px at 50% 110%, rgba(34,197,94,0.06), transparent 55%);">
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#05070d;background-image:radial-gradient(900px 700px at 18% 10%, rgba(56,189,248,0.14), transparent 60%),radial-gradient(700px 600px at 82% 18%, rgba(167,139,250,0.12), transparent 58%),radial-gradient(900px 900px at 50% 110%, rgba(34,197,94,0.06), transparent 55%);">
       <tr>
         <td align="center" style="padding:24px 12px 36px 12px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" style="width:640px;max-width:640px;border-collapse:separate;border-spacing:0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" class="oc-wrap" style="width:640px;max-width:640px;border-collapse:separate;border-spacing:0;">
             <tr>
-              <td style="padding:16px 18px;background:linear-gradient(180deg, #101a2e 0%, #0b1220 100%);border:1px solid #1f2a44;border-radius:18px;">
+              <td class="oc-card" style="padding:16px 18px;background:linear-gradient(180deg, #101a2e 0%, #0b1220 100%);border:1px solid #1f2a44;border-radius:18px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
                   <tr>
                     <td style="vertical-align:top;">
-                      <div style="font-family:Helvetica,Arial,sans-serif;color:#e2e8f0;font-size:18px;font-weight:800;letter-spacing:0.2px;">
+                      <div class="oc-title" style="font-family:Helvetica,Arial,sans-serif;color:#e2e8f0;font-size:18px;font-weight:800;letter-spacing:0.2px;">
                         ORION Kalshi Digest
                         <span style="display:inline-block;margin-left:8px;padding:3px 10px;border-radius:999px;background:{pill_bg};color:{pill_fg};font-size:12px;font-weight:700;vertical-align:middle;">
                           { _escape_html(status) }
@@ -898,12 +1044,12 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
                           {window_hours:.1f}h window
                         </span>
                       </div>
-                      <div style="margin-top:4px;font-family:Helvetica,Arial,sans-serif;color:#94a3b8;font-size:13px;">
+                      <div class="oc-meta" style="margin-top:4px;font-family:Helvetica,Arial,sans-serif;color:#94a3b8;font-size:13px;">
                         { _escape_html(ts_et) } · { _escape_html(ts_local) }
                       </div>
                     </td>
                     <td style="text-align:right;vertical-align:top;">
-                      <div style="font-family:Helvetica,Arial,sans-serif;color:#94a3b8;font-size:12px;">{ _escape_html(subject) }</div>
+                      <div class="oc-meta mobile-hide" style="font-family:Helvetica,Arial,sans-serif;color:#94a3b8;font-size:12px;">{ _escape_html(subject) }</div>
                     </td>
                   </tr>
                 </table>
@@ -911,10 +1057,11 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
             </tr>
 
             <tr><td style="height:14px;"></td></tr>
+            {mobile_compact_html}
 
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" class="oc-card mobile-hide" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
                   <tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Executive Summary</td></tr>
                   <tr>
                     <td style="padding:0 14px 14px 14px;">
@@ -931,12 +1078,13 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
             </tr>
 
             {health_html}
+            {mobile_why_html}
             {why_html}
             {positions_html}
 
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" class="oc-card mobile-hide" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
                   <tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Today So Far (ET)</td></tr>
                   <tr>
                     <td style="padding:0 14px 14px 14px;">
@@ -951,7 +1099,7 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
 
             <tr>
               <td style="padding:0 0 14px 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" class="oc-card mobile-hide" style="width:100%;border-collapse:separate;border-spacing:0;background:#0f1930;border:1px solid #1f2a44;border-radius:16px;">
                   <tr><td style="padding:14px 14px 10px 14px;color:#94a3b8;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Quick Commands</td></tr>
                   <tr>
                     <td style="padding:0 14px 14px 14px;color:#e2e8f0;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,\"Liberation Mono\",\"Courier New\",monospace;line-height:1.5;">
@@ -1057,6 +1205,46 @@ def _list_run_files_since(runs_dir: str, start_ts: int) -> List[str]:
             out.append(p)
     out.sort()
     return out
+
+
+def _quarantine_bad_run_file(path: str, *, min_age_s: int = 180) -> bool:
+    """Move stale malformed run artifacts out of the hot path.
+
+    The age guard avoids quarantining an in-flight writer.
+    """
+    try:
+        age_s = float(time.time()) - float(os.path.getmtime(path))
+    except Exception:
+        age_s = 0.0
+    if age_s < float(min_age_s):
+        return False
+    try:
+        runs_dir = os.path.dirname(path)
+        bad_dir = os.path.join(os.path.dirname(runs_dir), "runs_bad")
+        os.makedirs(bad_dir, exist_ok=True)
+        base = os.path.basename(path)
+        dst = os.path.join(bad_dir, base)
+        if os.path.exists(dst):
+            stem, ext = os.path.splitext(base)
+            dst = os.path.join(bad_dir, f"{stem}.{int(time.time())}{ext}")
+        os.replace(path, dst)
+        return True
+    except Exception:
+        return False
+
+
+def _load_run_obj(path: str, *, quarantine_bad: bool = True) -> Tuple[Optional[Dict[str, Any]], bool]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        if isinstance(obj, dict):
+            return obj, False
+        return None, False
+    except json.JSONDecodeError:
+        moved = _quarantine_bad_run_file(path) if quarantine_bad else False
+        return None, bool(moved)
+    except Exception:
+        return None, False
 
 
 @dataclass(frozen=True)
@@ -1548,15 +1736,14 @@ def main() -> int:
     start = now - window_s
 
     run_files = _list_run_files(runs_dir)
+    quarantined_bad_runs = 0
     run_objs: List[Dict[str, Any]] = []
     for p in run_files:
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                obj = json.load(f)
-            if isinstance(obj, dict) and int(obj.get("ts_unix") or 0) >= start:
-                run_objs.append(obj)
-        except Exception:
-            continue
+        obj, moved = _load_run_obj(p, quarantine_bad=True)
+        if moved:
+            quarantined_bad_runs += 1
+        if isinstance(obj, dict) and int(obj.get("ts_unix") or 0) >= start:
+            run_objs.append(obj)
 
     stats = _extract_stats(run_objs)
     sigma_s = _sigma_summary(run_objs)
@@ -1606,13 +1793,9 @@ def main() -> int:
     today_files = _list_run_files_since(runs_dir, today_start)
     today_objs: List[Dict[str, Any]] = []
     for p in today_files:
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                obj = json.load(f)
-            if isinstance(obj, dict):
-                today_objs.append(obj)
-        except Exception:
-            continue
+        obj, _ = _load_run_obj(p, quarantine_bad=False)
+        if isinstance(obj, dict):
+            today_objs.append(obj)
     today_stats = _extract_stats(today_objs)
     today_realized_pnl = _daily_realized_pnl_usd(root, now_unix=now, tz="America/New_York")
 
@@ -1663,6 +1846,8 @@ def main() -> int:
     notify_state = _load_json(os.path.join(root, "tmp", "kalshi_ref_arb", "notify_state.json"), default={})
 
     msg_lines = []
+    if quarantined_bad_runs > 0:
+        msg_lines.append(f"Artifacts: quarantined {int(quarantined_bad_runs)} malformed run file(s).")
     msg_lines.append(f"Kalshi arb digest ({int(args.window_hours)}h)")
     msg_lines.append(f"Cycles: {stats.cycles}")
     msg_lines.append(f"Live orders: {stats.live_orders} (notional { _format_usd(stats.live_notional_usd) })")
@@ -1934,13 +2119,13 @@ def main() -> int:
             if isinstance(t, dict) and isinstance(t.get("inputs"), dict):
                 current_inputs = t.get("inputs")
                 break
-        if isinstance(cl_report, dict):
-            param_recs = _param_recommendations(cl_report, current_inputs=current_inputs)
-            if param_recs:
-                # Keep Telegram short: only 1 line.
-                r0 = param_recs[0]
-                if isinstance(r0, dict) and isinstance(r0.get("env"), str) and isinstance(r0.get("value"), str):
-                    msg_lines.append(f"Param rec: set {r0['env']}={r0['value']}")
+        cl_for_recs = cl_report if isinstance(cl_report, dict) else {}
+        param_recs = _param_recommendations(cl_for_recs, current_inputs=current_inputs, sweep_roll=sweep_roll)
+        if param_recs:
+            # Keep Telegram short: only 1 line.
+            r0 = param_recs[0]
+            if isinstance(r0, dict) and isinstance(r0.get("env"), str) and isinstance(r0.get("value"), str):
+                msg_lines.append(f"Param rec: set {r0['env']}={r0['value']}")
     except Exception:
         param_recs = []
 
@@ -2067,6 +2252,7 @@ def main() -> int:
             "kill_switch_seen": stats.kill_switch_seen,
             "scan_failed": stats.scan_failed,
             "lock_skip_recent": bool(lock_skip_recent),
+            "bad_run_files_quarantined": int(quarantined_bad_runs),
         },
         "cash_usd": avail_usd,
         "portfolio_value_usd": port_usd,
@@ -2184,10 +2370,11 @@ def main() -> int:
             print("ERROR: missing --email-to (or env KALSHI_ARB_DIGEST_EMAIL_TO/AGENTMAIL_TO).", file=os.sys.stderr)
             return 4
         try:
-            subj_ts = datetime.datetime.fromtimestamp(now).astimezone().strftime("%Y-%m-%d %H:%M %Z")
+            et = datetime.datetime.fromtimestamp(now, tz=ZoneInfo("America/New_York"))
+            subj_ts = f"{et.strftime('%b')} {et.day}"
         except Exception:
             subj_ts = str(now)
-        subject = f"ORION Kalshi digest ({int(args.window_hours)}h) @ {subj_ts}"
+        subject = f"ORION Kalshi • {int(args.window_hours)}h • {subj_ts}"
         if bool(args.email_html):
             html = _digest_html(subject=subject, window_hours=float(args.window_hours), payload=payload, now_unix=now)
             ok = _send_email_html_via_agentmail(to_email, subject, text_body=payload["message"], html_body=html, cwd=root)

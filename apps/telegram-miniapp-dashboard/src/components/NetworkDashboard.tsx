@@ -4,7 +4,18 @@ import Node from "./Node";
 import ConnectionLayer from "./ConnectionLayer";
 import { useSmoothedActivities } from "../hooks/useSmoothedActivities";
 import MiniNode from "./MiniNode";
-import SideSilos from "./SideSilos";
+
+const MEDIUM_AGENT_IDS = ["PIXEL", "EMBER", "LEDGER", "POLARIS", "ATLAS"] as const;
+const FLOAT_DRIFT: Record<
+  (typeof MEDIUM_AGENT_IDS)[number],
+  { x: number; y: number; duration: number; delay: number }
+> = {
+  PIXEL: { x: -2, y: -2, duration: 7.8, delay: -1.1 },
+  EMBER: { x: 2, y: -3, duration: 8.6, delay: -0.2 },
+  LEDGER: { x: 3, y: -2, duration: 9.4, delay: -1.7 },
+  POLARIS: { x: -2, y: -3, duration: 8.2, delay: -0.8 },
+  ATLAS: { x: 2, y: -2, duration: 9.0, delay: -2.1 },
+};
 
 export default function NetworkDashboard(props: {
   state: LiveState;
@@ -29,8 +40,6 @@ export default function NetworkDashboard(props: {
   const linkDir = props.state.link?.dir ?? "out";
   const smoothed = useSmoothedActivities(agents);
   const orion = props.state.orion;
-  const artifacts = props.state.artifacts || [];
-  const feed = props.state.feed || [];
   const workflow = props.state.workflow || null;
   const composerActive = Boolean(props.composerActive);
 
@@ -168,6 +177,13 @@ export default function NetworkDashboard(props: {
     const xPixel = clamp(cx - spreadTop, R_MED + pad, w - (R_MED + pad));
     const xEmber = clamp(cx, R_MED + pad, w - (R_MED + pad));
     const xLedger = clamp(cx + spreadTop, R_MED + pad, w - (R_MED + pad));
+    // Keep POLARIS between top row and ORION without touching either.
+    const minPolarisGapToOrion = R_LG + R_MED + 10;
+    const yPolaris = clamp(
+      Math.min(yTop + 32, yOrion - minPolarisGapToOrion),
+      yTop + 8,
+      yOrion - minPolarisGapToOrion,
+    );
 
     const spreadSmall = clamp(w * 0.22, 86, 150);
     const xPulse = clamp(cx - spreadSmall, R_SM + pad, w - (R_SM + pad));
@@ -186,6 +202,7 @@ export default function NetworkDashboard(props: {
         PIXEL: { x: xPixel, y: yTop },
         EMBER: { x: xEmber, y: yTop },
         LEDGER: { x: xLedger, y: yTop },
+        POLARIS: { x: xEmber, y: yPolaris },
       },
       atlas: { x: cx, y: yAtlas },
       minis: {
@@ -208,7 +225,7 @@ export default function NetworkDashboard(props: {
         const activeStepId = activeStepAgentId;
         const atlasActive = active === "ATLAS" || linkAgentId === "ATLAS" || activeStepId === "ATLAS";
         const linkTo =
-          linkAgentId && (["PIXEL", "EMBER", "LEDGER", "ATLAS"] as const).includes(linkAgentId as any)
+          linkAgentId && (["PIXEL", "EMBER", "LEDGER", "POLARIS", "ATLAS"] as const).includes(linkAgentId as any)
             ? linkAgentId
             : null;
 
@@ -301,28 +318,14 @@ export default function NetworkDashboard(props: {
         ORION
       </div>
 
-      <SideSilos
-        // Positions are offsets from ORION to look like Cory's sketch.
-        cx={layout.orion.x}
-        cy={layout.orion.y}
-        artifacts={artifacts}
-        feed={feed}
-        token={props.token}
-        telegramWebApp={props.telegramWebApp}
-        onOpenFeed={props.onOpenFeed}
-        onOpenFiles={props.onOpenFiles}
-        unreadCount={props.unreadCount}
-        hiddenOrbitArtifactIds={props.hiddenOrbitArtifactIds}
-        onHideOrbitArtifact={props.onHideOrbitArtifact}
-      />
-
-      {(["PIXEL", "EMBER", "LEDGER", "ATLAS"] as const).map((id) => {
+      {MEDIUM_AGENT_IDS.map((id) => {
         const a = agents.find((x) => x.id === id);
         if (!a) return null;
         const pos =
           id === "ATLAS"
             ? layout.atlas
             : (layout.top as any)[id];
+        const drift = FLOAT_DRIFT[id];
 
         const stepStatus = wfStatusByAgent.get(id);
         const derivedActivity =
@@ -351,10 +354,15 @@ export default function NetworkDashboard(props: {
             kind="agent"
             size="medium"
             active={active === a.id}
+            className="nodeFreeFloat"
             style={{
               left: `${pos.x}px`,
               top: `${pos.y}px`,
               transform: "translate(-50%, -50%)",
+              ["--float-x" as any]: `${drift.x}px`,
+              ["--float-y" as any]: `${drift.y}px`,
+              ["--float-duration" as any]: `${drift.duration}s`,
+              ["--float-delay" as any]: `${drift.delay}s`,
             }}
           />
         );

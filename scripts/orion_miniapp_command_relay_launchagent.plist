@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.openclaw.orion.miniapp_command_relay</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>__REPO_ROOT__/scripts/miniapp_command_relay_run.sh</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/corystoner/Library/Logs/orion_miniapp_command_relay.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/corystoner/Library/Logs/orion_miniapp_command_relay.log</string>
+</dict>
+</plist>

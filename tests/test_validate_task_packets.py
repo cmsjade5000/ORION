@@ -153,6 +153,13 @@ class TestValidateTaskPackets(unittest.TestCase):
         td.cleanup()
         self.assertTrue(any("Requester" in e for e in errs), errs)
 
+    def test_polaris_requires_orion(self):
+        pkt = VALID_PACKET.format(owner="POLARIS", requester="ATLAS")
+        path, td = self._write_inbox("POLARIS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Requester" in e for e in errs), errs)
+
     def test_ignores_fenced_examples(self):
         body = textwrap.dedent(
             """\
@@ -165,6 +172,196 @@ class TestValidateTaskPackets(unittest.TestCase):
             """
         )
         path, td = self._write_inbox("NODE", body)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertEqual(errs, [])
+
+    def test_approval_gate_rejects_unknown_value(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Approval Gate: UNKNOWN_GATE\n"
+            "Gate Evidence: tasks/INBOX/LEDGER.md packet@line 10\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Approval Gate must be one of" in e for e in errs), errs)
+
+    def test_approval_gate_requires_gate_evidence(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Approval Gate: LEDGER_RESULT_REQUIRED\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Gate Evidence" in e for e in errs), errs)
+
+    def test_ledger_gate_requires_owner_atlas_or_orion(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: PIXEL\n"
+            "Requester: ORION\n"
+            "Approval Gate: LEDGER_RESULT_REQUIRED\n"
+            "Gate Evidence: tasks/INBOX/LEDGER.md packet@line 10\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("PIXEL", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("requires Owner to be 'ATLAS' or 'ORION'" in e for e in errs), errs)
+
+    def test_ledger_gate_requires_gate_evidence_reference(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Approval Gate: LEDGER_RESULT_REQUIRED\n"
+            "Gate Evidence: tasks/INBOX/ATLAS.md packet@line 10\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("must reference LEDGER" in e for e in errs), errs)
+
+    def test_ledger_gate_valid_packet(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Approval Gate: LEDGER_RESULT_REQUIRED\n"
+            "Gate Evidence: tasks/INBOX/LEDGER.md packet@line 10 Result\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertEqual(errs, [])
+
+    def test_polaris_requires_opened_and_due(self):
+        pkt = VALID_PACKET.format(owner="POLARIS", requester="ORION")
+        path, td = self._write_inbox("POLARIS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Opened" in e for e in errs), errs)
+        self.assertTrue(any("Due" in e for e in errs), errs)
+
+    def test_polaris_opened_and_due_must_be_yyyy_mm_dd(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: POLARIS\n"
+            "Requester: ORION\n"
+            "Opened: 2026/02/20\n"
+            "Due: 2026-2-21\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("POLARIS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("'Opened:' must be YYYY-MM-DD" in e for e in errs), errs)
+        self.assertTrue(any("'Due:' must be YYYY-MM-DD" in e for e in errs), errs)
+
+    def test_polaris_accepts_opened_and_due(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: POLARIS\n"
+            "Requester: ORION\n"
+            "Opened: 2026-02-20\n"
+            "Due: 2026-02-27\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("POLARIS", pkt)
         errs = self.v.validate_inbox_file(path)
         td.cleanup()
         self.assertEqual(errs, [])

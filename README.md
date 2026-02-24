@@ -12,7 +12,7 @@ Design goals:
 ## Runtime Model
 
 - **ORION** (`agentId: main`) is the only user-facing bot (Telegram/Discord/Slack when configured).
-- Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **EMBER**, **LEDGER**.
+- Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **EMBER**, **LEDGER**, **POLARIS**, **SCRIBE**, **WIRE**.
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
 
@@ -45,6 +45,10 @@ Runbook:
 This repo includes an optional Telegram Mini App dashboard:
 - App: `apps/telegram-miniapp-dashboard/`
 - ORION command: `/miniapp` (sends a `web_app` button via the Telegram plugin)
+- Paper-trading quick commands in ORION DM:
+  - `/paper_help` for a quick in-chat command list
+  - `/paper_status` for current paper status
+  - `/paper_update` (or `/paper_update 24`) for status + digest window
 - Flic conversation commands:
   - `/flic` starts a guided 4-question movie flow and emits a locked Vault picks deep link.
   - `/reroll` keeps the same filters and advances picks offset for a fresh stack.

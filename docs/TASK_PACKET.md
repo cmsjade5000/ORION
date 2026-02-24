@@ -20,7 +20,7 @@ Use this exact header + list format:
 
 ```text
 TASK_PACKET v1
-Owner: <AGENT>          # who executes (ATLAS/NODE/etc)
+Owner: <AGENT>          # who executes (ATLAS/NODE/POLARIS/etc)
 Requester: <ORION|ATLAS>
 Objective: <one sentence outcome>
 Success Criteria:
@@ -59,6 +59,10 @@ Output Format:
 - `Severity:` `P0` (emergency) | `P1` (urgent) | `P2` (normal) | `P3` (backlog)
 - `Emergency:` use only for explicit emergency modes (example: `ATLAS_UNAVAILABLE`)
 - `Incident:` incident id when an emergency bypass is used (see `tasks/INCIDENTS.md`)
+- `Opened:` `YYYY-MM-DD` packet open date (required for POLARIS inbox packets)
+- `Due:` `YYYY-MM-DD` target completion date (required for POLARIS inbox packets)
+- `Approval Gate:` optional explicit policy gate (example: `LEDGER_RESULT_REQUIRED`)
+- `Gate Evidence:` short pointer to the gating result/source (example: `tasks/INBOX/LEDGER.md packet@line ...`)
 
 ## Cron Payload Guidance
 
@@ -115,7 +119,21 @@ Inbox files are append-only queues of Task Packets.
     - Supported: single-line form `Commands to run: diagnose_gateway.sh`.
 - Requester field policy:
   - Most specialist inboxes: `Requester: ORION`.
+  - POLARIS inbox: `Requester: ORION`.
   - ATLAS-directed sub-agents (`NODE`, `PULSE`, `STRATUS`): `Requester: ATLAS` (or `Requester: ORION` only with `Emergency: ATLAS_UNAVAILABLE`).
+
+## Kalshi Risk-Gated Change Packets
+
+For Kalshi policy/risk/parameter changes:
+- Obtain LEDGER analysis first.
+- Include `Approval Gate: LEDGER_RESULT_REQUIRED`.
+- Include `Gate Evidence:` pointing to the LEDGER `Result:` location.
+- Only then route execution packets through ATLAS.
+
+Validation rules:
+- `Approval Gate` must be one of the allowlisted values.
+- When `Approval Gate` is present, `Gate Evidence` is required.
+- For `Approval Gate: LEDGER_RESULT_REQUIRED`, packet `Owner` must be `ATLAS` or `ORION`, and `Gate Evidence` must reference `LEDGER`.
 
 ## Validation (Recommended)
 

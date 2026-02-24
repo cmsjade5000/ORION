@@ -120,6 +120,12 @@ MINIAPP_COMMAND_RELAY_TOKEN=... \
 python3 scripts/miniapp_command_relay.py --once
 ```
 
+Persistent macOS service (LaunchAgent):
+
+```bash
+./scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/Desktop/ORION
+```
+
 ---
 
 ## telegram_open_miniapp.sh
@@ -137,6 +143,41 @@ Optional URL override:
 
 ```bash
 ./scripts/telegram_open_miniapp.sh https://<miniapp-host>
+```
+
+---
+
+## install_orion_personal_ops_crons.sh
+
+### Purpose
+Upsert two lightweight weekday personal-ops cron jobs for ORION:
+- morning brief
+- evening reset
+
+Defaults to dry-run; pass `--apply` to persist changes.
+
+### Usage
+
+Dry-run:
+
+```bash
+./scripts/install_orion_personal_ops_crons.sh
+```
+
+Apply:
+
+```bash
+./scripts/install_orion_personal_ops_crons.sh --apply
+```
+
+Customize schedule/timezone:
+
+```bash
+./scripts/install_orion_personal_ops_crons.sh \
+  --apply \
+  --morning-cron "15 7 * * 1-5" \
+  --evening-cron "30 20 * * 1-5" \
+  --tz "America/New_York"
 ```
 
 ---

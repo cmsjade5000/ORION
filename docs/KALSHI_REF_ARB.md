@@ -145,6 +145,17 @@ Paper execution emulator (paper mode only):
 
 Metrics file is emitted in Prometheus textfile format each cycle.
 
+## Governance: LEDGER Risk Gate
+
+Execution ownership split:
+- Routine Kalshi operations/diagnostics: ATLAS -> STRATUS/PULSE.
+- Financial policy/risk/parameter changes: LEDGER gate required before ATLAS execution.
+
+For any policy/risk/parameter packet:
+- Include LEDGER recommendation (`approve`, `approve_with_limits`, or `defer`).
+- Include explicit guardrails (drawdown stop, sizing cap, concentration limits).
+- Add `Approval Gate: LEDGER_RESULT_REQUIRED` and `Gate Evidence:` in the execution Task Packet.
+
 ## Sizing / Concentration
 
 - `KALSHI_ARB_MAX_MARKET_CONCENTRATION_FRACTION=0.35`

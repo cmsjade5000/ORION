@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.openclaw.orion.polymarket_sports_paper_cycle</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO_ROOT__/scripts/polymarket_sports_paper_cycle_run.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>60</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/corystoner/Library/Logs/orion_polymarket_sports_paper_cycle.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/corystoner/Library/Logs/orion_polymarket_sports_paper_cycle.log</string>
+</dict>
+</plist>

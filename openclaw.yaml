@@ -43,9 +43,8 @@ channels:
       # Needed for /miniapp (web_app inline keyboard button).
       inlineButtons: allowlist
     commands:
-      # Disable Telegram bot command registration to avoid "BOT_COMMANDS_TOO_MUCH"
-      # while the repo is still iterating on skill naming.
-      native: false
+      # Enable Telegram native slash-command registration.
+      native: true
       nativeSkills: false
     # Token file contains only the raw bot token + trailing newline.
     # Keep secrets out of Git (see KEEP.md).

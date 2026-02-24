@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 import unittest
 
 
@@ -62,6 +63,26 @@ class TestKalshiCyclePaperMode(unittest.TestCase):
                 text = f.read()
             self.assertIn("kalshi_cycle_last_ts_unix 123", text)
             self.assertIn("kalshi_cycle_allow_live_writes 0", text)
+
+    def test_recent_run_health_quarantines_old_bad_json(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        with tempfile.TemporaryDirectory() as td:
+            runs = os.path.join(td, "tmp", "kalshi_ref_arb", "runs")
+            os.makedirs(runs, exist_ok=True)
+            good = os.path.join(runs, "1770000100.json")
+            with open(good, "w", encoding="utf-8") as f:
+                json.dump({"ts_unix": 1770000100, "balance_rc": 0, "trade_rc": 0, "post_rc": 0, "trade": {"status": "ok"}}, f)
+            bad = os.path.join(runs, "1770000000.json")
+            with open(bad, "w", encoding="utf-8") as f:
+                f.write("{broken")
+            old = time.time() - 1000.0
+            os.utime(bad, (old, old))
+
+            h = cyc._recent_run_health(runs, lookback=10, min_ts_unix=0)
+            self.assertEqual(int(h.get("runs") or 0), 1)
+            self.assertFalse(os.path.exists(bad))
+            self.assertTrue(os.path.isdir(os.path.join(td, "tmp", "kalshi_ref_arb", "runs_bad")))
 
 
 if __name__ == "__main__":

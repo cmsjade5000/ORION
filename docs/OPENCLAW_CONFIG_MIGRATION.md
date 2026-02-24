@@ -15,9 +15,9 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `agents.defaults.model.primary = "google/gemini-2.5-flash-lite"` (pinned)
 - `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
-- `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","ember","ledger","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
+- `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","ember","ledger","polaris","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
 - `channels.telegram.enabled = true`
-- `channels.telegram.commands.native = false` (avoid Telegram bot command registration churn)
+- `channels.telegram.commands.native = true`
 - `channels.telegram.commands.nativeSkills = false`
 - `channels.telegram.dmPolicy = "allowlist"`
 - `channels.telegram.allowFrom = ["<CORY_TELEGRAM_USER_ID>"]`

@@ -7,6 +7,7 @@ These files are lightweight assignment queues for specialists.
 - ORION assigns work by appending a `TASK_PACKET v1` block to `tasks/INBOX/<AGENT>.md`.
 - Specialists pick up work from their inbox and write back a `Result:` section (exact heading `Result:`) under the packet.
 - If a task is too large, the specialist should propose a split and ask ORION to re-issue as multiple packets.
+- POLARIS inbox is for admin co-pilot orchestration tasks (reminders/calendar/contact/email-prep workflows).
 
 ## Task Packet Spec
 

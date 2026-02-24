@@ -11,6 +11,7 @@ from .kalshi_ledger import load_ledger  # type: ignore
 
 OVERRIDE_PATH_REL = os.path.join("tmp", "kalshi_ref_arb", "params_override.json")
 TUNE_STATE_PATH_REL = os.path.join("tmp", "kalshi_ref_arb", "tune_state.json")
+SWEEP_STATS_PATH_REL = os.path.join("tmp", "kalshi_ref_arb", "sweep_stats.json")
 
 
 @dataclass(frozen=True)
@@ -18,7 +19,9 @@ class TuneBounds:
     min_edge_bps: Tuple[int, int] = (80, 250)
     uncertainty_bps: Tuple[int, int] = (20, 140)
     persistence_cycles: Tuple[int, int] = (1, 3)
-    min_liquidity_usd: Tuple[int, int] = (20, 300)
+    min_liquidity_usd: Tuple[int, int] = (8, 300)
+    min_seconds_to_expiry: Tuple[int, int] = (300, 3600)
+    min_notional_usd: Tuple[float, float] = (0.10, 2.00)
     max_spread: Tuple[float, float] = (0.05, 0.12)
     limit: Tuple[int, int] = (50, 200)
     min_price: Tuple[float, float] = (0.01, 0.05)
@@ -169,6 +172,8 @@ def _current_params_from_env() -> Dict[str, str]:
         "KALSHI_ARB_UNCERTAINTY_BPS",
         "KALSHI_ARB_PERSISTENCE_CYCLES",
         "KALSHI_ARB_MIN_LIQUIDITY_USD",
+        "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY",
+        "KALSHI_ARB_MIN_NOTIONAL_USD",
         "KALSHI_ARB_MAX_SPREAD",
         "KALSHI_ARB_LIMIT",
         "KALSHI_ARB_MIN_PRICE",
@@ -183,6 +188,8 @@ def _current_params_from_env() -> Dict[str, str]:
     out.setdefault("KALSHI_ARB_UNCERTAINTY_BPS", "50")
     out.setdefault("KALSHI_ARB_PERSISTENCE_CYCLES", "2")
     out.setdefault("KALSHI_ARB_MIN_LIQUIDITY_USD", "200")
+    out.setdefault("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY", "900")
+    out.setdefault("KALSHI_ARB_MIN_NOTIONAL_USD", "0.20")
     out.setdefault("KALSHI_ARB_MAX_SPREAD", "0.05")
     out.setdefault("KALSHI_ARB_LIMIT", "20")
     out.setdefault("KALSHI_ARB_MIN_PRICE", "0.05")
@@ -202,6 +209,12 @@ def _bounded(params: Dict[str, str]) -> Dict[str, str]:
     )
     out["KALSHI_ARB_MIN_LIQUIDITY_USD"] = str(
         _clamp_int(int(float(out.get("KALSHI_ARB_MIN_LIQUIDITY_USD") or 200)), *BOUNDS.min_liquidity_usd)
+    )
+    out["KALSHI_ARB_MIN_SECONDS_TO_EXPIRY"] = str(
+        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY") or 900)), *BOUNDS.min_seconds_to_expiry)
+    )
+    out["KALSHI_ARB_MIN_NOTIONAL_USD"] = (
+        f"{_clamp_float(float(out.get('KALSHI_ARB_MIN_NOTIONAL_USD') or 0.20), *BOUNDS.min_notional_usd):.2f}"
     )
     out["KALSHI_ARB_MAX_SPREAD"] = (
         f"{_clamp_float(float(out.get('KALSHI_ARB_MAX_SPREAD') or 0.05), *BOUNDS.max_spread):.4f}".rstrip("0").rstrip(".")
@@ -267,6 +280,269 @@ def recommend_params(*, baseline: Dict[str, Any], current: Dict[str, str]) -> Li
     return out
 
 
+def _load_sweep_rollup(repo_root: str, *, window_s: int) -> Dict[str, Any]:
+    p = _repo_path(repo_root, SWEEP_STATS_PATH_REL)
+    try:
+        obj = _load_json(p, default={})
+    except Exception:
+        return {}
+    entries = obj.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return {}
+    now = int(time.time())
+    start = int(now - max(60, int(window_s)))
+    cycles = 0
+    recommended = 0
+    placed_live = 0
+    blocker_counts: Dict[str, int] = {}
+    for it in entries:
+        if not isinstance(it, dict):
+            continue
+        try:
+            ts = int(it.get("ts_unix") or 0)
+        except Exception:
+            ts = 0
+        if ts < start:
+            continue
+        cycles += 1
+        try:
+            recommended += int(it.get("candidates_recommended") or 0)
+        except Exception:
+            pass
+        try:
+            placed_live += int(it.get("placed_live") or 0)
+        except Exception:
+            pass
+        bt = it.get("blockers_top")
+        if isinstance(bt, list):
+            for r in bt:
+                if not isinstance(r, str) or not r:
+                    continue
+                blocker_counts[r] = blocker_counts.get(r, 0) + 1
+    if cycles <= 0:
+        return {}
+    return {
+        "window_s": int(window_s),
+        "cycles": int(cycles),
+        "recommended": int(recommended),
+        "placed_live": int(placed_live),
+        "blocker_counts": blocker_counts,
+    }
+
+
+def _recommend_params_from_sweep(
+    *,
+    current: Dict[str, str],
+    sweep: Dict[str, Any],
+    target_min_recommended: int,
+    target_max_recommended: int,
+) -> List[Dict[str, Any]]:
+    cycles = int(sweep.get("cycles") or 0)
+    if cycles <= 0:
+        return []
+    rec_n = int(sweep.get("recommended") or 0)
+    placed_live = int(sweep.get("placed_live") or 0)
+    bc = sweep.get("blocker_counts") if isinstance(sweep.get("blocker_counts"), dict) else {}
+
+    def _share(reason: str) -> float:
+        try:
+            return float(int(bc.get(reason) or 0)) / float(max(1, cycles))
+        except Exception:
+            return 0.0
+
+    cur_edge = int(float(current.get("KALSHI_ARB_MIN_EDGE_BPS") or 120))
+    cur_liq = int(float(current.get("KALSHI_ARB_MIN_LIQUIDITY_USD") or 200))
+    cur_tte = int(float(current.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY") or 900))
+    try:
+        cur_notional = float(current.get("KALSHI_ARB_MIN_NOTIONAL_USD") or 0.20)
+    except Exception:
+        cur_notional = 0.20
+
+    out: List[Dict[str, Any]] = []
+    if rec_n < int(target_min_recommended) and placed_live <= 0:
+        # Not enough opportunities: loosen slowly based on dominant blockers.
+        if _share("liquidity_below_min") >= 0.20:
+            nxt = _clamp_int(cur_liq - 2, *BOUNDS.min_liquidity_usd)
+            if nxt != cur_liq:
+                out.append(
+                    {
+                        "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
+                        "value": str(nxt),
+                        "why": "Low opportunity flow with frequent liquidity blocker; slightly lower liquidity floor.",
+                    }
+                )
+        if _share("too_close_to_expiry") >= 0.20:
+            nxt = _clamp_int(cur_tte - 120, *BOUNDS.min_seconds_to_expiry)
+            if nxt != cur_tte:
+                out.append(
+                    {
+                        "env": "KALSHI_ARB_MIN_SECONDS_TO_EXPIRY",
+                        "value": str(nxt),
+                        "why": "Low opportunity flow with frequent expiry blocker; slightly allow closer expiries.",
+                    }
+                )
+        no_notional = max(_share("yes_notional_below_min"), _share("no_notional_below_min"))
+        if no_notional >= 0.10:
+            nxt = _clamp_float(cur_notional - 0.05, *BOUNDS.min_notional_usd)
+            if abs(nxt - cur_notional) > 1e-9:
+                out.append(
+                    {
+                        "env": "KALSHI_ARB_MIN_NOTIONAL_USD",
+                        "value": f"{nxt:.2f}",
+                        "why": "Low opportunity flow with notional blocker; slightly lower probe notional floor.",
+                    }
+                )
+        if not out:
+            nxt = _clamp_int(cur_edge - 5, *BOUNDS.min_edge_bps)
+            if nxt != cur_edge:
+                out.append(
+                    {
+                        "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                        "value": str(nxt),
+                        "why": "Low opportunity flow; slightly lower min-edge to admit near-threshold setups.",
+                    }
+                )
+    elif rec_n > int(target_max_recommended):
+        # Too many opportunities: tighten slightly to keep quality high.
+        nxt = _clamp_int(cur_edge + 5, *BOUNDS.min_edge_bps)
+        if nxt != cur_edge:
+            out.append(
+                {
+                    "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                    "value": str(nxt),
+                    "why": "Opportunity flow is high; slightly tighten min-edge to preserve quality.",
+                }
+            )
+        if rec_n > int(target_max_recommended) * 2:
+            nxt_liq = _clamp_int(cur_liq + 2, *BOUNDS.min_liquidity_usd)
+            if nxt_liq != cur_liq:
+                out.append(
+                    {
+                        "env": "KALSHI_ARB_MIN_LIQUIDITY_USD",
+                        "value": str(nxt_liq),
+                        "why": "Opportunity flow far above target; modestly raise liquidity floor.",
+                    }
+                )
+
+    seen: set[str] = set()
+    dedup: List[Dict[str, Any]] = []
+    for r in out:
+        e = r.get("env")
+        if not isinstance(e, str) or not e.startswith("KALSHI_ARB_") or e in seen:
+            continue
+        seen.add(e)
+        dedup.append(r)
+        if len(dedup) >= 2:
+            break
+    return dedup
+
+
+def _maybe_apply_sweep_tune(
+    *,
+    repo_root: str,
+    state: Dict[str, Any],
+    champion: Dict[str, Any],
+    now: int,
+    current: Dict[str, str],
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """Apply paper-only sweep-based threshold nudges.
+
+    Returns (action, recs) where action is one of:
+    - disabled
+    - insufficient_cycles
+    - cooldown
+    - no_change
+    - applied
+    """
+    sweep_enabled = str(os.environ.get("KALSHI_ARB_TUNE_SWEEP_ENABLED", "1") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    exec_mode = str(os.environ.get("KALSHI_ARB_EXECUTION_MODE", "paper") or "paper").strip().lower()
+    live_armed = str(os.environ.get("KALSHI_ARB_LIVE_ARMED", "0") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if (not sweep_enabled) or exec_mode != "paper" or live_armed:
+        return "disabled", []
+
+    window_s = max(900, _get_env_int("KALSHI_ARB_TUNE_SWEEP_WINDOW_S", 6 * 3600))
+    min_cycles = max(12, _get_env_int("KALSHI_ARB_TUNE_SWEEP_MIN_CYCLES", 24))
+    cooldown_s = max(900, _get_env_int("KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S", 2 * 3600))
+    target_min = max(0, _get_env_int("KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_RECOMMENDED", 1))
+    target_max = max(target_min + 1, _get_env_int("KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_RECOMMENDED", 8))
+
+    sweep = _load_sweep_rollup(repo_root, window_s=window_s)
+    stn = state.get("sweep_tune") if isinstance(state.get("sweep_tune"), dict) else {}
+    if not isinstance(stn, dict):
+        stn = {}
+    stn["window_s"] = int(window_s)
+    stn["cycles"] = int(sweep.get("cycles") or 0) if isinstance(sweep, dict) else 0
+    stn["recommended"] = int(sweep.get("recommended") or 0) if isinstance(sweep, dict) else 0
+    stn["placed_live"] = int(sweep.get("placed_live") or 0) if isinstance(sweep, dict) else 0
+    state["sweep_tune"] = stn
+
+    if int(stn.get("cycles") or 0) < int(min_cycles):
+        stn["status"] = "insufficient_cycles"
+        state["sweep_tune"] = stn
+        return "insufficient_cycles", []
+
+    last_sw = int(stn.get("last_apply_ts") or 0)
+    if last_sw and (int(now) - last_sw) < cooldown_s:
+        stn["status"] = "cooldown"
+        state["sweep_tune"] = stn
+        return "cooldown", []
+
+    recs = _recommend_params_from_sweep(
+        current=current,
+        sweep=sweep,
+        target_min_recommended=int(target_min),
+        target_max_recommended=int(target_max),
+    )
+    if not recs:
+        stn["status"] = "no_change"
+        state["sweep_tune"] = stn
+        return "no_change", []
+
+    newp = dict(current)
+    for r in recs:
+        e = r.get("env")
+        v = r.get("value")
+        if isinstance(e, str) and isinstance(v, str) and e.startswith("KALSHI_ARB_"):
+            newp[e] = v
+    newp = _bounded(newp)
+    if newp == current:
+        stn["status"] = "no_change"
+        state["sweep_tune"] = stn
+        return "no_change", []
+
+    ov = _load_override_obj(repo_root)
+    ov["applied_ts"] = int(now)
+    ov["params"] = dict(newp)
+    ov["meta"] = {
+        "action": "sweep_apply",
+        "recs": recs,
+        "sweep": {
+            "cycles": int(sweep.get("cycles") or 0),
+            "recommended": int(sweep.get("recommended") or 0),
+            "placed_live": int(sweep.get("placed_live") or 0),
+        },
+    }
+    _save_override_obj(repo_root, ov)
+    apply_overrides_to_environ(newp)
+    state["current_params"] = dict(newp)
+    champion["params"] = dict(newp)
+    champion["status"] = "active"
+    stn["last_apply_ts"] = int(now)
+    stn["status"] = "applied"
+    state["sweep_tune"] = stn
+    return "applied", recs
+
+
 def _load_tune_state(repo_root: str) -> Dict[str, Any]:
     p = _repo_path(repo_root, TUNE_STATE_PATH_REL)
     state = _load_json(
@@ -290,6 +566,14 @@ def _load_tune_state(repo_root: str) -> Dict[str, Any]:
                 "eval_metrics": {},
                 "applied_ts": 0,
                 "completed_ts": 0,
+            },
+            "sweep_tune": {
+                "last_apply_ts": 0,
+                "status": "idle",
+                "window_s": 0,
+                "cycles": 0,
+                "recommended": 0,
+                "placed_live": 0,
             },
         },
     )
@@ -333,6 +617,15 @@ def _load_tune_state(repo_root: str) -> Dict[str, Any]:
 
     state["champion"] = champion
     state["challenger"] = challenger
+    if not isinstance(state.get("sweep_tune"), dict):
+        state["sweep_tune"] = {
+            "last_apply_ts": 0,
+            "status": "idle",
+            "window_s": 0,
+            "cycles": 0,
+            "recommended": 0,
+            "placed_live": 0,
+        }
     state.setdefault("version", 2)
     return state
 
@@ -393,6 +686,16 @@ def _status_payload(
         out["eval_progress"] = {
             "have": int(eval_progress.get("have") or 0),
             "target": int(eval_progress.get("target") or 0),
+        }
+    st = state.get("sweep_tune") if isinstance(state.get("sweep_tune"), dict) else {}
+    if isinstance(st, dict) and st:
+        out["sweep_tune"] = {
+            "last_apply_ts": int(st.get("last_apply_ts") or 0),
+            "status": str(st.get("status") or ""),
+            "window_s": int(st.get("window_s") or 0),
+            "cycles": int(st.get("cycles") or 0),
+            "recommended": int(st.get("recommended") or 0),
+            "placed_live": int(st.get("placed_live") or 0),
         }
     return out
 
@@ -530,8 +833,25 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
 
     # Apply check: at most once per 24h.
     if settled_n < min_settled:
-        state["status"] = "waiting_sample"
         state["settled_total"] = settled_n
+        cur = _bounded(_current_params_from_env())
+        sweep_action, sweep_recs = _maybe_apply_sweep_tune(
+            repo_root=repo_root,
+            state=state,
+            champion=champion,
+            now=now,
+            current=cur,
+        )
+        if sweep_action == "applied":
+            state["status"] = "sweep_applied"
+            _save_tune_state(repo_root, state)
+            return _status_payload(state, settled_total=settled_n, recs=sweep_recs)
+        if sweep_action == "cooldown":
+            state["status"] = "sweep_cooldown"
+            _save_tune_state(repo_root, state)
+            return _status_payload(state, settled_total=settled_n)
+
+        state["status"] = "waiting_sample"
         _save_tune_state(repo_root, state)
         return _status_payload(state, settled_total=settled_n)
 
@@ -545,7 +865,22 @@ def maybe_autotune(repo_root: str) -> Dict[str, Any]:
     cur = _bounded(_current_params_from_env())
     recs = recommend_params(baseline=base_metrics, current=cur)
     if not recs:
-        state["status"] = "no_change"
+        sweep_action, sweep_recs = _maybe_apply_sweep_tune(
+            repo_root=repo_root,
+            state=state,
+            champion=champion,
+            now=now,
+            current=cur,
+        )
+        if sweep_action == "applied":
+            state["status"] = "sweep_applied"
+            state["settled_total"] = settled_n
+            champion["baseline"] = dict(base_metrics)
+            state["baseline"] = dict(base_metrics)
+            _save_tune_state(repo_root, state)
+            return _status_payload(state, settled_total=settled_n, recs=sweep_recs)
+
+        state["status"] = "no_change" if sweep_action != "cooldown" else "sweep_cooldown"
         state["settled_total"] = settled_n
         champion["params"] = dict(cur)
         champion["baseline"] = dict(base_metrics)

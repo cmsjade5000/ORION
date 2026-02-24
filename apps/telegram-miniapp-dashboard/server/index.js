@@ -221,7 +221,7 @@ if (IS_PROD) {
 //
 // In the UI, ATLAS can "call" sub-agents (PULSE/NODE/STRATUS). Those are rendered as mini nodes
 // and should not steal ORION's focus line or activeAgentId.
-const PRIMARY_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "AEGIS"];
+const PRIMARY_AGENTS = ["ATLAS", "POLARIS", "EMBER", "PIXEL", "LEDGER", "AEGIS"];
 const ATLAS_SUBAGENTS = ["PULSE", "NODE", "STRATUS"];
 const ATLAS_SUBAGENTS_SET = new Set(ATLAS_SUBAGENTS);
 const AGENTS = [...PRIMARY_AGENTS, ...ATLAS_SUBAGENTS];

@@ -41,22 +41,53 @@ if [[ -z "${MIME}" ]]; then
   MIME="${MIME:-application/octet-stream}"
 fi
 
-AUTH_HEADER=()
-if [[ -n "${INGEST_TOKEN:-}" ]]; then
-  AUTH_HEADER=(-H "Authorization: Bearer ${INGEST_TOKEN}")
+# Fallback: if INGEST_TOKEN is not present in the current shell, try loading it
+# from OpenClaw config so agent-executed shell commands can still upload.
+if [[ -z "${INGEST_TOKEN:-}" ]]; then
+  CFG="${OPENCLAW_CONFIG_PATH:-$HOME/.openclaw/openclaw.json}"
+  if [[ -f "${CFG}" ]] && command -v python3 >/dev/null 2>&1; then
+    INGEST_TOKEN="$(
+      python3 - "${CFG}" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+try:
+    obj = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+vars_obj = ((obj.get("env") or {}).get("vars") or {})
+tok = vars_obj.get("MINIAPP_INGEST_TOKEN") or vars_obj.get("INGEST_TOKEN") or ""
+print(str(tok).strip())
+PY
+    )"
+    export INGEST_TOKEN
+  fi
 fi
 
-AGENT_HEADER=()
-if [[ -n "${AGENT_ID}" ]]; then
-  AGENT_HEADER=(-H "x-agent-id: ${AGENT_ID}")
+if [[ -n "${INGEST_TOKEN:-}" && -n "${AGENT_ID}" ]]; then
+  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
+    -H "Authorization: Bearer ${INGEST_TOKEN}" \
+    -H "x-agent-id: ${AGENT_ID}" \
+    -H "Content-Type: ${MIME}" \
+    -H "x-artifact-name: ${NAME}" \
+    --data-binary @"${FILE_PATH}"
+elif [[ -n "${INGEST_TOKEN:-}" ]]; then
+  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
+    -H "Authorization: Bearer ${INGEST_TOKEN}" \
+    -H "Content-Type: ${MIME}" \
+    -H "x-artifact-name: ${NAME}" \
+    --data-binary @"${FILE_PATH}"
+elif [[ -n "${AGENT_ID}" ]]; then
+  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
+    -H "x-agent-id: ${AGENT_ID}" \
+    -H "Content-Type: ${MIME}" \
+    -H "x-artifact-name: ${NAME}" \
+    --data-binary @"${FILE_PATH}"
+else
+  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
+    -H "Content-Type: ${MIME}" \
+    -H "x-artifact-name: ${NAME}" \
+    --data-binary @"${FILE_PATH}"
 fi
-
-curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
-  "${AUTH_HEADER[@]}" \
-  "${AGENT_HEADER[@]}" \
-  -H "Content-Type: ${MIME}" \
-  -H "x-artifact-name: ${NAME}" \
-  --data-binary @"${FILE_PATH}"
 
 echo
-

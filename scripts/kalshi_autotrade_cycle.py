@@ -472,6 +472,41 @@ def _list_run_files(runs_dir: str) -> list[str]:
     return paths
 
 
+def _quarantine_bad_run_file(path: str, *, min_age_s: int = 180) -> bool:
+    try:
+        age_s = float(time.time()) - float(os.path.getmtime(path))
+    except Exception:
+        age_s = 0.0
+    if age_s < float(min_age_s):
+        return False
+    try:
+        runs_dir = os.path.dirname(path)
+        bad_dir = os.path.join(os.path.dirname(runs_dir), "runs_bad")
+        os.makedirs(bad_dir, exist_ok=True)
+        base = os.path.basename(path)
+        dst = os.path.join(bad_dir, base)
+        if os.path.exists(dst):
+            stem, ext = os.path.splitext(base)
+            dst = os.path.join(bad_dir, f"{stem}.{int(time.time())}{ext}")
+        os.replace(path, dst)
+        return True
+    except Exception:
+        return False
+
+
+def _load_run_artifact(path: str, *, quarantine_bad: bool = True) -> Optional[Dict[str, Any]]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        if quarantine_bad:
+            _quarantine_bad_run_file(path)
+        return None
+    except Exception:
+        return None
+
+
 def _is_transient_http_err_payload(payload: Any) -> bool:
     """Heuristic for short-lived infra/API errors we should not escalate.
 
@@ -592,11 +627,7 @@ def _recent_run_health(runs_dir: str, *, lookback: int, min_ts_unix: int = 0) ->
     considered = 0
 
     for p in files:
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                o = json.load(f)
-        except Exception:
-            continue
+        o = _load_run_artifact(p, quarantine_bad=True)
         if not isinstance(o, dict):
             continue
         if int(o.get("ts_unix") or 0) < int(min_ts_unix):

@@ -20,6 +20,24 @@ Notes:
   - Telegram: direct API call (token file or env var).
   - Discord: uses `openclaw message send --channel discord ...` (so this script never touches the Discord token).
 
+## Milestone-Only Updates (POLARIS Rollouts)
+
+For POLARIS/admin rollout work, prefer milestone updates over step-by-step chatter.
+
+Recommended milestone labels:
+- `Scaffold complete`
+- `Routing + gates complete`
+- `Tests green + config active`
+
+Guidelines:
+- Use `Notify: telegram` on the relevant Task Packets.
+- Keep messages one to three short bullets.
+- Do not emit high-frequency progress pings between milestones.
+
+Weekly routing audit cadence:
+- ORION runs a weekly routing audit from `/Users/corystoner/Desktop/ORION`.
+- Audit/report format is defined in `tasks/INBOX/POLARIS.md` and policy ownership in `docs/AGENT_OWNERSHIP_MATRIX.md`.
+
 ## Recommended Packet Result Format
 
 Specialists should add, under the packet:

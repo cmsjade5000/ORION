@@ -52,5 +52,5 @@ test:
 shellcheck:
 	./scripts/ci_shellcheck.sh
 
-## Must-pass CI gate (lint + tests + plan validation)
-ci: shellcheck test plan-graph
+## Must-pass CI gate (lint + tests + plan + task packet validation)
+ci: shellcheck test plan-graph task-packets

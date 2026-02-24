@@ -13,7 +13,9 @@ export function registerDashboard(bot: Bot) {
       .text("PIXEL", "agent_PIXEL")
       .row()
       .text("NODE", "agent_NODE")
-      .text("LEDGER", "agent_LEDGER");
+      .text("LEDGER", "agent_LEDGER")
+      .row()
+      .text("POLARIS", "agent_POLARIS");
 
     await ctx.reply("Select an agent to view details:", {
       reply_markup: keyboard,
@@ -70,6 +72,11 @@ function agentInfo(id: string): string | null {
       return [
         "LEDGER",
         "Cost/value tradeoffs (internal-only).",
+      ].join("\n");
+    case "POLARIS":
+      return [
+        "POLARIS",
+        "Admin co-pilot for reminders/calendar/email-prep/contact workflows (internal-only).",
       ].join("\n");
     default:
       return null;

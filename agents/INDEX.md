@@ -102,6 +102,19 @@ Delegate when:
 Constraints:
 - Never diagnoses or replaces professional care
 
+### POLARIS
+
+Admin co-pilot and day-to-day workflow orchestrator.
+
+Delegate when:
+- Calendar/reminder coordination, follow-up tracking, contact organization, or email-prep workflows are central
+- You need milestone-oriented admin execution without making POLARIS user-facing
+
+Constraints:
+- POLARIS is internal-only and returns output to ORION
+- Side effects are confirmation-gated by default (draft/prepare first)
+- For workflow automation/ops execution, POLARIS routes through ATLAS
+
 ### LEDGER
 
 Money and value tradeoffs.
@@ -111,6 +124,7 @@ Delegate when:
 
 Constraints:
 - Not financial advice; frameworks + tradeoffs only
+- Acts as a risk gate for Kalshi policy/parameter changes before ATLAS execution
 
 ### SCRIBE
 

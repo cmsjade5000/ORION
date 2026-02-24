@@ -43,6 +43,55 @@ Administrative load routing:
 - Recurring triage (cron/heartbeat/queue scanning): ATLAS → PULSE.
 - Task/incident organization (“paperwork”): ATLAS → NODE.
 
+## POLARIS Admin Co-Pilot Model
+
+For day-to-day admin workflows, ORION can route through POLARIS:
+
+- ORION -> POLARIS (admin workflow orchestrator)
+- POLARIS -> ATLAS (execution path for workflow automation/cron/ops tasks) as needed
+- POLARIS -> SCRIBE (send-ready drafts) as needed
+- POLARIS -> ORION (integrated status + next steps)
+
+Boundary rules:
+- POLARIS is internal-only and never messages Cory directly.
+- ORION remains the only external messenger.
+- Side effects stay confirmation-gated by default.
+
+Kalshi boundary:
+- Routine operations/diagnostics: ORION -> ATLAS -> STRATUS/PULSE.
+- Policy/risk/parameter changes: LEDGER gate first, then ATLAS execution.
+
+## Ownership And Queue Controls
+
+- Ownership matrix: `docs/AGENT_OWNERSHIP_MATRIX.md`
+- POLARIS queue thresholds: `src/agents/POLARIS.md`
+- POLARIS queue runbook and audit format: `tasks/INBOX/POLARIS.md`
+
+## Weekly Routing Audit Runbook
+
+Run location:
+- ORION main workspace session in `/Users/corystoner/Desktop/ORION`.
+- Audit target: `tasks/INBOX/POLARIS.md` against ownership rules in `docs/AGENT_OWNERSHIP_MATRIX.md`.
+
+Cadence:
+- Weekly (Friday ET recommended).
+
+Required concise ORION report:
+- `Queue: <active>/<max> and oldest age`
+- `Aging: >24h=<n>, >48h=<n>, >72h=<n>, >120h=<n>`
+- `Escalations: <none|list>`
+- `Misroutes and fixes: <none|list>`
+- `Next actions: <1-3 bullets>`
+
+## Milestone Telegram Update Protocol
+
+When rollout/admin packets include `Notify: telegram`, ORION should send milestone updates at bounded checkpoints:
+- `Scaffold complete`
+- `Routing + gates complete`
+- `Tests green + config active`
+
+Avoid high-frequency chatter; use milestone checkpoints only.
+
 ## ATLAS Unavailable + Emergency Bypass (Auditable)
 
 Normal rule: ORION routes ops/infra/workflow work through ATLAS.

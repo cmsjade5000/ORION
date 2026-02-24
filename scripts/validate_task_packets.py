@@ -31,12 +31,18 @@ REQUIRED_SECTIONS = (
 
 ATLAS_DIRECTED_SUBAGENTS = {"NODE", "PULSE", "STRATUS"}
 ALLOWED_NOTIFY_CHANNELS = {"telegram", "discord", "none"}
+ALLOWED_APPROVAL_GATES = {"LEDGER_RESULT_REQUIRED"}
+RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @dataclass
 class Packet:
     start_line: int
     lines: list[str]
+
+
+def _is_yyyy_mm_dd(value: str) -> bool:
+    return bool(RE_YYYY_MM_DD.match(value))
 
 
 def _expected_owner_from_path(path: str) -> str | None:
@@ -169,6 +175,8 @@ def validate_inbox_file(path: str) -> list[str]:
         emergency = fields.get("Emergency", "").strip().upper()
         incident = fields.get("Incident", "").strip()
         notify = fields.get("Notify", "").strip().lower()
+        approval_gate = fields.get("Approval Gate", "").strip()
+        gate_evidence = fields.get("Gate Evidence", "").strip()
 
         if notify:
             # Support "telegram,discord" style lists but reject unknown tokens.
@@ -199,6 +207,38 @@ def validate_inbox_file(path: str) -> list[str]:
                         f"{path}:{pkt.start_line}: packet {n}: Requester must be one of {sorted(allowed_requesters)!r} "
                         f"(got {requester!r}){extra}"
                     )
+
+        if approval_gate:
+            if approval_gate not in ALLOWED_APPROVAL_GATES:
+                errors.append(
+                    f"{path}:{pkt.start_line}: packet {n}: Approval Gate must be one of "
+                    f"{sorted(ALLOWED_APPROVAL_GATES)!r} (got {approval_gate!r})"
+                )
+            if not gate_evidence:
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: Approval Gate requires non-empty 'Gate Evidence:'")
+            if approval_gate == "LEDGER_RESULT_REQUIRED":
+                if owner.upper() not in {"ATLAS", "ORION"}:
+                    errors.append(
+                        f"{path}:{pkt.start_line}: packet {n}: Approval Gate LEDGER_RESULT_REQUIRED requires "
+                        f"Owner to be 'ATLAS' or 'ORION' (got {owner!r})"
+                    )
+                if gate_evidence and not re.search(r"\bledger\b", gate_evidence, flags=re.IGNORECASE):
+                    errors.append(
+                        f"{path}:{pkt.start_line}: packet {n}: Gate Evidence must reference LEDGER when "
+                        f"Approval Gate is LEDGER_RESULT_REQUIRED"
+                    )
+
+        if expected_owner == "POLARIS":
+            opened = fields.get("Opened", "").strip()
+            due = fields.get("Due", "").strip()
+            if not opened:
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Opened:'")
+            elif not _is_yyyy_mm_dd(opened):
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: 'Opened:' must be YYYY-MM-DD (got {opened!r})")
+            if not due:
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Due:'")
+            elif not _is_yyyy_mm_dd(due):
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: 'Due:' must be YYYY-MM-DD (got {due!r})")
 
         # Emergency bypass packets must be incident-linked for auditability.
         if emergency == "ATLAS_UNAVAILABLE" and not incident:

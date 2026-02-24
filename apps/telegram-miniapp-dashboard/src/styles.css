@@ -817,6 +817,23 @@ html {
   z-index: 2;
 }
 
+.nodeFreeFloat {
+  animation: nodeFreeFloat var(--float-duration, 8.6s) ease-in-out infinite;
+  animation-delay: var(--float-delay, 0s);
+}
+
+@keyframes nodeFreeFloat {
+  0% {
+    transform: translate(-50%, -50%) translate3d(0px, 0px, 0px);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate3d(var(--float-x, 2px), var(--float-y, -2px), 0px);
+  }
+  100% {
+    transform: translate(-50%, -50%) translate3d(0px, 0px, 0px);
+  }
+}
+
 .nodeSizeMedium {
   width: 78px;
   height: 78px;
@@ -1224,6 +1241,9 @@ html {
     animation: none !important;
   }
   .orionNode .nodeProcEmojiIn .nodeProcEmojiGlyph {
+    animation: none !important;
+  }
+  .nodeFreeFloat {
     animation: none !important;
   }
 }

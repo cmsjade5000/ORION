@@ -11,7 +11,7 @@ import WorkflowPanel from "./components/WorkflowPanel";
 import OverlaySheet from "./components/OverlaySheet";
 import AegisPanel from "./components/AegisPanel";
 
-const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "AEGIS", "PULSE", "NODE", "STRATUS"] as const;
+const DEFAULT_AGENTS = ["ATLAS", "EMBER", "PIXEL", "LEDGER", "POLARIS", "AEGIS", "PULSE", "NODE", "STRATUS"] as const;
 
 export default function App() {
   const [initData, setInitData] = useState<string>("");
