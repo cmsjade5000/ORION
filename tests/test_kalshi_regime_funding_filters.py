@@ -121,6 +121,49 @@ class TestKalshiRegimeFundingFilters(unittest.TestCase):
         self.assertIsNotNone(s)
         self.assertAlmostEqual(float(s.edge_threshold_bps or 0.0), 10.0, places=9)
 
+    def test_ignore_zero_liquidity_skips_liquidity_reject(self) -> None:
+        import scripts.kalshi_ref_arb as mod
+
+        m = _mkt()
+        m = KalshiMarket(**{**m.__dict__, "liquidity_dollars": 0.0})
+        s_block = mod._signal_for_market(
+            m,
+            series="KXBTC",
+            spot=105.0,
+            sigma_annual=0.6,
+            min_edge_bps=5.0,
+            uncertainty_bps=0.0,
+            min_liquidity_usd=10.0,
+            max_spread=0.2,
+            min_seconds_to_expiry=10,
+            min_price=0.01,
+            max_price=0.99,
+            min_notional_usd=0.0,
+            min_notional_bypass_edge_bps=0.0,
+            ignore_zero_liquidity=False,
+        )
+        self.assertIsNotNone(s_block)
+        self.assertIn("liquidity_below_min", (s_block.rejected_reasons or []))
+
+        s_pass = mod._signal_for_market(
+            m,
+            series="KXBTC",
+            spot=105.0,
+            sigma_annual=0.6,
+            min_edge_bps=5.0,
+            uncertainty_bps=0.0,
+            min_liquidity_usd=10.0,
+            max_spread=0.2,
+            min_seconds_to_expiry=10,
+            min_price=0.01,
+            max_price=0.99,
+            min_notional_usd=0.0,
+            min_notional_bypass_edge_bps=0.0,
+            ignore_zero_liquidity=True,
+        )
+        self.assertIsNotNone(s_pass)
+        self.assertNotIn("liquidity_below_min", (s_pass.rejected_reasons or []))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,23 @@ POGO_WORK_CALENDAR_NAMES="${POGO_WORK_CALENDAR_NAMES:-}"
 POGO_COMMUTE_KEYWORDS="${POGO_COMMUTE_KEYWORDS:-commute,drive,train,bus,subway,uber,lyft}"
 POGO_CALENDAR_WINDOW_HOURS="${POGO_CALENDAR_WINDOW_HOURS:-24}"
 POGO_CALENDAR_INCLUDE_ALLDAY="${POGO_CALENDAR_INCLUDE_ALLDAY:-1}"
+POGO_HTTP_CONNECT_TIMEOUT_SECONDS="${POGO_HTTP_CONNECT_TIMEOUT_SECONDS:-5}"
+POGO_HTTP_MAX_TIME_SECONDS="${POGO_HTTP_MAX_TIME_SECONDS:-15}"
+POGO_CALENDAR_TIMEOUT_SECONDS="${POGO_CALENDAR_TIMEOUT_SECONDS:-8}"
+
+fetch_html_with_timeout() {
+  local url="$1"
+  local out="$2"
+  if curl -fsSL \
+    --connect-timeout "$POGO_HTTP_CONNECT_TIMEOUT_SECONDS" \
+    --max-time "$POGO_HTTP_MAX_TIME_SECONDS" \
+    "$url" -o "$out"; then
+    return 0
+  fi
+  # Keep pipeline alive on transient network failures/timeouts.
+  printf '<html><head><meta charset="utf-8"></head><body></body></html>\n' > "$out"
+  return 1
+}
 
 if [[ -z "${POGO_CALENDAR_NAMES// /}" && -f "$CFG" ]]; then
   v="$(jq -r '.env.vars.POGO_CALENDAR_NAMES // empty' "$CFG" 2>/dev/null || true)"
@@ -57,22 +74,56 @@ events_html="$tmpdir/events.html"
 pogo_json="$tmpdir/pogo.json"
 cal_json="$tmpdir/calendar.json"
 
-curl -fsSL 'https://pokemongo.com/en/news/' -o "$news_html"
-curl -fsSL 'https://pokemongo.com/en/events/' -o "$events_html"
+news_fetch_ok=1
+events_fetch_ok=1
+if ! fetch_html_with_timeout 'https://pokemongo.com/en/news/' "$news_html"; then
+  news_fetch_ok=0
+fi
+if ! fetch_html_with_timeout 'https://pokemongo.com/en/events/' "$events_html"; then
+  events_fetch_ok=0
+fi
 
-node "$ROOT/scripts/pogo_extract.mjs" \
+if ! node "$ROOT/scripts/pogo_extract.mjs" \
   --news-html "$news_html" \
   --events-html "$events_html" \
   --max-news "$POGO_NEWS_MAX_ITEMS" \
   --max-events "$POGO_EVENTS_MAX_ITEMS" \
   --tz "$POGO_TZ" \
   --now "$NOW_ISO" \
-  --stale-hours "$POGO_STALE_NEWS_HOURS" > "$pogo_json"
+  --stale-hours "$POGO_STALE_NEWS_HOURS" > "$pogo_json"; then
+  jq -n \
+    --arg now "$NOW_ISO" \
+    --arg tz "$POGO_TZ" \
+    --argjson newsOk "$news_fetch_ok" \
+    --argjson eventsOk "$events_fetch_ok" '
+    {
+      generatedAt: $now,
+      local: { tz: $tz, dayName: "", todayDate: "" },
+      news: [],
+      todayEvents: [],
+      weekEvents: [],
+      shinySignals: [],
+      freshness: {
+        stale: true,
+        confidence: "low",
+        newsAgeHours: null,
+        note: (
+          if ($newsOk == 1 and $eventsOk == 1) then
+            "official feed parsing failed; using fallback payload"
+          else
+            "official feed fetch timed out/failed; using fallback payload"
+          end
+        )
+      }
+    }
+  ' > "$pogo_json"
+fi
 
 CAL_NAMES="$POGO_CALENDAR_NAMES" \
 CAL_WINDOW_HOURS="$POGO_CALENDAR_WINDOW_HOURS" \
 CAL_INCLUDE_ALLDAY="$POGO_CALENDAR_INCLUDE_ALLDAY" \
 CAL_START_ISO="$NOW_ISO" \
+CAL_OSASCRIPT_TIMEOUT_SECONDS="$POGO_CALENDAR_TIMEOUT_SECONDS" \
   "$ROOT/scripts/calendar_events_fetch.sh" > "$cal_json"
 
 COMMUTE_REGEX="$({

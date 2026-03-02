@@ -38,6 +38,17 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
 
+## Telegram Draft Streaming (March 2, 2026)
+
+Telegram Bot API now includes `sendMessageDraft` for real-time draft streaming.
+This repo wires that support into `scripts/telegram_send_message.sh` behind env flags:
+
+- `TELEGRAM_STREAM_DRAFT=1`
+- optional tuning: `TELEGRAM_STREAM_CHUNK_CHARS`, `TELEGRAM_STREAM_STEP_MS`
+- optional: `TELEGRAM_STREAM_DRAFT_ID` (positive integer)
+
+The script falls back to normal `sendMessage` if draft streaming is unsupported for a chat/bot.
+
 ## Not Migrated (Schema Or Install Specific)
 
 All secrets and provider auth live outside the repo. Do not commit them.

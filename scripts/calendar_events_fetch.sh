@@ -10,6 +10,7 @@ set -euo pipefail
 # - CAL_WINDOW_HOURS         Window size in hours from "now" (default: 24).
 # - CAL_INCLUDE_ALLDAY       1 to include all-day events (default: 1).
 # - CAL_START_ISO            Optional ISO-8601 start time (UTC recommended, e.g. 2026-02-11T12:00:00Z).
+# - CAL_OSASCRIPT_TIMEOUT_SECONDS  Max seconds to wait for Calendar JXA query (default: 8).
 #
 # Notes:
 # - This is macOS-only (Calendar.app).
@@ -23,14 +24,25 @@ fi
 CAL_NAMES="${CAL_NAMES:-}"
 CAL_WINDOW_HOURS="${CAL_WINDOW_HOURS:-24}"
 CAL_INCLUDE_ALLDAY="${CAL_INCLUDE_ALLDAY:-1}"
+CAL_OSASCRIPT_TIMEOUT_SECONDS="${CAL_OSASCRIPT_TIMEOUT_SECONDS:-8}"
 
 if [[ -z "${CAL_NAMES// /}" ]]; then
   echo '{"enabled":false,"events":[]}'
   exit 0
 fi
 
-export CAL_NAMES CAL_WINDOW_HOURS CAL_INCLUDE_ALLDAY
+if ! [[ "$CAL_OSASCRIPT_TIMEOUT_SECONDS" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  CAL_OSASCRIPT_TIMEOUT_SECONDS="8"
+fi
 
+export CAL_NAMES CAL_WINDOW_HOURS CAL_INCLUDE_ALLDAY CAL_OSASCRIPT_TIMEOUT_SECONDS
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+out_json="$tmpdir/out.json"
+err_log="$tmpdir/err.log"
+
+set +e
 osascript -l JavaScript -e '
 ObjC.import("stdlib");
 
@@ -143,4 +155,33 @@ try {
 }
 
 JSON.stringify(out);
-' 2>/dev/null || echo '{"enabled":true,"error":"Calendar access failed (automation permission or scripting error).","events":[]}'
+' >"$out_json" 2>"$err_log" &
+osascript_pid="$!"
+
+(
+  sleep "$CAL_OSASCRIPT_TIMEOUT_SECONDS"
+  if kill -0 "$osascript_pid" 2>/dev/null; then
+    kill -TERM "$osascript_pid" 2>/dev/null || true
+    sleep 1
+    kill -KILL "$osascript_pid" 2>/dev/null || true
+  fi
+) &
+watchdog_pid="$!"
+
+wait "$osascript_pid"
+osascript_rc="$?"
+kill "$watchdog_pid" >/dev/null 2>&1 || true
+wait "$watchdog_pid" >/dev/null 2>&1 || true
+set -e
+
+if [[ "$osascript_rc" -eq 0 ]]; then
+  cat "$out_json"
+  exit 0
+fi
+
+if [[ "$osascript_rc" -eq 143 || "$osascript_rc" -eq 137 ]]; then
+  echo '{"enabled":true,"error":"Calendar access timed out.","events":[]}'
+  exit 0
+fi
+
+echo '{"enabled":true,"error":"Calendar access failed (automation permission or scripting error).","events":[]}'

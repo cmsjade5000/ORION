@@ -147,6 +147,63 @@ Optional URL override:
 
 ---
 
+## telegram_send_message.sh
+
+### Purpose
+Send a Telegram message with optional real-time draft streaming (`sendMessageDraft`) before the final `sendMessage`.
+Supports safe defaults for preview suppression, optional parse mode, reply-to, and long-message chunking.
+
+### Usage
+
+```bash
+./scripts/telegram_send_message.sh <chat_id> "message text"
+```
+
+Enable draft streaming:
+
+```bash
+TELEGRAM_STREAM_DRAFT=1 ./scripts/telegram_send_message.sh <chat_id> "longer message..."
+```
+
+Tune stream pacing:
+
+```bash
+TELEGRAM_STREAM_DRAFT=1 TELEGRAM_STREAM_CHUNK_CHARS=320 TELEGRAM_STREAM_STEP_MS=180 \
+  ./scripts/telegram_send_message.sh <chat_id> "longer message..."
+```
+
+Enable HTML parse mode:
+
+```bash
+TELEGRAM_PARSE_MODE=HTML ./scripts/telegram_send_message.sh <chat_id> "<b>bold</b>"
+```
+
+Enable web previews:
+
+```bash
+TELEGRAM_DISABLE_WEB_PREVIEW=0 ./scripts/telegram_send_message.sh <chat_id> "https://example.com"
+```
+
+Reply to a specific message id:
+
+```bash
+TELEGRAM_REPLY_TO_MESSAGE_ID=1234 ./scripts/telegram_send_message.sh <chat_id> "Acknowledged."
+```
+
+Force chunking for long messages:
+
+```bash
+TELEGRAM_MAX_CHARS=1200 ./scripts/telegram_send_message.sh <chat_id> "$(cat long_message.txt)"
+```
+
+Notes:
+- If Telegram draft APIs are unavailable for the chat/bot, the script falls back to normal `sendMessage`.
+- Final `sendMessage` is sent once even when draft streaming fails.
+- `ORION_SUPPRESS_TELEGRAM=1` still suppresses send operations (dry-run safety).
+- Optional override: `TELEGRAM_STREAM_DRAFT_ID=<positive-int>` to force a deterministic draft animation id.
+
+---
+
 ## install_orion_personal_ops_crons.sh
 
 ### Purpose
@@ -378,9 +435,12 @@ Key env knobs:
 - `KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_PLACED` (default `1`)
 - `KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_PLACED` (default `6`)
 - `KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S` (default `7200`)
+- `KALSHI_ARB_TUNE_SWEEP_DRY_COOLDOWN_S` (default `900`, used when dry in paper mode)
 - `KALSHI_ARB_TUNE_PAPER_MIN_EDGE_BPS_FLOOR` (default `70`, paper-only)
 - `KALSHI_ARB_TUNE_PAPER_MIN_LIQUIDITY_USD_FLOOR` (default `5`, paper-only)
 - `KALSHI_ARB_TUNE_PAPER_MIN_SECONDS_TO_EXPIRY_FLOOR` (default `180`, paper-only)
+- `KALSHI_ARB_IGNORE_ZERO_LIQUIDITY` (default `0`; if `1`, treat liquidity `<=0` as unknown instead of auto-reject)
+- `KALSHI_ARB_REINVEST_MAX_FRACTION` (default `0.08`, can be auto-tuned in paper mode on budget pressure)
 
 Dryness/stuck observability knobs:
 - `KALSHI_ARB_SERIES_ROTATION_ENABLED` (default `1`)
@@ -410,6 +470,44 @@ Send a concise Telegram digest summarizing the last N hours of Kalshi arb activi
 ```bash
 python3 scripts/kalshi_digest.py --window-hours 8 --send
 ```
+
+---
+
+## kalshi_digest_reliability.py
+
+### Purpose
+Monitor Kalshi digest email delivery reliability by correlating:
+- OpenClaw cron run history for `kalshi-ref-arb-digest`
+- AgentMail sent-message history for the Kalshi digest recipient
+
+It supports:
+- Morning guard: alert when the 07:00 ET run is `ok` but no email is observed
+  within 10 minutes.
+- Daily report: summarize expected slots (`07:00`, `15:00`, `23:00`) vs actual
+  sent emails.
+
+### Usage
+
+Guard + daily report (default behavior when no mode flags are passed):
+
+```bash
+python3 scripts/kalshi_digest_reliability.py
+```
+
+Guard only (with Telegram alerts):
+
+```bash
+python3 scripts/kalshi_digest_reliability.py --guard --send-telegram
+```
+
+Daily report only (with Telegram alerts):
+
+```bash
+python3 scripts/kalshi_digest_reliability.py --daily-report --send-telegram
+```
+
+State is persisted at:
+- `tmp/kalshi_ref_arb/digest_delivery_monitor_state.json`
 
 ---
 

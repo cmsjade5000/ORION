@@ -109,6 +109,16 @@ def _repo_root() -> str:
     return os.path.abspath(os.path.join(here, ".."))
 
 
+def _truthy(raw: Any) -> bool:
+    return str(raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _ignore_zero_liquidity_enabled(args: Optional[argparse.Namespace] = None) -> bool:
+    if args is not None and hasattr(args, "ignore_zero_liquidity"):
+        return bool(getattr(args, "ignore_zero_liquidity"))
+    return _truthy(os.environ.get("KALSHI_ARB_IGNORE_ZERO_LIQUIDITY", "0"))
+
+
 def _atomic_write_json(path: str, obj: Any) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = f"{path}.tmp.{os.getpid()}"
@@ -528,6 +538,7 @@ def _signal_for_market(
     funding_abs_bps_max: float = 3.0,
     momentum_15m_pct: Optional[float] = None,
     momentum_60m_pct: Optional[float] = None,
+    ignore_zero_liquidity: bool = False,
 ) -> Optional[Signal]:
     if m.strike_type not in ("greater", "less", "between"):
         return None
@@ -570,8 +581,12 @@ def _signal_for_market(
             base_rejected.append("funding_too_extreme")
 
     # Prefer more liquid markets; thin books are mostly noise.
-    if (m.liquidity_dollars is not None) and (float(m.liquidity_dollars) < float(min_liquidity_usd)):
-        base_rejected.append("liquidity_below_min")
+    if m.liquidity_dollars is not None:
+        liq_val = float(m.liquidity_dollars)
+        if bool(ignore_zero_liquidity) and liq_val <= 0.0:
+            pass
+        elif liq_val < float(min_liquidity_usd):
+            base_rejected.append("liquidity_below_min")
 
     strike = None
     strike_high = None
@@ -773,6 +788,7 @@ def _signal_for_market(
             "enable_funding_filter": bool(enable_funding_filter),
             "funding_rate_bps": float(funding_rate_bps) if isinstance(funding_rate_bps, (int, float)) else None,
             "funding_abs_bps_max": float(funding_abs_bps_max),
+            "ignore_zero_liquidity": bool(ignore_zero_liquidity),
         },
         rejected_reasons=sorted(list(dict.fromkeys(rejected))) if rejected else [],
     )
@@ -870,6 +886,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
             momentum_15m_pct=m15,
             momentum_60m_pct=m60,
+            ignore_zero_liquidity=bool(getattr(args, "ignore_zero_liquidity", False)),
         )
         if s is None:
             continue
@@ -895,6 +912,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "min_seconds_to_expiry": args.min_seconds_to_expiry,
             "min_price": args.min_price,
             "max_price": args.max_price,
+            "ignore_zero_liquidity": bool(getattr(args, "ignore_zero_liquidity", False)),
             "min_notional_usd": args.min_notional_usd,
             "min_notional_bypass_edge_bps": args.min_notional_bypass_edge_bps,
             "runtime_config_errors": rt_errs,
@@ -1080,6 +1098,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
             funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
             momentum_15m_pct=m15,
             momentum_60m_pct=m60,
+            ignore_zero_liquidity=bool(getattr(args, "ignore_zero_liquidity", False)),
         )
         if s is None:
             continue
@@ -1926,11 +1945,14 @@ def cmd_trade(args: argparse.Namespace) -> int:
         live_spot_fail = 0
         two_tick_failed = 0
         paper_exec_rejected = 0
+        skip_reason_counts: Dict[str, int] = {}
         if isinstance(skipped, list):
             for s in skipped:
                 if not isinstance(s, dict):
                     continue
                 r = s.get("reason")
+                if isinstance(r, str) and r:
+                    skip_reason_counts[r] = int(skip_reason_counts.get(r, 0)) + 1
                 d = s.get("detail")
                 if r == "no_fill":
                     no_fill += 1
@@ -1944,6 +1966,20 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     live_spot_fail += 1
                 elif isinstance(s.get("ref_spot_live_err"), str) and str(s.get("ref_spot_live_err") or "").strip():
                     live_spot_fail += 1
+        diag_blockers = (
+            [str(it.get("reason")) for it in (diagnostics.get("top_blockers") or [])[:3] if isinstance(it, dict) and it.get("reason")]
+            if isinstance(diagnostics.get("top_blockers"), list)
+            else []
+        )
+        exec_blockers = [
+            str(k)
+            for k, _ in sorted(skip_reason_counts.items(), key=lambda kv: int(kv[1]), reverse=True)[:3]
+            if isinstance(k, str) and k
+        ]
+        blockers_top: List[str] = []
+        for r in (diag_blockers + exec_blockers):
+            if r not in blockers_top:
+                blockers_top.append(r)
         _update_sweep_stats(
             repo_root,
             {
@@ -1974,9 +2010,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                     )
                 ),
                 "blockers_top": (
-                    [str(it.get("reason")) for it in (diagnostics.get("top_blockers") or [])[:3] if isinstance(it, dict) and it.get("reason")]
-                    if isinstance(diagnostics.get("top_blockers"), list)
-                    else []
+                    blockers_top[:5]
                 ),
             },
         )
@@ -2003,6 +2037,7 @@ def _compute_trade_diagnostics(
         "signals_computed": len(all_signals),
         "candidates_recommended": int(candidates_recommended),
     }
+    ignore_zero_liquidity = _ignore_zero_liquidity_enabled(args)
 
     def _safe_float(x: Any) -> Optional[float]:
         try:
@@ -2043,8 +2078,11 @@ def _compute_trade_diagnostics(
         if tte_s < float(args.min_seconds_to_expiry):
             return False
         liq = _safe_float((s.filters or {}).get("liquidity_dollars"))
-        if liq is not None and liq < float(args.min_liquidity_usd):
-            return False
+        if liq is not None:
+            if bool(ignore_zero_liquidity) and float(liq) <= 0.0:
+                pass
+            elif liq < float(args.min_liquidity_usd):
+                return False
         sp = _safe_float((s.filters or {}).get("yes_spread" if side == "yes" else "no_spread"))
         if sp is not None and sp > float(args.max_spread):
             return False
@@ -2118,8 +2156,11 @@ def _compute_trade_diagnostics(
                 totals["quotes_present"] += 1
                 if tte_s < float(args.min_seconds_to_expiry):
                     reasons.append("too_close_to_expiry")
-                if liq_f is not None and liq_f < float(args.min_liquidity_usd):
-                    reasons.append("liquidity_below_min")
+                if liq_f is not None:
+                    if bool(ignore_zero_liquidity) and float(liq_f) <= 0.0:
+                        pass
+                    elif liq_f < float(args.min_liquidity_usd):
+                        reasons.append("liquidity_below_min")
                 if spread is not None and spread > float(args.max_spread):
                     reasons.append(f"{side}_spread_too_wide")
                 rqa = _safe_float((s.filters or {}).get("ref_quote_age_sec"))
@@ -2243,6 +2284,12 @@ def main() -> int:
     scan.add_argument("--min-price", type=float, default=0.05, help="Skip asks below this price (tail risk).")
     scan.add_argument("--max-price", type=float, default=0.95, help="Skip asks above this price (tail risk).")
     scan.add_argument(
+        "--ignore-zero-liquidity",
+        action="store_true",
+        default=_ignore_zero_liquidity_enabled(),
+        help="Treat liquidity_dollars<=0 as unknown (do not auto-reject on liquidity filter).",
+    )
+    scan.add_argument(
         "--min-notional-usd",
         type=float,
         default=0.20,
@@ -2273,6 +2320,12 @@ def main() -> int:
     trade.add_argument("--min-seconds-to-expiry", type=int, default=900)
     trade.add_argument("--min-price", type=float, default=0.05)
     trade.add_argument("--max-price", type=float, default=0.95)
+    trade.add_argument(
+        "--ignore-zero-liquidity",
+        action="store_true",
+        default=_ignore_zero_liquidity_enabled(),
+        help="Treat liquidity_dollars<=0 as unknown (do not auto-reject on liquidity filter).",
+    )
     trade.add_argument("--min-notional-usd", type=float, default=0.20)
     trade.add_argument("--min-notional-bypass-edge-bps", type=float, default=4000.0)
     trade.add_argument("--persistence-cycles", type=int, default=1, help="Require edge to persist across N cycles before trading.")

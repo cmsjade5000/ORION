@@ -25,6 +25,7 @@ class TuneBounds:
     max_spread: Tuple[float, float] = (0.05, 0.12)
     limit: Tuple[int, int] = (50, 200)
     min_price: Tuple[float, float] = (0.01, 0.05)
+    reinvest_max_fraction: Tuple[float, float] = (0.03, 0.20)
 
 
 BOUNDS = TuneBounds()
@@ -217,6 +218,8 @@ def _current_params_from_env() -> Dict[str, str]:
         "KALSHI_ARB_MAX_SPREAD",
         "KALSHI_ARB_LIMIT",
         "KALSHI_ARB_MIN_PRICE",
+        "KALSHI_ARB_IGNORE_ZERO_LIQUIDITY",
+        "KALSHI_ARB_REINVEST_MAX_FRACTION",
     ]
     out: Dict[str, str] = {}
     for k in keys:
@@ -233,6 +236,8 @@ def _current_params_from_env() -> Dict[str, str]:
     out.setdefault("KALSHI_ARB_MAX_SPREAD", "0.05")
     out.setdefault("KALSHI_ARB_LIMIT", "20")
     out.setdefault("KALSHI_ARB_MIN_PRICE", "0.05")
+    out.setdefault("KALSHI_ARB_IGNORE_ZERO_LIQUIDITY", "0")
+    out.setdefault("KALSHI_ARB_REINVEST_MAX_FRACTION", "0.08")
     return out
 
 
@@ -263,6 +268,12 @@ def _bounded(params: Dict[str, str]) -> Dict[str, str]:
     out["KALSHI_ARB_LIMIT"] = str(_clamp_int(int(float(out.get("KALSHI_ARB_LIMIT") or 20)), *bounds.limit))
     out["KALSHI_ARB_MIN_PRICE"] = (
         f"{_clamp_float(float(out.get('KALSHI_ARB_MIN_PRICE') or 0.05), *bounds.min_price):.4f}".rstrip("0").rstrip(".")
+    )
+    out["KALSHI_ARB_IGNORE_ZERO_LIQUIDITY"] = "1" if _truthy(str(out.get("KALSHI_ARB_IGNORE_ZERO_LIQUIDITY") or "0")) else "0"
+    out["KALSHI_ARB_REINVEST_MAX_FRACTION"] = (
+        f"{_clamp_float(float(out.get('KALSHI_ARB_REINVEST_MAX_FRACTION') or 0.08), *bounds.reinvest_max_fraction):.4f}"
+        .rstrip("0")
+        .rstrip(".")
     )
     return out
 
@@ -572,10 +583,16 @@ def _recommend_params_from_sweep(
     cur_edge = int(float(current.get("KALSHI_ARB_MIN_EDGE_BPS") or 120))
     cur_liq = int(float(current.get("KALSHI_ARB_MIN_LIQUIDITY_USD") or 200))
     cur_tte = int(float(current.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY") or 900))
+    cur_ignore_zero_liq = _truthy(str(current.get("KALSHI_ARB_IGNORE_ZERO_LIQUIDITY") or "0"))
+    try:
+        cur_reinvest_max_frac = float(current.get("KALSHI_ARB_REINVEST_MAX_FRACTION") or 0.08)
+    except Exception:
+        cur_reinvest_max_frac = 0.08
     try:
         cur_notional = float(current.get("KALSHI_ARB_MIN_NOTIONAL_USD") or 0.20)
     except Exception:
         cur_notional = 0.20
+    budget_share = max(_share("budget_too_small"), _share("allocator_budget_exhausted"))
 
     scored: List[Tuple[float, Dict[str, Any]]] = []
     # If live placements happened in the round, avoid paper auto-tuning decisions.
@@ -650,6 +667,20 @@ def _recommend_params_from_sweep(
                         },
                     )
                 )
+            # Paper-only fallback: Kalshi liquidity fields can be zero/unknown on some contracts.
+            # If we're already at the liquidity floor and still blocked by liquidity on most cycles,
+            # enable a conservative fallback that ignores zero-liquidity telemetry only.
+            if (not cur_ignore_zero_liq) and int(cur_liq) <= int(bounds.min_liquidity_usd[0]) and liq_share >= 0.60:
+                scored.append(
+                    (
+                        0.30 + liq_share + 0.15 * scarcity,
+                        {
+                            "env": "KALSHI_ARB_IGNORE_ZERO_LIQUIDITY",
+                            "value": "1",
+                            "why": "Persistent liquidity blocker at floor; ignore zero-liquidity telemetry in paper mode.",
+                        },
+                    )
+                )
 
         tte_share = _share("too_close_to_expiry")
         if tte_share >= 0.05:
@@ -696,6 +727,20 @@ def _recommend_params_from_sweep(
                 )
             )
     out: List[Dict[str, Any]] = [r for _, r in sorted(scored, key=lambda x: x[0], reverse=True)]
+
+    # Independent budget-pressure lever: if we keep seeing opportunities but no placements
+    # because order budgets are too small, increase reinvest cap incrementally.
+    if budget_share >= 0.05 and int(placed_total) <= 0 and int(rec_n) > 0:
+        nxt_rf = _clamp_float(cur_reinvest_max_frac + 0.02, *bounds.reinvest_max_fraction)
+        if abs(float(nxt_rf) - float(cur_reinvest_max_frac)) > 1e-9:
+            out.insert(
+                0,
+                {
+                    "env": "KALSHI_ARB_REINVEST_MAX_FRACTION",
+                    "value": f"{float(nxt_rf):.4f}".rstrip("0").rstrip("."),
+                    "why": "Signals exist but budgets are too small; slightly raise reinvest cap in paper mode.",
+                },
+            )
 
     seen: set[str] = set()
     dedup: List[Dict[str, Any]] = []
@@ -801,6 +846,11 @@ def _maybe_apply_sweep_tune(
     stn["target_max_recommended"] = int(target_max)
     state["sweep_tune"] = stn
 
+    # Dry-run seeking mode: if we're chronically dry, tune faster than the default cooldown.
+    if int(stn.get("placed_total") or 0) <= 0 and int(stn.get("recommended") or 0) <= 1:
+        dry_cd = max(300, _get_env_int("KALSHI_ARB_TUNE_SWEEP_DRY_COOLDOWN_S", 900))
+        cooldown_s = min(int(cooldown_s), int(dry_cd))
+
     # Always compute top candidate moves for operator visibility, even when gated.
     candidate_recs = _recommend_params_from_sweep(
         current=current,
@@ -835,6 +885,11 @@ def _maybe_apply_sweep_tune(
         return "cooldown", []
     last_round_applied = int(stn.get("last_round_id_applied") or -1)
     current_round = int(stn.get("last_completed_round_id") or -1)
+    if current_round >= 0 and last_round_applied > current_round:
+        # Rebase stale round pointers when retention/pruning changes round counts.
+        # Without this, the tuner can get stuck in perpetual round_wait.
+        last_round_applied = int(current_round - 1)
+        stn["last_round_id_applied"] = int(last_round_applied)
     if current_round >= 0 and current_round <= last_round_applied:
         stn["status"] = "round_wait"
         stn["next_eligible_reason"] = "await_next_round"

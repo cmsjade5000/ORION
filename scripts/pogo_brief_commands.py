@@ -5,32 +5,76 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 INPUT_SCRIPT = ROOT / "scripts" / "pogo_brief_inputs.sh"
 SENDER_SCRIPT = ROOT / "scripts" / "pogo_morning_voice_send.sh"
+CACHE_PATH = ROOT / "tmp" / "pogo_brief_inputs_cache.json"
+
+
+def env_float(name: str, default: float) -> float:
+    raw = str(os.getenv(name, "")).strip()
+    if not raw:
+        return default
+    try:
+        val = float(raw)
+    except ValueError:
+        return default
+    return val if val > 0 else default
+
+
+INPUT_TIMEOUT_SECONDS = env_float("POGO_INPUT_TIMEOUT_SECONDS", 45.0)
+TEXT_INPUT_TIMEOUT_SECONDS = env_float("POGO_TEXT_INPUT_TIMEOUT_SECONDS", 30.0)
+SENDER_TIMEOUT_SECONDS = env_float("POGO_SENDER_TIMEOUT_SECONDS", 180.0)
+CACHE_MAX_AGE_SECONDS = env_float("POGO_CACHE_MAX_AGE_SECONDS", 6 * 3600.0)
 
 
 def emit(message: str) -> None:
     sys.stdout.write(json.dumps({"message": message}, ensure_ascii=True) + "\n")
 
 
-def load_inputs() -> dict:
-    proc = subprocess.run(
-        [str(INPUT_SCRIPT)],
+def cache_inputs(data: dict) -> None:
+    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CACHE_PATH.write_text(json.dumps(data, ensure_ascii=True), encoding="utf-8")
+
+
+def load_cached_inputs() -> dict | None:
+    if not CACHE_PATH.exists():
+        return None
+    age = time.time() - CACHE_PATH.stat().st_mtime
+    if age > CACHE_MAX_AGE_SECONDS:
+        return None
+    try:
+        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def load_inputs(*, timeout_seconds: float | None = None) -> dict:
+    run_kwargs = dict(
         cwd=str(ROOT),
         text=True,
         capture_output=True,
         check=False,
     )
+    if timeout_seconds and timeout_seconds > 0:
+        run_kwargs["timeout"] = timeout_seconds
+    try:
+        proc = subprocess.run([str(INPUT_SCRIPT)], **run_kwargs)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"timed out after {int(timeout_seconds or 0)}s") from exc
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "unknown error").strip()
         raise RuntimeError(err)
-    return json.loads(proc.stdout)
+    out = json.loads(proc.stdout)
+    cache_inputs(out)
+    return out
 
 
 def first_title(items: list[dict], fallback: str) -> str:
@@ -109,13 +153,17 @@ def cmd_status(data: dict) -> str:
 
 
 def run_sender(*sender_args: str) -> tuple[int, str]:
-    proc = subprocess.run(
-        [str(SENDER_SCRIPT), *sender_args],
-        cwd=str(ROOT),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [str(SENDER_SCRIPT), *sender_args],
+            cwd=str(ROOT),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=SENDER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return 124, f"timed out after {int(SENDER_TIMEOUT_SECONDS)}s"
     out = (proc.stdout or proc.stderr or "").strip()
     return proc.returncode, out
 
@@ -132,12 +180,17 @@ def cmd_voice_send() -> str:
 
 
 def cmd_text_send() -> str:
-    code, out = run_sender("--send", "--text-only")
-    if code != 0:
-        return f"Pokemon GO text delivery failed: {out or 'unknown error'}"
-    if "SENT_POGO_MORNING_TEXT_ONLY_OK" in out:
-        return "Pokemon GO brief sent as text."
-    return f"Pokemon GO text send completed: {out or 'ok'}"
+    # Keep /pogo_text deterministic and fast for Telegram slash handling.
+    # The command returns today's text brief directly instead of invoking the
+    # full send pipeline, which can be slow/flaky in chat-command contexts.
+    try:
+        data = load_inputs(timeout_seconds=TEXT_INPUT_TIMEOUT_SECONDS)
+        return cmd_today(data)
+    except Exception as exc:
+        cached = load_cached_inputs()
+        if cached:
+            return cmd_today(cached) + "\nNote: using cached briefing data while live refresh is unavailable."
+        return f"Pokemon GO briefing is temporarily unavailable: {exc}"
 
 
 def main() -> int:
@@ -156,7 +209,7 @@ def main() -> int:
         return 0
 
     try:
-        data = load_inputs()
+        data = load_inputs(timeout_seconds=INPUT_TIMEOUT_SECONDS)
     except Exception as exc:  # pragma: no cover - fallback path
         emit(f"Pokemon GO briefing is temporarily unavailable: {exc}")
         return 0

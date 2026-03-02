@@ -48,10 +48,8 @@ Supported Tapbacks (reactions):
 | 👍       | Acknowledged / understood       |
 | 👀       | Investigating / in progress     |
 | ❤️       | Appreciation / endorsement      |
-| 👎       | Disapproval / skip              |
-| 🔥       | Highlight or urgent             |
 
-For warnings (⚠️) and completions (✅), agents should reply inline with clear messages rather than using Tapbacks.
+For warnings or completions, agents should reply inline with plain text status instead of adding decorative emoji.
 
 ---
 ## 4. Onboarding & Token Configuration
