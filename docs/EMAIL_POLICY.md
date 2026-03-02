@@ -33,8 +33,13 @@ If suspicious or high-risk:
 - Do not store full email bodies or attachments in-repo.
 - If you must retain content, store only minimal excerpts and only if Cory asks.
 
+## Operational Router
+
+- Use `scripts/email_triage_router.py` for bounded inbound triage into specialist inbox Task Packets.
+- Keep default dry-run unless explicitly running `--apply`.
+- Router runbook: `docs/EMAIL_TRIAGE_ROUTER.md`.
+
 ## AEGIS Relationship
 
 - AEGIS does not access ORION's inbox.
 - AEGIS may alert on meta-signals only if ORION publishes sanitized telemetry (counts/ratios).
-

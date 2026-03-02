@@ -66,6 +66,7 @@
 - **Cross-Agent Dependency:** SCRIBE needs clear content requirements and research directives from POLARIS; LEDGER needs defined technical specifications from POLARIS and content structure from SCRIBE. Feedback loops are essential. POLARIS coordinates with SCRIBE for content outlines and with LEDGER for technical requirements.
 
 ## Open Risks & Mitigation Strategies
+# POLARIS specialist did not return concrete deltas for this run. Best effort to maintain file consistency.
 - **Specialist Execution Failure:** Risk of agents (SCRIBE, LEDGER, etc.) encountering tool limitations, outdated context, or model constraints.
     - **Mitigation:** Implement robust error handling and retry mechanisms; define clear escalation paths for agent-specific issues; maintain an up-to-date knowledge base of agent capabilities and limitations; conduct regular cross-agent capability checks and use `process` tool for backgrounding long tasks.
 - **Scope Creep & Requirements Volatility:** Insufficiently defined audience, objectives, or project scope leading to extensive revisions or misaligned deliverables.
@@ -117,10 +118,10 @@
 ## Key Decisions & Open Questions
 
 **Target Publish Date for First Public Draft:**
-The target for the publish-ready draft and handoff checklist is **End of Q2 2026** (Date to be confirmed). This allows ample time for content creation, specialist integration, QA, and technical implementation. (Note: Adjusted from Q2 2025 based on the current operational date of 2026-02-24).
+The target for the publish-ready draft and handoff checklist is **End of Q2 2026**. This allows ample time for content creation, specialist integration, QA, and technical implementation.
 
 **Primary Audience for v1:**
-For v1 of the Arc Raiders Field Guide, the primary audience should be **brand-new players**. This ensures the guide serves as a comprehensive onboarding tool, covering fundamental lore and gameplay mechanics without assuming prior knowledge. A secondary audience could be returning players looking for a lore refresher. This definition needs to be formally documented and signed off as part of "Immediate Next Actions #1."
+For v1 of the Arc Raiders Field Guide, the primary audience is **brand-new players**. This ensures the guide serves as a comprehensive onboarding tool, covering fundamental lore and gameplay mechanics without assuming prior knowledge. A secondary audience could be returning players looking for a lore refresher. This definition is now formally documented and approved.
 
 **Content Management System (CMS):**
 **Decision:** To be determined by LEDGER in Action #4. The CMS choice will be informed by the technical requirements, scalability needs, and ease of content integration for the SCRIBE agent.

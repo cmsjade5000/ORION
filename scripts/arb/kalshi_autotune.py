@@ -30,6 +30,46 @@ class TuneBounds:
 BOUNDS = TuneBounds()
 
 
+def _truthy(raw: str) -> bool:
+    return str(raw or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _effective_bounds() -> TuneBounds:
+    """Bounds with paper-only floor overrides for continued exploration."""
+    base = BOUNDS
+    exec_mode = str(os.environ.get("KALSHI_ARB_EXECUTION_MODE", "paper") or "paper").strip().lower()
+    live_armed = _truthy(str(os.environ.get("KALSHI_ARB_LIVE_ARMED", "0") or "0"))
+    if exec_mode != "paper" or live_armed:
+        return base
+
+    edge_floor = _clamp_int(
+        _get_env_int("KALSHI_ARB_TUNE_PAPER_MIN_EDGE_BPS_FLOOR", 70),
+        40,
+        int(base.min_edge_bps[1]),
+    )
+    liq_floor = _clamp_int(
+        _get_env_int("KALSHI_ARB_TUNE_PAPER_MIN_LIQUIDITY_USD_FLOOR", 5),
+        1,
+        int(base.min_liquidity_usd[1]),
+    )
+    tte_floor = _clamp_int(
+        _get_env_int("KALSHI_ARB_TUNE_PAPER_MIN_SECONDS_TO_EXPIRY_FLOOR", 180),
+        60,
+        int(base.min_seconds_to_expiry[1]),
+    )
+    return TuneBounds(
+        min_edge_bps=(int(edge_floor), int(base.min_edge_bps[1])),
+        uncertainty_bps=base.uncertainty_bps,
+        persistence_cycles=base.persistence_cycles,
+        min_liquidity_usd=(int(liq_floor), int(base.min_liquidity_usd[1])),
+        min_seconds_to_expiry=(int(tte_floor), int(base.min_seconds_to_expiry[1])),
+        min_notional_usd=base.min_notional_usd,
+        max_spread=base.max_spread,
+        limit=base.limit,
+        min_price=base.min_price,
+    )
+
+
 def _repo_path(repo_root: str, rel: str) -> str:
     return os.path.join(repo_root, rel)
 
@@ -198,30 +238,31 @@ def _current_params_from_env() -> Dict[str, str]:
 
 def _bounded(params: Dict[str, str]) -> Dict[str, str]:
     out = dict(params)
+    bounds = _effective_bounds()
     out["KALSHI_ARB_MIN_EDGE_BPS"] = str(
-        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_EDGE_BPS") or 120)), *BOUNDS.min_edge_bps)
+        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_EDGE_BPS") or 120)), *bounds.min_edge_bps)
     )
     out["KALSHI_ARB_UNCERTAINTY_BPS"] = str(
-        _clamp_int(int(float(out.get("KALSHI_ARB_UNCERTAINTY_BPS") or 50)), *BOUNDS.uncertainty_bps)
+        _clamp_int(int(float(out.get("KALSHI_ARB_UNCERTAINTY_BPS") or 50)), *bounds.uncertainty_bps)
     )
     out["KALSHI_ARB_PERSISTENCE_CYCLES"] = str(
-        _clamp_int(int(float(out.get("KALSHI_ARB_PERSISTENCE_CYCLES") or 2)), *BOUNDS.persistence_cycles)
+        _clamp_int(int(float(out.get("KALSHI_ARB_PERSISTENCE_CYCLES") or 2)), *bounds.persistence_cycles)
     )
     out["KALSHI_ARB_MIN_LIQUIDITY_USD"] = str(
-        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_LIQUIDITY_USD") or 200)), *BOUNDS.min_liquidity_usd)
+        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_LIQUIDITY_USD") or 200)), *bounds.min_liquidity_usd)
     )
     out["KALSHI_ARB_MIN_SECONDS_TO_EXPIRY"] = str(
-        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY") or 900)), *BOUNDS.min_seconds_to_expiry)
+        _clamp_int(int(float(out.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY") or 900)), *bounds.min_seconds_to_expiry)
     )
     out["KALSHI_ARB_MIN_NOTIONAL_USD"] = (
-        f"{_clamp_float(float(out.get('KALSHI_ARB_MIN_NOTIONAL_USD') or 0.20), *BOUNDS.min_notional_usd):.2f}"
+        f"{_clamp_float(float(out.get('KALSHI_ARB_MIN_NOTIONAL_USD') or 0.20), *bounds.min_notional_usd):.2f}"
     )
     out["KALSHI_ARB_MAX_SPREAD"] = (
-        f"{_clamp_float(float(out.get('KALSHI_ARB_MAX_SPREAD') or 0.05), *BOUNDS.max_spread):.4f}".rstrip("0").rstrip(".")
+        f"{_clamp_float(float(out.get('KALSHI_ARB_MAX_SPREAD') or 0.05), *bounds.max_spread):.4f}".rstrip("0").rstrip(".")
     )
-    out["KALSHI_ARB_LIMIT"] = str(_clamp_int(int(float(out.get("KALSHI_ARB_LIMIT") or 20)), *BOUNDS.limit))
+    out["KALSHI_ARB_LIMIT"] = str(_clamp_int(int(float(out.get("KALSHI_ARB_LIMIT") or 20)), *bounds.limit))
     out["KALSHI_ARB_MIN_PRICE"] = (
-        f"{_clamp_float(float(out.get('KALSHI_ARB_MIN_PRICE') or 0.05), *BOUNDS.min_price):.4f}".rstrip("0").rstrip(".")
+        f"{_clamp_float(float(out.get('KALSHI_ARB_MIN_PRICE') or 0.05), *bounds.min_price):.4f}".rstrip("0").rstrip(".")
     )
     return out
 
@@ -229,6 +270,7 @@ def _bounded(params: Dict[str, str]) -> Dict[str, str]:
 def recommend_params(*, baseline: Dict[str, Any], current: Dict[str, str]) -> List[Dict[str, Any]]:
     """Return <=2 bounded, incremental changes."""
     recs: List[Dict[str, Any]] = []
+    bounds = _effective_bounds()
     settled = int(baseline.get("settled_orders") or 0)
     if settled <= 0:
         return []
@@ -243,25 +285,25 @@ def recommend_params(*, baseline: Dict[str, Any], current: Dict[str, str]) -> Li
     cur_pers = int(float(current.get("KALSHI_ARB_PERSISTENCE_CYCLES") or 2))
 
     if isinstance(wr, (int, float)) and isinstance(ap, (int, float)) and wr + 0.05 < ap:
-        nxt = _clamp_int(cur_unc + 10, *BOUNDS.uncertainty_bps)
+        nxt = _clamp_int(cur_unc + 10, *bounds.uncertainty_bps)
         if nxt != cur_unc:
             recs.append({"env": "KALSHI_ARB_UNCERTAINTY_BPS", "value": str(nxt), "why": "Win-rate below implied; add buffer."})
     if isinstance(brier, (int, float)) and brier > 0.25:
-        nxt = _clamp_int(cur_unc + 10, *BOUNDS.uncertainty_bps)
+        nxt = _clamp_int(cur_unc + 10, *bounds.uncertainty_bps)
         if nxt != cur_unc:
             recs.append({"env": "KALSHI_ARB_UNCERTAINTY_BPS", "value": str(nxt), "why": "High Brier; add buffer."})
     if isinstance(pnl, (int, float)) and float(pnl) < 0.0:
-        nxtp = _clamp_int(cur_pers + 1, *BOUNDS.persistence_cycles)
+        nxtp = _clamp_int(cur_pers + 1, *bounds.persistence_cycles)
         if nxtp != cur_pers:
             recs.append({"env": "KALSHI_ARB_PERSISTENCE_CYCLES", "value": str(nxtp), "why": "Negative P/L; require more persistence."})
-        nxte = _clamp_int(cur_edge + 10, *BOUNDS.min_edge_bps)
+        nxte = _clamp_int(cur_edge + 10, *bounds.min_edge_bps)
         if nxte != cur_edge:
             recs.append({"env": "KALSHI_ARB_MIN_EDGE_BPS", "value": str(nxte), "why": "Negative P/L; require clearer edge."})
 
     # If we outperform implied odds over a meaningful sample, cautiously loosen min-edge a hair.
     if isinstance(pnl, (int, float)) and float(pnl) > 0.0 and isinstance(wr, (int, float)) and isinstance(ap, (int, float)):
         if wr > ap + 0.05 and settled >= 20:
-            nxt = _clamp_int(cur_edge - 5, *BOUNDS.min_edge_bps)
+            nxt = _clamp_int(cur_edge - 5, *bounds.min_edge_bps)
             if nxt != cur_edge:
                 recs.append({"env": "KALSHI_ARB_MIN_EDGE_BPS", "value": str(nxt), "why": "Performance above implied; slightly lower min-edge."})
 
@@ -509,6 +551,7 @@ def _recommend_params_from_sweep(
     target_max_placed: int,
     max_changes: int = 2,
 ) -> List[Dict[str, Any]]:
+    bounds = _effective_bounds()
     cycles = int(sweep.get("cycles") or 0)
     if cycles <= 0:
         return []
@@ -562,7 +605,7 @@ def _recommend_params_from_sweep(
             float(max(0, round_placed_total - int(target_max_placed))) / float(max(1, int(target_max_placed))),
         )
         overflow = max(overflow_rec, overflow_placed)
-        nxt = _clamp_int(cur_edge + 5, *BOUNDS.min_edge_bps)
+        nxt = _clamp_int(cur_edge + 5, *bounds.min_edge_bps)
         if nxt != cur_edge:
             scored.append(
                 (
@@ -575,7 +618,7 @@ def _recommend_params_from_sweep(
                 )
             )
         if rec_n > int(target_max_recommended) * 2:
-            nxt_liq = _clamp_int(cur_liq + 2, *BOUNDS.min_liquidity_usd)
+            nxt_liq = _clamp_int(cur_liq + 2, *bounds.min_liquidity_usd)
             if nxt_liq != cur_liq:
                 scored.append(
                     (
@@ -595,7 +638,7 @@ def _recommend_params_from_sweep(
         )
         liq_share = _share("liquidity_below_min")
         if liq_share >= 0.05:
-            nxt = _clamp_int(cur_liq - 2, *BOUNDS.min_liquidity_usd)
+            nxt = _clamp_int(cur_liq - 2, *bounds.min_liquidity_usd)
             if nxt != cur_liq:
                 scored.append(
                     (
@@ -610,7 +653,7 @@ def _recommend_params_from_sweep(
 
         tte_share = _share("too_close_to_expiry")
         if tte_share >= 0.05:
-            nxt = _clamp_int(cur_tte - 120, *BOUNDS.min_seconds_to_expiry)
+            nxt = _clamp_int(cur_tte - 120, *bounds.min_seconds_to_expiry)
             if nxt != cur_tte:
                 scored.append(
                     (
@@ -625,7 +668,7 @@ def _recommend_params_from_sweep(
 
         no_notional = max(_share("yes_notional_below_min"), _share("no_notional_below_min"))
         if no_notional >= 0.05:
-            nxt = _clamp_float(cur_notional - 0.05, *BOUNDS.min_notional_usd)
+            nxt = _clamp_float(cur_notional - 0.05, *bounds.min_notional_usd)
             if abs(nxt - cur_notional) > 1e-9:
                 scored.append(
                     (
@@ -640,7 +683,7 @@ def _recommend_params_from_sweep(
 
         # Generic edge loosen fallback if blocker-specific options are weak.
         edge_miss = max(_share("yes_edge_below_min"), _share("no_edge_below_min"))
-        nxt_edge = _clamp_int(cur_edge - 5, *BOUNDS.min_edge_bps)
+        nxt_edge = _clamp_int(cur_edge - 5, *bounds.min_edge_bps)
         if nxt_edge != cur_edge:
             scored.append(
                 (

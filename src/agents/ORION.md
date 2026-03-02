@@ -40,6 +40,21 @@ OpenClaw may not execute custom Telegram slash-command handlers. Treat these com
 - `/paper_help`
   - Quick in-chat command list for paper trading.
   - Run `python3 scripts/paper_help.py` and reply with the JSON `message` field.
+- `/pogo_help`
+  - Quick in-chat command list for Pokemon GO brief controls.
+  - Run `python3 scripts/pogo_brief_commands.py --cmd help` and reply with the JSON `message` field.
+- `/pogo_voice`
+  - Send today’s Pokemon GO brief as voice now.
+  - Run `python3 scripts/pogo_brief_commands.py --cmd voice` and reply with the JSON `message` field.
+- `/pogo_text`
+  - Send today’s Pokemon GO brief as text now.
+  - Run `python3 scripts/pogo_brief_commands.py --cmd text` and reply with the JSON `message` field.
+- `/pogo_today`
+  - Return a shiny-first text brief for today (no media send).
+  - Run `python3 scripts/pogo_brief_commands.py --cmd today` and reply with the JSON `message` field.
+- `/pogo_status`
+  - Return freshness + commute + urgency status for the Pokemon GO brief pipeline.
+  - Run `python3 scripts/pogo_brief_commands.py --cmd status` and reply with the JSON `message` field.
 
 ### Kalshi Toolbelt (Local)
 

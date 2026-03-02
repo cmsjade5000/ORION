@@ -182,6 +182,92 @@ Customize schedule/timezone:
 
 ---
 
+## pogo_extract.mjs
+
+### Purpose
+Parse official Pokemon GO `news` and `events` pages into structured JSON for automation-safe brief generation.
+
+### Usage
+
+```bash
+node scripts/pogo_extract.mjs \
+  --news-html /tmp/news.html \
+  --events-html /tmp/events.html \
+  --tz America/New_York
+```
+
+---
+
+## pogo_brief_inputs.sh
+
+### Purpose
+Build the Pokemon GO morning-brief input payload:
+- official event/news cards + freshness/confidence
+- shiny-signal extraction
+- calendar-aware `R096` work-shift + commute checks
+- urgency tier + weekly story arc line
+
+### Usage
+
+```bash
+./scripts/pogo_brief_inputs.sh
+```
+
+---
+
+## pogo_morning_voice_send.sh
+
+### Purpose
+Send a 60-second shiny-first Pokemon GO voice brief to Telegram via ElevenLabs TTS, with optional follow-up links.
+
+### Usage
+
+Dry-run:
+
+```bash
+./scripts/pogo_morning_voice_send.sh
+```
+
+Send now:
+
+```bash
+./scripts/pogo_morning_voice_send.sh --send
+```
+
+Prompt-only ask (voice or text):
+
+```bash
+./scripts/pogo_morning_voice_send.sh --send --prompt-only
+```
+
+Text-only fallback:
+
+```bash
+./scripts/pogo_morning_voice_send.sh --send --text-only
+```
+
+---
+
+## pogo_brief_commands.py
+
+### Purpose
+Deterministic text command responses for Telegram slash-like prompts:
+- `help`
+- `today`
+- `status`
+
+### Usage
+
+```bash
+python3 scripts/pogo_brief_commands.py --cmd help
+python3 scripts/pogo_brief_commands.py --cmd voice
+python3 scripts/pogo_brief_commands.py --cmd text
+python3 scripts/pogo_brief_commands.py --cmd today
+python3 scripts/pogo_brief_commands.py --cmd status
+```
+
+---
+
 ## soul_factory.sh
 
 ### Purpose
@@ -292,6 +378,9 @@ Key env knobs:
 - `KALSHI_ARB_TUNE_SWEEP_TARGET_MIN_PLACED` (default `1`)
 - `KALSHI_ARB_TUNE_SWEEP_TARGET_MAX_PLACED` (default `6`)
 - `KALSHI_ARB_TUNE_SWEEP_COOLDOWN_S` (default `7200`)
+- `KALSHI_ARB_TUNE_PAPER_MIN_EDGE_BPS_FLOOR` (default `70`, paper-only)
+- `KALSHI_ARB_TUNE_PAPER_MIN_LIQUIDITY_USD_FLOOR` (default `5`, paper-only)
+- `KALSHI_ARB_TUNE_PAPER_MIN_SECONDS_TO_EXPIRY_FLOOR` (default `180`, paper-only)
 
 Dryness/stuck observability knobs:
 - `KALSHI_ARB_SERIES_ROTATION_ENABLED` (default `1`)
@@ -363,3 +452,16 @@ Single-cycle runner for unattended paper sports execution:
 ```bash
 python3 scripts/polymarket_sports_paper_cycle.py
 ```
+
+### Key Env Knobs
+
+- `PM_SPORTS_PAPER_LIMIT` (default `30`)
+- `PM_SPORTS_PAPER_MAX_PAGES` (default `2`)
+- `PM_SPORTS_PAPER_TIMEOUT_S` (default `120`)
+- `PM_SPORTS_PAPER_LOCK_STALE_SEC` (default `600`)
+- `PM_SPORTS_PAPER_NOTIFY_ERRORS` (default `1`)
+- `PM_SPORTS_PAPER_ERROR_NOTIFY_COOLDOWN_S` (default `900`)
+
+Notes:
+- Cycle overlap is prevented with a lock at `tmp/polymarket_sports_paper/cycle.lock`.
+- If a prior cycle is still running, status is recorded as `skipped_lock` (not an error).

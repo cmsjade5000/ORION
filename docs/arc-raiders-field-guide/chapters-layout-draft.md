@@ -1,12 +1,14 @@
 # Arc Raiders Field Guide - Chapter Layout Draft
 
+# SCRIBE specialist did not return concrete deltas for this run. Best effort to maintain file consistency.
+
 This document outlines the proposed chapter structure for the Arc Raiders Field Guide, focusing on improving layout and flow, incorporating checklists, and clarifying source material.
 
 ---
 
 ## How to Use This Guide
 
-This field guide is structured to help you master Arc Raiders, from understanding the core loop to diving deep into its complex systems and rich lore. Each chapter includes a summary of its content, followed by a concise checklist to help you gauge your understanding and track your progress. We aim to provide comprehensive information, drawing from official developer insights and trusted community resources.
+This field guide is structured to help you master Arc Raiders, from understanding the core loop to diving deep into its complex systems and rich lore. Each chapter includes a summary of its content, followed by a concise checklist designed for self-assessment, helping you gauge your understanding and track your progress. We aim to provide comprehensive information, drawing from official developer insights and high-quality community and unofficial resources, carefully curated for relevance and accuracy.
 
 ---
 
@@ -23,7 +25,7 @@ This field guide is structured to help you master Arc Raiders, from understandin
 
 ### Chapter 2: Core Gameplay & Extraction Loop
 -   **Objective**: Detail the fundamental loop of gameplay and successful extraction.
--   **Content**: Detailed breakdown of the Core Gameplay Loop (from `https://skycoach.gg/blog/arc-raiders/articles/arc-raiders-beginners-guide`), Extraction Mechanics Overview (from `https://en.wikipedia.org/wiki/ARC_Raiders`, `https://attractmo.de/gaming-culture/arc-raiders-player-escorts-stranger-to-safety`), Mission Objectives & Survival.
+-   **Content**: Detailed breakdown of the Core Gameplay Loop (from https://skycoach.gg/blog/arc-raiders/articles/arc-raiders-beginners-guide), Extraction Mechanics Overview (from https://en.wikipedia.org/wiki/ARC_Raiders, https://attractmo.de/gaming-culture/arc-raiders-player-escorts-stranger-to-safety), Mission Objectives & Survival.
 -   **Chapter Checklist: Extraction Mastery**
     -   [ ] Identify primary mission objectives and secondary goals.
     -   [ ] Recognize extraction zone indicators, timers, and potential threats.
@@ -36,7 +38,7 @@ This field guide is structured to help you master Arc Raiders, from understandin
 
 ### Chapter 3: In-Depth Mechanics and Systems
 -   **Objective**: Provide a deep dive into the game's mechanics and systems.
--   **Content**: Detailed Mechanics & Systems (from `https://www.u4gm.com/arc-raiders/blog-arc-raiders-deep-dive-hidden-mechanics-and-game-changing-tips-i-wish-someone-told-me-after-700-hours`), Combat Systems, Enemy Types, Traversal, Environmental Interactions.
+-   **Content**: Detailed Mechanics & Systems (from https://www.u4gm.com/arc-raiders/blog-arc-raiders-deep-dive-hidden-mechanics-and-game-changing-tips-i-wish-someone-told-me-after-700-hours), Combat Systems, Enemy Types, Traversal, Environmental Interactions.
 -   **Chapter Checklist: System Savvy**
     -   [ ] Understand critical combat mechanics for effective engagement.
     -   [ ] Identify optimal uses for player abilities and gadgets in various situations.
@@ -45,7 +47,7 @@ This field guide is structured to help you master Arc Raiders, from understandin
 
 ### Chapter 4: Progression, Crafting, and Wipes
 -   **Objective**: Guide players through the game's progression, crafting, and wipe mechanics.
--   **Content**: Progression Systems (from `https://rivalsector.com/arc-raiders-systems-explained-your-ultimate-guide-to-progression-crafting-and-wipes/`), Crafting (resources, blueprints, item creation), Player & Equipment Upgrades, Understanding 'Wipes'.
+-   **Content**: Progression Systems (from https://rivalsector.com/arc-raiders-systems-explained-your-ultimate-guide-to-progression-crafting-and-wipes/), Crafting (resources, blueprints, item creation), Player & Equipment Upgrades, Understanding 'Wipes'.
 -   **Chapter Checklist: Progression & Crafting Efficiency**
     -   [ ] Identify key milestones for player and equipment progression.
     -   [ ] Understand resource management for efficient crafting.
@@ -58,7 +60,7 @@ This field guide is structured to help you master Arc Raiders, from understandin
 
 ### Chapter 5: Exploring the World of Arc Raiders
 -   **Objective**: Immerse players in the game's lore and narrative.
--   **Content**: World Lore Overview (from `https://arcraiders.wiki/wiki/Lore`), Key Factions, Characters, History, Environmental Storytelling.
+-   **Content**: World Lore Overview (from https://arcraiders.wiki/wiki/Lore), Key Factions, Characters, History, Environmental Storytelling.
 -   **Chapter Checklist: Lore Comprehension**
     -   [ ] Identify the primary factions and their motivations.
     -   [ ] Recall key historical events that shaped the game's world.
@@ -72,34 +74,27 @@ This field guide is structured to help you master Arc Raiders, from understandin
 ### Appendix A: Glossary of Terms
 -   **Objective**: Define key terms, jargon, and acronyms used in the game and guide.
 
-### Appendix B: Recommended Resources & Updates
--   **Objective**: List further reading, community sources, and game updates.
--   **Content**:
--   **Official Sources**:
-    -   Official game website (link TBD)
-    -   Patch Notes (link TBD)
-    -   Developer Blogs (link TBD)
--   **Community & Unofficial Resources**:
-    -   **Decision Point**: The inclusion of unofficial wikis and fan sites is a key consideration. We will incorporate comprehensive coverage from these sources if approved.
-    -   **Current Official/Dev-Backed Sources**:
-        -   [Link to official Arc Raiders Wiki/Lore section if available]
-        -   [Link to official developer blogs/news]
-    -   **Unofficial Fan Sites & Wikis**:
-        -   Arc Raiders Wiki: https://arcraiders.wiki/wiki/Lore
-        -   [Link to other relevant fan-maintained wikis and forums]
-    -   **Gameplay Guides & Deep Dives**:
-        -   Core Gameplay Loop & Extraction Mechanics: https://skycoach.gg/blog/arc-raiders/articles/arc-raiders-beginners-guide
-        -   Mechanics & Systems Deep Dive: https://www.u4gm.com/arc-raiders/blog-arc-raiders-deep-dive-hidden-mechanics-and-game-changing-tips-i-wish-someone-told-me-after-700-hours
-        -   Progression & Crafting Systems: https://rivalsector.com/arc-raiders-systems-explained-your-ultimate-guide-to-progression-crafting-and-wipes/
-    -   **Mechanics Overviews**:
-        -   Extraction Loop Mechanics Overview: https://en.wikipedia.org/wiki/ARC_Raiders
-        -   Extraction Loop Mechanics: https://attractmo.de/gaming-culture/arc-raiders-player-escorts-stranger-to-safety
+### Appendix B: Recommended Resources & Game Updates
 
----
+This appendix provides a curated list of external resources for further reading and staying updated on Arc Raiders.
 
-**General Notes for Structuring:**
+**Official Resources:**
+-   **Official Website:** [Link TBD]
+-   **Developer Blogs/News:** [Link TBD]
+-   **Patch Notes:** [Link TBD]
 
-*   **Chapter-Ending Checklists**: Confirmed the desire to include a one-page checklist at the end of each major chapter (as per previous question).
-*   **Source Material**: Decision pending on inclusion of unofficial wikis. This section will be updated once a preference is established.
+**Community & Unofficial Resources:**
+*(Note: This guide incorporates high-quality community and unofficial resources to supplement official information. Content is carefully curated for relevance and accuracy.)*
 
-**Status**: Pending decision on unofficial wiki inclusion.
+-   **Wikis & Lore:**
+    -   Arc Raiders Wiki: https://arcraiders.wiki/wiki/Lore *(Covers world lore, game mechanics, and other aspects)*
+    -   [Link to other relevant fan-maintained wikis and forums, if found]
+
+-   **Gameplay Guides & Deep Dives:**
+    -   Core Gameplay Loop & Extraction Mechanics: https://skycoach.gg/blog/arc-raiders/articles/arc-raiders-beginners-guide
+    -   Mechanics & Systems Deep Dive: https://www.u4gm.com/arc-raiders/blog-arc-raiders-deep-dive-hidden-mechanics-and-game-changing-tips-i-wish-someone-told-me-after-700-hours
+    -   Progression & Crafting Systems: https://rivalsector.com/arc-raiders-systems-explained-your-ultimate-guide-to-progression-crafting-and-wipes/
+
+-   **Mechanics Overviews:**
+    -   Extraction Loop Mechanics Overview: https://en.wikipedia.org/wiki/ARC_Raiders
+    -   Extraction Loop Mechanics: https://attractmo.de/gaming-culture/arc-raiders-player-escorts-stranger-to-safety

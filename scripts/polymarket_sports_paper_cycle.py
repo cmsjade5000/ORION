@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 def _repo_root() -> str:
@@ -48,6 +48,90 @@ def _save_json(path: str, obj: Dict[str, Any]) -> None:
         json.dump(obj, f, indent=2, sort_keys=True)
         f.write("\n")
     os.replace(tmp, path)
+
+
+def _load_json(path: str) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return int(default)
+    try:
+        return int(str(raw).strip())
+    except Exception:
+        return int(default)
+
+
+def _acquire_cycle_lock(lock_path: str, *, stale_after_s: int) -> Tuple[bool, str]:
+    now = int(time.time())
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    payload = {"pid": os.getpid(), "ts_unix": now}
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    try:
+        fd = os.open(lock_path, flags, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f, sort_keys=True)
+            f.write("\n")
+        return True, "acquired"
+    except FileExistsError:
+        prev = _load_json(lock_path)
+        prev_ts = int(prev.get("ts_unix") or 0)
+        age = max(0, now - prev_ts) if prev_ts > 0 else 0
+        if prev_ts > 0 and age > int(max(30, stale_after_s)):
+            try:
+                os.remove(lock_path)
+            except Exception:
+                return False, "lock_stale_remove_failed"
+            return _acquire_cycle_lock(lock_path, stale_after_s=stale_after_s)
+        return False, "lock_held"
+    except Exception:
+        return False, "lock_error"
+
+
+def _release_cycle_lock(lock_path: str) -> None:
+    try:
+        if os.path.exists(lock_path):
+            os.remove(lock_path)
+    except Exception:
+        return
+
+
+def _notify_state_path(root: str) -> str:
+    return os.path.join(root, "tmp", "polymarket_sports_paper", "notify_state.json")
+
+
+def _notification_signature(*, rc: int, stderr_head: str) -> str:
+    return f"rc={int(rc)}|err={str(stderr_head).strip()[:160]}"
+
+
+def _should_send_error_notification(root: str, *, signature: str, now_unix: int, cooldown_s: int) -> bool:
+    st = _load_json(_notify_state_path(root))
+    last_sig = str(st.get("last_error_sig") or "")
+    last_ts = int(st.get("last_notify_ts") or 0)
+    if signature != last_sig:
+        return True
+    return (now_unix - last_ts) >= int(max(60, cooldown_s))
+
+
+def _mark_error_notification_sent(root: str, *, signature: str, now_unix: int) -> None:
+    _save_json(
+        _notify_state_path(root),
+        {"last_error_sig": str(signature), "last_notify_ts": int(now_unix)},
+    )
 
 
 def _run_cmd_json(argv: list[str], *, cwd: str, timeout_s: int) -> tuple[int, str, Dict[str, Any]]:
@@ -121,74 +205,97 @@ def main() -> int:
     ts = int(time.time())
     out_dir = os.path.join(root, "tmp", "polymarket_sports_paper", "runs")
     os.makedirs(out_dir, exist_ok=True)
+    lock_path = os.path.join(root, "tmp", "polymarket_sports_paper", "cycle.lock")
+    lock_stale_after_s = _env_int("PM_SPORTS_PAPER_LOCK_STALE_SEC", 600)
+    locked, lock_reason = _acquire_cycle_lock(lock_path, stale_after_s=lock_stale_after_s)
+    if not locked:
+        _write_status(
+            root,
+            status="skipped_lock",
+            detail="sports paper cycle skipped; prior cycle still active",
+            extra={"lock_reason": lock_reason},
+        )
+        return 0
 
-    argv = [
-        "python3",
-        "scripts/polymarket_sports_paper.py",
-        "trade",
-        "--limit",
-        str(os.environ.get("PM_SPORTS_PAPER_LIMIT", "50")),
-        "--max-pages",
-        str(os.environ.get("PM_SPORTS_PAPER_MAX_PAGES", "4")),
-        "--yes-sum-max",
-        str(os.environ.get("PM_SPORTS_PAPER_YES_SUM_MAX", "0.98")),
-        "--no-sum-max",
-        str(os.environ.get("PM_SPORTS_PAPER_NO_SUM_MAX", "0.98")),
-        "--min-edge-bps",
-        str(os.environ.get("PM_SPORTS_PAPER_MIN_EDGE_BPS", "5")),
-        "--max-pairs-per-run",
-        str(os.environ.get("PM_SPORTS_PAPER_MAX_PAIRS_PER_RUN", "2")),
-        "--max-risk-per-side-usd",
-        str(os.environ.get("PM_SPORTS_PAPER_MAX_RISK_PER_SIDE_USD", "200")),
-        "--max-notional-per-run-usd",
-        str(os.environ.get("PM_SPORTS_PAPER_MAX_NOTIONAL_PER_RUN_USD", "500")),
-        "--max-shares-per-side",
-        str(os.environ.get("PM_SPORTS_PAPER_MAX_SHARES_PER_SIDE", "500")),
-        "--min-shares",
-        str(os.environ.get("PM_SPORTS_PAPER_MIN_SHARES", "1")),
-        "--slippage-bps",
-        str(os.environ.get("PM_SPORTS_PAPER_SLIPPAGE_BPS", "8")),
-        "--latency-ms",
-        str(os.environ.get("PM_SPORTS_PAPER_LATENCY_MS", "40")),
-        "--sleep-ms",
-        str(os.environ.get("PM_SPORTS_PAPER_SLEEP_MS", "25")),
-    ]
-    rc, stderr, trade = _run_cmd_json(argv, cwd=root, timeout_s=int(os.environ.get("PM_SPORTS_PAPER_TIMEOUT_S", "90")))
-    artifact = {
-        "ts_unix": int(ts),
-        "cycle_inputs": {"paper_only": True, "argv": argv[3:]},
-        "trade_rc": int(rc),
-        "trade": trade if isinstance(trade, dict) else {"raw": trade},
-        "stderr_head": str(stderr).strip()[:300],
-    }
-    artifact_path = os.path.join(out_dir, f"{ts}.json")
-    _save_json(artifact_path, artifact)
+    try:
+        argv = [
+            "python3",
+            "scripts/polymarket_sports_paper.py",
+            "trade",
+            "--limit",
+            str(os.environ.get("PM_SPORTS_PAPER_LIMIT", "30")),
+            "--max-pages",
+            str(os.environ.get("PM_SPORTS_PAPER_MAX_PAGES", "2")),
+            "--yes-sum-max",
+            str(os.environ.get("PM_SPORTS_PAPER_YES_SUM_MAX", "0.98")),
+            "--no-sum-max",
+            str(os.environ.get("PM_SPORTS_PAPER_NO_SUM_MAX", "0.98")),
+            "--min-edge-bps",
+            str(os.environ.get("PM_SPORTS_PAPER_MIN_EDGE_BPS", "5")),
+            "--max-pairs-per-run",
+            str(os.environ.get("PM_SPORTS_PAPER_MAX_PAIRS_PER_RUN", "2")),
+            "--max-risk-per-side-usd",
+            str(os.environ.get("PM_SPORTS_PAPER_MAX_RISK_PER_SIDE_USD", "200")),
+            "--max-notional-per-run-usd",
+            str(os.environ.get("PM_SPORTS_PAPER_MAX_NOTIONAL_PER_RUN_USD", "500")),
+            "--max-shares-per-side",
+            str(os.environ.get("PM_SPORTS_PAPER_MAX_SHARES_PER_SIDE", "500")),
+            "--min-shares",
+            str(os.environ.get("PM_SPORTS_PAPER_MIN_SHARES", "1")),
+            "--slippage-bps",
+            str(os.environ.get("PM_SPORTS_PAPER_SLIPPAGE_BPS", "8")),
+            "--latency-ms",
+            str(os.environ.get("PM_SPORTS_PAPER_LATENCY_MS", "40")),
+            "--sleep-ms",
+            str(os.environ.get("PM_SPORTS_PAPER_SLEEP_MS", "25")),
+        ]
+        timeout_s = _env_int("PM_SPORTS_PAPER_TIMEOUT_S", 120)
+        t0 = time.time()
+        rc, stderr, trade = _run_cmd_json(argv, cwd=root, timeout_s=timeout_s)
+        elapsed_s = round(time.time() - t0, 3)
+        stderr_head = str(stderr).strip()[:300]
+        artifact = {
+            "ts_unix": int(ts),
+            "cycle_inputs": {"paper_only": True, "argv": argv[3:], "timeout_s": int(timeout_s)},
+            "trade_rc": int(rc),
+            "trade": trade if isinstance(trade, dict) else {"raw": trade},
+            "stderr_head": stderr_head,
+            "elapsed_s": elapsed_s,
+        }
+        artifact_path = os.path.join(out_dir, f"{ts}.json")
+        _save_json(artifact_path, artifact)
 
-    status = "completed" if rc == 0 else "error"
-    _write_status(root, status=status, detail="sports paper cycle complete", extra={"artifact": artifact_path, "trade_rc": int(rc)})
+        status = "completed" if rc == 0 else "error"
+        _write_status(root, status=status, detail="sports paper cycle complete", extra={"artifact": artifact_path, "trade_rc": int(rc)})
 
-    if rc != 0 and str(os.environ.get("PM_SPORTS_PAPER_NOTIFY_ERRORS", "1")).strip().lower() in ("1", "true", "yes", "on"):
-        cid = _telegram_chat_id()
-        if cid is not None:
-            _send_telegram(
-                int(cid),
-                "\n".join(
-                    [
-                        "Status: Testing",
-                        "What changed:",
-                        "- Polymarket sports paper cycle hit an error.",
-                        "Why it matters:",
-                        "Paper subsystem paused this cycle without any live writes.",
-                        "Risks / notes:",
-                        "- Check tmp/polymarket_sports_paper/runs for details.",
-                        "Next step: Retry automatically on next cycle.",
-                    ]
-                ),
-                cwd=root,
-            )
+        notify_errors = _env_bool("PM_SPORTS_PAPER_NOTIFY_ERRORS", True)
+        if rc != 0 and notify_errors:
+            cid = _telegram_chat_id()
+            sig = _notification_signature(rc=int(rc), stderr_head=stderr_head)
+            cooldown_s = _env_int("PM_SPORTS_PAPER_ERROR_NOTIFY_COOLDOWN_S", 900)
+            now_unix = int(time.time())
+            if cid is not None and _should_send_error_notification(root, signature=sig, now_unix=now_unix, cooldown_s=cooldown_s):
+                _send_telegram(
+                    int(cid),
+                    "\n".join(
+                        [
+                            "Status: Testing",
+                            "What changed:",
+                            "- Polymarket sports paper cycle hit an error.",
+                            "Why it matters:",
+                            "Paper subsystem paused this cycle without any live writes.",
+                            "Risks / notes:",
+                            "- Check tmp/polymarket_sports_paper/runs for details.",
+                            "Next step: Retry automatically on next cycle.",
+                        ]
+                    ),
+                    cwd=root,
+                )
+                _mark_error_notification_sent(root, signature=sig, now_unix=now_unix)
+    finally:
+        _release_cycle_lock(lock_path)
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
