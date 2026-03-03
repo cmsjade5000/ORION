@@ -12,9 +12,10 @@ export function registerDashboard(bot: Bot) {
       .text("ATLAS", "agent_ATLAS")
       .text("PIXEL", "agent_PIXEL")
       .row()
-      .text("NODE", "agent_NODE")
+      .text("QUEST", "agent_QUEST")
       .text("LEDGER", "agent_LEDGER")
       .row()
+      .text("NODE", "agent_NODE")
       .text("POLARIS", "agent_POLARIS");
 
     await ctx.reply("Select an agent to view details:", {
@@ -62,6 +63,11 @@ function agentInfo(id: string): string | null {
       return [
         "PIXEL",
         "Discovery and inspiration (internal-only).",
+      ].join("\n");
+    case "QUEST":
+      return [
+        "QUEST",
+        "Gaming co-pilot for in-game tactics, builds, and progression planning (internal-only).",
       ].join("\n");
     case "EMBER":
       return [

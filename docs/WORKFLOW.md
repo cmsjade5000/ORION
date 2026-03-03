@@ -59,10 +59,91 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make dev`          | Start or resume the OpenClaw gateway service.      |
 | `make restart`      | Restart the OpenClaw gateway service.              |
 | `make soul`         | Regenerate all agent `SOUL.md` identity files.     |
-| `make routingsim`   | View and run the routing simulation exercise.      |
+| `make routingsim`   | Run routing eval + regression gate against baseline. |
+| `make skill-discovery` | Run online OpenClaw skill discovery + update generated shortlist section. |
+| `make monthly-scorecard` | Regenerate monthly scorecard from eval/reliability/canary artifacts. |
+| `make route-hygiene` | Enforce daily route hygiene guard (safe autofix + report artifact). |
+| `make lane-hotspots` | Detect lane-wait hot windows and correlate cron jobs. |
+| `make stop-gate-enforce` | Enforce canary stop gate and auto-disable promotion jobs after consecutive R1/R2 failures. |
+| `make canary-stage` | Run one-shot staged canary harness with verdict artifact. |
 | `make avatar`       | Preview or update your agent's avatar.             |
 | `make audio-check`  | Test the audio (TTS) setup (ElevenLabs skill).     |
 | `make lint`         | Run all lint and formatting checks (pre-commit).   |
+
+## Orion March Compute Operations (2026-03)
+
+Use this runbook during the March compute allocation window.
+
+### Daily Monitors
+
+Check these once per day and log outcomes in `eval/monthly-scorecard-2026-03.md`:
+
+- Lane wait: p50 and p95 queue wait time by lane.
+- Cron success/error: total runs, failures, and repeated error signatures.
+- Delivery backlog: queued vs completed delivery tasks.
+- Eval pass/delta: latest eval pass rate and score delta vs baseline.
+
+### Stop Gates
+
+Pause rollout work and escalate to ORION main if any gate is hit:
+
+- Lane wait regression breaches team threshold for 2 consecutive checks.
+- Cron failures persist across 2 consecutive scheduled runs.
+- Delivery backlog grows day-over-day for 2 days without burn-down.
+- Eval pass rate drops or eval delta shows net regression vs locked baseline.
+- Any incident with external delivery correctness risk is unresolved.
+
+### Weekly Cadence (Eval + Skill Canary Review)
+
+Run once per week (recommended Monday):
+
+1. Run full eval suite and archive artifacts.
+2. Compare current report against previous weekly baseline.
+3. Review skill canary outcomes, failure classes, and top regressions.
+4. Record decisions, mitigations, and owner/date follow-ups in the monthly scorecard.
+
+### Eval Commands
+
+```bash
+# Run full eval and emit latest report artifacts
+make eval-run
+
+# Compare two reports (example baseline vs latest)
+make eval-compare BASE=eval/history/baseline-2026-03.json AFTER=eval/latest_report.json
+
+# Capture a 24h runtime reliability snapshot
+make eval-reliability
+
+# Refresh monthly scorecard from current artifacts
+make monthly-scorecard MONTH=2026-03
+
+# Run route hygiene guard (safe autofix enabled)
+make route-hygiene
+
+# Detect top lane-wait hotspots and correlated cron runs
+make lane-hotspots HOURS=24 TOP=10
+
+# Enforce stop-gate disable action after consecutive reliability failures
+make stop-gate-enforce MIN_FAIL_DAYS=2
+
+# Run weekly online skill discovery update
+make skill-discovery LIMIT=8
+
+# Run one "coding party" batch (eval + reliability + canary health)
+make party-batch-once
+
+# Run one staged canary harness (set staged enable/rollback commands)
+make canary-stage \
+  CANDIDATE=openprose-workflow-2026-03 \
+  STAGE_CMD='echo stage-ok' \
+  ROLLBACK_CMD='echo rollback-ok'
+
+# Optional: pass through extra harness flags
+make canary-stage \
+  CANDIDATE=openprose-workflow-2026-03 \
+  STAGE_CMD='echo stage-ok' \
+  HARNESS_ARGS='--skip-eval --skip-reliability'
+```
 
 ## Pre-commit Checks
 

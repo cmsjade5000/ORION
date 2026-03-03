@@ -1,0 +1,13 @@
+{
+  "candidate": "openprose-workflow-2026-03",
+  "decision": "continue",
+  "delivery_queue_files": 0,
+  "eval_gate": "pass",
+  "eval_gate_reasons": [],
+  "evidence": "eval/history/reliability-20260303-022859.json",
+  "kind": "canary_health_check",
+  "lane_wait_count": 20,
+  "lane_wait_p95_ms": 34527,
+  "scorecard": "docs/skills/canary-results-2026-03.md",
+  "timestamp_et": "2026-03-02 21:28"
+}

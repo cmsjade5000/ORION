@@ -592,7 +592,23 @@ def _recommend_params_from_sweep(
         cur_notional = float(current.get("KALSHI_ARB_MIN_NOTIONAL_USD") or 0.20)
     except Exception:
         cur_notional = 0.20
+    try:
+        dry_loosen_step = int(float(current.get("KALSHI_ARB_DRY_STREAK_LOOSEN_STEP_BPS") or os.environ.get("KALSHI_ARB_DRY_STREAK_LOOSEN_STEP_BPS", "10")))
+    except Exception:
+        dry_loosen_step = 10
+    dry_loosen_step = max(1, int(dry_loosen_step))
+    try:
+        dry_loosen_every = int(float(current.get("KALSHI_ARB_DRY_STREAK_LOOSEN_EVERY_CYCLES") or os.environ.get("KALSHI_ARB_DRY_STREAK_LOOSEN_EVERY_CYCLES", "18")))
+    except Exception:
+        dry_loosen_every = 18
+    dry_loosen_every = max(1, int(dry_loosen_every))
+    try:
+        loosen_floor = int(float(current.get("KALSHI_ARB_LOOSEN_FLOOR_EDGE_BPS") or os.environ.get("KALSHI_ARB_LOOSEN_FLOOR_EDGE_BPS", "85")))
+    except Exception:
+        loosen_floor = 85
+    loosen_floor = max(int(bounds.min_edge_bps[0]), int(loosen_floor))
     budget_share = max(_share("budget_too_small"), _share("allocator_budget_exhausted"))
+    exec_stress = max(_share("recheck_failed"), _share("order_failed"), _share("paper_exec_rejected"), _share("no_fill"))
 
     scored: List[Tuple[float, Dict[str, Any]]] = []
     # If live placements happened in the round, avoid paper auto-tuning decisions.
@@ -714,7 +730,10 @@ def _recommend_params_from_sweep(
 
         # Generic edge loosen fallback if blocker-specific options are weak.
         edge_miss = max(_share("yes_edge_below_min"), _share("no_edge_below_min"))
-        nxt_edge = _clamp_int(cur_edge - 5, *bounds.min_edge_bps)
+        use_step = int(dry_loosen_step)
+        if int(cycles) % int(max(1, dry_loosen_every)) != 0:
+            use_step = max(1, int(use_step // 2))
+        nxt_edge = _clamp_int(max(int(loosen_floor), int(cur_edge - use_step)), *bounds.min_edge_bps)
         if nxt_edge != cur_edge:
             scored.append(
                 (
@@ -727,6 +746,18 @@ def _recommend_params_from_sweep(
                 )
             )
     out: List[Dict[str, Any]] = [r for _, r in sorted(scored, key=lambda x: x[0], reverse=True)]
+
+    if exec_stress >= 0.10:
+        nxt = _clamp_int(cur_edge + max(5, int(dry_loosen_step // 2)), *bounds.min_edge_bps)
+        if nxt != cur_edge:
+            out.insert(
+                0,
+                {
+                    "env": "KALSHI_ARB_MIN_EDGE_BPS",
+                    "value": str(nxt),
+                    "why": "Execution quality stress increased (recheck/no-fill/order errors); temporarily tighten edge threshold.",
+                },
+            )
 
     # Independent budget-pressure lever: if we keep seeing opportunities but no placements
     # because order budgets are too small, increase reinvest cap incrementally.

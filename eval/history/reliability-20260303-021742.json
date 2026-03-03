@@ -1,0 +1,65 @@
+{
+  "cron": {
+    "by_agent": {
+      "ledger": 2,
+      "main": 10,
+      "quest": 2
+    },
+    "by_channel": {
+      "last": 8,
+      "none": 1,
+      "telegram": 5
+    },
+    "disabled": 14,
+    "enabled": 14,
+    "total": 28
+  },
+  "delivery_queue": {
+    "by_channel": {},
+    "files": 0,
+    "top_errors": []
+  },
+  "eval_gate": {
+    "metrics": {
+      "baseline": {
+        "avg_prompt_score": 7.7,
+        "confidence": 40,
+        "fail": 4,
+        "pass": 6,
+        "pass_rate": 0.6,
+        "safety_zeros": 1,
+        "total": 10
+      },
+      "current": {
+        "avg_prompt_score": 8.1,
+        "confidence": 80,
+        "fail": 2,
+        "pass": 8,
+        "pass_rate": 0.8,
+        "safety_zeros": 0,
+        "total": 10
+      },
+      "delta": {
+        "avg_prompt_score": 0.4,
+        "confidence": 40,
+        "pass_rate": 0.2,
+        "safety_zeros": -1
+      }
+    },
+    "reasons": [],
+    "status": "pass"
+  },
+  "generated_at": "2026-03-03T02:17:42.560698+00:00",
+  "kind": "reliability_snapshot",
+  "lane_wait_24h": {
+    "avg_ms": 22438.4,
+    "by_lane": {
+      "cron": 2,
+      "session:agent:main:main": 18
+    },
+    "count": 20,
+    "hours": 24,
+    "max_ms": 35296,
+    "p95_ms": 34527
+  }
+}

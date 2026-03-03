@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from typing import Any, Dict, Optional, Tuple
 
 try:
+    from scripts.arb.exchanges import list_unmapped_series  # type: ignore
     from scripts.arb.kalshi_analytics import match_fills_for_order  # type: ignore
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
@@ -25,6 +26,7 @@ except ModuleNotFoundError:
     repo_root = os.path.abspath(os.path.join(here, ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
+    from scripts.arb.exchanges import list_unmapped_series  # type: ignore
     from scripts.arb.kalshi_analytics import match_fills_for_order  # type: ignore
     from scripts.arb.risk import RiskConfig, RiskState, cooldown_active, set_cooldown  # type: ignore
     from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
@@ -761,6 +763,19 @@ def _parse_series_list(raw: str) -> list[str]:
     return out
 
 
+def _merge_series_lists(*series_lists: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for seq in series_lists:
+        for s in seq:
+            ss = str(s or "").strip().upper()
+            if not ss or ss in seen:
+                continue
+            seen.add(ss)
+            out.append(ss)
+    return out
+
+
 def _load_sweep_entries(root: str, *, window_s: int) -> list[dict[str, Any]]:
     path = os.path.join(root, "tmp", "kalshi_ref_arb", "sweep_stats.json")
     try:
@@ -797,6 +812,37 @@ def _sum_entry_placed_total(it: Dict[str, Any]) -> int:
         return int(it.get("placed_live") or 0) + int(it.get("placed_paper") or 0)
     except Exception:
         return 0
+
+
+def _series_share_stats(root: str, *, window_s: int) -> Dict[str, Any]:
+    entries = _load_sweep_entries(root, window_s=max(3600, int(window_s)))
+    per_series_cycles: Dict[str, int] = {}
+    per_series_placed: Dict[str, int] = {}
+    total_placed = 0
+    total_cycles = 0
+    for it in entries:
+        s = str(it.get("series") or "").strip().upper()
+        if not s:
+            continue
+        total_cycles += 1
+        per_series_cycles[s] = int(per_series_cycles.get(s, 0)) + 1
+        p = _sum_entry_placed_total(it)
+        if p > 0:
+            per_series_placed[s] = int(per_series_placed.get(s, 0)) + int(p)
+            total_placed += int(p)
+    shares: Dict[str, float] = {}
+    for s, p in per_series_placed.items():
+        if total_placed > 0:
+            shares[s] = float(p) / float(total_placed)
+    return {
+        "window_s": int(window_s),
+        "entries": int(len(entries)),
+        "cycles_total": int(total_cycles),
+        "placed_total": int(total_placed),
+        "cycles_by_series": per_series_cycles,
+        "placed_by_series": per_series_placed,
+        "share_by_series": shares,
+    }
 
 
 def _maybe_expand_series_with_rotation(root: str, series_list: list[str]) -> tuple[list[str], Dict[str, Any]]:
@@ -1289,7 +1335,34 @@ def main() -> int:
 
         # Live trade (user-authorized) but still guarded by kill switch + risk caps in the bot.
         series_raw = os.environ.get("KALSHI_ARB_SERIES", "KXBTC")
-        series_list_base = _parse_series_list(series_raw) or ["KXBTC"]
+        structural_series_raw = os.environ.get("KALSHI_ARB_SERIES_STRUCTURAL", "")
+        primary_series = _parse_series_list(series_raw) or ["KXBTC"]
+        structural_series = _parse_series_list(structural_series_raw)
+        series_list_base = _merge_series_lists(primary_series, structural_series) or ["KXBTC"]
+        if bool(getattr(rt_cfg, "require_mapped_series", True)):
+            unmapped = list_unmapped_series(series_list_base)
+            if unmapped:
+                detail = f"unmapped series: {','.join(unmapped)}"
+                _write_cycle_status(root, status="config_error", detail=detail, extra={"series": series_list_base})
+                artifact = {
+                    "ts_unix": ts,
+                    "cycle_inputs": {
+                        "series_list_base": series_list_base,
+                        "series_structural": structural_series,
+                        "runtime": rt_cfg.as_dict(),
+                        "runtime_errors": rt_errs,
+                    },
+                    "balance_rc": bal_rc,
+                    "balance": bal,
+                    "trade_rc": 2,
+                    "trade": {"mode": "trade", "status": "refused", "reason": "unmapped_series", "unmapped_series": unmapped},
+                    "post_rc": 0,
+                    "post": {},
+                }
+                artifact_path = os.path.join(out_dir, f"{ts}.json")
+                _save_json(artifact_path, artifact)
+                _write_prom_metrics(root, metrics_path=rt_cfg.metrics_path, enabled=bool(rt_cfg.metrics_enabled), artifact=artifact)
+                return 0
         series_list, series_rotation = _maybe_expand_series_with_rotation(root, series_list_base)
         sigma = os.environ.get("KALSHI_ARB_SIGMA", "auto")
         min_edge = os.environ.get("KALSHI_ARB_MIN_EDGE_BPS", "120")
@@ -1340,6 +1413,7 @@ def main() -> int:
         selected_eff = None
         selected_score = None
         selected_eligible = False
+        router_stats = _series_share_stats(root, window_s=max(3600, int(os.environ.get("KALSHI_ARB_ROUTER_WINDOW_S", str(24 * 3600)) or (24 * 3600))))
         for s in series_list:
             sobj = _scan_series(
                 root,
@@ -1373,11 +1447,27 @@ def main() -> int:
             if eligible and isinstance(tte, (int, float)) and float(tte) < float(select_min_tte):
                 eligible = False
             score = None
+            router_penalty = 0.0
+            router_share = None
+            router_obs = int((router_stats.get("cycles_by_series") or {}).get(str(s), 0)) if isinstance(router_stats, dict) else 0
+            if isinstance(router_stats, dict):
+                try:
+                    v = (router_stats.get("share_by_series") or {}).get(str(s))
+                    router_share = float(v) if v is not None else None
+                except Exception:
+                    router_share = None
             if isinstance(best, dict):
                 try:
                     score = float(best.get("effective_edge_bps") or 0.0) + float(select_depth_weight) * (float(rec_count) ** 0.5)
                 except Exception:
                     score = None
+            if bool(getattr(rt_cfg, "router_enabled", False)) and isinstance(score, (int, float)):
+                if router_share is not None and int(router_obs) >= int(getattr(rt_cfg, "router_min_obs", 12) or 12):
+                    max_share = float(getattr(rt_cfg, "router_max_series_share", 0.35) or 0.35)
+                    if float(router_share) > float(max_share):
+                        # Penalize over-dominant series to keep exploration breadth.
+                        router_penalty = (float(router_share) - float(max_share)) * 100.0
+                        score = float(score) - float(router_penalty)
             scan_summary["series"].append(
                 {
                     "series": s,
@@ -1387,6 +1477,9 @@ def main() -> int:
                     "best": best,
                     "eligible_for_selection": bool(eligible),
                     "selection_score": float(score) if isinstance(score, (int, float)) else None,
+                    "router_penalty": float(router_penalty),
+                    "router_share": float(router_share) if isinstance(router_share, (int, float)) else None,
+                    "router_obs": int(router_obs),
                     "selection_filters": {
                         "min_liquidity_usd": float(select_min_liq),
                         "max_spread": float(select_max_spread),
@@ -1412,6 +1505,7 @@ def main() -> int:
         scan_summary["selected_effective_edge_bps"] = selected_eff
         scan_summary["selected_score"] = selected_score
         scan_summary["selected_eligible"] = bool(selected_eligible)
+        scan_summary["series_router"] = router_stats
 
         # If *all* scans failed (timeouts/errors), skip trading this cycle rather than
         # blindly defaulting to the first series.
@@ -1497,6 +1591,7 @@ def main() -> int:
         cycle_inputs = {
             "series": selected_series,
             "series_list_base": series_list_base,
+            "series_structural": structural_series,
             "series_list": series_list,
             "series_rotation": series_rotation,
             "scan_summary": scan_summary,
@@ -1523,6 +1618,9 @@ def main() -> int:
             "scan_select_min_tte_s": float(select_min_tte),
             "scan_select_min_candidates": int(select_min_candidates),
             "scan_select_depth_weight": float(select_depth_weight),
+            "router_enabled": bool(rt_cfg.router_enabled),
+            "router_max_series_share": float(rt_cfg.router_max_series_share),
+            "router_min_obs": int(rt_cfg.router_min_obs),
             "persistence_cycles": int(persist),
             "persistence_window_min": float(persist_win),
             "daily_loss_limit_usd": float(limit) if limit > 0 else 0.0,

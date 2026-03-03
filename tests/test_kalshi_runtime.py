@@ -20,6 +20,15 @@ class TestKalshiRuntime(unittest.TestCase):
         self.assertTrue(cfg.portfolio_allocator_enabled)
         self.assertAlmostEqual(cfg.portfolio_allocator_min_signal_fraction, 0.05, places=9)
         self.assertAlmostEqual(cfg.max_ref_quote_age_sec, 3.0, places=9)
+        self.assertTrue(cfg.require_mapped_series)
+        self.assertTrue(cfg.enable_strike_mono_arb)
+        self.assertTrue(cfg.enable_time_mono_arb)
+        self.assertTrue(cfg.enable_touch_ladder_arb)
+        self.assertAlmostEqual(cfg.struct_min_edge_bps, 220.0, places=9)
+        self.assertAlmostEqual(cfg.struct_min_liquidity_usd, 25.0, places=9)
+        self.assertTrue(cfg.router_enabled)
+        self.assertAlmostEqual(cfg.router_max_series_share, 0.35, places=9)
+        self.assertEqual(cfg.router_min_obs, 12)
         self.assertIsInstance(errs, list)
 
     def test_runtime_live_arm_gate(self) -> None:

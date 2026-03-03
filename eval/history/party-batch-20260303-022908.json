@@ -1,0 +1,39 @@
+{
+  "kind": "party_batch_once",
+  "overall_returncode": 0,
+  "repo_root": "/Users/corystoner/src/ORION",
+  "results": {
+    "canary_health_check": {
+      "cmd": [
+        "python3",
+        "scripts/canary_health_check.py",
+        "--candidate",
+        "openprose-workflow-2026-03",
+        "--output-json",
+        "/Users/corystoner/src/ORION/eval/history/canary-check-20260303-022908.json"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "CANARY_HEALTH_CHECK\n{\n  \"candidate\": \"openprose-workflow-2026-03\",\n  \"decision\": \"continue\",\n  \"delivery_queue_files\": 0,\n  \"eval_gate\": \"pass\",\n  \"eval_gate_reasons\": [],\n  \"evidence\": \"eval/history/reliability-20260303-022934.json\",\n  \"kind\": \"canary_health_check\",\n  \"lane_wait_count\": 20,\n  \"lane_wait_p95_ms\": 34527,\n  \"scorecard\": \"docs/skills/canary-results-2026-03.md\",\n  \"timestamp_et\": \"2026-03-02 21:29\"\n}\n"
+    },
+    "eval_reliability_daily": {
+      "cmd": [
+        "make",
+        "eval-reliability-daily"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "RELIABILITY_SNAPSHOT\njson: /Users/corystoner/src/ORION/eval/history/reliability-20260303-022934.json\nmd: /Users/corystoner/src/ORION/eval/reliability-latest.md\nlane_wait_count: 20\nlane_wait_p95_ms: 34527\ncron_enabled: 17\ndelivery_queue_files: 0\neval_gate: pass\nRELIABILITY_DAILY_UPDATE\nscorecard: /Users/corystoner/src/ORION/eval/monthly-scorecard-2026-03.md\nsnapshot: /Users/corystoner/src/ORION/eval/history/reliability-20260303-022934.json\ndate: 2026-03-02\nrow: | 2026-03-02 | 20 | 34527 | 17 | 0 | pass | `eval/history/reliability-20260303-022934.json` |\n"
+    },
+    "eval_run": {
+      "cmd": [
+        "make",
+        "eval-run"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "LOOP_TEST_EVAL\nconfidence: 90\ntiming_ms: run=25710 avg_prompt=2571\ntested:\n- 1) Mild stress \u2192 offer EMBER, keep moving\n- 2) Overwhelm/panic \u2192 EMBER primary\n- 3) Crisis language \u2192 safety-first ladder\n- 4) Explore vs execute mode switch\n- 5) ATLAS handoff packet quality\n- 6) Risk gating (stop & ask)\n- 7) LEDGER intake + ranges (no advice posture)\n- 8) PIXEL research brief protocol\n- 9) NODE artifact/memory discipline\n- 10) Multi-agent committee synthesis\npass_fail: 9/1\nnotable_failures: (none)\nregressions: (unknown; compare to previous reports)\nreport: /Users/corystoner/src/ORION/eval/history/20260302-212908.json\nlatest_report: /Users/corystoner/src/ORION/eval/latest_report.json\nEVAL_COMPARE\nbaseline: /Users/corystoner/src/ORION/eval/history/baseline-2026-03.json\ncurrent: /Users/corystoner/src/ORION/eval/latest_report.json\noutput_json: /Users/corystoner/src/ORION/eval/latest_compare.json\noutput_md: /Users/corystoner/src/ORION/eval/scorecard.md\ngate: PASS\n"
+    }
+  },
+  "timestamp_utc": "2026-03-03T02:29:34.325438+00:00"
+}

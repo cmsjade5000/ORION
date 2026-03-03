@@ -81,6 +81,19 @@ Delegate when:
 Constraints:
 - PIXEL is not the sources-of-record retrieval agent. For factual headlines/news, use WIRE.
 
+### QUEST
+
+Gaming co-pilot (internal-only).
+
+Delegate when:
+- You need in-game strategy, loadout/build guidance, encounter tactics, or progression planning.
+- You want fast tradeoff-based recommendations during active gameplay sessions.
+
+Constraints:
+- QUEST is internal-only and returns output to ORION.
+- Do not request cheating/exploit/anti-cheat bypass guidance.
+- For current patch/news/date claims, pair with WIRE retrieval.
+
 ### WIRE
 
 Sources-first web retrieval (internal-only).

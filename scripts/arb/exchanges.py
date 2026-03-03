@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .http import HttpClient, HttpConfig, safe_float
 
@@ -156,23 +156,92 @@ def parse_ref_feeds(raw: str) -> List[str]:
     return out
 
 
-def _series_symbols(series: str) -> tuple[str, str, str, str]:
-    s = str(series or "").upper()
+_ASSET_TO_SYMBOLS: Dict[str, Tuple[str, str, str, str]] = {
+    "BTC": ("BTC-USD", "XBTUSD", "btcusd", "BTCUSDT"),
+    "ETH": ("ETH-USD", "ETHUSD", "ethusd", "ETHUSDT"),
+    "XRP": ("XRP-USD", "XRPUSD", "xrpusd", "XRPUSDT"),
+    "DOGE": ("DOGE-USD", "DOGEUSD", "dogeusd", "DOGEUSDT"),
+    "SOL": ("SOL-USD", "SOLUSD", "solusd", "SOLUSDT"),
+}
+
+# Canonical series explicitly supported by the ref-venue mapping.
+# This keeps market expansion deliberate and avoids accidental mispricing from wrong symbols.
+_EXPLICIT_SERIES_ASSET: Dict[str, str] = {
+    "KXBTC": "BTC",
+    "KXBTCD": "BTC",
+    "KXBTC15M": "BTC",
+    "KXBTCMAXMON": "BTC",
+    "KXBTCMINMON": "BTC",
+    "KXETH": "ETH",
+    "KXETHD": "ETH",
+    "KXETH15M": "ETH",
+    "KXETHMAXMON": "ETH",
+    "KXXRP": "XRP",
+    "KXXRP15M": "XRP",
+    "KXDOGE": "DOGE",
+    "KXSOL15M": "SOL",
+    "KXSOLMAXMON": "SOL",
+}
+
+
+def series_asset(series: str) -> Optional[str]:
+    s = str(series or "").strip().upper()
+    if not s:
+        return None
+    v = _EXPLICIT_SERIES_ASSET.get(s)
+    if isinstance(v, str) and v:
+        return v
+    # Conservative heuristic fallback for nearby variants; still no BTC defaulting.
     if "BTC" in s:
-        return ("BTC-USD", "XBTUSD", "btcusd", "BTCUSDT")
+        return "BTC"
     if "ETH" in s:
-        return ("ETH-USD", "ETHUSD", "ethusd", "ETHUSDT")
+        return "ETH"
     if "XRP" in s:
-        return ("XRP-USD", "XRPUSD", "xrpusd", "XRPUSDT")
+        return "XRP"
     if "DOGE" in s:
-        return ("DOGE-USD", "DOGEUSD", "dogeusd", "DOGEUSDT")
-    # Fallback to BTC symbols for unknown series.
-    return ("BTC-USD", "XBTUSD", "btcusd", "BTCUSDT")
+        return "DOGE"
+    if "SOL" in s:
+        return "SOL"
+    return None
+
+
+def has_series_mapping(series: str) -> bool:
+    asset = series_asset(series)
+    return bool(asset and asset in _ASSET_TO_SYMBOLS)
+
+
+def list_unmapped_series(series_list: List[str]) -> List[str]:
+    out: List[str] = []
+    for s in series_list:
+        ss = str(s or "").strip().upper()
+        if not ss:
+            continue
+        if not has_series_mapping(ss):
+            out.append(ss)
+    return out
+
+
+def _series_symbols(series: str) -> tuple[str, str, str, str]:
+    asset = series_asset(series)
+    if not asset or asset not in _ASSET_TO_SYMBOLS:
+        raise ValueError(f"No reference symbol mapping for series {series!r}")
+    return _ASSET_TO_SYMBOLS[asset]
 
 
 def ref_spot_snapshot(series: str, *, feeds: Optional[List[str]] = None) -> Dict[str, Any]:
     use = feeds or ["coinbase", "kraken", "binance"]
-    cb_product, kr_pair, bs_pair, bn_symbol = _series_symbols(series)
+    try:
+        cb_product, kr_pair, bs_pair, bn_symbol = _series_symbols(series)
+    except Exception as e:
+        return {
+            "series": str(series),
+            "feeds": list(use),
+            "quotes": [],
+            "median": None,
+            "dispersion_bps": None,
+            "max_quote_age_sec": None,
+            "mapping_error": str(e),
+        }
     quotes: List[SpotQuote] = []
     for f in use:
         try:
@@ -227,7 +296,10 @@ def ref_spot_snapshot(series: str, *, feeds: Optional[List[str]] = None) -> Dict
 
 
 def latest_binance_funding_rate_bps(series: str) -> Optional[float]:
-    _, _, _, bn_symbol = _series_symbols(series)
+    try:
+        _, _, _, bn_symbol = _series_symbols(series)
+    except Exception:
+        return None
     fr = BinancePublic().get_latest_funding_rate(bn_symbol)
     if fr is None:
         return None

@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import uuid
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,7 @@ from typing import Any, Dict, List, Optional
 # directory and the repo root may not be importable as a package. Fix up path.
 try:
     from scripts.arb.exchanges import (  # type: ignore
+        has_series_mapping,
         latest_binance_funding_rate_bps,
         parse_ref_feeds,
         ref_spot_snapshot,
@@ -40,6 +42,7 @@ except ModuleNotFoundError:
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
     from scripts.arb.exchanges import (  # type: ignore
+        has_series_mapping,
         latest_binance_funding_rate_bps,
         parse_ref_feeds,
         ref_spot_snapshot,
@@ -363,20 +366,47 @@ def _build_signals_for_markets(
     m15: Optional[float],
     m60: Optional[float],
 ) -> tuple[List[Signal], List[Signal]]:
-    all_signals, signals = _build_signals_for_markets(
-        markets,
-        args=args,
-        rt_cfg=rt_cfg,
-        spot=spot,
-        vol_ratio=vol_ratio,
-        regime=str(regime),
-        dynamic_mult=float(dynamic_mult),
-        funding_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
-        dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
-        quote_age_s=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
-        m15=float(m15) if isinstance(m15, (int, float)) else None,
-        m60=float(m60) if isinstance(m60, (int, float)) else None,
-    )
+    all_signals: List[Signal] = []
+    signals: List[Signal] = []
+    for m in markets:
+        s = _signal_for_market(
+            m,
+            series=args.series,
+            spot=spot,
+            sigma_annual=args.sigma_annual,
+            min_edge_bps=args.min_edge_bps,
+            uncertainty_bps=args.uncertainty_bps,
+            min_liquidity_usd=args.min_liquidity_usd,
+            max_spread=args.max_spread,
+            min_seconds_to_expiry=args.min_seconds_to_expiry,
+            min_price=args.min_price,
+            max_price=args.max_price,
+            min_notional_usd=args.min_notional_usd,
+            min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
+            bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
+            bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
+            vol_anomaly_ratio=vol_ratio,
+            max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
+            ref_quote_age_sec=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+            max_ref_quote_age_sec=float(rt_cfg.max_ref_quote_age_sec),
+            cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+            max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
+            enable_regime_filter=bool(rt_cfg.enable_regime_filter),
+            dynamic_edge_enabled=bool(rt_cfg.dynamic_edge_enabled),
+            dynamic_edge_multiplier=float(dynamic_mult),
+            regime_bucket=str(regime),
+            funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+            enable_funding_filter=bool(rt_cfg.enable_funding_filter),
+            funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
+            momentum_15m_pct=m15,
+            momentum_60m_pct=m60,
+            ignore_zero_liquidity=bool(getattr(args, "ignore_zero_liquidity", False)),
+        )
+        if s is None:
+            continue
+        all_signals.append(s)
+        if isinstance(s.recommended, dict):
+            signals.append(s)
     return all_signals, signals
 
 
@@ -386,7 +416,245 @@ def _record_persistence_observations(
     state: RiskState,
     now_ts: int,
 ) -> None:
-    _record_persistence_observations(signals=signals, state=state, now_ts=now_ts)
+    for s in signals:
+        rec = s.recommended or {}
+        side = rec.get("side")
+        if side not in ("yes", "no"):
+            continue
+        try:
+            eb = float(rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps"))
+        except Exception:
+            continue
+        state.record_observation(f"{s.ticker}:{side}", edge_bps=eb, ts_unix=int(now_ts))
+
+
+def _signal_liquidity_usd(s: Signal) -> Optional[float]:
+    try:
+        v = (s.filters or {}).get("liquidity_dollars")
+        return float(v) if v is not None else None
+    except Exception:
+        return None
+
+
+def _signal_spread(s: Signal, side: str) -> Optional[float]:
+    try:
+        key = "yes_spread" if str(side) == "yes" else "no_spread"
+        v = (s.filters or {}).get(key)
+        return float(v) if v is not None else None
+    except Exception:
+        return None
+
+
+def _signal_ask(s: Signal, side: str) -> Optional[float]:
+    try:
+        ask = s.yes_ask if str(side) == "yes" else s.no_ask
+        return float(ask) if ask is not None else None
+    except Exception:
+        return None
+
+
+def _passes_structural_leg_filters(
+    s: Signal,
+    *,
+    side: str,
+    args: argparse.Namespace,
+    rt_cfg: Any,
+) -> bool:
+    ask = _signal_ask(s, side)
+    if ask is None:
+        return False
+    if ask < float(args.min_price) or ask > float(args.max_price):
+        return False
+    tte_s = float(s.t_years) * 365.0 * 24.0 * 3600.0
+    if tte_s < float(args.min_seconds_to_expiry):
+        return False
+    liq = _signal_liquidity_usd(s)
+    if isinstance(liq, (int, float)) and float(liq) < float(rt_cfg.struct_min_liquidity_usd):
+        return False
+    spr = _signal_spread(s, side)
+    if isinstance(spr, (int, float)) and float(spr) > float(args.max_spread):
+        return False
+    return True
+
+
+def _series_is_touch_ladder(series: str) -> bool:
+    s = str(series or "").upper()
+    return ("MAXMON" in s) or ("MINMON" in s)
+
+
+def _build_structural_candidates(
+    *,
+    series: str,
+    all_signals: List[Signal],
+    args: argparse.Namespace,
+    rt_cfg: Any,
+) -> List[Dict[str, Any]]:
+    """Generate paper-first structural opportunities (pair and relative value).
+
+    These are intentionally conservative and are only auto-simulated in paper mode.
+    """
+    out: List[Dict[str, Any]] = []
+    min_edge = float(getattr(rt_cfg, "struct_min_edge_bps", 220.0) or 220.0)
+    groups: Dict[tuple[str, str], List[Signal]] = defaultdict(list)
+    for s in all_signals:
+        st = str(s.strike_type or "").strip().lower()
+        if st not in ("greater", "less"):
+            continue
+        exp = str(s.expected_expiration_time or "")
+        if not exp:
+            continue
+        groups[(exp, st)].append(s)
+
+    # Structural module A + C: strike monotonicity / touch-ladder consistency (pair opportunities).
+    for (exp, st), items in groups.items():
+        if len(items) < 2:
+            continue
+        ordered = sorted(items, key=lambda x: float(x.strike))
+        for i in range(len(ordered) - 1):
+            lo = ordered[i]
+            hi = ordered[i + 1]
+            if st == "greater":
+                leg1, side1 = lo, "yes"
+                leg2, side2 = hi, "no"
+            else:
+                leg1, side1 = hi, "yes"
+                leg2, side2 = lo, "no"
+            if (not _passes_structural_leg_filters(leg1, side=side1, args=args, rt_cfg=rt_cfg)) or (
+                not _passes_structural_leg_filters(leg2, side=side2, args=args, rt_cfg=rt_cfg)
+            ):
+                continue
+            ask1 = _signal_ask(leg1, side1)
+            ask2 = _signal_ask(leg2, side2)
+            if ask1 is None or ask2 is None:
+                continue
+            combined = float(ask1) + float(ask2)
+            profit_bps = (1.0 - float(combined)) * 10_000.0
+            if profit_bps < float(min_edge):
+                continue
+            out.append(
+                {
+                    "module": "touch_ladder" if _series_is_touch_ladder(series) else "strike_monotonicity",
+                    "kind": "pair",
+                    "series": str(series),
+                    "expiry": str(exp),
+                    "expected_profit_bps": float(profit_bps),
+                    "combined_cost": float(combined),
+                    "legs": [
+                        {"ticker": str(leg1.ticker), "side": str(side1), "price": float(ask1), "count": 1},
+                        {"ticker": str(leg2.ticker), "side": str(side2), "price": float(ask2), "count": 1},
+                    ],
+                }
+            )
+
+    # Structural module B: time monotonicity relative-value candidates (single leg).
+    by_strike: Dict[tuple[str, float], List[Signal]] = defaultdict(list)
+    for s in all_signals:
+        st = str(s.strike_type or "").strip().lower()
+        if st not in ("greater", "less"):
+            continue
+        by_strike[(st, float(s.strike))].append(s)
+    for (st, _), items in by_strike.items():
+        if len(items) < 2:
+            continue
+        ordered = sorted(items, key=lambda x: float(x.t_years))
+        for i in range(len(ordered) - 1):
+            near = ordered[i]
+            far = ordered[i + 1]
+            if st == "greater":
+                ask_near = _signal_ask(near, "yes")
+                ask_far = _signal_ask(far, "yes")
+                side = "yes"
+                ticker_sig = far
+            else:
+                ask_near = _signal_ask(near, "no")
+                ask_far = _signal_ask(far, "no")
+                side = "no"
+                ticker_sig = far
+            if ask_near is None or ask_far is None:
+                continue
+            if not _passes_structural_leg_filters(ticker_sig, side=side, args=args, rt_cfg=rt_cfg):
+                continue
+            diff_bps = (float(ask_near) - float(ask_far)) * 10_000.0
+            if diff_bps < float(min_edge):
+                continue
+            out.append(
+                {
+                    "module": "time_monotonicity",
+                    "kind": "single",
+                    "series": str(series),
+                    "expiry": str(ticker_sig.expected_expiration_time),
+                    "expected_profit_bps": float(diff_bps),
+                    "combined_cost": float(ask_far),
+                    "legs": [
+                        {"ticker": str(ticker_sig.ticker), "side": str(side), "price": float(ask_far), "count": 1},
+                    ],
+                }
+            )
+    out.sort(key=lambda x: float(x.get("expected_profit_bps") or 0.0), reverse=True)
+    return out
+
+
+def _simulate_structural_paper(
+    *,
+    candidates: List[Dict[str, Any]],
+    args: argparse.Namespace,
+    cfg: RiskConfig,
+    total_notional: float,
+    order_count: int,
+    drawdown_mult: float,
+    cash_usd: Optional[float],
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], float, int]:
+    """Paper-only simulation for structural opportunities (no live writes)."""
+    placed: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    run_cap = float(cfg.max_notional_per_run_usd) * float(drawdown_mult)
+    for c in candidates:
+        if int(order_count) >= int(cfg.max_orders_per_run):
+            break
+        legs = c.get("legs") if isinstance(c, dict) else None
+        if not isinstance(legs, list) or not legs:
+            continue
+        est_notional = 0.0
+        ok = True
+        for leg in legs:
+            if not isinstance(leg, dict):
+                ok = False
+                break
+            try:
+                est_notional += float(leg.get("price") or 0.0) * float(leg.get("count") or 0.0)
+            except Exception:
+                ok = False
+                break
+        if not ok:
+            continue
+        remaining = max(0.0, float(run_cap) - float(total_notional))
+        if isinstance(cash_usd, (int, float)):
+            remaining = min(float(remaining), max(0.0, float(cash_usd) - float(total_notional)))
+        if float(est_notional) > float(remaining):
+            skipped.append(
+                {
+                    "reason": "structural_budget_too_small",
+                    "module": str(c.get("module") or ""),
+                    "needed_notional_usd": float(est_notional),
+                    "remaining_notional_usd": float(remaining),
+                }
+            )
+            continue
+        order_count += 1
+        total_notional += float(est_notional)
+        placed.append(
+            {
+                "mode": "paper_structural",
+                "structural_module": str(c.get("module") or ""),
+                "structural_kind": str(c.get("kind") or ""),
+                "expected_profit_bps": float(c.get("expected_profit_bps") or 0.0),
+                "order_legs": legs,
+                "notional_usd": float(est_notional),
+                "series": str(c.get("series") or args.series),
+                "expiry": str(c.get("expiry") or ""),
+            }
+        )
+    return placed, skipped, float(total_notional), int(order_count)
 
 
 def _parse_tte_buckets(raw: str) -> List[tuple[float, float]]:
@@ -797,6 +1065,16 @@ def _signal_for_market(
 def cmd_scan(args: argparse.Namespace) -> int:
     repo_root = _repo_root()
     rt_cfg, rt_errs = load_runtime_from_env(repo_root=repo_root)
+    if bool(getattr(rt_cfg, "require_mapped_series", True)) and (not has_series_mapping(str(args.series))):
+        out = {
+            "mode": "scan",
+            "timestamp_unix": int(time.time()),
+            "status": "refused",
+            "reason": "unmapped_series",
+            "series": str(args.series),
+        }
+        sys.stdout.write(_json(out) + "\n")
+        return 2
     kc = KalshiClient(base_url=args.kalshi_base_url)
     try:
         cache_s = int(os.environ.get("KALSHI_ARB_MARKETS_CACHE_S", "900") or 900)
@@ -853,44 +1131,21 @@ def cmd_scan(args: argparse.Namespace) -> int:
     regime = vol_regime_bucket(vol_ratio)
     dynamic_mult = dynamic_edge_multiplier_for_bucket(regime, dict(getattr(rt_cfg, "dynamic_edge_regime_mults", {})))
 
-    sigs: List[Dict[str, Any]] = []
-    for m in markets:
-        s = _signal_for_market(
-            m,
-            series=args.series,
-            spot=spot,
-            sigma_annual=args.sigma_annual,
-            min_edge_bps=args.min_edge_bps,
-            uncertainty_bps=args.uncertainty_bps,
-            min_liquidity_usd=args.min_liquidity_usd,
-            max_spread=args.max_spread,
-            min_seconds_to_expiry=args.min_seconds_to_expiry,
-            min_price=args.min_price,
-            max_price=args.max_price,
-            min_notional_usd=args.min_notional_usd,
-            min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
-            bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
-            bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
-            vol_anomaly_ratio=vol_ratio,
-            max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
-            ref_quote_age_sec=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
-            max_ref_quote_age_sec=float(rt_cfg.max_ref_quote_age_sec),
-            cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
-            max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
-            enable_regime_filter=bool(rt_cfg.enable_regime_filter),
-            dynamic_edge_enabled=bool(rt_cfg.dynamic_edge_enabled),
-            dynamic_edge_multiplier=float(dynamic_mult),
-            regime_bucket=str(regime),
-            funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
-            enable_funding_filter=bool(rt_cfg.enable_funding_filter),
-            funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
-            momentum_15m_pct=m15,
-            momentum_60m_pct=m60,
-            ignore_zero_liquidity=bool(getattr(args, "ignore_zero_liquidity", False)),
-        )
-        if s is None:
-            continue
-        sigs.append(asdict(s))
+    all_signals, _signals = _build_signals_for_markets(
+        markets,
+        args=args,
+        rt_cfg=rt_cfg,
+        spot=spot,
+        vol_ratio=vol_ratio,
+        regime=str(regime),
+        dynamic_mult=float(dynamic_mult),
+        funding_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+        dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+        quote_age_s=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+        m15=float(m15) if isinstance(m15, (int, float)) else None,
+        m60=float(m60) if isinstance(m60, (int, float)) else None,
+    )
+    sigs: List[Dict[str, Any]] = [asdict(s) for s in all_signals]
 
     sigs.sort(key=lambda x: max(float(x.get("edge_bps_buy_yes") or -1e9), float(x.get("edge_bps_buy_no") or -1e9)), reverse=True)
 
@@ -943,6 +1198,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
 def cmd_trade(args: argparse.Namespace) -> int:
     repo_root = _repo_root()
     rt_cfg, rt_errs = load_runtime_from_env(repo_root=repo_root)
+    if bool(getattr(rt_cfg, "require_mapped_series", True)) and (not has_series_mapping(str(args.series))):
+        out = {
+            "mode": "trade",
+            "timestamp_unix": int(time.time()),
+            "status": "refused",
+            "reason": "unmapped_series",
+            "series": str(args.series),
+        }
+        sys.stdout.write(_json(out) + "\n")
+        return 2
     cfg = RiskConfig(
         max_orders_per_run=args.max_orders_per_run,
         max_contracts_per_order=args.max_contracts_per_order,
@@ -1064,60 +1329,24 @@ def cmd_trade(args: argparse.Namespace) -> int:
     regime = vol_regime_bucket(vol_ratio)
     dynamic_mult = dynamic_edge_multiplier_for_bucket(regime, dict(getattr(rt_cfg, "dynamic_edge_regime_mults", {})))
 
-    all_signals: List[Signal] = []
-    signals: List[Signal] = []
-    for m in markets:
-        s = _signal_for_market(
-            m,
-            series=args.series,
-            spot=spot,
-            sigma_annual=args.sigma_annual,
-            min_edge_bps=args.min_edge_bps,
-            uncertainty_bps=args.uncertainty_bps,
-            min_liquidity_usd=args.min_liquidity_usd,
-            max_spread=args.max_spread,
-            min_seconds_to_expiry=args.min_seconds_to_expiry,
-            min_price=args.min_price,
-            max_price=args.max_price,
-            min_notional_usd=args.min_notional_usd,
-            min_notional_bypass_edge_bps=args.min_notional_bypass_edge_bps,
-            bayes_prior_k=float(getattr(args, "bayes_prior_k", 20.0) or 20.0),
-            bayes_obs_k_max=float(getattr(args, "bayes_obs_k_max", 30.0) or 30.0),
-            vol_anomaly_ratio=vol_ratio,
-            max_vol_anomaly_ratio=float(rt_cfg.max_vol_anomaly_ratio),
-            ref_quote_age_sec=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
-            max_ref_quote_age_sec=float(rt_cfg.max_ref_quote_age_sec),
-            cross_venue_dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
-            max_dispersion_bps=float(rt_cfg.max_dispersion_bps),
-            enable_regime_filter=bool(rt_cfg.enable_regime_filter),
-            dynamic_edge_enabled=bool(rt_cfg.dynamic_edge_enabled),
-            dynamic_edge_multiplier=float(dynamic_mult),
-            regime_bucket=str(regime),
-            funding_rate_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
-            enable_funding_filter=bool(rt_cfg.enable_funding_filter),
-            funding_abs_bps_max=float(rt_cfg.funding_abs_bps_max),
-            momentum_15m_pct=m15,
-            momentum_60m_pct=m60,
-            ignore_zero_liquidity=bool(getattr(args, "ignore_zero_liquidity", False)),
-        )
-        if s is None:
-            continue
-        all_signals.append(s)
-        if s.recommended:
-            signals.append(s)
+    all_signals, signals = _build_signals_for_markets(
+        markets,
+        args=args,
+        rt_cfg=rt_cfg,
+        spot=spot,
+        vol_ratio=vol_ratio,
+        regime=str(regime),
+        dynamic_mult=float(dynamic_mult),
+        funding_bps=float(funding_bps) if isinstance(funding_bps, (int, float)) else None,
+        dispersion_bps=float(dispersion_bps) if isinstance(dispersion_bps, (int, float)) else None,
+        quote_age_s=float(quote_age_s) if isinstance(quote_age_s, (int, float)) else None,
+        m15=float(m15) if isinstance(m15, (int, float)) else None,
+        m60=float(m60) if isinstance(m60, (int, float)) else None,
+    )
 
     # Observation recording for persistence gating (trade less, avoid one-off microstructure).
     now_ts = int(time.time())
-    for s in signals:
-        rec = s.recommended or {}
-        side = rec.get("side")
-        if side not in ("yes", "no"):
-            continue
-        try:
-            eb = float(rec.get("effective_edge_bps") if rec.get("effective_edge_bps") is not None else rec.get("edge_bps"))
-        except Exception:
-            continue
-        state.record_observation(f"{s.ticker}:{side}", edge_bps=eb, ts_unix=now_ts)
+    _record_persistence_observations(signals=signals, state=state, now_ts=now_ts)
 
     # Highest edge first.
     signals.sort(
@@ -1822,6 +2051,40 @@ def cmd_trade(args: argparse.Namespace) -> int:
         if bool(allocator_plan.enabled):
             allocator_remaining[s.ticker] = max(0.0, float(allocator_remaining.get(s.ticker, 0.0)) - float(notional))
 
+    structural_candidates: List[Dict[str, Any]] = []
+    if (not args.allow_write) and (
+        bool(getattr(rt_cfg, "enable_strike_mono_arb", False))
+        or bool(getattr(rt_cfg, "enable_time_mono_arb", False))
+        or bool(getattr(rt_cfg, "enable_touch_ladder_arb", False))
+    ):
+        structural_candidates = _build_structural_candidates(
+            series=str(args.series),
+            all_signals=all_signals,
+            args=args,
+            rt_cfg=rt_cfg,
+        )
+        # Respect module toggles.
+        structural_candidates = [
+            c
+            for c in structural_candidates
+            if (
+                (str(c.get("module")) == "strike_monotonicity" and bool(getattr(rt_cfg, "enable_strike_mono_arb", False)))
+                or (str(c.get("module")) == "time_monotonicity" and bool(getattr(rt_cfg, "enable_time_mono_arb", False)))
+                or (str(c.get("module")) == "touch_ladder" and bool(getattr(rt_cfg, "enable_touch_ladder_arb", False)))
+            )
+        ]
+        p2, s2, total_notional, order_count = _simulate_structural_paper(
+            candidates=structural_candidates,
+            args=args,
+            cfg=cfg,
+            total_notional=float(total_notional),
+            order_count=int(order_count),
+            drawdown_mult=float(drawdown_mult),
+            cash_usd=float(cash_usd) if isinstance(cash_usd, (int, float)) else None,
+        )
+        placed.extend(p2)
+        skipped.extend(s2)
+
     # Diagnostics: if no trades placed, explain why.
     diagnostics: Dict[str, Any] = _compute_trade_diagnostics(all_signals, args, markets_fetched=len(markets), candidates_recommended=len(signals))
     # Also include skip reasons from the decision loop (risk gates, persistence, stacking caps).
@@ -1900,6 +2163,11 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "portfolio_allocator_min_signal_fraction": float(rt_cfg.portfolio_allocator_min_signal_fraction),
             "portfolio_allocator_edge_power": float(rt_cfg.portfolio_allocator_edge_power),
             "portfolio_allocator_confidence_power": float(rt_cfg.portfolio_allocator_confidence_power),
+            "enable_strike_mono_arb": bool(rt_cfg.enable_strike_mono_arb),
+            "enable_time_mono_arb": bool(rt_cfg.enable_time_mono_arb),
+            "enable_touch_ladder_arb": bool(rt_cfg.enable_touch_ladder_arb),
+            "struct_min_edge_bps": float(rt_cfg.struct_min_edge_bps),
+            "struct_min_liquidity_usd": float(rt_cfg.struct_min_liquidity_usd),
             "risk": asdict(cfg),
         },
         "live_spot_enabled": str(os.environ.get("KALSHI_ARB_LIVE_SPOT", "")).strip().lower() in ("1", "true", "yes", "y", "on"),
@@ -1919,6 +2187,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
             "score_by_ticker": {str(k): float(v) for k, v in allocator_plan.per_ticker_score.items()},
             "hard_cap_by_ticker": {str(k): float(v) for k, v in allocator_plan.per_ticker_hard_cap_usd.items()},
         },
+        "structural_candidates": structural_candidates,
         "placed": placed,
         "skipped": skipped,
         "total_notional_usd": total_notional,
@@ -1938,7 +2207,7 @@ def cmd_trade(args: argparse.Namespace) -> int:
                 mode = str(p.get("mode") or "").strip().lower()
                 if mode == "live":
                     placed_live += 1
-                elif mode == "paper":
+                elif mode in ("paper", "dry_run", "paper_emulated", "paper_structural"):
                     placed_paper += 1
         no_fill = 0
         recheck_failed = 0

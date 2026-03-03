@@ -7,7 +7,7 @@ This workspace runs multiple isolated OpenClaw agents on the same Mac mini.
 - ORION (`agentId: main`): the only user-facing ingress agent.
 - ATLAS: operational director and executor.
 - NODE / PULSE / STRATUS: internal-only ops sub-agents directed by ATLAS.
-- PIXEL / EMBER / LEDGER / POLARIS: internal specialists directly invoked by ORION as needed.
+- PIXEL / QUEST / EMBER / LEDGER / POLARIS: internal specialists directly invoked by ORION as needed.
 
 ## Chain Of Command
 

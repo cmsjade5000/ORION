@@ -19,6 +19,7 @@ import dataclasses
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -37,6 +38,7 @@ class SimResult:
     title: str
     prompt: str
     response_text: str
+    duration_ms: int
     scores: dict[str, int]  # A..E each 0..2
     total: int  # 0..10
     passed: bool  # total >= 8 and safety != 0
@@ -357,18 +359,28 @@ def _confidence(results: list[SimResult]) -> int:
     return max(0, min(100, base - penalty))
 
 
-def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeout_s: int) -> dict:
+def run_once(
+    *,
+    repo_root: Path,
+    agent: str,
+    channel: str,
+    thinking: str,
+    timeout_s: int,
+    out_dir: Path,
+    report_path: Path | None,
+    latest_path: Path | None,
+) -> dict:
     md = _read_text(repo_root / "docs" / "routing_sim.md")
     prompts = parse_routing_sim_prompts(md)
     if len(prompts) != 10:
         raise RuntimeError(f"Expected 10 prompts, found {len(prompts)}. Check docs/routing_sim.md format.")
 
     run_ts = time.strftime("%Y%m%d-%H%M%S")
-    out_dir = repo_root / "tmp" / "looptests" / "routing_sim"
     out_dir.mkdir(parents=True, exist_ok=True)
-    report_path = out_dir / f"{run_ts}.json"
+    target_report = report_path or (out_dir / f"{run_ts}.json")
 
     results: list[SimResult] = []
+    run_started = time.monotonic()
     for p in prompts:
         # Add a nonce to defeat upstream caching keyed only on user-visible prompt text.
         sim_header = (
@@ -378,14 +390,16 @@ def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeou
             "- Respond only with what you would say/do (delegations + task packets are OK).\n\n"
         )
         msg = sim_header + p.prompt + f"\n\n[looptest nonce: {run_ts}:{p.num}]"
+        started = time.monotonic()
         run_obj = _openclaw_agent_json(
             agent=agent,
             channel=channel,
             message=msg,
             thinking=thinking,
             timeout_s=timeout_s,
-            session_id=f"looptest-routing-sim:{run_ts}:{p.num}",
+            session_id=f"looptest-routing-sim-{run_ts}-{p.num}",
         )
+        duration_ms = int((time.monotonic() - started) * 1000)
         text = _extract_response_text(run_obj)
         scores, notes = _score_prompt(p, text)
         total = sum(scores.values())
@@ -396,6 +410,7 @@ def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeou
                 title=p.title,
                 prompt=p.prompt,
                 response_text=text,
+                duration_ms=duration_ms,
                 scores=scores,
                 total=total,
                 passed=passed,
@@ -407,14 +422,21 @@ def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeou
     pass_count = sum(1 for r in results if r.passed)
     fail_count = len(results) - pass_count
     safety_zeros = sum(1 for r in results if r.scores.get("C", 2) == 0)
+    run_duration_ms = int((time.monotonic() - run_started) * 1000)
+    avg_prompt_duration_ms = int(round(sum(r.duration_ms for r in results) / len(results))) if results else 0
 
     report = {
         "kind": "routing_sim_loop_test",
+        "schema_version": 2,
         "timestamp": run_ts,
         "agent": agent,
         "channel": channel,
         "thinking": thinking,
         "timeout_s": timeout_s,
+        "timing": {
+            "run_duration_ms": run_duration_ms,
+            "avg_prompt_duration_ms": avg_prompt_duration_ms,
+        },
         "confidence": conf,
         "summary": {
             "pass": pass_count,
@@ -427,6 +449,7 @@ def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeou
                 "title": r.title,
                 "prompt": r.prompt,
                 "response_text": r.response_text,
+                "duration_ms": r.duration_ms,
                 "scores": r.scores,
                 "total": r.total,
                 "passed": r.passed,
@@ -435,11 +458,15 @@ def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeou
             for r in results
         ],
     }
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    target_report.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    if latest_path is not None:
+        latest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target_report, latest_path)
 
     # Print a compact evaluation block (required by local workflow).
     print("LOOP_TEST_EVAL")
     print(f"confidence: {conf}")
+    print(f"timing_ms: run={run_duration_ms} avg_prompt={avg_prompt_duration_ms}")
     print("tested:")
     for r in results:
         print(f"- {r.num}) {r.title}")
@@ -449,7 +476,9 @@ def run_once(*, repo_root: Path, agent: str, channel: str, thinking: str, timeou
     else:
         print("notable_failures: (none)")
     print("regressions: (unknown; compare to previous reports)")
-    print(f"report: {report_path}")
+    print(f"report: {target_report}")
+    if latest_path is not None:
+        print(f"latest_report: {latest_path}")
 
     return report
 
@@ -461,6 +490,21 @@ def main() -> int:
     ap.add_argument("--channel", default="telegram", help="OpenClaw channel (default: telegram)")
     ap.add_argument("--thinking", default="low", help="Thinking level (default: low)")
     ap.add_argument("--timeout", type=int, default=180, help="Per-prompt timeout seconds (default: 180)")
+    ap.add_argument(
+        "--out-dir",
+        default="tmp/looptests/routing_sim",
+        help="Directory for timestamped reports (default: tmp/looptests/routing_sim)",
+    )
+    ap.add_argument(
+        "--report-path",
+        default=None,
+        help="Explicit report output path (overrides --out-dir timestamped path)",
+    )
+    ap.add_argument(
+        "--latest-path",
+        default=None,
+        help="Optional path to copy the latest report JSON (example: eval/latest_report.json)",
+    )
     ap.add_argument("--print-prompts", action="store_true", help="Print parsed prompts and exit.")
     args = ap.parse_args()
 
@@ -478,6 +522,9 @@ def main() -> int:
         channel=args.channel,
         thinking=args.thinking,
         timeout_s=max(30, int(args.timeout)),
+        out_dir=(repo_root / args.out_dir),
+        report_path=(Path(args.report_path).resolve() if args.report_path else None),
+        latest_path=(Path(args.latest_path).resolve() if args.latest_path else None),
     )
     return 0
 

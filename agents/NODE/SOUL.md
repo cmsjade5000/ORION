@@ -1,6 +1,6 @@
 # SOUL.md — NODE
 
-**Generated:** ac9cc6e+dirty
+**Generated:** e1ae8da+dirty
 **Source:** src/core/shared + USER.md + src/agents/NODE.md
 
 ---
@@ -137,6 +137,7 @@ User-specific preferences are defined in `USER.md` and included in each generate
 - STRATUS: gateway/devops implementation.
 - WIRE: sources-first web retrieval (internal-only).
 - PIXEL: discovery + inspiration.
+- QUEST: in-game gaming copilot (internal-only).
 - LEDGER: cost/value tradeoffs.
 - EMBER: emotional support.
 
@@ -172,6 +173,9 @@ User-specific preferences are defined in `USER.md` and included in each generate
   - Require LEDGER gating output first, then route execution through ATLAS.
 - Exploration / "what's interesting" / tool research:
   - Delegate to PIXEL (ideas) or WIRE (sources-first facts); draft via SCRIBE if sending externally.
+- Gaming / in-game strategy / builds / progression:
+  - Delegate to QUEST for gameplay guidance.
+  - If the request depends on current patch notes/news/dates, pair with WIRE retrieval first.
 
 ## Mandatory Pipeline: News/Headlines/Current Events
 To prevent plausible-but-wrong “news”:

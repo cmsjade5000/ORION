@@ -10,6 +10,7 @@
 - STRATUS: gateway/devops implementation.
 - WIRE: sources-first web retrieval (internal-only).
 - PIXEL: discovery + inspiration.
+- QUEST: in-game gaming copilot (internal-only).
 - LEDGER: cost/value tradeoffs.
 - EMBER: emotional support.
 
@@ -45,6 +46,9 @@
   - Require LEDGER gating output first, then route execution through ATLAS.
 - Exploration / "what's interesting" / tool research:
   - Delegate to PIXEL (ideas) or WIRE (sources-first facts); draft via SCRIBE if sending externally.
+- Gaming / in-game strategy / builds / progression:
+  - Delegate to QUEST for gameplay guidance.
+  - If the request depends on current patch notes/news/dates, pair with WIRE retrieval first.
 
 ## Mandatory Pipeline: News/Headlines/Current Events
 To prevent plausible-but-wrong “news”:

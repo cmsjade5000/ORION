@@ -441,6 +441,9 @@ Key env knobs:
 - `KALSHI_ARB_TUNE_PAPER_MIN_SECONDS_TO_EXPIRY_FLOOR` (default `180`, paper-only)
 - `KALSHI_ARB_IGNORE_ZERO_LIQUIDITY` (default `0`; if `1`, treat liquidity `<=0` as unknown instead of auto-reject)
 - `KALSHI_ARB_REINVEST_MAX_FRACTION` (default `0.08`, can be auto-tuned in paper mode on budget pressure)
+- `KALSHI_ARB_DRY_STREAK_LOOSEN_STEP_BPS` (default `10`)
+- `KALSHI_ARB_DRY_STREAK_LOOSEN_EVERY_CYCLES` (default `18`)
+- `KALSHI_ARB_LOOSEN_FLOOR_EDGE_BPS` (default `85`)
 
 Dryness/stuck observability knobs:
 - `KALSHI_ARB_SERIES_ROTATION_ENABLED` (default `1`)
@@ -451,6 +454,19 @@ Dryness/stuck observability knobs:
 - `KALSHI_ARB_STUCK_WINDOW_S` (default `86400`)
 - `KALSHI_ARB_STUCK_MIN_CYCLES` (default `24`)
 - `KALSHI_ARB_STUCK_DOMINANT_BLOCKER_SHARE` (default `0.70`)
+
+Aggressive expansion knobs (paper-first):
+- `KALSHI_ARB_SERIES` (can include `KXBTCD,KXETHD,KXBTC15M,KXETH15M,KXSOL15M,KXXRP15M`)
+- `KALSHI_ARB_SERIES_STRUCTURAL` (for structural modules, e.g. `KXBTCMAXMON,KXBTCMINMON,KXETHMAXMON,KXSOLMAXMON`)
+- `KALSHI_ARB_REQUIRE_MAPPED_SERIES` (default `1`; refuse unmapped series)
+- `KALSHI_ARB_ENABLE_STRIKE_MONO_ARB` (default `1`)
+- `KALSHI_ARB_ENABLE_TIME_MONO_ARB` (default `1`)
+- `KALSHI_ARB_ENABLE_TOUCH_LADDER_ARB` (default `1`)
+- `KALSHI_ARB_STRUCT_MIN_EDGE_BPS` (default `220`)
+- `KALSHI_ARB_STRUCT_MIN_LIQUIDITY_USD` (default `25`)
+- `KALSHI_ARB_ROUTER_ENABLED` (default `1`)
+- `KALSHI_ARB_ROUTER_MAX_SERIES_SHARE` (default `0.35`)
+- `KALSHI_ARB_ROUTER_MIN_OBS` (default `12`)
 
 ---
 

@@ -1,0 +1,53 @@
+{
+  "apply": true,
+  "changes": [],
+  "disabled_job_ids": [],
+  "generated_at_et": "2026-03-02 22:28:29 EST",
+  "generated_at_utc": "2026-03-03T03:28:29.163648+00:00",
+  "kind": "stop_gate_enforcement",
+  "policy": {
+    "consecutive_days": 2,
+    "exclude_name_patterns": [
+      "route-hygiene",
+      "lane-hotspots",
+      "reliability",
+      "scorecard",
+      "skill-discovery"
+    ],
+    "include_name_patterns": [
+      "party-batch",
+      "canary-rollout",
+      "canary-promote",
+      "canary-promotion"
+    ],
+    "max_lane_wait_count": 6,
+    "max_lane_wait_p95_ms": 10000
+  },
+  "recent_days": [
+    {
+      "date_et": "2026-03-02",
+      "day_fail": true,
+      "lane_wait_count": 21,
+      "lane_wait_p95_ms": 34034,
+      "path": "eval/history/reliability-20260303-032031.json",
+      "r1_fail": true,
+      "r2_fail": true,
+      "timestamp_utc": "2026-03-03T03:20:31.106943+00:00"
+    }
+  ],
+  "target_jobs": [
+    {
+      "enabled": true,
+      "id": "f8ec0962-ac40-4458-98f9-483efd20d557",
+      "name": "party-batch-tonight-r4h"
+    },
+    {
+      "enabled": true,
+      "id": "784bdfcc-68ff-4e01-8aea-37a5643af8e8",
+      "name": "party-batch-tonight-r6h"
+    }
+  ],
+  "timezone": "America/New_York",
+  "triggered": false,
+  "warnings": []
+}

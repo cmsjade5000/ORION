@@ -3,9 +3,12 @@
 Purpose: make the “minimal overlap + clean routing” update measurable.
 
 ## How to run
-1. Use the **same 10 prompts** below.
-2. Score each prompt **immediately after the response**.
-3. Record evidence by linking to message IDs / transcripts if available.
+1. Run the automated harness:
+   - `make routingsim` (writes timestamped JSON to `eval/history/` and refreshes `eval/latest_report.json`)
+2. Run regression comparison against the baseline:
+   - `make eval-compare BASE=eval/history/baseline-2026-03.json AFTER=eval/latest_report.json`
+3. Use the **same 10 prompts** below for manual spot checks.
+4. Record evidence by linking to message IDs / transcripts if available.
 
 ## Scoring (per prompt)
 Score each category 0–2. Total per prompt: **0–10**.

@@ -1,0 +1,152 @@
+{
+  "canary_health": {
+    "candidate": "openprose-workflow-2026-03",
+    "candidate_streak_record": {
+      "last_result": "fail",
+      "last_run_date_et": "2026-03-02",
+      "streak_days": 0,
+      "updated_at_et": "2026-03-02 21:42"
+    },
+    "decision": "hold",
+    "decision_display": "hold (0/7)",
+    "delivery_queue_files": 0,
+    "eval_gate": "pass",
+    "eval_gate_reasons": [],
+    "evidence": "eval/history/reliability-20260303-024229.json",
+    "kind": "canary_health_check",
+    "lane_wait_count": 20,
+    "lane_wait_p95_ms": 34527,
+    "promotion_eligible": false,
+    "scorecard": "docs/skills/canary-results-2026-03.md",
+    "slo_failures": [
+      "lane_wait_count_exceeded:20>6",
+      "lane_wait_p95_exceeded:34527>10000"
+    ],
+    "slo_pass": false,
+    "streak_days": 0,
+    "streak_state": "eval/history/canary-streak-state-v1.json",
+    "streak_target": 7,
+    "thresholds": {
+      "max_delivery_queue_files": 0,
+      "max_lane_wait_count": 6,
+      "max_lane_wait_p95_ms": 10000
+    },
+    "timestamp_et": "2026-03-02 21:42"
+  },
+  "canary_health_artifact": "/Users/corystoner/src/ORION/eval/history/canary-check-openprose-workflow-2026-03-20260303-024138.json",
+  "candidate": "openprose-workflow-2026-03",
+  "kind": "canary_stage_harness",
+  "post_state": {
+    "delivery_queue": {
+      "by_channel": {},
+      "files": 0,
+      "invalid_json": 0,
+      "queue_dir": "/Users/corystoner/.openclaw/delivery-queue"
+    },
+    "timestamp_utc": "2026-03-03T02:42:29.202536+00:00"
+  },
+  "pre_state": {
+    "channels": {
+      "config_path": "/Users/corystoner/.openclaw/openclaw.json",
+      "configured": [
+        "defaults",
+        "discord",
+        "mochat",
+        "slack",
+        "telegram"
+      ],
+      "enabled": [
+        "discord",
+        "telegram"
+      ],
+      "source": "explicit_enabled"
+    },
+    "delivery_queue": {
+      "by_channel": {},
+      "files": 0,
+      "invalid_json": 0,
+      "queue_dir": "/Users/corystoner/.openclaw/delivery-queue"
+    },
+    "timestamp_utc": "2026-03-03T02:41:38.009949+00:00"
+  },
+  "repo_root": "/Users/corystoner/src/ORION",
+  "side_effects": {
+    "enabled_channels": [
+      "discord",
+      "telegram"
+    ],
+    "queue_growth_by_channel": {},
+    "queue_growth_delta": 0,
+    "skipped": false,
+    "unauthorized_channels": []
+  },
+  "steps": {
+    "canary_health_check": {
+      "cmd": "python3 scripts/canary_health_check.py --candidate openprose-workflow-2026-03 --history-dir eval/history --compare eval/latest_compare.json --output-json /Users/corystoner/src/ORION/eval/history/canary-check-openprose-workflow-2026-03-20260303-024138.json",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 0.034,
+      "ended_at": "2026-03-03T02:42:29.202489+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:42:29.168143+00:00",
+      "stderr": "",
+      "stdout": "CANARY_HEALTH_CHECK\n{\n  \"candidate\": \"openprose-workflow-2026-03\",\n  \"candidate_streak_record\": {\n    \"last_result\": \"fail\",\n    \"last_run_date_et\": \"2026-03-02\",\n    \"streak_days\": 0,\n    \"updated_at_et\": \"2026-03-02 21:42\"\n  },\n  \"decision\": \"hold\",\n  \"decision_display\": \"hold (0/7)\",\n  \"delivery_queue_files\": 0,\n  \"eval_gate\": \"pass\",\n  \"eval_gate_reasons\": [],\n  \"evidence\": \"eval/history/reliability-20260303-024229.json\",\n  \"kind\": \"canary_health_check\",\n  \"lane_wait_count\": 20,\n  \"lane_wait_p95_ms\": 34527,\n  \"promotion_eligible\": false,\n  \"scorecard\": \"docs/skills/canary-results-2026-03.md\",\n  \"slo_failures\": [\n    \"lane_wait_count_exceeded:20>6\",\n    \"lane_wait_p95_exceeded:34527>10000\"\n  ],\n  \"slo_pass\": false,\n  \"streak_days\": 0,\n  \"streak_state\": \"eval/history/canary-streak-state-v1.json\",\n  \"streak_target\": 7,\n  \"thresholds\": {\n    \"max_delivery_queue_files\": 0,\n    \"max_lane_wait_count\": 6,\n    \"max_lane_wait_p95_ms\": 10000\n  },\n  \"timestamp_et\": \"2026-03-02 21:42\"\n}\n"
+    },
+    "post_eval": {
+      "cmd": "make eval-run",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 27.101,
+      "ended_at": "2026-03-03T02:42:29.052341+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:42:01.950959+00:00",
+      "stderr": "",
+      "stdout": "LOOP_TEST_EVAL\nconfidence: 90\ntiming_ms: run=27015 avg_prompt=2701\ntested:\n- 1) Mild stress \u2192 offer EMBER, keep moving\n- 2) Overwhelm/panic \u2192 EMBER primary\n- 3) Crisis language \u2192 safety-first ladder\n- 4) Explore vs execute mode switch\n- 5) ATLAS handoff packet quality\n- 6) Risk gating (stop & ask)\n- 7) LEDGER intake + ranges (no advice posture)\n- 8) PIXEL research brief protocol\n- 9) NODE artifact/memory discipline\n- 10) Multi-agent committee synthesis\npass_fail: 9/1\nnotable_failures: (none)\nregressions: (unknown; compare to previous reports)\nreport: /Users/corystoner/src/ORION/eval/history/20260302-214201.json\nlatest_report: /Users/corystoner/src/ORION/eval/latest_report.json\nEVAL_COMPARE\nbaseline: /Users/corystoner/src/ORION/eval/history/baseline-2026-03.json\ncurrent: /Users/corystoner/src/ORION/eval/latest_report.json\noutput_json: /Users/corystoner/src/ORION/eval/latest_compare.json\noutput_md: /Users/corystoner/src/ORION/eval/scorecard.md\ngate: PASS\n"
+    },
+    "post_reliability": {
+      "cmd": "make eval-reliability-daily",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 0.116,
+      "ended_at": "2026-03-03T02:42:29.168042+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:42:29.052401+00:00",
+      "stderr": "",
+      "stdout": "RELIABILITY_SNAPSHOT\njson: /Users/corystoner/src/ORION/eval/history/reliability-20260303-024229.json\nmd: /Users/corystoner/src/ORION/eval/reliability-latest.md\nlane_wait_count: 20\nlane_wait_p95_ms: 34527\ncron_enabled: 17\ndelivery_queue_files: 0\neval_gate: pass\nRELIABILITY_DAILY_UPDATE\nscorecard: /Users/corystoner/src/ORION/eval/monthly-scorecard-2026-03.md\nsnapshot: /Users/corystoner/src/ORION/eval/history/reliability-20260303-024229.json\ndate: 2026-03-02\nrow: | 2026-03-02 | 20 | 34527 | 17 | 0 | pass | `eval/history/reliability-20260303-024229.json` |\n"
+    },
+    "pre_eval": {
+      "cmd": "make eval-run",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 23.81,
+      "ended_at": "2026-03-03T02:42:01.819964+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:41:38.010399+00:00",
+      "stderr": "",
+      "stdout": "LOOP_TEST_EVAL\nconfidence: 90\ntiming_ms: run=23711 avg_prompt=2371\ntested:\n- 1) Mild stress \u2192 offer EMBER, keep moving\n- 2) Overwhelm/panic \u2192 EMBER primary\n- 3) Crisis language \u2192 safety-first ladder\n- 4) Explore vs execute mode switch\n- 5) ATLAS handoff packet quality\n- 6) Risk gating (stop & ask)\n- 7) LEDGER intake + ranges (no advice posture)\n- 8) PIXEL research brief protocol\n- 9) NODE artifact/memory discipline\n- 10) Multi-agent committee synthesis\npass_fail: 9/1\nnotable_failures: (none)\nregressions: (unknown; compare to previous reports)\nreport: /Users/corystoner/src/ORION/eval/history/20260302-214138.json\nlatest_report: /Users/corystoner/src/ORION/eval/latest_report.json\nEVAL_COMPARE\nbaseline: /Users/corystoner/src/ORION/eval/history/baseline-2026-03.json\ncurrent: /Users/corystoner/src/ORION/eval/latest_report.json\noutput_json: /Users/corystoner/src/ORION/eval/latest_compare.json\noutput_md: /Users/corystoner/src/ORION/eval/scorecard.md\ngate: PASS\n"
+    },
+    "pre_reliability": {
+      "cmd": "make eval-reliability-daily",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 0.128,
+      "ended_at": "2026-03-03T02:42:01.947579+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:42:01.820037+00:00",
+      "stderr": "",
+      "stdout": "RELIABILITY_SNAPSHOT\njson: /Users/corystoner/src/ORION/eval/history/reliability-20260303-024201.json\nmd: /Users/corystoner/src/ORION/eval/reliability-latest.md\nlane_wait_count: 20\nlane_wait_p95_ms: 34527\ncron_enabled: 17\ndelivery_queue_files: 0\neval_gate: pass\nRELIABILITY_DAILY_UPDATE\nscorecard: /Users/corystoner/src/ORION/eval/monthly-scorecard-2026-03.md\nsnapshot: /Users/corystoner/src/ORION/eval/history/reliability-20260303-024201.json\ndate: 2026-03-02\nrow: | 2026-03-02 | 20 | 34527 | 17 | 0 | pass | `eval/history/reliability-20260303-024201.json` |\n"
+    },
+    "stage": {
+      "cmd": "echo stage-ok",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 0.003,
+      "ended_at": "2026-03-03T02:42:01.950928+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:42:01.947617+00:00",
+      "stderr": "",
+      "stdout": "stage-ok\n"
+    }
+  },
+  "timestamp_utc": "2026-03-03T02:41:38.009949+00:00",
+  "verdict": {
+    "reasons": [
+      "canary decision is hold"
+    ],
+    "status": "fail"
+  }
+}

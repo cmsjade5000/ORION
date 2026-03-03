@@ -159,6 +159,12 @@ class TestKalshiCyclePaperMode(unittest.TestCase):
         self.assertEqual(cyc._sum_entry_placed_total({"placed_total": 3, "placed_live": 1, "placed_paper": 1}), 3)
         self.assertEqual(cyc._sum_entry_placed_total({"placed_live": 1, "placed_paper": 2}), 3)
 
+    def test_merge_series_lists_dedup(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        merged = cyc._merge_series_lists(["KXBTC", "KXETH"], ["KXETH", "KXBTCD"])
+        self.assertEqual(merged, ["KXBTC", "KXETH", "KXBTCD"])
+
 
 if __name__ == "__main__":
     unittest.main()

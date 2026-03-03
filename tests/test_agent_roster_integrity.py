@@ -17,6 +17,11 @@ class TestAgentRosterIntegrity(unittest.TestCase):
         self.assertIn("# Role Layer — POLARIS", text)
         self.assertIn("internal-only", text)
 
+    def test_quest_role_exists(self):
+        text = self._read("src/agents/QUEST.md")
+        self.assertIn("# Role Layer — QUEST", text)
+        self.assertIn("internal-only", text)
+
     def test_roster_and_routing_include_polaris(self):
         roster = self._read("agents/INDEX.md")
         routing = self._read("src/core/shared/ROUTING.md")
@@ -25,6 +30,15 @@ class TestAgentRosterIntegrity(unittest.TestCase):
         self.assertIn("### POLARIS", roster)
         self.assertIn("POLARIS: admin co-pilot", routing)
         self.assertIn("delegate to POLARIS", orion)
+
+    def test_roster_and_routing_include_quest(self):
+        roster = self._read("agents/INDEX.md")
+        routing = self._read("src/core/shared/ROUTING.md")
+        orion = self._read("src/agents/ORION.md")
+
+        self.assertIn("### QUEST", roster)
+        self.assertIn("QUEST: in-game gaming copilot", routing)
+        self.assertIn("delegate to QUEST", orion)
 
     def test_inbox_and_contacts_scaffold_exist(self):
         inbox = self._read("tasks/INBOX/POLARIS.md")
@@ -35,6 +49,11 @@ class TestAgentRosterIntegrity(unittest.TestCase):
         self.assertIn("# Contact Registry (POLARIS)", contacts)
         self.assertIn("Last Touch (YYYY-MM-DD)", contacts)
 
+    def test_quest_inbox_scaffold_exists(self):
+        inbox = self._read("tasks/INBOX/QUEST.md")
+        self.assertIn("# QUEST Inbox", inbox)
+        self.assertIn("## Packets", inbox)
+
     def test_config_and_docs_allowlist_include_polaris(self):
         cfg = json.loads(self._read("openclaw.json.example"))
         allow_agents = cfg["agents"]["list"][0]["subagents"]["allowAgents"]
@@ -42,6 +61,14 @@ class TestAgentRosterIntegrity(unittest.TestCase):
 
         migration = self._read("docs/OPENCLAW_CONFIG_MIGRATION.md")
         self.assertIn('"polaris"', migration)
+
+    def test_config_and_docs_allowlist_include_quest(self):
+        cfg = json.loads(self._read("openclaw.json.example"))
+        allow_agents = cfg["agents"]["list"][0]["subagents"]["allowAgents"]
+        self.assertIn("quest", allow_agents)
+
+        migration = self._read("docs/OPENCLAW_CONFIG_MIGRATION.md")
+        self.assertIn('"quest"', migration)
 
     def test_dashboards_include_polaris(self):
         tg = self._read("src/plugins/telegram/dashboard/index.ts")
@@ -53,6 +80,17 @@ class TestAgentRosterIntegrity(unittest.TestCase):
         m = re.search(r"const PRIMARY_AGENTS = \[(.*?)\];", mini)
         self.assertIsNotNone(m)
         self.assertIn('"POLARIS"', m.group(1))
+
+    def test_dashboards_include_quest(self):
+        tg = self._read("src/plugins/telegram/dashboard/index.ts")
+        mini = self._read("apps/telegram-miniapp-dashboard/server/index.js")
+
+        self.assertIn('.text("QUEST", "agent_QUEST")', tg)
+        self.assertIn('case "QUEST":', tg)
+
+        m = re.search(r"const PRIMARY_AGENTS = \[(.*?)\];", mini)
+        self.assertIsNotNone(m)
+        self.assertIn('"QUEST"', m.group(1))
 
     def test_ownership_matrix_and_queue_policy_links_exist(self):
         matrix = self._read("docs/AGENT_OWNERSHIP_MATRIX.md")

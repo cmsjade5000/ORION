@@ -121,6 +121,18 @@ class KalshiArbRuntime:
     portfolio_allocator_min_signal_fraction: float
     portfolio_allocator_edge_power: float
     portfolio_allocator_confidence_power: float
+    require_mapped_series: bool
+    enable_strike_mono_arb: bool
+    enable_time_mono_arb: bool
+    enable_touch_ladder_arb: bool
+    struct_min_edge_bps: float
+    struct_min_liquidity_usd: float
+    dry_streak_loosen_step_bps: int
+    dry_streak_loosen_every_cycles: int
+    loosen_floor_edge_bps: int
+    router_enabled: bool
+    router_max_series_share: float
+    router_min_obs: int
 
     @property
     def allow_live_writes(self) -> bool:
@@ -212,6 +224,27 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
     )
     if e:
         errs.append(e)
+    struct_min_edge_bps, e = _float_env("KALSHI_ARB_STRUCT_MIN_EDGE_BPS", 220.0, min_v=10.0)
+    if e:
+        errs.append(e)
+    struct_min_liquidity_usd, e = _float_env("KALSHI_ARB_STRUCT_MIN_LIQUIDITY_USD", 25.0, min_v=0.0)
+    if e:
+        errs.append(e)
+    dry_streak_loosen_step_bps, e = _int_env("KALSHI_ARB_DRY_STREAK_LOOSEN_STEP_BPS", 10, min_v=1)
+    if e:
+        errs.append(e)
+    dry_streak_loosen_every_cycles, e = _int_env("KALSHI_ARB_DRY_STREAK_LOOSEN_EVERY_CYCLES", 18, min_v=1)
+    if e:
+        errs.append(e)
+    loosen_floor_edge_bps, e = _int_env("KALSHI_ARB_LOOSEN_FLOOR_EDGE_BPS", 85, min_v=1)
+    if e:
+        errs.append(e)
+    router_max_series_share, e = _float_env("KALSHI_ARB_ROUTER_MAX_SERIES_SHARE", 0.35, min_v=0.05, max_v=1.0)
+    if e:
+        errs.append(e)
+    router_min_obs, e = _int_env("KALSHI_ARB_ROUTER_MIN_OBS", 12, min_v=1)
+    if e:
+        errs.append(e)
 
     metrics_path = str(
         os.environ.get(
@@ -250,5 +283,17 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
         portfolio_allocator_min_signal_fraction=float(portfolio_allocator_min_signal_fraction),
         portfolio_allocator_edge_power=float(portfolio_allocator_edge_power),
         portfolio_allocator_confidence_power=float(portfolio_allocator_confidence_power),
+        require_mapped_series=_truthy(os.environ.get("KALSHI_ARB_REQUIRE_MAPPED_SERIES", "1"), default=True),
+        enable_strike_mono_arb=_truthy(os.environ.get("KALSHI_ARB_ENABLE_STRIKE_MONO_ARB", "1"), default=True),
+        enable_time_mono_arb=_truthy(os.environ.get("KALSHI_ARB_ENABLE_TIME_MONO_ARB", "1"), default=True),
+        enable_touch_ladder_arb=_truthy(os.environ.get("KALSHI_ARB_ENABLE_TOUCH_LADDER_ARB", "1"), default=True),
+        struct_min_edge_bps=float(struct_min_edge_bps),
+        struct_min_liquidity_usd=float(struct_min_liquidity_usd),
+        dry_streak_loosen_step_bps=int(dry_streak_loosen_step_bps),
+        dry_streak_loosen_every_cycles=int(dry_streak_loosen_every_cycles),
+        loosen_floor_edge_bps=int(loosen_floor_edge_bps),
+        router_enabled=_truthy(os.environ.get("KALSHI_ARB_ROUTER_ENABLED", "1"), default=True),
+        router_max_series_share=float(router_max_series_share),
+        router_min_obs=int(router_min_obs),
     )
     return cfg, errs

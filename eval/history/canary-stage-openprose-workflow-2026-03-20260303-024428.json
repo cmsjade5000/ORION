@@ -1,0 +1,112 @@
+{
+  "canary_health": {
+    "candidate": "openprose-workflow-2026-03",
+    "candidate_streak_record": {
+      "last_result": "fail",
+      "last_run_date_et": "2026-03-02",
+      "streak_days": 0,
+      "updated_at_et": "2026-03-02 21:44"
+    },
+    "decision": "hold",
+    "decision_display": "hold (0/7)",
+    "delivery_queue_files": 0,
+    "eval_gate": "pass",
+    "eval_gate_reasons": [],
+    "evidence": "eval/history/reliability-20260303-024229.json",
+    "kind": "canary_health_check",
+    "lane_wait_count": 20,
+    "lane_wait_p95_ms": 34527,
+    "promotion_eligible": false,
+    "scorecard": "docs/skills/canary-results-2026-03.md",
+    "slo_failures": [
+      "lane_wait_count_exceeded:20>6",
+      "lane_wait_p95_exceeded:34527>10000"
+    ],
+    "slo_pass": false,
+    "streak_days": 0,
+    "streak_state": "eval/history/canary-streak-state-v1.json",
+    "streak_target": 7,
+    "thresholds": {
+      "max_delivery_queue_files": 0,
+      "max_lane_wait_count": 6,
+      "max_lane_wait_p95_ms": 10000
+    },
+    "timestamp_et": "2026-03-02 21:44"
+  },
+  "canary_health_artifact": "/Users/corystoner/src/ORION/eval/history/canary-check-openprose-workflow-2026-03-20260303-024428.json",
+  "candidate": "openprose-workflow-2026-03",
+  "kind": "canary_stage_harness",
+  "post_state": {
+    "delivery_queue": {
+      "by_channel": {},
+      "files": 0,
+      "invalid_json": 0,
+      "queue_dir": "/Users/corystoner/.openclaw/delivery-queue"
+    },
+    "timestamp_utc": "2026-03-03T02:44:28.386160+00:00"
+  },
+  "pre_state": {
+    "channels": {
+      "config_path": "/Users/corystoner/.openclaw/openclaw.json",
+      "configured": [
+        "defaults",
+        "discord",
+        "mochat",
+        "slack",
+        "telegram"
+      ],
+      "enabled": [
+        "discord",
+        "telegram"
+      ],
+      "source": "explicit_enabled"
+    },
+    "delivery_queue": {
+      "by_channel": {},
+      "files": 0,
+      "invalid_json": 0,
+      "queue_dir": "/Users/corystoner/.openclaw/delivery-queue"
+    },
+    "timestamp_utc": "2026-03-03T02:44:28.335616+00:00"
+  },
+  "repo_root": "/Users/corystoner/src/ORION",
+  "side_effects": {
+    "enabled_channels": [
+      "discord",
+      "telegram"
+    ],
+    "queue_growth_by_channel": {},
+    "queue_growth_delta": 0,
+    "skipped": false,
+    "unauthorized_channels": []
+  },
+  "steps": {
+    "canary_health_check": {
+      "cmd": "python3 scripts/canary_health_check.py --candidate openprose-workflow-2026-03 --history-dir eval/history --compare eval/latest_compare.json --output-json /Users/corystoner/src/ORION/eval/history/canary-check-openprose-workflow-2026-03-20260303-024428.json",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 0.045,
+      "ended_at": "2026-03-03T02:44:28.386050+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:44:28.341115+00:00",
+      "stderr": "",
+      "stdout": "CANARY_HEALTH_CHECK\n{\n  \"candidate\": \"openprose-workflow-2026-03\",\n  \"candidate_streak_record\": {\n    \"last_result\": \"fail\",\n    \"last_run_date_et\": \"2026-03-02\",\n    \"streak_days\": 0,\n    \"updated_at_et\": \"2026-03-02 21:44\"\n  },\n  \"decision\": \"hold\",\n  \"decision_display\": \"hold (0/7)\",\n  \"delivery_queue_files\": 0,\n  \"eval_gate\": \"pass\",\n  \"eval_gate_reasons\": [],\n  \"evidence\": \"eval/history/reliability-20260303-024229.json\",\n  \"kind\": \"canary_health_check\",\n  \"lane_wait_count\": 20,\n  \"lane_wait_p95_ms\": 34527,\n  \"promotion_eligible\": false,\n  \"scorecard\": \"docs/skills/canary-results-2026-03.md\",\n  \"slo_failures\": [\n    \"lane_wait_count_exceeded:20>6\",\n    \"lane_wait_p95_exceeded:34527>10000\"\n  ],\n  \"slo_pass\": false,\n  \"streak_days\": 0,\n  \"streak_state\": \"eval/history/canary-streak-state-v1.json\",\n  \"streak_target\": 7,\n  \"thresholds\": {\n    \"max_delivery_queue_files\": 0,\n    \"max_lane_wait_count\": 6,\n    \"max_lane_wait_p95_ms\": 10000\n  },\n  \"timestamp_et\": \"2026-03-02 21:44\"\n}\n"
+    },
+    "stage": {
+      "cmd": "echo stage-ok",
+      "cwd": "/Users/corystoner/src/ORION",
+      "duration_seconds": 0.005,
+      "ended_at": "2026-03-03T02:44:28.341038+00:00",
+      "returncode": 0,
+      "started_at": "2026-03-03T02:44:28.336227+00:00",
+      "stderr": "",
+      "stdout": "stage-ok\n"
+    }
+  },
+  "timestamp_utc": "2026-03-03T02:44:28.335616+00:00",
+  "verdict": {
+    "reasons": [
+      "canary decision is hold"
+    ],
+    "status": "fail"
+  }
+}

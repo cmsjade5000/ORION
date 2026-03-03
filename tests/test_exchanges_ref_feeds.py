@@ -29,6 +29,16 @@ class TestExchangeRefFeeds(unittest.TestCase):
             v = ex.latest_binance_funding_rate_bps("KXBTC")
         self.assertAlmostEqual(float(v), 2.0, places=9)
 
+    def test_series_mapping_helpers_cover_new_series(self) -> None:
+        import scripts.arb.exchanges as ex
+
+        self.assertTrue(ex.has_series_mapping("KXBTCD"))
+        self.assertTrue(ex.has_series_mapping("KXBTC15M"))
+        self.assertTrue(ex.has_series_mapping("KXETHD"))
+        self.assertTrue(ex.has_series_mapping("KXSOL15M"))
+        self.assertFalse(ex.has_series_mapping("KXUNKNOWN"))
+        self.assertEqual(ex.list_unmapped_series(["KXBTC", "KXETHD", "KXUNKNOWN"]), ["KXUNKNOWN"])
+
 
 if __name__ == "__main__":
     unittest.main()

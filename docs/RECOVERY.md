@@ -93,3 +93,24 @@ This is intentionally login-scoped (LaunchAgent). It is not a boot-level daemon.
 
 1. Append an `INCIDENT v1` entry to `tasks/INCIDENTS.md` if you restarted anything or hit a safety bypass.
 2. Create a follow-up Task Packet for prevention if the issue can repeat (bad config, provider outage, auth drift, disk pressure).
+
+## March 2026 Reliability Hardening Checks
+
+When validating March compute-allocation changes, run these checks after restart:
+
+1. Plugin trust allowlist:
+   - `python3 - <<'PY'`
+   - `import json, pathlib`
+   - `j=json.loads(pathlib.Path('/Users/corystoner/.openclaw/openclaw.json').read_text())`
+   - `print('plugins.allow', j.get('plugins',{}).get('allow'))`
+   - `PY`
+2. Model fallback/auth posture:
+   - `openclaw models status --check`
+3. Cron delivery/channel consistency:
+   - ensure no enabled cron job targets a disabled channel/plugin.
+4. Delivery queue health:
+   - `python3 - <<'PY'`
+   - `from pathlib import Path; print(len(list(Path('/Users/corystoner/.openclaw/delivery-queue').glob('*.json'))))`
+   - `PY`
+5. Queue pressure follow-up (24h):
+   - parse `~/.openclaw/logs/gateway.err.log` for `lane wait exceeded` and compare against `eval/history/baseline-2026-03.json`.

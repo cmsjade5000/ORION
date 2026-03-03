@@ -12,7 +12,7 @@ Design goals:
 ## Runtime Model
 
 - **ORION** (`agentId: main`) is the only user-facing bot (Telegram/Discord/Slack when configured).
-- Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **EMBER**, **LEDGER**, **POLARIS**, **SCRIBE**, **WIRE**.
+- Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **QUEST**, **EMBER**, **LEDGER**, **POLARIS**, **SCRIBE**, **WIRE**.
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
 
