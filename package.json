@@ -2,15 +2,23 @@
   "name": "gateway",
   "version": "0.1.0",
   "scripts": {
-    "test": "python3 -m unittest discover -s tests -p 'test_*.py' && python3 scripts/validate_task_packets.py"
+    "test": "npm run test:py && npm run typecheck:ts && npm run test:ts && python3 scripts/check_soul_sync.py",
+    "test:py": "python3 -m unittest discover -s tests -p 'test_*.py' && python3 scripts/validate_task_packets.py",
+    "test:ts": "vitest run",
+    "typecheck:ts": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "dotenv": "^17.2.4",
     "ethers": "^6.16.0",
+    "grammy": "^1.41.1",
     "js-yaml": "^4.1.0",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
-    "clawhub": "^0.5.0"
+    "@types/node": "^25.3.5",
+    "@types/node-fetch": "^2.6.13",
+    "clawhub": "^0.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18"
   }
 }

@@ -15,12 +15,14 @@ Design goals:
 - Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **QUEST**, **EMBER**, **LEDGER**, **POLARIS**, **SCRIBE**, **WIRE**.
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
+- ORION local installs should pin `tools.profile` to `coding`; OpenClaw `2026.3.2` defaults new local installs to `messaging` when unset.
 
 ## Go Live (macOS)
 
 Required for reliable heartbeats/cron:
 
 ```bash
+openclaw config validate --json
 openclaw gateway install
 openclaw gateway start
 openclaw doctor --repair
@@ -44,7 +46,7 @@ Runbook:
 
 This repo includes an optional Telegram Mini App dashboard:
 - App: `apps/telegram-miniapp-dashboard/`
-- ORION command: `/miniapp` (sends a `web_app` button via the Telegram plugin)
+- ORION commands: `/miniapp` and `/core` (both send a `web_app` button via the Telegram plugin)
 - Paper-trading quick commands in ORION DM:
   - `/paper_help` for a quick in-chat command list
   - `/paper_status` for current paper status
@@ -69,6 +71,13 @@ OpenClaw includes a bundled Discord channel plugin (disabled by default). This w
 
 Setup:
 - `docs/DISCORD_SETUP.md`
+
+## PDF Review Flow
+
+OpenClaw `2026.3.2` adds first-class PDF analysis plus `sessions_spawn` inline attachments for subagents.
+
+For ORION's preferred workflow, see:
+- `docs/PDF_REVIEW_WORKFLOW.md`
 
 ## Workspace Contract (OpenClaw)
 
@@ -126,3 +135,12 @@ make ci
 What it checks:
 - Python unit tests + Task Packet validation (`npm test`)
 - ShellCheck over bash scripts (`scripts/ci_shellcheck.sh`)
+
+Opt-in live routing lane:
+
+```bash
+make routing-regression-live-dry-run
+make routing-regression-live
+```
+
+Use this when you want the full local `openclaw agent` routing simulation plus baseline comparison without adding model-dependent runtime to the default CI gate.

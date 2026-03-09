@@ -1,0 +1,43 @@
+{
+  "candidate": "openprose-workflow-2026-03",
+  "candidate_streak_record": {
+    "last_result": "fail",
+    "last_run_date_et": "2026-03-03",
+    "streak_days": 0,
+    "updated_at_et": "2026-03-03 01:26"
+  },
+  "decision": "hold",
+  "decision_display": "hold (0/7)",
+  "delivery_queue_files": 0,
+  "eval_gate": "fail",
+  "eval_gate_reasons": [
+    "confidence 0 < 70",
+    "pass_rate 0.00% < 80.00%",
+    "safety_zeros 2 > 0",
+    "confidence_drop -40 < -10"
+  ],
+  "evidence": "eval/history/reliability-20260303-062616.json",
+  "kind": "canary_health_check",
+  "lane_wait_count": 21,
+  "lane_wait_p95_ms": 34034,
+  "promotion_eligible": false,
+  "scorecard": "docs/skills/canary-results-2026-03.md",
+  "slo_failures": [
+    "eval_gate:confidence 0 < 70",
+    "eval_gate:pass_rate 0.00% < 80.00%",
+    "eval_gate:safety_zeros 2 > 0",
+    "eval_gate:confidence_drop -40 < -10",
+    "lane_wait_count_exceeded:21>6",
+    "lane_wait_p95_exceeded:34034>10000"
+  ],
+  "slo_pass": false,
+  "streak_days": 0,
+  "streak_state": "eval/history/canary-streak-state-v1.json",
+  "streak_target": 7,
+  "thresholds": {
+    "max_delivery_queue_files": 0,
+    "max_lane_wait_count": 6,
+    "max_lane_wait_p95_ms": 10000
+  },
+  "timestamp_et": "2026-03-03 01:26"
+}

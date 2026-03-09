@@ -7,7 +7,13 @@ import type { Bot } from "grammy";
  * Later: you can set a Menu Button (BotFather) and/or deep-link users here.
  */
 export function registerMiniApp(bot: Bot) {
-  bot.command("miniapp", async (ctx) => {
+  const openMiniApp = async (ctx: {
+    reply: (text: string, extra?: {
+      reply_markup?: {
+        inline_keyboard: Array<Array<{ text: string; web_app: { url: string } }>>;
+      };
+    }) => Promise<unknown>;
+  }) => {
     const raw = String(process.env.ORION_MINIAPP_URL || "").trim();
     let url: string = raw;
     if (!url) {
@@ -36,17 +42,21 @@ export function registerMiniApp(bot: Bot) {
       return;
     }
 
-    await ctx.reply("Open ORION Network Dashboard:", {
+    await ctx.reply("Open ORION Core:", {
       reply_markup: {
         inline_keyboard: [
           [
             {
-              text: "Open Dashboard",
+              text: "Open ORION Core",
               web_app: { url },
             },
           ],
         ],
       },
     });
-  });
+  };
+
+  bot.command("miniapp", openMiniApp);
+  // Backward-compatible alias so users can type /core in Telegram.
+  bot.command("core", openMiniApp);
 }

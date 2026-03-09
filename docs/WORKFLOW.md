@@ -42,6 +42,7 @@ This document outlines the recommended workflow for developing and maintaining t
 
 6. **Go live locally (recommended order)**
    ```bash
+   openclaw config validate --json
     openclaw gateway install
    openclaw gateway start
    openclaw doctor --repair
@@ -49,6 +50,8 @@ This document outlines the recommended workflow for developing and maintaining t
    openclaw channels status --probe
    openclaw agents list --bindings
    ```
+   - OpenClaw `2026.3.2` defaults new local installs to `tools.profile=messaging` when unset.
+   - ORION should pin `tools.profile` to `coding` in local installs.
 
 ## Daily Commands
 
@@ -60,6 +63,8 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make restart`      | Restart the OpenClaw gateway service.              |
 | `make soul`         | Regenerate all agent `SOUL.md` identity files.     |
 | `make routingsim`   | Run routing eval + regression gate against baseline. |
+| `make routing-regression-live-dry-run` | Print preflight status and planned live routing commands. |
+| `make routing-regression-live` | Run the local OpenClaw-backed routing regression gate. |
 | `make skill-discovery` | Run online OpenClaw skill discovery + update generated shortlist section. |
 | `make monthly-scorecard` | Regenerate monthly scorecard from eval/reliability/canary artifacts. |
 | `make route-hygiene` | Enforce daily route hygiene guard (safe autofix + report artifact). |

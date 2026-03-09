@@ -42,6 +42,15 @@ Output Format:
 - `Context:` short background paragraph
 - `Scope:` included/excluded
 - `Timebox:` e.g., `30m` or `2h`
+- `Execution Mode:` `direct` | `delegate` | `parallel` | `batch`
+  - `parallel` is for independent, non-destructive work only.
+  - `batch` is for bounded row-wise jobs (for example `spawn_agents_on_csv`) with explicit schema and limits.
+- `Tool Scope:` `read-only` | `write`
+- `Tool Plan:` compact list of intended tool families (for example `mcp-read`, `parallel-checks`, `subagents`)
+- `Retrieval Order:` `mcp-first` | `web-first`
+  - Default to `mcp-first` when relevant resources exist.
+- `Evidence Required:` required proof items (paths/outputs/check lines) before marking complete.
+- `Rollback:` required for write or destructive flows; document reversible fallback.
 - `Dependencies:` other tasks/agents needed first
 - `Checkpoints:` interim status points
 - `Notify:` `telegram` | `discord` | `none` (also supports `telegram,discord`)
@@ -96,6 +105,12 @@ Stop Gates:
 Output Format:
 - Short checklist of what was checked + what changed.
 ```
+
+Suggested additions for tool-heavy cron packets:
+- `Execution Mode: direct`
+- `Tool Scope: read-only` unless explicitly approved otherwise
+- `Evidence Required:` command output path or report path
+- `Rollback:` if packet can write or modify system state
 
 ## ORION → Specialist Session Guidance
 

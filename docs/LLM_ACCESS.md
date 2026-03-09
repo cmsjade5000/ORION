@@ -75,3 +75,4 @@ openclaw models fallbacks add google/gemini-2.5-flash-lite
 
 - Secrets belong in `~/.openclaw/` per `KEEP.md`. Never paste keys into chat or commit them.
 - `openclaw.yaml` / `openclaw.json.example` are templates only; runtime config is `~/.openclaw/openclaw.json`.
+- For supported credential fields in runtime config, prefer SecretRef objects over raw `${ENV}` strings so `openclaw secrets` audit/planning flows can inspect them cleanly.

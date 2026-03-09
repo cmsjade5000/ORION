@@ -6,7 +6,7 @@
 #
 # Telegram requires HTTPS; Fly provides it automatically.
 
-app = "orion-miniapp-cory-95ce0d"
+app = "orion-miniapp-dashboard-cory-95ce0d"
 primary_region = "ord"
 
 [build]
@@ -24,4 +24,3 @@ primary_region = "ord"
   auto_stop_machines = "stop"
   min_machines_running = 0
   processes = ["app"]
-

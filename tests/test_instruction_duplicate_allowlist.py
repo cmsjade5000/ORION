@@ -15,8 +15,11 @@ class TestInstructionDuplicateAllowlist(unittest.TestCase):
     def setUpClass(cls):
         repo = Path(__file__).resolve().parents[1]
         cfg_path = repo / "src" / "core" / "shared" / "instruction_duplicate_allowlist.json"
+        rules_path = repo / "src" / "core" / "shared" / "orion_survival_rules.json"
         cls.cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        survival_cfg = json.loads(rules_path.read_text(encoding="utf-8"))
         cls.repo = repo
+        cls.survival_rules = {rule["id"]: rule for rule in survival_cfg["rules"]}
 
         cls.canonical_files: list[str] = cls.cfg["canonical_files"]
         cls.canonical_text: dict[str, str] = {}
@@ -43,7 +46,9 @@ class TestInstructionDuplicateAllowlist(unittest.TestCase):
 
     def test_allowed_duplicate_counts(self):
         for rule in self.cfg["allowed_duplicates"]:
-            files = self._files_with_phrase(rule["phrase"])
+            self.assertIn(rule["id"], self.survival_rules)
+            phrase = self.survival_rules[rule["id"]]["duplicate_phrase"]
+            files = self._files_with_phrase(phrase)
             count = len(files)
             self.assertGreaterEqual(
                 count,
@@ -55,6 +60,11 @@ class TestInstructionDuplicateAllowlist(unittest.TestCase):
                 rule["max_files"],
                 f'{rule["id"]} above max_files; found in {files}',
             )
+
+    def test_survival_rule_requirements_match_allowlist(self):
+        allowlisted_ids = {rule["id"] for rule in self.cfg["allowed_duplicates"]}
+        survival_ids = {rule_id for rule_id in self.survival_rules}
+        self.assertEqual(allowlisted_ids, survival_ids)
 
     def test_blocked_reintroductions(self):
         for rule in self.cfg["blocked_reintroductions"]:

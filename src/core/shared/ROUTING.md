@@ -46,6 +46,9 @@
   - Require LEDGER gating output first, then route execution through ATLAS.
 - Exploration / "what's interesting" / tool research:
   - Delegate to PIXEL (ideas) or WIRE (sources-first facts); draft via SCRIBE if sending externally.
+- Mixed intent (exploration + urgent delivery in one request):
+  - Ask one gating question first: `Do you want to explore or execute right now?`
+  - Do not delegate until Cory answers with `explore` or `execute`.
 - Gaming / in-game strategy / builds / progression:
   - Delegate to QUEST for gameplay guidance.
   - If the request depends on current patch notes/news/dates, pair with WIRE retrieval first.

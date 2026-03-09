@@ -1,0 +1,15 @@
+{
+  "kind": "task_packet_v1",
+  "owner": "ATLAS",
+  "requester": "ORION",
+  "objective": "Add a guarded deployment checklist and verify rollback command coverage.",
+  "success_criteria": [
+    "Checklist committed",
+    "Rollback command documented",
+    "Validation script exits zero"
+  ],
+  "stop_gates": [
+    "Missing production backup",
+    "Unverified rollback command"
+  ]
+}

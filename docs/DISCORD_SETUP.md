@@ -61,7 +61,7 @@ Then set config:
 
 ```bash
 openclaw config set channels.discord.enabled true
-openclaw config set channels.discord.token '${DISCORD_BOT_TOKEN}'
+openclaw config set --json channels.discord.token '{"source":"env","provider":"default","id":"DISCORD_BOT_TOKEN"}'
 
 # DM allowlist (recommended for personal use)
 openclaw config set channels.discord.dm.policy allowlist
@@ -86,6 +86,10 @@ openclaw config set channels.discord.replyToMode off
 # Proactive updates target (used by scripts/notify_inbox_results.py)
 export DISCORD_DEFAULT_POST_TARGET="channel:<DISCORD_UPDATES_CHANNEL_ID>"
 ```
+
+Notes:
+- SecretRef is preferred on supported credential surfaces in OpenClaw `2026.3.2`.
+- `${DISCORD_BOT_TOKEN}` interpolation remains compatible, but SecretRef gives better `openclaw secrets` planning/audit behavior.
 
 ## High-Autonomy Bootstrap (Server-Wide ORION Operations)
 

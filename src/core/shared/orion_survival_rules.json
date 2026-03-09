@@ -1,0 +1,48 @@
+{
+  "rules": [
+    {
+      "id": "R1",
+      "description": "Cron and scheduling requests route through ATLAS with a Task Packet.",
+      "duplicate_phrase": "delegate to ATLAS with a Task Packet",
+      "required_in": ["AGENTS.md", "src/agents/ORION.md"],
+      "soul_head_phrase": "delegate to ATLAS with a Task Packet"
+    },
+    {
+      "id": "R2",
+      "description": "Operational changes cannot be claimed complete without execution and verification.",
+      "duplicate_phrase": "Never claim an operational change is already complete",
+      "required_in": ["AGENTS.md", "src/core/shared/ROUTING.md"],
+      "soul_head_phrase": "Never claim an operational change is already complete"
+    },
+    {
+      "id": "R3",
+      "description": "Crisis language requires safety-first guidance and EMBER handoff.",
+      "duplicate_phrase": "safety-first guidance",
+      "required_in": ["AGENTS.md", "src/core/shared/ROUTING.md", "src/agents/ORION.md"],
+      "soul_head_phrase": "Give safety-first guidance"
+    },
+    {
+      "id": "R4",
+      "description": "Destructive work requires an explicit confirmation gate and reversible first step.",
+      "duplicate_phrase": "reversible first step",
+      "required_in": ["AGENTS.md", "src/agents/ORION.md"],
+      "soul_head_phrase": "reversible first step"
+    },
+    {
+      "id": "R5",
+      "description": "Mixed-intent requests must use the explore-vs-execute gate.",
+      "duplicate_phrase": "\"explore\" vs \"execute\"",
+      "required_in": ["AGENTS.md", "src/agents/ORION.md"],
+      "exact_phrase": "Do you want to explore or execute right now?",
+      "exact_required_in": ["src/core/shared/ROUTING.md", "src/agents/ORION.md"],
+      "soul_head_phrase": "Do you want to explore or execute right now?"
+    },
+    {
+      "id": "R6",
+      "description": "sessions_spawn announce prompts must be answered with ANNOUNCE_SKIP.",
+      "duplicate_phrase": "ANNOUNCE_SKIP",
+      "required_in": ["AGENTS.md", "src/agents/ORION.md"],
+      "soul_head_phrase": "ANNOUNCE_SKIP"
+    }
+  ]
+}

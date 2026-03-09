@@ -1,5 +1,9 @@
 {
   "_comment": "Example OpenClaw config for ORION local development. Runtime config lives at ~/.openclaw/openclaw.json. Do not store secrets in Git.",
+  "tools": {
+    "_comment": "OpenClaw 2026.3.2 defaults new local installs to tools.profile=messaging when unset. ORION is a local workspace agent and expects the broader coding tool posture.",
+    "profile": "coding"
+  },
   "agents": {
     "defaults": {
       "workspace": "/Users/corystoner/Desktop/ORION",
@@ -62,9 +66,13 @@
       "streamMode": "partial"
     },
     "discord": {
-      "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md).",
+      "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env and reference it via SecretRef (see KEEP.md).",
       "enabled": false,
-      "token": "${DISCORD_BOT_TOKEN}",
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "DISCORD_BOT_TOKEN"
+      },
       "allowBots": false,
       "commands": {
         "native": "auto",
@@ -104,13 +112,17 @@
     }
   },
   "models": {
-    "_comment": "Optional: custom provider config for NVIDIA Build (OpenAI-compatible). Store NVIDIA_API_KEY in ~/.openclaw/.env (see KEEP.md).",
+    "_comment": "Optional: custom provider config for NVIDIA Build (OpenAI-compatible). Store NVIDIA_API_KEY in ~/.openclaw/.env and reference it via SecretRef (see KEEP.md).",
     "mode": "merge",
     "providers": {
       "nvidia-build": {
         "api": "openai-completions",
         "baseUrl": "https://integrate.api.nvidia.com/v1",
-        "apiKey": "${NVIDIA_API_KEY}",
+        "apiKey": {
+          "source": "env",
+          "provider": "default",
+          "id": "NVIDIA_API_KEY"
+        },
         "models": [
           {
             "id": "moonshotai/kimi-k2-5",

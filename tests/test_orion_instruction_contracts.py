@@ -1,4 +1,5 @@
 import unittest
+import json
 from pathlib import Path
 
 
@@ -49,6 +50,22 @@ class TestOrionInstructionContracts(unittest.TestCase):
             encoding="utf-8"
         )
         cls.orion_role_text = (repo / "src" / "agents" / "ORION.md").read_text(encoding="utf-8")
+        cls.atlas_role_text = (repo / "src" / "agents" / "ATLAS.md").read_text(encoding="utf-8")
+        cls.task_packet_text = (repo / "docs" / "TASK_PACKET.md").read_text(encoding="utf-8")
+        cls.survival_rules = {
+            rule["id"]: rule
+            for rule in json.loads(
+                (repo / "src" / "core" / "shared" / "orion_survival_rules.json").read_text(
+                    encoding="utf-8"
+                )
+            )["rules"]
+        }
+
+    def test_survival_rule_artifact_shape(self):
+        for rule_id in ("R1", "R2", "R3", "R4", "R5", "R6"):
+            self.assertIn(rule_id, self.survival_rules)
+            self.assertIn("duplicate_phrase", self.survival_rules[rule_id])
+            self.assertIn("required_in", self.survival_rules[rule_id])
 
     def test_cron_delegation_contract(self):
         self.assertIn("ATLAS delegation with a Task Packet", self.agents_text)
@@ -57,6 +74,10 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("not configured yet", self.agents_text)
         self.assertIn("HARD RULE: do not claim it is already configured.", self.orion_role_text)
         self.assertIn("Direct execution criteria (all required):", self.orion_role_text)
+        rule = self.survival_rules["R1"]
+        for rel in rule["required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["duplicate_phrase"], text)
 
     def test_operational_change_verification_contract(self):
         self.assertIn(
@@ -64,16 +85,28 @@ class TestOrionInstructionContracts(unittest.TestCase):
             self.routing_text,
         )
         self.assertIn("Never claim an operational change is already done", self.orion_role_text)
+        rule = self.survival_rules["R2"]
+        for rel in rule["required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["duplicate_phrase"], text)
 
     def test_crisis_handoff_contract(self):
         self.assertIn("safety-first guidance, then hand off to EMBER (primary).", self.agents_text)
         self.assertIn("Give safety-first guidance (emergency services / 988 in the US).", self.orion_role_text)
         self.assertIn("hand off to EMBER (primary)", self.orion_role_text)
+        rule = self.survival_rules["R3"]
+        for rel in rule["required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["duplicate_phrase"], text)
 
     def test_destructive_reset_contract(self):
         self.assertIn("explicit confirmation gate + propose a reversible first step", self.agents_text)
         self.assertIn("Ask for explicit confirmation.", self.orion_role_text)
         self.assertIn("reversible first step", self.orion_role_text)
+        rule = self.survival_rules["R4"]
+        for rel in rule["required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["duplicate_phrase"], text)
 
     def test_announce_skip_contract(self):
         self.assertIn("Reply exactly `ANNOUNCE_SKIP`", self.agents_text)
@@ -81,13 +114,26 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("After the announce prompt is satisfied, send a normal user-facing synthesis", self.agents_text)
         self.assertIn("reply with exactly `ANNOUNCE_SKIP`", self.orion_role_text)
         self.assertIn("After satisfying an announce prompt with `ANNOUNCE_SKIP`", self.orion_role_text)
+        rule = self.survival_rules["R6"]
+        for rel in rule["required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["duplicate_phrase"], text)
 
     def test_explore_execute_contract(self):
         self.assertIn(
             'Explore vs execute: ask explicitly "explore" vs "execute" when user intent is ambiguous or impact is non-trivial.',
             self.agents_text,
         )
+        rule = self.survival_rules["R5"]
         self.assertIn('Ask explicitly using the words: "explore" vs "execute"', self.orion_role_text)
+        self.assertIn(rule["exact_phrase"], self.orion_role_text)
+        self.assertIn("stop and wait for the one-word answer", self.orion_role_text)
+        for rel in rule["required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["duplicate_phrase"], text)
+        for rel in rule["exact_required_in"]:
+            text = (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+            self.assertIn(rule["exact_phrase"], text)
 
     def test_proactive_clarification_contract(self):
         self.assertIn(
@@ -103,16 +149,61 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("report it as `queued`, `in progress`, or `pending verification`", self.agents_text)
         self.assertIn("use explicit progress states: `queued`, `in progress`, or `pending verification`", self.orion_role_text)
 
+    def test_notes_and_reminders_contract(self):
+        self.assertIn("For Apple Notes requests", self.orion_role_text)
+        self.assertIn(
+            "use Notes capabilities first",
+            self.orion_role_text,
+        )
+        self.assertIn(
+            "never use repo `read`/`*.md` title lookup unless Cory explicitly asks for a repo file.",
+            self.orion_role_text,
+        )
+        self.assertIn("For Apple Reminders requests, use Reminders capabilities first", self.orion_role_text)
+        self.assertIn(
+            "If Apple Notes lookup fails, ask Cory to paste or screenshot the note text",
+            self.orion_role_text,
+        )
+        self.assertIn("For note-summary requests", self.orion_role_text)
+        self.assertIn(
+            "If a requested note is not found, do not propose creating a new note unless Cory explicitly asks to create one.",
+            self.orion_role_text,
+        )
+
+    def test_agentmail_identity_contract(self):
+        self.assertIn("orion_gatewaybot@agentmail.to", self.orion_role_text)
+        self.assertIn("AgentMail inbox identity, not a personal mailbox", self.orion_role_text)
+        self.assertIn("Never answer that ORION has no email address.", self.orion_role_text)
+
+    def test_verifiable_capability_claims_contract(self):
+        self.assertIn("Only claim capabilities you can verify in-turn.", self.orion_role_text)
+        self.assertIn("Never emit raw `<tool_code>`", self.orion_role_text)
+        self.assertIn("Never emit raw `<error>` blocks", self.orion_role_text)
+        self.assertIn("Mac control capability question:", self.orion_role_text)
+
+    def test_tool_execution_contracts(self):
+        self.assertIn("Execution Mode", self.orion_role_text)
+        self.assertIn("Tool Scope", self.orion_role_text)
+        self.assertIn("mcp-first", self.orion_role_text)
+        self.assertIn("parallel tool calls only for independent, non-destructive checks", self.orion_role_text)
+        self.assertIn("Tool orchestration rules:", self.atlas_role_text)
+        self.assertIn("multi_tool_use.parallel", self.atlas_role_text)
+        self.assertIn("spawn_agents_on_csv", self.atlas_role_text)
+
+    def test_task_packet_tool_fields_contract(self):
+        self.assertIn("Execution Mode:", self.task_packet_text)
+        self.assertIn("Tool Scope:", self.task_packet_text)
+        self.assertIn("Retrieval Order:", self.task_packet_text)
+        self.assertIn("Evidence Required:", self.task_packet_text)
+        self.assertIn("Rollback:", self.task_packet_text)
+
     def test_survival_rules_present_in_soul_head(self):
         soul = _compose_soul("ORION")
         head = soul[:17500]
-        self.assertIn("delegate to ATLAS with a Task Packet", head)
-        self.assertIn("Never claim an operational change is already complete", head)
+        for rule in self.survival_rules.values():
+            self.assertIn(rule["soul_head_phrase"], head)
         self.assertIn("HARD RULE: do not claim it is already configured", head)
-        self.assertIn("Give safety-first guidance", head)
         self.assertIn("Ask for explicit confirmation.", head)
-        self.assertIn("reversible first step", head)
-        self.assertIn("ANNOUNCE_SKIP", head)
 
 
 if __name__ == "__main__":

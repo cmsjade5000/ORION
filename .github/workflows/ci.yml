@@ -35,3 +35,21 @@ jobs:
       - name: Run CI Gate
         run: make ci
 
+      - name: Run MCP Harness Smoke Test
+        run: make mcp-harness-smoke
+
+      - name: Run Skill Guards Smoke Suite
+        run: make skill-guards-smoke
+
+      - name: Validate Promptfoo Config
+        run: make redteam-validate
+
+      - name: Run Promptfoo Redteam Gate
+        if: ${{ secrets.OPENAI_API_KEY != '' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: make redteam-gate
+
+      - name: Redteam Gate Skipped (Missing Secret)
+        if: ${{ secrets.OPENAI_API_KEY == '' }}
+        run: 'echo "Skipping redteam-gate: OPENAI_API_KEY secret is not configured for this workflow context."'

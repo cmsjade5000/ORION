@@ -1,0 +1,18 @@
+{
+  "name": "orion-core-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Telegram bot scaffold for ORION Core Mini App",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "typescript": "^5.4.5"
+  }
+}

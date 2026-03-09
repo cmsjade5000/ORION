@@ -1,0 +1,144 @@
+{
+  "routes": [
+    {
+      "id": "cron_ops",
+      "owner": "ATLAS",
+      "trigger_phrase": "Cron / scheduling",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to ATLAS"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "delegate to ATLAS with a Task Packet"
+        }
+      ],
+      "notes": "Cron, scheduling, heartbeat, reminders, and recurring execution route through ATLAS for non-trivial workflows."
+    },
+    {
+      "id": "admin_copilot",
+      "owner": "POLARIS",
+      "trigger_phrase": "Admin co-pilot workflows",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to POLARIS"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "delegate to POLARIS with a Task Packet"
+        }
+      ],
+      "notes": "Admin workflows route to POLARIS, with execution flowing through ATLAS when needed."
+    },
+    {
+      "id": "infra_gateway",
+      "owner": "ATLAS",
+      "trigger_phrase": "Infra / gateway / ports / host health / deploy",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to ATLAS"
+        }
+      ],
+      "notes": "Infra and gateway work route through ATLAS, then STRATUS/NODE/PULSE as needed."
+    },
+    {
+      "id": "emotional_support",
+      "owner": "EMBER",
+      "trigger_phrase": "Emotional overwhelm / panic / distress",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to EMBER"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "hand off to EMBER (primary)"
+        }
+      ],
+      "notes": "Emotional distress routes to EMBER, with safety-first handling for crisis language."
+    },
+    {
+      "id": "money_tradeoffs",
+      "owner": "LEDGER",
+      "trigger_phrase": "Money / buying decisions / budgets",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to LEDGER"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "route to LEDGER"
+        }
+      ],
+      "notes": "Money and buying decisions route to LEDGER after a small intake."
+    },
+    {
+      "id": "tool_research",
+      "owner": "PIXEL",
+      "trigger_phrase": "Exploration / \"what's interesting\" / tool research",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to PIXEL"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "delegate to PIXEL"
+        }
+      ],
+      "notes": "Tool exploration routes to PIXEL; factual retrieval may pair with WIRE."
+    },
+    {
+      "id": "mixed_intent_gate",
+      "owner": "ORION",
+      "trigger_phrase": "Mixed intent",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Do you want to explore or execute right now?"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "Do you want to explore or execute right now?"
+        }
+      ],
+      "notes": "Mixed intent must ask the exact explore-vs-execute gate before delegation."
+    },
+    {
+      "id": "gaming_support",
+      "owner": "QUEST",
+      "trigger_phrase": "Gaming / in-game strategy / builds / progression",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "Delegate to QUEST"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "delegate to QUEST"
+        }
+      ],
+      "notes": "Gaming support routes to QUEST, paired with WIRE for current patch/news claims."
+    },
+    {
+      "id": "config_drift",
+      "owner": "NODE",
+      "trigger_phrase": "System glue / repo organization / drift / \"where should this live\"",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "then NODE as needed"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "delegate to NODE"
+        }
+      ],
+      "notes": "System glue, memory discipline, and config-location drift route to NODE via ATLAS or directly when framed that way in ORION policy."
+    }
+  ]
+}

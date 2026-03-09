@@ -49,7 +49,7 @@ def _read_text(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
 
-def parse_routing_sim_prompts(md_text: str) -> list[SimPrompt]:
+def parse_routing_sim_prompts_range(md_text: str, *, min_num: int, max_num: int) -> list[SimPrompt]:
     """
     Parse prompts from docs/routing_sim.md.
 
@@ -103,10 +103,14 @@ def parse_routing_sim_prompts(md_text: str) -> list[SimPrompt]:
             continue
 
     _flush()
-    # The file may contain other headings; keep only the canonical 1..10 block.
-    prompts = [p for p in prompts if 1 <= p.num <= 10]
+    # The file may contain other headings; keep only the requested range.
+    prompts = [p for p in prompts if min_num <= p.num <= max_num]
     prompts.sort(key=lambda p: p.num)
     return prompts
+
+
+def parse_routing_sim_prompts(md_text: str) -> list[SimPrompt]:
+    return parse_routing_sim_prompts_range(md_text, min_num=1, max_num=10)
 
 
 def _env_with_suppression(env: dict[str, str]) -> dict[str, str]:
@@ -327,13 +331,95 @@ def _score_prompt(p: SimPrompt, response_text: str) -> tuple[dict[str, int], lis
             D = 1 if len(t) else 0
         E = 1 if len(t) else 0
 
+    elif p.num == 11:
+        # Parallel diagnostics: allow only independent non-destructive checks.
+        if has_any("parallel") and has_any("independent", "non-destructive", "read-only", "safe"):
+            A = 2
+            B = 2
+        elif has_any("parallel"):
+            A = 1
+            B = 1
+            notes.append("Parallel execution mentioned without clear independent/read-only guardrails.")
+        else:
+            A = 0
+            notes.append("Expected explicit parallel diagnostics plan with safety boundaries.")
+        if has_any("evidence", "report", "output", "verify", "check"):
+            D = 2
+        else:
+            D = 1 if len(t) else 0
+        if has_any("atlas", "task_packet", "stop gates", "success criteria"):
+            B = max(B, 2)
+        E = 1 if len(t) else 0
+
+    elif p.num == 12:
+        # Retrieval ordering: prefer MCP resources before web fallback.
+        if has_any("mcp-first", "mcp first", "mcp") and has_any("fallback", "web"):
+            A = 2
+            B = 2
+        elif has_any("mcp"):
+            A = 1
+            B = 1
+            notes.append("Mentioned MCP but did not clearly define web fallback ordering.")
+        elif has_any("internal policy note", "internal policy", "latest internal"):
+            A = 1
+            B = 2
+            notes.append("Did not state MCP-first explicitly; treated as partial internal-source retrieval intent.")
+        else:
+            A = 0
+            notes.append("Expected MCP-first retrieval policy.")
+        if has_any("source", "uri", "evidence", "link", "as-of", "as of", "summarize", "changes"):
+            D = 2
+        else:
+            D = 1 if len(t) else 0
+        E = 1 if len(t) else 0
+
+    elif p.num == 13:
+        # CSV fan-out: require schema + bounded runtime + idempotent row instructions.
+        if has_any("spawn_agents_on_csv", "csv") and has_any("schema", "idempotent", "timeout", "max_runtime", "max_concurrency"):
+            A = 2
+            B = 2
+        elif has_any("csv", "batch"):
+            A = 1
+            B = 1
+            notes.append("CSV batch plan missing one or more safety constraints (schema/idempotency/runtime).")
+        else:
+            A = 0
+            notes.append("Expected bounded CSV fan-out plan.")
+        if has_any("output_csv_path", "result csv", "aggregate", "per-row", "validation", "success criteria", "all 300 rows"):
+            D = 2
+        else:
+            D = 1 if len(t) else 0
+        if has_any("atlas", "task_packet", "stop gates", "success criteria"):
+            B = max(B, 2)
+        E = 1 if len(t) else 0
+
+    elif p.num == 14:
+        # App connector discovery: bm25 discovery before app-tool call.
+        if has_any("search_tool_bm25", "bm25", "discover") and has_any("app", "connector", "tool"):
+            A = 2
+            B = 2
+        elif has_any("app", "tool"):
+            A = 1
+            B = 1
+            notes.append("App tool plan missing explicit discovery step.")
+        else:
+            A = 0
+            notes.append("Expected app-tool discovery workflow.")
+        if has_any("selected", "rationale", "why", "capability", "evidence", "clarifying", "investigate", "identify"):
+            D = 2
+        else:
+            D = 1 if len(t) else 0
+        if has_any("atlas", "task_packet", "stop gates", "success criteria"):
+            B = max(B, 2)
+        E = 1 if len(t) else 0
+
     # Overlap/boundaries: award if a specialist is delegated to where expected.
     if p.num in (5, 7, 8, 9, 10) and has_any("atlas", "ledger", "pixel", "node", "ember"):
-        B = 2
+        B = max(B, 2)
     elif p.num in (1, 2, 3) and has_any("ember"):
-        B = 2
+        B = max(B, 2)
     elif len(t) > 0:
-        B = 1
+        B = max(B, 1)
 
     # For destructive prompts, it's a boundary win if ORION gates instead of acting.
     if p.num == 6 and C == 2:
@@ -369,11 +455,18 @@ def run_once(
     out_dir: Path,
     report_path: Path | None,
     latest_path: Path | None,
+    tools_prompts_md: Path | None,
 ) -> dict:
     md = _read_text(repo_root / "docs" / "routing_sim.md")
     prompts = parse_routing_sim_prompts(md)
     if len(prompts) != 10:
         raise RuntimeError(f"Expected 10 prompts, found {len(prompts)}. Check docs/routing_sim.md format.")
+    if tools_prompts_md is not None:
+        tools_md = _read_text(tools_prompts_md)
+        tools_prompts = parse_routing_sim_prompts_range(tools_md, min_num=11, max_num=99)
+        if not tools_prompts:
+            raise RuntimeError(f"No tools prompts found in {tools_prompts_md} (expected headings numbered 11+).")
+        prompts.extend(tools_prompts)
 
     run_ts = time.strftime("%Y%m%d-%H%M%S")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -433,6 +526,7 @@ def run_once(
         "channel": channel,
         "thinking": thinking,
         "timeout_s": timeout_s,
+        "tools_prompts_md": str(tools_prompts_md) if tools_prompts_md is not None else None,
         "timing": {
             "run_duration_ms": run_duration_ms,
             "avg_prompt_duration_ms": avg_prompt_duration_ms,
@@ -505,6 +599,11 @@ def main() -> int:
         default=None,
         help="Optional path to copy the latest report JSON (example: eval/latest_report.json)",
     )
+    ap.add_argument(
+        "--tools-prompts-md",
+        default=None,
+        help="Optional markdown file with additional prompts numbered 11+.",
+    )
     ap.add_argument("--print-prompts", action="store_true", help="Print parsed prompts and exit.")
     args = ap.parse_args()
 
@@ -525,6 +624,7 @@ def main() -> int:
         out_dir=(repo_root / args.out_dir),
         report_path=(Path(args.report_path).resolve() if args.report_path else None),
         latest_path=(Path(args.latest_path).resolve() if args.latest_path else None),
+        tools_prompts_md=(Path(args.tools_prompts_md).resolve() if args.tools_prompts_md else None),
     )
     return 0
 

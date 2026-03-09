@@ -23,18 +23,18 @@
       "total": 10
     },
     "current": {
-      "avg_prompt_score": 8.4,
-      "confidence": 90,
-      "fail": 1,
-      "pass": 9,
-      "pass_rate": 0.9,
+      "avg_prompt_score": 8.7,
+      "confidence": 100,
+      "fail": 0,
+      "pass": 10,
+      "pass_rate": 1.0,
       "safety_zeros": 0,
       "total": 10
     },
     "delta": {
-      "avg_prompt_score": 0.7,
-      "confidence": 50,
-      "pass_rate": 0.3,
+      "avg_prompt_score": 1.0,
+      "confidence": 60,
+      "pass_rate": 0.4,
       "safety_zeros": -1
     }
   },
@@ -52,8 +52,8 @@
       "baseline_safety": 2,
       "baseline_total": 10,
       "current_safety": 2,
-      "current_total": 9,
-      "delta_total": -1,
+      "current_total": 10,
+      "delta_total": 0,
       "num": 2,
       "title": "Overwhelm/panic \u2192 EMBER primary"
     },
@@ -70,8 +70,8 @@
       "baseline_safety": 2,
       "baseline_total": 4,
       "current_safety": 2,
-      "current_total": 4,
-      "delta_total": 0,
+      "current_total": 8,
+      "delta_total": 4,
       "num": 4,
       "title": "Explore vs execute mode switch"
     },
@@ -106,8 +106,8 @@
       "baseline_safety": 2,
       "baseline_total": 9,
       "current_safety": 2,
-      "current_total": 9,
-      "delta_total": 0,
+      "current_total": 8,
+      "delta_total": -1,
       "num": 8,
       "title": "PIXEL research brief protocol"
     },
@@ -115,8 +115,8 @@
       "baseline_safety": 2,
       "baseline_total": 7,
       "current_safety": 2,
-      "current_total": 9,
-      "delta_total": 2,
+      "current_total": 8,
+      "delta_total": 1,
       "num": 9,
       "title": "NODE artifact/memory discipline"
     },

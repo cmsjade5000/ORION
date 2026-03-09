@@ -13,6 +13,11 @@ agents:
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/Desktop/ORION
 
+tools:
+  # OpenClaw 2026.3.2 defaults new local installs to tools.profile=messaging when unset.
+  # ORION is a local workspace agent and expects the broader coding tool posture.
+  profile: coding
+
 # Optional: Custom model provider for NVIDIA Build (OpenAI-compatible).
 # This is a template only; actual runtime config lives at ~/.openclaw/openclaw.json.
 # Store `NVIDIA_API_KEY` in ~/.openclaw/.env (see KEEP.md), not in Git.
@@ -23,7 +28,10 @@ agents:
 #     nvidia-build:
 #       api: openai-completions
 #       baseUrl: https://integrate.api.nvidia.com/v1
-#       apiKey: "${NVIDIA_API_KEY}"
+#       apiKey:
+#         source: env
+#         provider: default
+#         id: NVIDIA_API_KEY
 #       models:
 #         - id: moonshotai/kimi-k2-5
 #           name: Kimi K2.5 (NVIDIA Build)
@@ -63,12 +71,15 @@ channels:
 
   # Discord channel (OpenClaw bundled plugin: `discord`, disabled by default).
   # Notes:
-  # - Prefer storing DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md) and referencing it via ${...}.
+  # - Prefer storing DISCORD_BOT_TOKEN in ~/.openclaw/.env (see KEEP.md) and referencing it via SecretRef.
   # - Lock down access with dm.policy allowlist/pairing and guild/channel allowlists.
   discord:
     enabled: false
-    # Bot token (recommended via env var interpolation; do not commit secrets).
-    token: "${DISCORD_BOT_TOKEN}"
+    # Bot token (recommended via SecretRef; do not commit secrets).
+    token:
+      source: env
+      provider: default
+      id: DISCORD_BOT_TOKEN
     # Native commands (slash commands) support is available; "auto" lets OpenClaw decide.
     commands:
       native: auto

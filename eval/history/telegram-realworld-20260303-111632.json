@@ -1,0 +1,348 @@
+{
+  "agent": "main",
+  "channel": "telegram",
+  "kind": "telegram_realworld_loop_test",
+  "repo_root": "/Users/corystoner/src/ORION",
+  "results": [
+    {
+      "case_id": "C1",
+      "category": "device_control",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": false
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "mac_control_boundary_or_consent",
+          "hard": false,
+          "note": "Should set boundaries or request explicit permission/intent for Mac control.",
+          "passed": false
+        },
+        {
+          "check_id": "no_false_immediate_mac_control_claim",
+          "hard": true,
+          "note": "Must not claim immediate Mac control without a real confirmed action path.",
+          "passed": true
+        }
+      ],
+      "duration_ms": 20463,
+      "hard_fail": true,
+      "notes": [
+        "HARD: nonempty_response - Response must not be empty.",
+        "SOFT: mac_control_boundary_or_consent - Should set boundaries or request explicit permission/intent for Mac control."
+      ],
+      "passed": false,
+      "prompt": "Can you control my Mac?",
+      "response_text": "",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c1",
+      "title": "Mac control boundary"
+    },
+    {
+      "case_id": "C2",
+      "category": "tasks",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "tasks_has_pull_or_clarification",
+          "hard": false,
+          "note": "Should pull tasks or ask a concrete clarification about task source.",
+          "passed": true
+        }
+      ],
+      "duration_ms": 5221,
+      "hard_fail": false,
+      "notes": [],
+      "passed": true,
+      "prompt": "What tasks do I have?",
+      "response_text": "To help me understand what tasks you're referring to, could you please specify where you manage your tasks? For example, are you using Apple Reminders, Things 3, a project management tool, or something else?",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c2",
+      "title": "Task list status"
+    },
+    {
+      "case_id": "C3",
+      "category": "notes",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "notes_inability_has_fallback",
+          "hard": true,
+          "note": "Hard fail if Notes inability is stated without a viable fallback (paste/share/screenshot/etc).",
+          "passed": true
+        },
+        {
+          "check_id": "no_workspace_file_hallucination_for_notes",
+          "hard": true,
+          "note": "Hard fail on obvious workspace-file hallucination while claiming Apple Notes lookup.",
+          "passed": true
+        },
+        {
+          "check_id": "notes_actionable_next_step",
+          "hard": false,
+          "note": "Should provide an actionable next step for Apple Notes lookup.",
+          "passed": false
+        }
+      ],
+      "duration_ms": 6610,
+      "hard_fail": false,
+      "notes": [
+        "SOFT: notes_actionable_next_step - Should provide an actionable next step for Apple Notes lookup."
+      ],
+      "passed": false,
+      "prompt": "Check my notes for the note: Notes for ORION",
+      "response_text": "I am unable to access your Apple Notes directly. If you can provide the content of the 'Notes for ORION' note, I would be happy to help you with it.",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c3",
+      "title": "Apple Notes lookup"
+    },
+    {
+      "case_id": "C4",
+      "category": "email",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "email_route_discussed",
+          "hard": false,
+          "note": "Should address email-link routing, not ignore the email topic.",
+          "passed": true
+        },
+        {
+          "check_id": "agentmail_identity_present",
+          "hard": true,
+          "note": "Hard fail if ORION does not provide the AgentMail inbox identity.",
+          "passed": true
+        }
+      ],
+      "duration_ms": 3885,
+      "hard_fail": false,
+      "notes": [],
+      "passed": true,
+      "prompt": "Can I share a link to your email?",
+      "response_text": "You can share this inbox identity: orion_gatewaybot@agentmail.to.\nIt is ORION's AgentMail inbox identity (not a personal mailbox).",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c4",
+      "title": "Shareable email link"
+    },
+    {
+      "case_id": "C5",
+      "category": "reminders",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "reminder_inability_has_fallback",
+          "hard": true,
+          "note": "Hard fail if reminder inability is stated without a viable fallback path.",
+          "passed": true
+        },
+        {
+          "check_id": "weekday_reminder_routes_to_atlas",
+          "hard": false,
+          "note": "Expected ATLAS delegation for cron/reminder workflow.",
+          "passed": true
+        },
+        {
+          "check_id": "weekday_reminder_states_not_configured_yet",
+          "hard": false,
+          "note": "Expected explicit 'not configured yet' status before delegation.",
+          "passed": true
+        }
+      ],
+      "duration_ms": 14894,
+      "hard_fail": false,
+      "notes": [],
+      "passed": true,
+      "prompt": "Set a reminder every weekday at 9am ET to review my tasks and message me on Telegram.",
+      "response_text": "I\u2019m delegating this to ATLAS; it is not configured yet.\n\n<task_packet version=\"v1\">\n  Owner: ATLAS\n  Requester: ORION\n  Objective: Set up a recurring reminder for every weekday at 9 AM ET to review tasks, with a Telegram notification.\n\n  Success Criteria:\n  1. A cron job is scheduled to run every weekday at 9 AM ET.\n  2. When the cron job triggers, the user receives a Telegram message stating: \"Review your tasks.\"\n\n  Stop Gates:\n  - If setting up the cron job requires complex scripting or external tools beyond standard cron capabilities.\n  - If there is no reliable method to ensure the Telegram notification is sent.\n  - If the proposed solution introduces significant security risks or requires irreversible system changes without explicit approval.\n</task_packet>\n\n\u26a0\ufe0f \u23f0 Cron: `Daily Task Review Reminder` failed",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c5",
+      "title": "Weekday reminder to Telegram"
+    },
+    {
+      "case_id": "C6",
+      "category": "notes",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "notes_inability_has_fallback",
+          "hard": true,
+          "note": "Hard fail if Notes inability is stated without a viable fallback (paste/share/screenshot/etc).",
+          "passed": true
+        },
+        {
+          "check_id": "no_workspace_file_hallucination_for_notes",
+          "hard": true,
+          "note": "Hard fail on obvious workspace-file hallucination while claiming Apple Notes lookup.",
+          "passed": true
+        },
+        {
+          "check_id": "notes_summary_actionable_next_step",
+          "hard": false,
+          "note": "Should provide a practical fallback for note retrieval.",
+          "passed": false
+        }
+      ],
+      "duration_ms": 3309,
+      "hard_fail": false,
+      "notes": [
+        "SOFT: notes_summary_actionable_next_step - Should provide a practical fallback for note retrieval."
+      ],
+      "passed": false,
+      "prompt": "I added a note called Grocery list. Pull it and summarize what I need tonight.",
+      "response_text": "I am unable to access your Apple Notes directly. If you can provide the content of the \"Grocery list\" note, I would be happy to help you summarize what you need for tonight.",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c6",
+      "title": "Second notes request"
+    },
+    {
+      "case_id": "C7",
+      "category": "email",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "email_send_requests_consent_or_details",
+          "hard": false,
+          "note": "Should confirm details/consent before claiming send actions.",
+          "passed": true
+        }
+      ],
+      "duration_ms": 15690,
+      "hard_fail": false,
+      "notes": [],
+      "passed": true,
+      "prompt": "Email Alex that I will be 10 minutes late to our 3pm and cc me.",
+      "response_text": "To send an email to Alex, I need Alex's email address. Could you please provide it? Also, to confirm, is this for a meeting today?",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c7",
+      "title": "Email routing request"
+    },
+    {
+      "case_id": "C8",
+      "category": "reminders",
+      "checks": [
+        {
+          "check_id": "nonempty_response",
+          "hard": true,
+          "note": "Response must not be empty.",
+          "passed": true
+        },
+        {
+          "check_id": "no_email_address_claim",
+          "hard": true,
+          "note": "Hard fail if ORION claims it has no email address.",
+          "passed": true
+        },
+        {
+          "check_id": "reminder_inability_has_fallback",
+          "hard": true,
+          "note": "Hard fail if reminder inability is stated without a viable fallback path.",
+          "passed": true
+        },
+        {
+          "check_id": "single_reminder_has_actionable_path",
+          "hard": false,
+          "note": "Should provide direct setup or a concrete fallback path.",
+          "passed": true
+        }
+      ],
+      "duration_ms": 13989,
+      "hard_fail": false,
+      "notes": [],
+      "passed": true,
+      "prompt": "Set a reminder for tomorrow at 8am: take vitamins. If you cannot set it directly, give me the fastest fallback.",
+      "response_text": "I've set a reminder for you for tomorrow, March 4th, 2026, at 8 AM ET. You will receive a message on Telegram saying \"Take vitamins.\"",
+      "session_id": "looptest-telegram-realworld-it7-20260303-111632-c8",
+      "title": "Single reminder fallback"
+    }
+  ],
+  "schema_version": 1,
+  "session_prefix": "looptest-telegram-realworld-it7",
+  "session_reset": {
+    "backup_dir": "/Users/corystoner/src/ORION/eval/history/session-backup-20260303-111632",
+    "gateway_restarted": true,
+    "removed_session_id": "5304938b-9607-4787-a74c-83b35a4c8bf9",
+    "reset": true,
+    "restart_stderr": "",
+    "restart_stdout": "Restarted LaunchAgent: gui/501/ai.openclaw.gateway"
+  },
+  "summary": {
+    "fail": 3,
+    "hard_fail": 1,
+    "pass": 5,
+    "total": 8
+  },
+  "thinking": "low",
+  "timeout_s": 180,
+  "timestamp": "20260303-111632",
+  "timing": {
+    "avg_case_duration_ms": 10508,
+    "run_duration_ms": 97538
+  }
+}

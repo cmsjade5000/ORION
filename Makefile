@@ -1,5 +1,8 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim eval-routing eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once looptest avatar audio-check lint dev task-packets plan-graph test shellcheck ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once looptest avatar audio-check lint dev config-validate task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check skill-guards-smoke ci
+
+PROMPTFOO_CONFIG ?= skills/llm-redteam-gate/examples/promptfooconfig.yaml
+THINKING ?= high
 
 ## Regenerate all agent SOUL.md files
 soul:
@@ -13,13 +16,36 @@ restart:
 routingsim:
 	@$(MAKE) eval-run
 
+## Opt-in live routing regression gate (requires local OpenClaw runtime)
+routing-regression-live:
+	@python3 scripts/run_routing_regression_gate.py --repo-root .
+
+## Opt-in live routing regression gate including tools prompts 11+
+routing-regression-live-tools:
+	@python3 scripts/run_routing_regression_gate.py --repo-root . --tools-prompts-md docs/routing_sim_tools.md
+
+## Show live routing regression preflight + planned commands without running them
+routing-regression-live-dry-run:
+	@python3 scripts/run_routing_regression_gate.py --repo-root . --dry-run
+
 ## Run routing eval and persist timestamped history + latest report
 eval-routing:
 	@ORION_SUPPRESS_TELEGRAM=1 TELEGRAM_SUPPRESS=1 ORION_SUPPRESS_DISCORD=1 DISCORD_SUPPRESS=1 NOTIFY_DRY_RUN=1 \
 		python3 scripts/loop_test_routing_sim.py \
 		--repo-root . \
+		--thinking "$(THINKING)" \
 		--out-dir eval/history \
 		--latest-path eval/latest_report.json
+
+## Run routing eval with Codex 0.110 tools extension prompts (11+)
+eval-routing-tools:
+	@ORION_SUPPRESS_TELEGRAM=1 TELEGRAM_SUPPRESS=1 ORION_SUPPRESS_DISCORD=1 DISCORD_SUPPRESS=1 NOTIFY_DRY_RUN=1 \
+		python3 scripts/loop_test_routing_sim.py \
+		--repo-root . \
+		--thinking "$(THINKING)" \
+		--out-dir eval/history \
+		--latest-path eval/latest_report_tools.json \
+		--tools-prompts-md docs/routing_sim_tools.md
 
 ## Alias for compatibility with docs
 eval-run:
@@ -124,6 +150,10 @@ lint:
 dev:
 	openclaw gateway start
 
+## Validate the live OpenClaw runtime config when available
+config-validate:
+	@bash scripts/openclaw_config_validate.sh
+
 ## Validate Task Packets in per-agent inbox files
 task-packets:
 	python3 scripts/validate_task_packets.py
@@ -140,5 +170,69 @@ test:
 shellcheck:
 	./scripts/ci_shellcheck.sh
 
+## Validate promptfoo config only (no eval/model calls)
+redteam-validate:
+	@npx -y promptfoo@latest validate config -c "$(PROMPTFOO_CONFIG)"
+
+## Run redteam gate harness (requires OPENAI_API_KEY)
+redteam-gate:
+	@if [ -z "$${OPENAI_API_KEY:-}" ]; then echo "OPENAI_API_KEY is required for redteam-gate"; exit 2; fi
+	@bash skills/llm-redteam-gate/scripts/run_redteam_gate.sh -c "$(PROMPTFOO_CONFIG)"
+
+## Install MCP package and run integration smoke harness
+mcp-harness-smoke:
+	@set -e; \
+	PYTHON_BIN=python3; \
+	if ! $$PYTHON_BIN -c "import mcp" >/dev/null 2>&1; then \
+		if [ -x .venv/bin/python ]; then \
+			PYTHON_BIN=.venv/bin/python; \
+		fi; \
+		$$PYTHON_BIN -m pip install --upgrade mcp; \
+	fi; \
+	bash skills/mcp-integration-harness/scripts/run_mcp_harness.sh --python "$$PYTHON_BIN"
+
+## Run Conftest policy gate against the passing example packet (requires conftest)
+policy-gate-check:
+	@bash skills/policy-gate-conftest/scripts/run_policy_gate.sh \
+		skills/policy-gate-conftest/examples/task_packet.pass.json
+
+## Run Semgrep preflight check (requires semgrep)
+secure-preflight-check:
+	@bash skills/secure-code-preflight/scripts/run_secure_code_preflight.sh
+
+## Run supply chain gate in dry-run mode (dependency-safe preview)
+supply-chain-check:
+	@bash skills/supply-chain-verify-scan/scripts/run_supply_chain_gate.sh \
+		--dry-run \
+		--target alpine:latest \
+		--skip-cosign \
+		--skip-grype
+
+## Run garak probe in dry-run mode (dependency-safe preview)
+llm-vuln-probe-check:
+	@bash skills/llm-vuln-probe/scripts/run_garak_probe.sh --dry-run
+
+## Scaffold Langfuse bootstrap artifacts in dry-run mode
+langfuse-bootstrap-check:
+	@bash skills/langfuse-trace-eval-bootstrap/scripts/bootstrap_langfuse_trace_eval.sh --dry-run
+
+## Validate MCP schema compliance using repo venv when available
+mcp-schema-check:
+	@set -e; \
+	PYTHON_BIN=python3; \
+	if [ -x .venv/bin/python ]; then \
+		PYTHON_BIN=.venv/bin/python; \
+	fi; \
+	bash skills/mcp-schema-compliance-check/scripts/run_mcp_schema_check.sh --python "$$PYTHON_BIN"
+
+## Dependency-safe smoke checks for all new skill wrappers
+skill-guards-smoke:
+	@bash skills/policy-gate-conftest/scripts/run_policy_gate.sh --help >/dev/null
+	@$(MAKE) supply-chain-check
+	@$(MAKE) llm-vuln-probe-check
+	@$(MAKE) langfuse-bootstrap-check
+	@bash skills/mcp-schema-compliance-check/scripts/run_mcp_schema_check.sh --dry-run >/dev/null
+	@bash skills/secure-code-preflight/scripts/run_secure_code_preflight.sh --dry-run >/dev/null
+
 ## Must-pass CI gate (lint + tests + plan + task packet validation)
-ci: shellcheck test plan-graph task-packets
+ci: config-validate shellcheck test plan-graph task-packets

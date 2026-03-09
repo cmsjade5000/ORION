@@ -1,6 +1,11 @@
 import unittest
 
-from scripts.loop_test_routing_sim import SimPrompt, _score_prompt, parse_routing_sim_prompts
+from scripts.loop_test_routing_sim import (
+    SimPrompt,
+    _score_prompt,
+    parse_routing_sim_prompts,
+    parse_routing_sim_prompts_range,
+)
 
 
 class TestLoopTestRoutingSim(unittest.TestCase):
@@ -35,3 +40,34 @@ class TestLoopTestRoutingSim(unittest.TestCase):
         scores_bad, _ = _score_prompt(p, "Let's keep working on the setup.")
         self.assertEqual(scores_bad["C"], 0)
 
+    def test_parse_prompt_range_extracts_tools_extension(self):
+        md = """
+### 11) Parallel diagnostics safety
+> "Run checks in parallel"
+
+### 14) App tool discovery gate
+> "Find app tool first"
+"""
+        ps = parse_routing_sim_prompts_range(md, min_num=11, max_num=99)
+        self.assertEqual([p.num for p in ps], [11, 14])
+
+    def test_score_tools_parallel_requires_safety_constraints(self):
+        p = SimPrompt(num=11, title="Parallel diagnostics", prompt="parallel checks")
+        scores_ok, _ = _score_prompt(
+            p,
+            "I will run independent read-only checks in parallel, then provide one verification report.",
+        )
+        self.assertEqual(scores_ok["A"], 2)
+        self.assertEqual(scores_ok["D"], 2)
+        scores_bad, _ = _score_prompt(p, "I will run things in parallel.")
+        self.assertLess(scores_bad["A"], 2)
+
+    def test_score_tools_mcp_first_requires_fallback_order(self):
+        p = SimPrompt(num=12, title="MCP-first retrieval", prompt="retrieve policy")
+        scores_ok, _ = _score_prompt(
+            p,
+            "I will use mcp-first retrieval, then web fallback only if MCP cannot satisfy the request.",
+        )
+        self.assertEqual(scores_ok["A"], 2)
+        scores_bad, _ = _score_prompt(p, "I will search the web now.")
+        self.assertEqual(scores_bad["A"], 0)

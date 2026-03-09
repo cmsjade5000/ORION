@@ -65,9 +65,11 @@ When ORION is down and you have local access to the Mac mini:
 1. Soft restart:
    - `openclaw gateway restart`
 2. If restart fails (service missing or broken):
+   - `openclaw config validate --json`
    - `openclaw gateway install`
    - `openclaw gateway start`
 3. Repair + probe:
+   - `openclaw config validate --json`
    - `openclaw doctor --repair`
    - `openclaw security audit --deep`
    - `openclaw channels status --probe`

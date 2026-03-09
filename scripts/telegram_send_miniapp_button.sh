@@ -41,9 +41,9 @@ if [[ -z "${TOKEN}" ]]; then
   exit 2
 fi
 
-REPLY_MARKUP="$(node -e 'const url=process.argv[1]; console.log(JSON.stringify({inline_keyboard:[[{text:"Open Dashboard", web_app:{url}}]]}));' "${URL}")"
+REPLY_MARKUP="$(node -e 'const url=process.argv[1]; console.log(JSON.stringify({inline_keyboard:[[{text:"Open ORION Core", web_app:{url}}]]}));' "${URL}")"
 
 curl -fsS "https://api.telegram.org/bot${TOKEN}/sendMessage" \
   -H "content-type: application/json" \
-  -d "$(node -e 'const chat_id=process.argv[1]; const reply_markup=process.argv[2]; console.log(JSON.stringify({chat_id, text:"Open ORION Network Dashboard:", reply_markup: JSON.parse(reply_markup)}));' "${CHAT_ID}" "${REPLY_MARKUP}")" \
+  -d "$(node -e 'const chat_id=process.argv[1]; const reply_markup=process.argv[2]; console.log(JSON.stringify({chat_id, text:"Open ORION Core:", reply_markup: JSON.parse(reply_markup)}));' "${CHAT_ID}" "${REPLY_MARKUP}")" \
   >/dev/null

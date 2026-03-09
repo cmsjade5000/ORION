@@ -35,5 +35,5 @@ if [[ -z "${URL}" || "${URL}" == "null" ]]; then
   exit 2
 fi
 
-exec /Users/corystoner/Desktop/ORION/scripts/telegram_send_miniapp_button.sh "${CHAT_ID}" "${URL}"
-
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+exec "${SCRIPT_DIR}/telegram_send_miniapp_button.sh" "${CHAT_ID}" "${URL}"

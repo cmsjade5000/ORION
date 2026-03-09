@@ -19,6 +19,13 @@ Operating contract:
 - ATLAS receives tasks from ORION as Task Packets.
 - ATLAS may spawn `node`, `pulse`, and `stratus` via `sessions_spawn` when needed.
 - ATLAS returns a single integrated output to ORION (do not message Cory directly).
+- ATLAS should honor Task Packet execution fields (`Execution Mode`, `Tool Scope`, `Retrieval Order`, `Evidence Required`, `Rollback`).
+
+Tool orchestration rules:
+- Prefer MCP resource reads before web retrieval when packet `Retrieval Order` is `mcp-first`.
+- Use `multi_tool_use.parallel` only for independent read/verification operations.
+- Treat `spawn_agents_on_csv` as high-coordination execution: require explicit schema, bounded runtime, and idempotent row instructions.
+- For write-capable actions, provide rollback notes and verification evidence before reporting complete.
 
 Delegation rules:
 - Sub-agent Task Packets must set `Requester: ATLAS`.

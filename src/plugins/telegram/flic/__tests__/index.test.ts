@@ -1,14 +1,15 @@
+import { describe, expect, it, vi } from "vitest";
 import { Bot } from "grammy";
 import { __test_only_applyStepInput, registerFlicChatRouter } from "../index";
 
 describe("Flic chat router registration", () => {
   it("registers commands and text handler", () => {
     const bot = {
-      command: jest.fn(),
-      on: jest.fn(),
-    } as any as Bot;
+      command: vi.fn(),
+      on: vi.fn(),
+    };
 
-    registerFlicChatRouter(bot);
+    registerFlicChatRouter(bot as any as Bot);
 
     expect(bot.command).toHaveBeenCalledWith("flic", expect.any(Function));
     expect(bot.command).toHaveBeenCalledWith("flicreset", expect.any(Function));
@@ -29,22 +30,22 @@ describe("Flic chat router registration", () => {
 
   it("passes through non-flic private DMs to downstream middleware", async () => {
     const bot = {
-      command: jest.fn(),
-      on: jest.fn(),
-    } as any as Bot;
+      command: vi.fn(),
+      on: vi.fn(),
+    };
 
-    registerFlicChatRouter(bot);
+    registerFlicChatRouter(bot as any as Bot);
 
-    const onCall = (bot.on as jest.Mock).mock.calls.find((call) => call[0] === "message:text");
+    const onCall = bot.on.mock.calls.find((call) => call[0] === "message:text");
     expect(onCall).toBeTruthy();
     const handler = onCall?.[1] as (ctx: any, next: () => Promise<void>) => Promise<void>;
 
     const ctx = {
       chat: { type: "private", id: 42 },
       message: { text: "hello there" },
-      reply: jest.fn(),
+      reply: vi.fn(),
     };
-    const next = jest.fn(async () => {});
+    const next = vi.fn(async () => {});
 
     await handler(ctx, next);
 

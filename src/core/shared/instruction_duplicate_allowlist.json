@@ -7,37 +7,31 @@
   "allowed_duplicates": [
     {
       "id": "R1",
-      "phrase": "delegate to ATLAS with a Task Packet",
       "min_files": 2,
       "max_files": 2
     },
     {
       "id": "R2",
-      "phrase": "Never claim an operational change is already complete",
       "min_files": 2,
       "max_files": 2
     },
     {
       "id": "R3",
-      "phrase": "safety-first guidance",
       "min_files": 3,
       "max_files": 3
     },
     {
       "id": "R4",
-      "phrase": "reversible first step",
       "min_files": 2,
       "max_files": 2
     },
     {
       "id": "R5",
-      "phrase": "\"explore\" vs \"execute\"",
       "min_files": 2,
       "max_files": 2
     },
     {
       "id": "R6",
-      "phrase": "ANNOUNCE_SKIP",
       "min_files": 2,
       "max_files": 2
     }

@@ -14,7 +14,13 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
    ```bash
    openclaw agents list
    ```
-3. Verify model routing (Gemini primary):
+3. Validate the active runtime config before starting the gateway:
+   ```bash
+   openclaw config validate --json
+   ```
+   - OpenClaw `2026.3.2` defaults new local installs to `tools.profile=messaging` when unset.
+   - ORION expects `tools.profile` pinned to `coding` in local installs.
+4. Verify model routing (Gemini primary):
    ```bash
    openclaw models status
    ```
@@ -26,20 +32,20 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
      openclaw models auth paste-token --provider google
      openclaw models status --probe
      ```
-4. Verify Telegram token file exists and is locked down (`600`):
+5. Verify Telegram token file exists and is locked down (`600`):
    - Config uses `channels.telegram.tokenFile`
    - Token file should contain only the raw token + newline
-5. Install and start the gateway service (required for cron reliability):
+6. Install and start the gateway service (required for cron reliability):
    ```bash
    openclaw gateway install
    openclaw gateway start
    ```
-6. Repair and harden:
+7. Repair and harden:
    ```bash
    openclaw doctor --repair
    openclaw security audit --deep
    ```
-7. Verify channel health:
+8. Verify channel health:
    ```bash
    openclaw channels status --probe
    ```
@@ -47,12 +53,12 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
      ```bash
      ./status.sh
      ```
-8. Verify delegation (ORION -> ATLAS via `sessions_spawn` + Task Packet):
+9. Verify delegation (ORION -> ATLAS via `sessions_spawn` + Task Packet):
    - Use `docs/TASK_PACKET.md`
    - Specialists never message Telegram directly
-9. Add minimal cron jobs (optional; keep delivery off unless explicitly wanted):
+10. Add minimal cron jobs (optional; keep delivery off unless explicitly wanted):
    - Use `skills/cron-manager`
-10. (Optional) Email toolchain (ORION-only):
+11. (Optional) Email toolchain (ORION-only):
    - Store AgentMail key at `~/.openclaw/secrets/agentmail.api_key` (chmod `600`)
    - Smoke test:
      ```bash

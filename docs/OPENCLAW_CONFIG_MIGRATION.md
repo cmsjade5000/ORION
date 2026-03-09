@@ -12,6 +12,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 
 ## Migrated To Runtime
 
+- `tools.profile = "coding"` (pin ORION to a local workspace posture; OpenClaw `2026.3.2` defaults new local installs to `messaging` when unset)
 - `agents.defaults.model.primary = "google/gemini-2.5-flash-lite"` (pinned)
 - `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
@@ -29,7 +30,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `channels.telegram.reactionLevel = "ack"`
 - Optional (Discord):
   - `channels.discord.enabled = true`
-  - `channels.discord.token = "${DISCORD_BOT_TOKEN}"`
+  - `channels.discord.token = { source: "env", provider: "default", id: "DISCORD_BOT_TOKEN" }`
   - `channels.discord.dm.policy = "allowlist"`
   - `channels.discord.dm.allowFrom = ["<CORY_DISCORD_USER_ID>"]`
   - `channels.discord.groupPolicy = "allowlist"`
@@ -37,6 +38,16 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
   - `channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_PRIMARY_CHANNEL_ID>".autoThread = true`
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
+
+## Config Validation (2026.3.2)
+
+Use the new preflight validator before gateway start or after config edits:
+
+```bash
+openclaw config validate --json
+```
+
+This checks the live runtime config at `~/.openclaw/openclaw.json` without starting the gateway.
 
 ## Telegram Draft Streaming (March 2, 2026)
 
@@ -52,6 +63,7 @@ The script falls back to normal `sendMessage` if draft streaming is unsupported 
 ## Not Migrated (Schema Or Install Specific)
 
 All secrets and provider auth live outside the repo. Do not commit them.
+For supported credential fields, prefer SecretRef objects over raw `${ENV}` strings so `openclaw secrets` audit/planning flows can reason about them directly.
 
 ## Auth Required For Model Routing
 

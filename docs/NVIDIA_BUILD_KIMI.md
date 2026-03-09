@@ -32,7 +32,11 @@ openclaw config set models.mode merge
 openclaw config set --json 'models.providers["nvidia-build"]' '{
   api: "openai-completions",
   baseUrl: "https://integrate.api.nvidia.com/v1",
-  apiKey: "${NVIDIA_API_KEY}",
+  apiKey: {
+    source: "env",
+    provider: "default",
+    id: "NVIDIA_API_KEY"
+  },
   models: [
     { id: "moonshotai/kimi-k2-5", name: "Kimi K2.5 (NVIDIA Build)" }
   ]
@@ -41,7 +45,7 @@ openclaw config set --json 'models.providers["nvidia-build"]' '{
 
 Notes:
 - The NVIDIA docs commonly spell this model id as `moonshotai/kimi-k2-5`.
-- This config only references `${NVIDIA_API_KEY}`; it does not store the key itself.
+- This config references `NVIDIA_API_KEY` via SecretRef; it does not store the key itself.
 
 ## 3) Set routing: Gemini primary, NVIDIA Build fallback
 

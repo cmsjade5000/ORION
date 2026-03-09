@@ -21,6 +21,19 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
 5. ORION collects outputs, resolves conflicts, and returns one response to the user.
 
+### PDF And File Review Path (2026.3.2)
+
+When Cory asks ORION to review a PDF or file-heavy artifact:
+
+1. ORION keeps the user-facing thread.
+2. ORION delegates via `sessions_spawn` with a Task Packet.
+3. ORION attaches the source file inline to the subagent session when the file is needed for direct inspection.
+4. The specialist uses the `pdf` tool (or other file-aware tooling) and returns a concise result to ORION only.
+5. ORION sends the integrated summary back to Cory.
+
+See:
+- `docs/PDF_REVIEW_WORKFLOW.md`
+
 ## Mandatory News Pipeline (Sourced)
 
 To prevent plausible-but-wrong headlines:

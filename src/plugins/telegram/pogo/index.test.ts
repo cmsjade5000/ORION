@@ -1,9 +1,10 @@
+import { describe, expect, it, vi } from "vitest";
 import { Bot } from "grammy";
 import { parsePogoSlashCommand, registerPogoCommands } from "./index";
 
 describe("Pogo command registration", () => {
   it("registers all /pogo_* command handlers", () => {
-    const bot = { command: jest.fn(), on: jest.fn() } as any as Bot;
+    const bot = { command: vi.fn(), on: vi.fn() } as any as Bot;
     registerPogoCommands(bot);
 
     expect(bot.command).toHaveBeenCalledWith("pogo_help", expect.any(Function));

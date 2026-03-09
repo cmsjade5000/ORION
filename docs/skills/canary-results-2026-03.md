@@ -95,6 +95,8 @@ Decision:
 
 | Timestamp (ET) | Candidate | Eval Gate | Lane Wait Count | Lane Wait P95 (ms) | Delivery Queue | Decision | Evidence |
 | --- | --- | --- | ---: | ---: | ---: | --- | --- |
+| 2026-03-03 03:26 | openprose-workflow-2026-03 | fail | 21 | 34034 | 0 | hold (0/7) | `eval/history/reliability-20260303-082621.json` |
+| 2026-03-03 01:26 | openprose-workflow-2026-03 | fail | 21 | 34034 | 0 | hold (0/7) | `eval/history/reliability-20260303-062616.json` |
 | 2026-03-02 21:44 | openprose-workflow-2026-03 | pass | 20 | 34527 | 0 | hold (0/7) | `eval/history/reliability-20260303-024229.json` |
 | 2026-03-02 21:43 | openprose-workflow-2026-03 | pass | 20 | 34527 | 0 | hold (0/7) | `eval/history/reliability-20260303-024229.json` |
 | 2026-03-02 21:42 | openprose-workflow-2026-03 | pass | 20 | 34527 | 0 | hold (0/7) | `eval/history/reliability-20260303-024229.json` |

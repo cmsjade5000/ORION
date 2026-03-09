@@ -28,6 +28,7 @@ Primary locations (local machine only):
 Notes:
 - Prefer storing model/provider auth using `openclaw models auth paste-token` so the LaunchAgent gateway service can use it.
 - If you rely on shell environment variables (`OPENROUTER_API_KEY`, `GEMINI_API_KEY`), the gateway service may not inherit them.
+- For supported runtime config fields, prefer SecretRef objects over raw `${ENV}` strings so `openclaw secrets` planning/apply/audit flows can track them directly.
 - Remote sentinel secrets (AEGIS) live on the Hetzner host (example `/etc/aegis-monitor.env`) and must never be copied into this repo.
 
 Rules:
