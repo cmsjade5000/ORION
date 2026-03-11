@@ -18,7 +18,7 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
    ```bash
    openclaw config validate --json
    ```
-   - OpenClaw `2026.3.2` defaults new local installs to `tools.profile=messaging` when unset.
+   - As of OpenClaw `2026.3.x`, new local installs default to `tools.profile=messaging` when unset.
    - ORION expects `tools.profile` pinned to `coding` in local installs.
 4. Verify model routing (Gemini primary):
    ```bash

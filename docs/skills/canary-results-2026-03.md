@@ -1,7 +1,7 @@
 # Canary Results Log (March 2026)
 
 Last updated: 2026-03-02
-Reference protocol: `/Users/corystoner/src/ORION/docs/skills/canary-protocol.md`
+Reference protocol: `docs/skills/canary-protocol.md`
 
 ## Current Status
 
@@ -12,7 +12,7 @@ Notes:
 - Intake and protocol docs prepared.
 - Baseline data collection and implementation work are still active.
 - No candidate has completed the required 7-day promotion gate.
-- Eval gate is currently passing in `/Users/corystoner/src/ORION/eval/scorecard.md`; canary execution may proceed.
+- Eval gate is currently passing in `eval/scorecard.md`; canary execution may proceed.
 
 ### Candidate: `OpenProse workflow canary`
 
@@ -25,14 +25,14 @@ Notes:
 - Verification: `pending verification`
 
 Pre-canary baseline evidence:
-- Reliability baseline: `/Users/corystoner/src/ORION/eval/history/baseline-2026-03.json`
-- Quality baseline: `/Users/corystoner/src/ORION/eval/scorecard.md`
-- Safety baseline: `/Users/corystoner/src/ORION/eval/latest_compare.json`
+- Reliability baseline: `eval/history/baseline-2026-03.json`
+- Quality baseline: `eval/scorecard.md`
+- Safety baseline: `eval/latest_compare.json`
 
 Canary execution evidence:
-- Install transcript: `/Users/corystoner/src/ORION/eval/history/canary-openprose-run1-2026-03-02.json` (staging-only simulated canary run)
-- Test run transcript(s): `/Users/corystoner/src/ORION/eval/history/canary-openprose-run1-2026-03-02.md`
-- Observability evidence: `/Users/corystoner/src/ORION/eval/history/reliability-20260303-021409.json`
+- Install transcript: `eval/history/canary-openprose-run1-2026-03-02.json` (staging-only simulated canary run)
+- Test run transcript(s): `eval/history/canary-openprose-run1-2026-03-02.md`
+- Observability evidence: `eval/history/reliability-20260303-021409.json`
 
 SLO gate outcomes:
 - Reliability gate: `pending` (requires sustained multi-day window)

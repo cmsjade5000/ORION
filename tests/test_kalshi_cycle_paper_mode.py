@@ -5,9 +5,19 @@ import os
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 
 class TestKalshiCyclePaperMode(unittest.TestCase):
+    def _arg_value(self, argv: list[str], flag: str) -> str | None:
+        try:
+            i = argv.index(flag)
+        except ValueError:
+            return None
+        if i + 1 >= len(argv):
+            return None
+        return argv[i + 1]
+
     def test_build_trade_argv_paper_vs_live(self) -> None:
         import scripts.kalshi_autotrade_cycle as cyc
 
@@ -34,10 +44,18 @@ class TestKalshiCyclePaperMode(unittest.TestCase):
             vol_anomaly_window_h="24",
             max_market_concentration_fraction="0.35",
         )
-        paper = cyc._build_trade_argv(allow_live_writes=False, **base)
-        live = cyc._build_trade_argv(allow_live_writes=True, **base)
+        with patch.dict("os.environ", {}, clear=True):
+            paper = cyc._build_trade_argv(allow_live_writes=False, **base)
+            live = cyc._build_trade_argv(allow_live_writes=True, **base)
         self.assertNotIn("--allow-write", paper)
         self.assertIn("--allow-write", live)
+        self.assertIn("--ignore-zero-liquidity", paper)
+        self.assertNotIn("--ignore-zero-liquidity", live)
+        self.assertEqual(self._arg_value(paper, "--max-orders-per-run"), "6")
+        self.assertEqual(self._arg_value(paper, "--max-contracts-per-order"), "3")
+        self.assertEqual(self._arg_value(paper, "--max-notional-per-run-usd"), "20")
+        self.assertEqual(self._arg_value(paper, "--max-notional-per-market-usd"), "12")
+        self.assertEqual(self._arg_value(paper, "--max-open-contracts-per-ticker"), "8")
 
     def test_write_cycle_status_and_metrics(self) -> None:
         import scripts.kalshi_autotrade_cycle as cyc

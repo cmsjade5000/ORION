@@ -8,7 +8,7 @@ class TestKalshiRuntime(unittest.TestCase):
     def test_runtime_defaults(self) -> None:
         from scripts.arb.kalshi_runtime import load_runtime_from_env
 
-        with patch.dict("os.environ", {}, clear=False):
+        with patch.dict("os.environ", {}, clear=True):
             cfg, errs = load_runtime_from_env(repo_root="/tmp")
         self.assertEqual(cfg.execution_mode, "paper")
         self.assertFalse(cfg.allow_live_writes)
@@ -20,6 +20,7 @@ class TestKalshiRuntime(unittest.TestCase):
         self.assertTrue(cfg.portfolio_allocator_enabled)
         self.assertAlmostEqual(cfg.portfolio_allocator_min_signal_fraction, 0.05, places=9)
         self.assertAlmostEqual(cfg.max_ref_quote_age_sec, 3.0, places=9)
+        self.assertAlmostEqual(cfg.paper_exec_slippage_bps, 2.0, places=9)
         self.assertTrue(cfg.require_mapped_series)
         self.assertTrue(cfg.enable_strike_mono_arb)
         self.assertTrue(cfg.enable_time_mono_arb)
@@ -29,12 +30,15 @@ class TestKalshiRuntime(unittest.TestCase):
         self.assertTrue(cfg.router_enabled)
         self.assertAlmostEqual(cfg.router_max_series_share, 0.35, places=9)
         self.assertEqual(cfg.router_min_obs, 12)
+        self.assertEqual(cfg.dry_streak_loosen_step_bps, 15)
+        self.assertEqual(cfg.dry_streak_loosen_every_cycles, 10)
+        self.assertEqual(cfg.loosen_floor_edge_bps, 70)
         self.assertIsInstance(errs, list)
 
     def test_runtime_live_arm_gate(self) -> None:
         from scripts.arb.kalshi_runtime import load_runtime_from_env
 
-        with patch.dict("os.environ", {"KALSHI_ARB_EXECUTION_MODE": "live", "KALSHI_ARB_LIVE_ARMED": "1"}, clear=False):
+        with patch.dict("os.environ", {"KALSHI_ARB_EXECUTION_MODE": "live", "KALSHI_ARB_LIVE_ARMED": "1"}, clear=True):
             cfg, errs = load_runtime_from_env(repo_root="/tmp")
         self.assertFalse(errs)
         self.assertEqual(cfg.execution_mode, "live")
@@ -43,7 +47,7 @@ class TestKalshiRuntime(unittest.TestCase):
     def test_runtime_invalid_values_fall_back(self) -> None:
         from scripts.arb.kalshi_runtime import load_runtime_from_env
 
-        with patch.dict("os.environ", {"KALSHI_ARB_EXECUTION_MODE": "oops", "KALSHI_ARB_RETRY_MAX_ATTEMPTS": "NaN"}, clear=False):
+        with patch.dict("os.environ", {"KALSHI_ARB_EXECUTION_MODE": "oops", "KALSHI_ARB_RETRY_MAX_ATTEMPTS": "NaN"}, clear=True):
             cfg, errs = load_runtime_from_env(repo_root="/tmp")
         self.assertEqual(cfg.execution_mode, "paper")
         self.assertEqual(cfg.retry_max_attempts, 4)
@@ -59,7 +63,7 @@ class TestKalshiRuntime(unittest.TestCase):
                 "KALSHI_ARB_DYNAMIC_EDGE_REGIME_MULTS": "calm:0.8,normal:1.0,hot:1.5",
                 "KALSHI_ARB_PORTFOLIO_ALLOCATOR_EDGE_POWER": "1.3",
             },
-            clear=False,
+            clear=True,
         ):
             cfg, errs = load_runtime_from_env(repo_root="/tmp")
         self.assertFalse(errs)

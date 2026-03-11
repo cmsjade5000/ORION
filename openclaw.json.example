@@ -1,14 +1,14 @@
 {
   "_comment": "Example OpenClaw config for ORION local development. Runtime config lives at ~/.openclaw/openclaw.json. Do not store secrets in Git.",
   "tools": {
-    "_comment": "OpenClaw 2026.3.2 defaults new local installs to tools.profile=messaging when unset. ORION is a local workspace agent and expects the broader coding tool posture.",
+    "_comment": "As of OpenClaw 2026.3.x, new local installs default to tools.profile=messaging when unset. ORION is a local workspace agent and expects the broader coding tool posture.",
     "profile": "coding"
   },
   "agents": {
     "defaults": {
       "workspace": "/Users/corystoner/Desktop/ORION",
       "model": {
-        "_comment_model": "Default posture: use Google Gemini directly (no OpenRouter/OpenAI). Pin a specific model for stable agent hygiene.",
+        "_comment_model": "Default posture: use Google Gemini directly for production orchestration. OpenAI is a direct API control/eval lane outside the default OpenClaw model path.",
         "_comment_fallbacks": "Keep fallbacks provider-restricted. Optional: add nvidia-build/moonshotai/kimi-k2-5 after you configure NVIDIA Build (see docs/NVIDIA_BUILD_KIMI.md).",
         "primary": "google/gemini-2.5-flash-lite",
         "fallbacks": [
@@ -16,7 +16,14 @@
         ]
       },
       "compaction": {
-        "mode": "safeguard"
+        "mode": "safeguard",
+        "_comment_sections": "Pin critical AGENTS.md sections after compaction so ORION routing/safety instructions stay present.",
+        "postCompactionSections": [
+          "Session Startup",
+          "Red Lines"
+        ],
+        "_comment_recentTurnsPreserve": "Keep a small tail of recent turns verbatim before compaction synthesis.",
+        "recentTurnsPreserve": 8
       },
       "maxConcurrent": 4,
       "subagents": {
@@ -56,7 +63,15 @@
       "groupPolicy": "allowlist",
       "groupAllowFrom": ["<CORY_TELEGRAM_USER_ID>"],
       "groups": {
-        "<TELEGRAM_GROUP_ID>": {}
+        "<TELEGRAM_GROUP_ID>": {
+          "_comment": "Per-topic agent routing (available in OpenClaw 2026.3.x). Topic IDs are forum thread ids.",
+          "topics": {
+            "1": { "agentId": "main" },
+            "3": { "agentId": "atlas" },
+            "5": { "agentId": "ledger" },
+            "7": { "agentId": "ember" }
+          }
+        }
       },
       "commands": {
         "native": true,
@@ -108,11 +123,13 @@
       "ORION_MINIAPP_URL": "https://<your-miniapp-host>",
       "FLIC_ROUTER_ENABLED": "1",
       "FLIC_VAULT_BASE_URL": "https://vault966-r2.fly.dev",
-      "FLIC_BOT_USERNAME": "Flic_GatewayBot"
+      "FLIC_BOT_USERNAME": "Flic_GatewayBot",
+      "LOCAL_LLM_BASE_URL": "http://127.0.0.1:1234/v1",
+      "LOCAL_LLM_MODEL": "qwen3.5-4b-mlx"
     }
   },
   "models": {
-    "_comment": "Optional: custom provider config for NVIDIA Build (OpenAI-compatible). Store NVIDIA_API_KEY in ~/.openclaw/.env and reference it via SecretRef (see KEEP.md).",
+    "_comment": "Optional: custom provider config for NVIDIA Build and local LM Studio. Store provider secrets in ~/.openclaw/.env and reference them via SecretRef where possible.",
     "mode": "merge",
     "providers": {
       "nvidia-build": {
@@ -127,6 +144,17 @@
           {
             "id": "moonshotai/kimi-k2-5",
             "name": "Kimi K2.5 (NVIDIA Build)"
+          }
+        ]
+      },
+      "lmstudio": {
+        "api": "openai-completions",
+        "baseUrl": "http://127.0.0.1:1234/v1",
+        "apiKey": "${LOCAL_LLM_API_KEY}",
+        "models": [
+          {
+            "id": "qwen3.5-4b-mlx",
+            "name": "Local bounded runtime"
           }
         ]
       }

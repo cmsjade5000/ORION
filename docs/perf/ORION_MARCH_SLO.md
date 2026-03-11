@@ -6,7 +6,7 @@ Scope: Runtime reliability, eval quality, and staged canary safety.
 
 ## Baseline Snapshot (Pre-change)
 
-Source: `/Users/corystoner/src/ORION/eval/history/baseline-2026-03.json`
+Source: `eval/history/baseline-2026-03.json`
 
 - lane_wait_24h_count: 19
 - lane_wait_24h_max_ms: 35296

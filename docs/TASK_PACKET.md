@@ -40,6 +40,7 @@ Output Format:
 ## Optional Fields (Use When Helpful)
 
 - `Context:` short background paragraph
+- For transcript-aware runtimes, keep `Context:` to net-new facts, status, and artifact refs; do not paste the full prior transcript when the runtime already injects it.
 - `Scope:` included/excluded
 - `Timebox:` e.g., `30m` or `2h`
 - `Execution Mode:` `direct` | `delegate` | `parallel` | `batch`
@@ -119,6 +120,7 @@ For internal sessions, include:
 - Specialist SOUL: `agents/<AGENT>/SOUL.md`
 - Policy anchors: `SECURITY.md`, `TOOLS.md`, `USER.md`
 - Task Packet (in-message or as a file link)
+- If the runtime already carries realtime transcript context, include only the delta needed for safe execution plus any artifact paths that are not already obvious from the thread.
 
 ## Per-Agent Inbox Guidance
 

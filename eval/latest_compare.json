@@ -1,6 +1,6 @@
 {
-  "baseline": "/Users/corystoner/src/ORION/eval/history/baseline-2026-03.json",
-  "current": "/Users/corystoner/src/ORION/eval/latest_report.json",
+  "baseline": "/Users/corystoner/Desktop/ORION/eval/history/baseline-2026-03.json",
+  "current": "/Users/corystoner/Desktop/ORION/eval/latest_report.json",
   "gate": {
     "passed": true,
     "reasons": [],

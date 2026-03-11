@@ -3,8 +3,8 @@
 agents:
   defaults:
     model:
-      # Default posture: use Google Gemini directly (no OpenRouter/OpenAI).
-      # Pin a specific Gemini model for predictable instruction-following.
+      # Default posture: use Google Gemini directly for production orchestration.
+      # OpenAI remains a direct API control/eval lane outside the default OpenClaw routing path.
       primary: google/gemini-2.5-flash-lite
       fallbacks:
         - google/gemini-2.5-flash-lite
@@ -12,15 +12,23 @@ agents:
         # - nvidia-build/moonshotai/kimi-k2-5
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/Desktop/ORION
+    compaction:
+      mode: safeguard
+      # As of OpenClaw 2026.3.x, explicitly pin critical sections after compaction.
+      postCompactionSections:
+        - Session Startup
+        - Red Lines
+      # Keep a short recent-turn tail before synthesis.
+      recentTurnsPreserve: 8
 
 tools:
-  # OpenClaw 2026.3.2 defaults new local installs to tools.profile=messaging when unset.
+  # As of OpenClaw 2026.3.x, new local installs default to tools.profile=messaging when unset.
   # ORION is a local workspace agent and expects the broader coding tool posture.
   profile: coding
 
-# Optional: Custom model provider for NVIDIA Build (OpenAI-compatible).
+# Optional: Custom model providers for NVIDIA Build and local LM Studio (OpenAI-compatible).
 # This is a template only; actual runtime config lives at ~/.openclaw/openclaw.json.
-# Store `NVIDIA_API_KEY` in ~/.openclaw/.env (see KEEP.md), not in Git.
+# Store provider secrets in ~/.openclaw/.env (see KEEP.md), not in Git.
 #
 # models:
 #   mode: merge
@@ -35,6 +43,13 @@ tools:
 #       models:
 #         - id: moonshotai/kimi-k2-5
 #           name: Kimi K2.5 (NVIDIA Build)
+#     lmstudio:
+#       api: openai-completions
+#       baseUrl: http://127.0.0.1:1234/v1
+#       apiKey: ${LOCAL_LLM_API_KEY}
+#       models:
+#         - id: qwen3.5-4b-mlx
+#           name: Local bounded runtime
 #
 # Example routing (Gemini primary, NVIDIA Build fallback):
 # agents:
@@ -65,7 +80,17 @@ channels:
     groupAllowFrom:
       - "<CORY_TELEGRAM_USER_ID>"
     groups:
-      "<TELEGRAM_GROUP_ID>": {}
+      "<TELEGRAM_GROUP_ID>":
+        # OpenClaw 2026.3.x supports routing forum topics to dedicated agents.
+        topics:
+          "1":
+            agentId: main
+          "3":
+            agentId: atlas
+          "5":
+            agentId: ledger
+          "7":
+            agentId: ember
     reactionLevel: ack
     streamMode: partial
 

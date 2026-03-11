@@ -14,26 +14,26 @@ function asDeliverTarget(value: unknown): string | null {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { appendEvent, getSnapshot, isDirectiveEventType, queueDirectiveAction } = await import("@orion-core/db");
+    const { appendEvent, getSnapshot, isDirectiveOnlyEvent, queueDirectiveAction, validateEventInput } = await import("@orion-core/db");
     const body = (await request.json()) as EventInput & {
       operator?: { telegramUserId?: number | string | null };
     };
-    if (!body?.type) {
-      return Response.json({ error: "Missing event type" }, { status: 400 });
-    }
+    const eventInput = validateEventInput(body);
 
-    const event = appendEvent({ type: body.type, payload: body.payload ?? {} });
-    if (isDirectiveEventType(event.type)) {
+    const event = appendEvent(eventInput);
+    if (isDirectiveOnlyEvent(eventInput)) {
       queueDirectiveAction(event as Parameters<typeof queueDirectiveAction>[0], asDeliverTarget(body.operator?.telegramUserId));
     }
 
     return Response.json(getSnapshot());
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to append event";
+    const status = /Invalid|Missing|Unsupported/.test(message) ? 400 : 500;
     return Response.json(
       {
-        error: error instanceof Error ? error.message : "Failed to append event"
+        error: message
       },
-      { status: 500 }
+      { status }
     );
   }
 }

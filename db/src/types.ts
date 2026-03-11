@@ -158,6 +158,8 @@ export interface DirectiveActionRun {
   commandText: string | null;
   deliverTarget: string | null;
   relayWorkerId: string | null;
+  leaseUntil: string | null;
+  claimToken: string | null;
   responseText: string | null;
   error: string | null;
   code: number | null;

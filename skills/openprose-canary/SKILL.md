@@ -21,6 +21,6 @@ Use this skill only during staged canary validation.
 3. Re-run:
    - `make eval-run`
 4. Log results in:
-   - `/Users/corystoner/src/ORION/docs/skills/canary-results-2026-03.md`
+   - `docs/skills/canary-results-2026-03.md`
 
 If any gate fails, set candidate status to `hold` and stop.

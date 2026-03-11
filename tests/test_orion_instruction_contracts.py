@@ -184,6 +184,9 @@ class TestOrionInstructionContracts(unittest.TestCase):
     def test_tool_execution_contracts(self):
         self.assertIn("Execution Mode", self.orion_role_text)
         self.assertIn("Tool Scope", self.orion_role_text)
+        self.assertIn("transcript-aware runtimes", self.orion_role_text)
+        self.assertIn("request_permissions", self.orion_role_text)
+        self.assertIn("@plugin", self.orion_role_text)
         self.assertIn("mcp-first", self.orion_role_text)
         self.assertIn("parallel tool calls only for independent, non-destructive checks", self.orion_role_text)
         self.assertIn("Tool orchestration rules:", self.atlas_role_text)
@@ -191,6 +194,7 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("spawn_agents_on_csv", self.atlas_role_text)
 
     def test_task_packet_tool_fields_contract(self):
+        self.assertIn("transcript-aware runtimes", self.task_packet_text)
         self.assertIn("Execution Mode:", self.task_packet_text)
         self.assertIn("Tool Scope:", self.task_packet_text)
         self.assertIn("Retrieval Order:", self.task_packet_text)

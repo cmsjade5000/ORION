@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "updated_at": "2026-03-11",
+  "providers": [
+    {
+      "provider_id": "gemini-openclaw",
+      "display_name": "Google Gemini via OpenClaw",
+      "lane": "production-orchestrator",
+      "api_path": "openclaw://google/gemini-2.5-flash-lite",
+      "api_surface": "OpenClaw model routing",
+      "models": [
+        "google/gemini-2.5-flash-lite"
+      ],
+      "allowed_tasks": [
+        "normal_chat",
+        "routing",
+        "specialist_handoffs",
+        "tool_selection",
+        "light_retrieval_synthesis"
+      ],
+      "forbidden_tasks": [
+        "destructive_execution_without_approval",
+        "unguarded_external_delivery",
+        "provider_promotion_without_benchmark_win"
+      ],
+      "fallback_order": 1,
+      "requires_schema": true,
+      "requires_hitl": true,
+      "role_summary": "Default live ORION orchestration lane.",
+      "docs": [
+        "/Users/corystoner/Desktop/ORION/docs/LLM_ACCESS.md",
+        "/Users/corystoner/Desktop/ORION/docs/OPENCLAW_CONFIG_MIGRATION.md"
+      ]
+    },
+    {
+      "provider_id": "openai-control-plane",
+      "display_name": "OpenAI Responses / ChatGPT API",
+      "lane": "control-eval",
+      "api_path": "https://api.openai.com/v1/responses",
+      "api_surface": "OpenAI Responses API",
+      "models": [
+        "gpt-5",
+        "gpt-5-mini"
+      ],
+      "allowed_tasks": [
+        "structured_outputs",
+        "tool_contract_testing",
+        "eval_generation",
+        "trace_grading",
+        "redteam_judging"
+      ],
+      "forbidden_tasks": [
+        "silent_primary_promotion",
+        "destructive_execution_without_approval"
+      ],
+      "fallback_order": 2,
+      "requires_schema": true,
+      "requires_hitl": true,
+      "role_summary": "High-control lane for schema validation, evals, and trace grading.",
+      "docs": [
+        "https://platform.openai.com/docs/api-reference/responses",
+        "https://developers.openai.com/api/docs/guides/structured-outputs",
+        "https://developers.openai.com/api/docs/guides/function-calling"
+      ]
+    },
+    {
+      "provider_id": "kimi-k2-5-nvidia-build",
+      "display_name": "Kimi K2.5 via NVIDIA Build",
+      "lane": "reasoning-fallback",
+      "api_path": "openclaw://nvidia-build/moonshotai/kimi-k2-5",
+      "api_surface": "OpenAI-compatible provider via OpenClaw",
+      "models": [
+        "moonshotai/kimi-k2-5"
+      ],
+      "allowed_tasks": [
+        "research_synthesis",
+        "second_opinion_reasoning",
+        "alternative_plan_generation",
+        "long_context_comparison"
+      ],
+      "forbidden_tasks": [
+        "silent_primary_promotion",
+        "destructive_execution_without_approval"
+      ],
+      "fallback_order": 3,
+      "requires_schema": true,
+      "requires_hitl": true,
+      "role_summary": "Hosted reasoning and backup lane that must pass ORION-specific evals before promotion.",
+      "docs": [
+        "/Users/corystoner/Desktop/ORION/docs/NVIDIA_BUILD_KIMI.md",
+        "/Users/corystoner/Desktop/ORION/scripts/openclaw_enable_nvidia_kimi.sh"
+      ]
+    },
+    {
+      "provider_id": "local-bounded-runtime",
+      "display_name": "Local Model Runtime",
+      "lane": "bounded-utility",
+      "api_path": "openai-compatible://lmstudio-or-ollama-or-vllm",
+      "api_surface": "OpenAI-compatible local server",
+      "models": [
+        "qwen3.5-4b-mlx",
+        "ollama:<bounded-model>",
+        "vllm:<bounded-model>"
+      ],
+      "allowed_tasks": [
+        "summarization",
+        "extraction",
+        "tagging",
+        "compression",
+        "cheap_preprocessing"
+      ],
+      "forbidden_tasks": [
+        "specialist_orchestration",
+        "financial_risk_gating",
+        "external_messaging_decisions",
+        "approval_gate_judgments",
+        "destructive_tool_decisions"
+      ],
+      "fallback_order": 4,
+      "requires_schema": true,
+      "requires_hitl": false,
+      "role_summary": "Low-risk privacy and cost lane for bounded utility work only.",
+      "docs": [
+        "/Users/corystoner/Desktop/ORION/docs/LLM_PROVIDER_MATRIX.md"
+      ]
+    }
+  ]
+}

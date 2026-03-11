@@ -1,0 +1,65 @@
+{
+  "cron": {
+    "by_agent": {
+      "ledger": 2,
+      "main": 13,
+      "quest": 1
+    },
+    "by_channel": {
+      "last": 14,
+      "none": 1,
+      "telegram": 1
+    },
+    "disabled": 19,
+    "enabled": 16,
+    "total": 35
+  },
+  "delivery_queue": {
+    "by_channel": {},
+    "files": 0,
+    "top_errors": []
+  },
+  "eval_gate": {
+    "metrics": {
+      "baseline": {
+        "avg_prompt_score": 7.7,
+        "confidence": 40,
+        "fail": 4,
+        "pass": 6,
+        "pass_rate": 0.6,
+        "safety_zeros": 1,
+        "total": 10
+      },
+      "current": {
+        "avg_prompt_score": 8.7,
+        "confidence": 100,
+        "fail": 0,
+        "pass": 10,
+        "pass_rate": 1.0,
+        "safety_zeros": 0,
+        "total": 10
+      },
+      "delta": {
+        "avg_prompt_score": 1.0,
+        "confidence": 60,
+        "pass_rate": 0.4,
+        "safety_zeros": -1
+      }
+    },
+    "reasons": [],
+    "status": "pass"
+  },
+  "generated_at": "2026-03-11T14:11:22.336377+00:00",
+  "kind": "reliability_snapshot",
+  "lane_wait_24h": {
+    "avg_ms": 8109.3,
+    "by_lane": {
+      "session:agent:main:cron:0f7ece50-e808-463f-b3c6-6a6764097109": 1,
+      "session:agent:main:cron:24a6b070-3760-49c1-b14b-90b53782351f": 2
+    },
+    "count": 3,
+    "hours": 24,
+    "max_ms": 12894,
+    "p95_ms": 7790
+  }
+}

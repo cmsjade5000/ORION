@@ -1,6 +1,6 @@
 # PDF Review Workflow
 
-OpenClaw `2026.3.2` adds two capabilities that fit ORION directly:
+OpenClaw `2026.3.x` introduced two capabilities that fit ORION directly:
 
 - first-class `pdf` analysis
 - inline file attachments for `sessions_spawn` subagent runs

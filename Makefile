@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once looptest avatar audio-check lint dev config-validate task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= skills/llm-redteam-gate/examples/promptfooconfig.yaml
 THINKING ?= high
@@ -154,6 +154,10 @@ dev:
 config-validate:
 	@bash scripts/openclaw_config_validate.sh
 
+## Validate required OpenClaw CLI surface with compatibility fallbacks
+openclaw-compat:
+	@bash scripts/openclaw_cli_compat_check.sh
+
 ## Validate Task Packets in per-agent inbox files
 task-packets:
 	python3 scripts/validate_task_packets.py
@@ -216,6 +220,34 @@ llm-vuln-probe-check:
 langfuse-bootstrap-check:
 	@bash skills/langfuse-trace-eval-bootstrap/scripts/bootstrap_langfuse_trace_eval.sh --dry-run
 
+## Dry-run OpenClaw provider wiring for Gemini/Kimi/local lanes
+llm-provider-configure-dry:
+	@bash scripts/openclaw_configure_llm_providers.sh --dry-run
+
+## Dry-run provider benchmark matrix with tracing hooks
+llm-provider-bench-dry:
+	@python3 scripts/run_llm_provider_benchmarks.py --dry-run --trace
+
+## Run provider benchmark matrix and emit report
+llm-provider-bench:
+	@python3 scripts/run_llm_provider_benchmarks.py --trace
+
+## Check provider readiness before a live benchmark
+llm-provider-readiness:
+	@python3 scripts/run_llm_provider_benchmarks.py --check-readiness
+
+## Fail-fast OpenAI control-lane readiness check
+llm-provider-openai-ready:
+	@python3 scripts/run_llm_provider_benchmarks.py --check-readiness --require-ready --providers openai-control-plane
+
+## Run hosted live benchmark suite (Gemini + OpenAI + Kimi)
+llm-provider-bench-full-live:
+	@python3 scripts/run_llm_provider_benchmarks.py --providers gemini-openclaw,openai-control-plane,kimi-k2-5-nvidia-build --trace
+
+## Run targeted OpenAI control-lane benchmarks
+llm-provider-bench-openai:
+	@python3 scripts/run_llm_provider_benchmarks.py --providers openai-control-plane --tasks structured_output_validation,evals_and_trace_grading --trace
+
 ## Validate MCP schema compliance using repo venv when available
 mcp-schema-check:
 	@set -e; \
@@ -235,4 +267,4 @@ skill-guards-smoke:
 	@bash skills/secure-code-preflight/scripts/run_secure_code_preflight.sh --dry-run >/dev/null
 
 ## Must-pass CI gate (lint + tests + plan + task packet validation)
-ci: config-validate shellcheck test plan-graph task-packets
+ci: config-validate openclaw-compat shellcheck test plan-graph task-packets

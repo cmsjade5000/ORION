@@ -52,11 +52,36 @@ Notes:
 
 Script (runs on the Mac mini):
 - `scripts/gateway_maintenance_apply.sh`
+- `scripts/sessions_hygiene.sh` (called by maintenance script in preview mode)
 
 Check-only (safe):
 - `scripts/gateway_maintenance_apply.sh`
 
 Apply changes (requires explicit opt-in):
-- `AUTO_OK=1 scripts/gateway_maintenance_apply.sh --fix --repair --update --commit --push --restart`
+- `AUTO_OK=1 scripts/gateway_maintenance_apply.sh --fix --repair --update --sessions --commit --push --restart`
+
+## Session Hygiene (2026.3.7+)
+
+OpenClaw 2026.3.7 adds first-class session cleanup commands. This repo now
+includes a safe wrapper:
+
+- `scripts/sessions_hygiene.sh`
+
+Read-only preview:
+
+```bash
+scripts/sessions_hygiene.sh --agent main --fix-missing
+```
+
+Apply session cleanup:
+
+```bash
+AUTO_OK=1 scripts/sessions_hygiene.sh --agent main --fix-missing --doctor --apply
+```
+
+What this does:
+- runs `openclaw sessions cleanup ... --dry-run` first
+- optionally applies `--enforce` cleanup
+- optionally runs `openclaw doctor --non-interactive` when `--doctor` is set
 
 Hard rule: do not enable unattended `AUTO_OK` automation until Telegram inbound is verified and you are comfortable with drift.

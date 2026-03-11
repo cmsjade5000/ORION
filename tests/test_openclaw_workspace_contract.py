@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 
-class TestOpenClaw202632Adoption(unittest.TestCase):
+class TestOpenClawWorkspaceContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo = Path(__file__).resolve().parents[1]
@@ -22,6 +22,19 @@ class TestOpenClaw202632Adoption(unittest.TestCase):
         cls.makefile = (cls.repo / "Makefile").read_text(encoding="utf-8")
         cls.discord_setup = (cls.repo / "docs" / "DISCORD_SETUP.md").read_text(encoding="utf-8")
         cls.nvim = (cls.repo / "docs" / "NVIDIA_BUILD_KIMI.md").read_text(encoding="utf-8")
+        cls.fly_toml = (cls.repo / "fly.orion-core.toml").read_text(encoding="utf-8")
+        cls.compat_0114 = (cls.repo / "docs" / "CODEX_0114_COMPATIBILITY_REPORT.md").read_text(
+            encoding="utf-8"
+        )
+        cls.app_healthz = (cls.repo / "app" / "src" / "app" / "healthz" / "route.ts").read_text(
+            encoding="utf-8"
+        )
+        cls.app_readyz = (cls.repo / "app" / "src" / "app" / "readyz" / "route.ts").read_text(
+            encoding="utf-8"
+        )
+        cls.dashboard_server = (
+            cls.repo / "apps" / "telegram-miniapp-dashboard" / "server" / "index.js"
+        ).read_text(encoding="utf-8")
 
     def test_examples_pin_tools_profile(self):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
@@ -49,7 +62,10 @@ class TestOpenClaw202632Adoption(unittest.TestCase):
             self.assertIn("openclaw config validate --json", text)
 
         self.assertIn("config-validate:", self.makefile)
-        self.assertIn("ci: config-validate shellcheck test plan-graph task-packets", self.makefile)
+        self.assertIn(
+            "ci: config-validate openclaw-compat shellcheck test plan-graph task-packets",
+            self.makefile,
+        )
 
     def test_pdf_review_workflow_is_documented(self):
         self.assertIn("sessions_spawn", self.pdf_workflow)
@@ -61,6 +77,18 @@ class TestOpenClaw202632Adoption(unittest.TestCase):
         self.assertIn("SecretRef", self.discord_setup)
         self.assertIn("SecretRef", self.nvim)
         self.assertIn("SecretRef", self.migration)
+
+    def test_codex_0114_health_contract_is_implemented(self):
+        self.assertIn('path = "/readyz"', self.fly_toml)
+        self.assertIn('check: "healthz"', self.app_healthz)
+        self.assertIn('check: "readyz"', self.app_readyz)
+        self.assertIn('app.get("/healthz"', self.dashboard_server)
+        self.assertIn('app.get("/readyz"', self.dashboard_server)
+        self.assertIn('app.get("/api/health"', self.dashboard_server)
+
+    def test_codex_0114_report_locks_permission_plugin_and_health_defaults(self):
+        for needle in ("request_permissions", "@plugin", "/readyz", "/healthz", "workspace-write"):
+            self.assertIn(needle, self.compat_0114)
 
 
 if __name__ == "__main__":

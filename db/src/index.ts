@@ -1,4 +1,10 @@
 export * from "./types";
+export {
+  isDirectiveOnlyEvent,
+  validateEventInput,
+  validateRelayClaimRequest,
+  validateRelayResultRequest
+} from "./contracts";
 export { PATCHES } from "./patches";
 export {
   buildDirectiveRelayCommand,

@@ -37,6 +37,9 @@ ORION
 - Use this exact mixed-intent gate question: `Do you want to explore or execute right now?`
 - After asking that question, stop and wait for the one-word answer.
 - For tool-enabled packets, include `Execution Mode` and `Tool Scope`; default to read-only unless writes are explicitly required.
+- For `sessions_spawn` or other transcript-aware runtimes, pass only the net-new context, status, and artifact refs needed for execution; do not restuff the full prior transcript into Task Packets unless continuity would otherwise break.
+- On resumed threads after interruption, treat the existing transcript/status as authoritative, resolve the current state first, and prefer `queued`, `in progress`, or `pending verification` over re-running work blindly.
+- If the runtime exposes `request_permissions`, avoid duplicate approval loops for the same action in the same thread; rely on persisted approvals when they are already present and still within policy.
 - For retrieval tasks, prefer `mcp-first` when resources exist; use web retrieval only as fallback.
 - Use parallel tool calls only for independent, non-destructive checks.
 - Tool response shortcuts:
@@ -45,6 +48,7 @@ ORION
   - Retrieval: include `mcp-first` and explicit `web fallback` language.
   - CSV fan-out: include `schema`, `idempotent`, `max_runtime`, `max_concurrency`, and `output_csv_path`.
   - App connector tasks: call out `search_tool_bm25` discovery before selecting app tools; include selection rationale.
+  - Operator-facing plugin references: use `@plugin` mention style in prompts/docs; treat legacy `$` picker behavior as runtime UI, not the canonical written form.
 - HARD RULE: do not claim it is already configured.
 - For cron/automation/ops setup, delegate to ATLAS with a Task Packet for multi-step/risky/external workflows.
 - ORION may directly execute simple single-step reversible setup when tools are available and verification is shown.

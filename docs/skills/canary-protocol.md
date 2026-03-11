@@ -10,8 +10,8 @@ Provide a decision-complete process for introducing a skill with measurable safe
 ## Preconditions
 
 All must be true before starting canary:
-- Candidate has passed intake criteria in `/Users/corystoner/src/ORION/docs/skills/skill-intake-rubric.md`.
-- Candidate appears in active shortlist at `/Users/corystoner/src/ORION/docs/skills/shortlist-2026-03-weekly.md`.
+- Candidate has passed intake criteria in `docs/skills/skill-intake-rubric.md`.
+- Candidate appears in active shortlist at `docs/skills/shortlist-2026-03-weekly.md`.
 - Rollback steps are documented and command-tested in staging.
 - Evaluation owner and backup owner are assigned.
 
@@ -103,4 +103,4 @@ If seven full days have not elapsed, status remains `in progress`.
 
 ## Required Logging Location
 
-Use `/Users/corystoner/src/ORION/docs/skills/canary-results-2026-03.md` for canary run records and status updates.
+Use `docs/skills/canary-results-2026-03.md` for canary run records and status updates.

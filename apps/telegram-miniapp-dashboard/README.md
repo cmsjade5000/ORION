@@ -51,8 +51,8 @@ Environment:
 
 This repo includes two helper scripts that can emit real `task.*`, `tool.*`, and `response.created` events:
 
-- `/Users/corystoner/src/ORION/scripts/run_inbox_packets.py`
-- `/Users/corystoner/src/ORION/scripts/notify_inbox_results.py`
+- `/Users/corystoner/Desktop/ORION/scripts/run_inbox_packets.py`
+- `/Users/corystoner/Desktop/ORION/scripts/notify_inbox_results.py`
 
 Configure either environment variables or `~/.openclaw/openclaw.json` `env.vars`:
 

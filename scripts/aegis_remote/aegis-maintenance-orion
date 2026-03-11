@@ -59,6 +59,7 @@ fi
 # Must match Mac mini forced-command allowlist (`~/.openclaw/bin/aegis-ssh-command`).
 : "${ORION_OPENCLAW_SECURITY_AUDIT_CMD:=/Users/corystoner/.npm-global/bin/openclaw security audit --deep --json}"
 : "${ORION_OPENCLAW_UPDATE_STATUS_CMD:=/Users/corystoner/.npm-global/bin/openclaw update status}"
+: "${ORION_OPENCLAW_UPDATE_STATUS_FALLBACK_CMD:=/Users/corystoner/.npm-global/bin/openclaw update --json status}"
 
 if [ -z "$ORION_HOST" ] || [ -z "$ORION_SSH_USER" ] || [ -z "$SSH_IDENTITY" ]; then
   log "SKIP: missing ORION_HOST/ORION_SSH_USER/SSH_IDENTITY in $ENV_FILE"
@@ -101,8 +102,13 @@ fi
 if ! remote "$ORION_OPENCLAW_UPDATE_STATUS_CMD" >"$update_txt" 2>"${tmpdir}/update.err"; then
   rc=$?
   err="$(tail -n 50 "${tmpdir}/update.err" 2>/dev/null || true)"
-  log "WARN: update_status rc=$rc err=$(printf %q "$err")"
-  : >"$update_txt"
+  log "WARN: update_status primary rc=$rc err=$(printf %q "$err")"
+  if ! remote "$ORION_OPENCLAW_UPDATE_STATUS_FALLBACK_CMD" >"$update_txt" 2>"${tmpdir}/update_fallback.err"; then
+    frc=$?
+    ferr="$(tail -n 50 "${tmpdir}/update_fallback.err" 2>/dev/null || true)"
+    log "WARN: update_status fallback rc=$frc err=$(printf %q "$ferr")"
+    : >"$update_txt"
+  fi
 fi
 
 critical="0"
@@ -180,7 +186,7 @@ fi
   printf '## Recommended Actions (ORION executes)\n\n'
   printf -- '- Review: run `openclaw security audit --deep` locally and inspect critical findings.\n'
   printf -- '- If safe: `openclaw security audit --deep --fix` (chmod/tighten defaults).\n'
-  printf -- '- Check OpenClaw update: `openclaw update status` then (optionally) `openclaw update`.\n'
+  printf -- '- Check OpenClaw update: `openclaw update status` (fallback `openclaw update --json status`) then (optionally) `openclaw update`.\n'
   printf -- '- If repo changes are needed: commit + push from ORION host (run a secrets scan first).\n'
   printf -- '- Reboot meaning: prefer `openclaw gateway restart` (not OS reboot) unless explicitly required.\n\n'
   printf '## Stop Gates\n\n'
@@ -198,4 +204,3 @@ msg="$(format_alert \
   "$incident_id")"
 
 printf '%s\n' "$msg"
-

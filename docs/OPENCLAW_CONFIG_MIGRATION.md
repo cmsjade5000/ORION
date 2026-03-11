@@ -12,7 +12,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 
 ## Migrated To Runtime
 
-- `tools.profile = "coding"` (pin ORION to a local workspace posture; OpenClaw `2026.3.2` defaults new local installs to `messaging` when unset)
+- `tools.profile = "coding"` (pin ORION to a local workspace posture; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset)
 - `agents.defaults.model.primary = "google/gemini-2.5-flash-lite"` (pinned)
 - `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
@@ -39,7 +39,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
 
-## Config Validation (2026.3.2)
+## Config Validation (OpenClaw 2026.3.x)
 
 Use the new preflight validator before gateway start or after config edits:
 
@@ -48,6 +48,69 @@ openclaw config validate --json
 ```
 
 This checks the live runtime config at `~/.openclaw/openclaw.json` without starting the gateway.
+
+## Codex 0.114.0 Compatibility Notes
+
+Codex `0.114.0` changed a few runtime behaviors that matter to ORION-style orchestration:
+
+- Handoffs now inherit realtime transcript context. Keep Task Packets concise and avoid stuffing the full prior transcript into delegation templates.
+- `request_permissions` approvals now persist across turns, work with reject-style configs, and preserve legacy `workspace-write` behavior on older builds. ORION policy stays the same: security gates still come from `SECURITY.md` and `TOOLS.md`.
+- The runtime still exposes the `$` mention picker, but operator-facing docs/prompts should standardize on `@plugin` mention style.
+- If you run a websocket app-server alongside ORION automation, health probes should target `GET /readyz` and `GET /healthz` on that listener.
+
+This repo keeps those changes backwards-tolerant by treating them as additive runtime capabilities, not permission relaxations.
+
+## Compatibility Note (OpenClaw 2026.3.x): `gateway.auth.mode`
+
+As of OpenClaw `2026.3.x`, runtime config requires explicit `gateway.auth.mode` when both auth
+credentials exist. Keep this pinned to avoid ambiguous auth startup failures:
+
+```bash
+openclaw config get gateway.auth
+```
+
+Expected shape:
+
+```json
+{ "mode": "token", "token": "..." }
+```
+
+If needed:
+
+```bash
+openclaw config set gateway.auth.mode token
+```
+
+## Telegram Topic Routing (OpenClaw 2026.3.x)
+
+OpenClaw now supports topic-level `agentId` routing under:
+
+- `channels.telegram.groups.<chatId>.topics.<topicId>.agentId`
+
+Template examples are documented in:
+
+- `openclaw.yaml`
+- `openclaw.json.example`
+- `docs/TELEGRAM_TOPIC_ROUTING.md`
+
+Bootstrap helper in this repo:
+
+```bash
+scripts/telegram_topic_bindings_bootstrap.sh \
+  --group-id -1001234567890 \
+  --topic 1:main \
+  --topic 7:atlas
+```
+
+Apply:
+
+```bash
+scripts/telegram_topic_bindings_bootstrap.sh \
+  --group-id -1001234567890 \
+  --topic 1:main \
+  --topic 7:atlas \
+  --apply
+```
 
 ## Telegram Draft Streaming (March 2, 2026)
 
@@ -82,4 +145,13 @@ openclaw models status
 openclaw config get agents.defaults.workspace
 openclaw config get 'agents.list[0].subagents.allowAgents'
 openclaw config get channels.telegram
+openclaw sessions cleanup --agent main --dry-run --fix-missing --json
+openclaw agents bindings --json
+```
+
+If a Codex websocket app-server is in front of automation flows, also verify:
+
+```bash
+curl -fsS "${CODEX_APP_SERVER_BASE_URL%/}/readyz"
+curl -fsS "${CODEX_APP_SERVER_BASE_URL%/}/healthz"
 ```

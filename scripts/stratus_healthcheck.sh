@@ -14,8 +14,32 @@ set -euo pipefail
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+probe_http() {
+  local url="$1"
+  if have curl; then
+    curl -fsS --max-time 5 "$url" >/dev/null
+    return $?
+  fi
+  if have python3; then
+    python3 - "$url" <<'PY'
+import sys
+import urllib.request
+
+url = sys.argv[1]
+try:
+    with urllib.request.urlopen(url, timeout=5) as resp:
+        sys.exit(0 if 200 <= getattr(resp, "status", 0) < 300 else 1)
+except Exception:
+    sys.exit(1)
+PY
+    return $?
+  fi
+  return 2
+}
+
 skip_host=0
 check_channels=0
+app_server_base="${STRATUS_APP_SERVER_BASE_URL:-${CODEX_APP_SERVER_BASE_URL:-}}"
 if [[ "${STRATUS_SKIP_HOST:-}" == "1" ]]; then
   skip_host=1
 fi
@@ -23,22 +47,48 @@ if [[ "${STRATUS_CHECK_CHANNELS:-}" == "1" ]]; then
   check_channels=1
 fi
 
-for arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+  arg="$1"
   case "$arg" in
-    --no-host) skip_host=1 ;;
-    --channels) check_channels=1 ;;
+    --no-host)
+      skip_host=1
+      shift
+      ;;
+    --channels)
+      check_channels=1
+      shift
+      ;;
+    --app-server)
+      shift
+      app_server_base="${1-}"
+      if [[ -z "$app_server_base" ]]; then
+        printf 'CHECKS:\n'
+        printf -- '- app-server: MISSING_URL\n'
+        printf 'NEXT:\n'
+        printf -- '- Re-run with --app-server URL.\n'
+        exit 2
+      fi
+      shift
+      ;;
+    --app-server=*)
+      app_server_base="${arg#*=}"
+      shift
+      ;;
     -h|--help)
       cat <<'TXT'
 Usage:
-  scripts/stratus_healthcheck.sh [--no-host] [--channels]
+  scripts/stratus_healthcheck.sh [--no-host] [--channels] [--app-server URL]
 
 Options:
   --no-host   Skip host resource checks (useful for tests/CI).
   --channels  Probe channel status (slow; includes Slack/Telegram/Mochat).
+  --app-server  Probe Codex app-server health on URL via /readyz and /healthz.
 TXT
       exit 2
       ;;
-    *) ;;
+    *)
+      shift
+      ;;
   esac
 done
 
@@ -84,9 +134,32 @@ else
   gateway_status="FAIL"
 fi
 
+app_readyz="SKIP"
+app_healthz="SKIP"
+app_probe_failed=0
+if [[ -n "$app_server_base" ]]; then
+  app_server_base="${app_server_base%/}"
+  if probe_http "${app_server_base}/readyz"; then
+    app_readyz="OK"
+  else
+    app_readyz="FAIL"
+    app_probe_failed=1
+  fi
+  if probe_http "${app_server_base}/healthz"; then
+    app_healthz="OK"
+  else
+    app_healthz="FAIL"
+    app_probe_failed=1
+  fi
+fi
+
 printf 'CHECKS:\n'
 printf -- '- gateway health: %s\n' "$health"
 printf -- '- gateway service: %s\n' "$gateway_status"
+if [[ -n "$app_server_base" ]]; then
+  printf -- '- codex app-server readyz: %s\n' "$app_readyz"
+  printf -- '- codex app-server healthz: %s\n' "$app_healthz"
+fi
 
 if [[ "$check_channels" -eq 1 ]]; then
   channels="$("$OPENCLAW" channels status --probe 2>/dev/null || true)"
@@ -113,7 +186,7 @@ if [[ "$skip_host" -eq 0 ]]; then
   fi
 fi
 
-if [[ "$health" == "OK" ]]; then
+if [[ "$health" == "OK" && "$app_probe_failed" -eq 0 ]]; then
   printf 'NEXT:\n'
   printf -- '- No action needed.\n'
   exit 0
@@ -121,5 +194,9 @@ fi
 
 printf -- '- health output: %s\n' "$(sed -n '1p' "$tmp" 2>/dev/null | tr -d '\r' || true)"
 printf 'NEXT:\n'
-printf -- '- Run scripts/diagnose_gateway.sh, then consider: openclaw gateway restart\n'
+if [[ "$app_probe_failed" -eq 1 ]]; then
+  printf -- '- Check the Codex app-server listener and verify /readyz + /healthz on %s.\n' "$app_server_base"
+else
+  printf -- '- Run scripts/diagnose_gateway.sh, then consider: openclaw gateway restart\n'
+fi
 exit 1

@@ -15,7 +15,7 @@ Design goals:
 - Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **QUEST**, **EMBER**, **LEDGER**, **POLARIS**, **SCRIBE**, **WIRE**.
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
-- ORION local installs should pin `tools.profile` to `coding`; OpenClaw `2026.3.2` defaults new local installs to `messaging` when unset.
+- ORION local installs should pin `tools.profile` to `coding`; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset.
 
 ## Go Live (macOS)
 
@@ -74,7 +74,7 @@ Setup:
 
 ## PDF Review Flow
 
-OpenClaw `2026.3.2` adds first-class PDF analysis plus `sessions_spawn` inline attachments for subagents.
+OpenClaw `2026.3.x` introduced first-class PDF analysis plus `sessions_spawn` inline attachments for subagents.
 
 For ORION's preferred workflow, see:
 - `docs/PDF_REVIEW_WORKFLOW.md`

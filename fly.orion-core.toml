@@ -24,7 +24,7 @@ primary_region = "ord"
     interval = "15s"
     method = "GET"
     timeout = "5s"
-    path = "/api/health"
+    path = "/readyz"
 
 [[mounts]]
   source = "orion_core_data"

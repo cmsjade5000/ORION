@@ -301,7 +301,7 @@ def main() -> int:
     ap.add_argument("--grace-minutes", type=int, default=10, help="Guard grace window after run in minutes.")
     ap.add_argument("--slot-hours", default="7,15,23", help="Comma-separated expected daily slot hours.")
     ap.add_argument("--report-date", default="", help="Report date YYYY-MM-DD. Default: yesterday in local tz.")
-    ap.add_argument("--runs-limit", type=int, default=400, help="Cron run history limit.")
+    ap.add_argument("--runs-limit", type=int, default=200, help="Cron run history limit (OpenClaw max: 200).")
     ap.add_argument("--messages-limit", type=int, default=500, help="AgentMail history limit.")
     ap.add_argument("--report-match-minutes", type=int, default=30, help="Run-to-email matching window for daily report.")
     ap.add_argument("--state-path", default="tmp/kalshi_ref_arb/digest_delivery_monitor_state.json", help="State file path (repo-relative unless absolute).")
@@ -325,7 +325,8 @@ def main() -> int:
         do_daily = bool(args.daily_report)
 
     job_id = args.job_id.strip() or _detect_kalshi_digest_job_id(repo_root)
-    runs = load_cron_runs(repo_root, job_id=job_id, tz=tz, limit=args.runs_limit)
+    runs_limit = max(1, min(int(args.runs_limit), 200))
+    runs = load_cron_runs(repo_root, job_id=job_id, tz=tz, limit=runs_limit)
     emails = load_agentmail_sent(
         repo_root,
         inbox_id=args.inbox_id,

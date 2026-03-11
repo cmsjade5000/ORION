@@ -1,0 +1,66 @@
+{
+  "captured_at": "2026-03-11T12:00:00-04:00",
+  "generated_at": "2026-03-11T22:21:06Z",
+  "results": [
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 4779.27,
+      "pass_fail": "fail",
+      "provider": "gemini-openclaw",
+      "scenario": "routing_and_handoffs",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    },
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 110.98,
+      "pass_fail": "fail",
+      "provider": "kimi-k2-5-nvidia-build",
+      "scenario": "routing_and_handoffs",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    },
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 3396.84,
+      "pass_fail": "fail",
+      "provider": "gemini-openclaw",
+      "scenario": "structured_output_validation",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    },
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 300.75,
+      "pass_fail": "fail",
+      "provider": "kimi-k2-5-nvidia-build",
+      "scenario": "structured_output_validation",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    },
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 92.28,
+      "pass_fail": "fail",
+      "provider": "kimi-k2-5-nvidia-build",
+      "scenario": "research_and_second_opinions",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    },
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 3633.84,
+      "pass_fail": "fail",
+      "provider": "gemini-openclaw",
+      "scenario": "research_and_second_opinions",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    }
+  ],
+  "suite": "orion-provider-benchmark",
+  "summary": {
+    "primary_candidate": "gemini-openclaw",
+    "promotion_recommended": false
+  },
+  "version": 1
+}

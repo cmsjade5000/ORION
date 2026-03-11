@@ -12,6 +12,57 @@ Nothing in this directory should modify secrets directly.
 
 ---
 
+## sessions_hygiene.sh
+
+### Purpose
+Run OpenClaw session-store hygiene for one agent with a safe default dry-run preview and optional apply mode.
+
+### Usage
+
+Dry-run preview (safe default):
+
+```bash
+./scripts/sessions_hygiene.sh --agent main --fix-missing
+```
+
+Apply cleanup (requires explicit gate):
+
+```bash
+AUTO_OK=1 ./scripts/sessions_hygiene.sh --agent main --fix-missing --doctor --apply
+```
+
+---
+
+## telegram_topic_bindings_bootstrap.sh
+
+### Purpose
+Bootstrap Telegram forum topic routing to specialist agents by writing per-topic `agentId` config and ensuring topic-scoped route bindings.
+
+### Usage
+
+Dry-run:
+
+```bash
+./scripts/telegram_topic_bindings_bootstrap.sh \
+  --group-id -1001234567890 \
+  --topic 1:main \
+  --topic 7:atlas \
+  --topic 9:ledger
+```
+
+Apply:
+
+```bash
+./scripts/telegram_topic_bindings_bootstrap.sh \
+  --group-id -1001234567890 \
+  --topic 1:main \
+  --topic 7:atlas \
+  --topic 9:ledger \
+  --apply
+```
+
+---
+
 ## discord_selfcheck.sh
 
 ### Purpose

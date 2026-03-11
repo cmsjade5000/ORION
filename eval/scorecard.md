@@ -1,7 +1,7 @@
 # Eval Scorecard (Routing Sim)
 
-- Baseline: `/Users/corystoner/src/ORION/eval/history/baseline-2026-03.json`
-- Current: `/Users/corystoner/src/ORION/eval/latest_report.json`
+- Baseline: `/Users/corystoner/Desktop/ORION/eval/history/baseline-2026-03.json`
+- Current: `/Users/corystoner/Desktop/ORION/eval/latest_report.json`
 - Gate: **PASS**
 
 ## Metrics

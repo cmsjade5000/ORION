@@ -24,6 +24,31 @@ const IS_PROD = NODE_ENV === "production";
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 8787);
 
+function healthPayload(check) {
+  return {
+    ok: true,
+    service: "orion-miniapp-dashboard",
+    check,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+app.get("/healthz", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(healthPayload("healthz"));
+});
+
+app.get("/readyz", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(healthPayload("readyz"));
+});
+
+// Backward-compatible legacy probe path.
+app.get("/api/health", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(healthPayload("api/health"));
+});
+
 function parseAllowedOrigins() {
   const raw = String(process.env.MINIAPP_ALLOWED_ORIGINS || "").trim();
   const out = new Set();

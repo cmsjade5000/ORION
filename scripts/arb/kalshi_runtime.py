@@ -202,7 +202,7 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
     paper_exec_latency_ms, e = _int_env("KALSHI_ARB_PAPER_EXEC_LATENCY_MS", 250, min_v=0)
     if e:
         errs.append(e)
-    paper_exec_slippage_bps, e = _float_env("KALSHI_ARB_PAPER_EXEC_SLIPPAGE_BPS", 5.0, min_v=0.0, max_v=1000.0)
+    paper_exec_slippage_bps, e = _float_env("KALSHI_ARB_PAPER_EXEC_SLIPPAGE_BPS", 2.0, min_v=0.0, max_v=1000.0)
     if e:
         errs.append(e)
     portfolio_allocator_min_signal_fraction, e = _float_env(
@@ -230,13 +230,13 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
     struct_min_liquidity_usd, e = _float_env("KALSHI_ARB_STRUCT_MIN_LIQUIDITY_USD", 25.0, min_v=0.0)
     if e:
         errs.append(e)
-    dry_streak_loosen_step_bps, e = _int_env("KALSHI_ARB_DRY_STREAK_LOOSEN_STEP_BPS", 10, min_v=1)
+    dry_streak_loosen_step_bps, e = _int_env("KALSHI_ARB_DRY_STREAK_LOOSEN_STEP_BPS", 15, min_v=1)
     if e:
         errs.append(e)
-    dry_streak_loosen_every_cycles, e = _int_env("KALSHI_ARB_DRY_STREAK_LOOSEN_EVERY_CYCLES", 18, min_v=1)
+    dry_streak_loosen_every_cycles, e = _int_env("KALSHI_ARB_DRY_STREAK_LOOSEN_EVERY_CYCLES", 10, min_v=1)
     if e:
         errs.append(e)
-    loosen_floor_edge_bps, e = _int_env("KALSHI_ARB_LOOSEN_FLOOR_EDGE_BPS", 85, min_v=1)
+    loosen_floor_edge_bps, e = _int_env("KALSHI_ARB_LOOSEN_FLOOR_EDGE_BPS", 70, min_v=1)
     if e:
         errs.append(e)
     router_max_series_share, e = _float_env("KALSHI_ARB_ROUTER_MAX_SERIES_SHARE", 0.35, min_v=0.05, max_v=1.0)

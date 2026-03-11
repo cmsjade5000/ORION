@@ -1,4 +1,4 @@
-import { completeDirectiveAction } from "@orion-core/db";
+import { completeDirectiveAction, validateRelayResultRequest } from "@orion-core/db";
 import { relayAuthOk, relayEnabled } from "@/lib/relay";
 
 export const runtime = "nodejs";
@@ -11,13 +11,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
   }
 
-  if (!relayAuthOk(request)) {
-    return Response.json(
-      { ok: false, error: { code: "UNAUTHORIZED", message: "Bad relay token" } },
-      { status: 401 }
-    );
-  }
-
   const params = await context.params;
   const id = String(params.id ?? "").trim();
   if (!id) {
@@ -27,23 +20,34 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     );
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    ok?: boolean;
-    code?: number | null;
-    responseText?: string | null;
-    error?: string | null;
-  };
+  const rawBody = await request.text();
+  if (!relayAuthOk(request, rawBody, `/api/relay/${id}/result`)) {
+    return Response.json(
+      { ok: false, error: { code: "UNAUTHORIZED", message: "Bad relay token" } },
+      { status: 401 }
+    );
+  }
 
-  const run = completeDirectiveAction(id, {
-    ok: Boolean(body.ok),
-    code: typeof body.code === "number" ? body.code : null,
-    responseText: typeof body.responseText === "string" ? body.responseText : null,
-    error: typeof body.error === "string" ? body.error : null
+  let body: ReturnType<typeof validateRelayResultRequest>;
+  try {
+    body = validateRelayResultRequest(rawBody ? JSON.parse(rawBody) : {});
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: { code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Invalid relay result body" } },
+      { status: 400 }
+    );
+  }
+
+  const run = completeDirectiveAction(id, body.workerId, body.claimToken, {
+    ok: body.ok,
+    code: body.code,
+    responseText: body.responseText,
+    error: body.error
   });
 
   if (!run) {
     return Response.json(
-      { ok: false, error: { code: "NOT_FOUND", message: "Unknown relay command id" } },
+      { ok: false, error: { code: "NOT_FOUND", message: "Unknown relay command id or invalid lease" } },
       { status: 404 }
     );
   }

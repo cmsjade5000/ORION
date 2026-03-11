@@ -1,0 +1,21 @@
+{
+  "captured_at": "2026-03-11T12:00:00-04:00",
+  "generated_at": "2026-03-11T22:30:44Z",
+  "results": [
+    {
+      "cost_estimate": 0.0,
+      "latency_ms": 45015.79,
+      "pass_fail": "fail",
+      "provider": "local-bounded-runtime",
+      "scenario": "bounded_local_utility",
+      "schema_failure_rate": 1.0,
+      "tool_success_rate": 0.0
+    }
+  ],
+  "suite": "orion-provider-benchmark",
+  "summary": {
+    "primary_candidate": "gemini-openclaw",
+    "promotion_recommended": false
+  },
+  "version": 1
+}

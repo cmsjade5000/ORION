@@ -47,9 +47,9 @@ Record evidence for each scored dimension:
 - Reproduction notes and local command transcript path.
 
 Minimum artifact locations:
-- Intake notes: `/Users/corystoner/src/ORION/docs/skills/shortlist-2026-03-weekly.md`
-- Canary protocol reference: `/Users/corystoner/src/ORION/docs/skills/canary-protocol.md`
-- Results logging: `/Users/corystoner/src/ORION/docs/skills/canary-results-2026-03.md`
+- Intake notes: `docs/skills/shortlist-2026-03-weekly.md`
+- Canary protocol reference: `docs/skills/canary-protocol.md`
+- Results logging: `docs/skills/canary-results-2026-03.md`
 
 ## Source Validation Rules (Online-Discovered Skills)
 

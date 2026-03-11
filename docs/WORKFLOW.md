@@ -50,7 +50,7 @@ This document outlines the recommended workflow for developing and maintaining t
    openclaw channels status --probe
    openclaw agents list --bindings
    ```
-   - OpenClaw `2026.3.2` defaults new local installs to `tools.profile=messaging` when unset.
+   - As of OpenClaw `2026.3.x`, new local installs default to `tools.profile=messaging` when unset.
    - ORION should pin `tools.profile` to `coding` in local installs.
 
 ## Daily Commands

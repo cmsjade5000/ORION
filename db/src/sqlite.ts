@@ -1,4 +1,5 @@
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { buildDirectiveRelayCommand, listDirectiveBindings, objectiveFromDirectivePayload } from "./directives";
 import { PATCHES } from "./patches";
@@ -73,6 +74,8 @@ function ensureSchema(): void {
       command_text TEXT,
       deliver_target TEXT,
       relay_worker_id TEXT,
+      lease_until TEXT,
+      claim_token TEXT,
       response_text TEXT,
       error TEXT,
       code INTEGER,
@@ -84,6 +87,15 @@ function ensureSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_directive_action_runs_status_created
       ON directive_action_runs(status, datetime(created_at), id);
   `);
+
+  const directiveColumns = db.prepare("PRAGMA table_info(directive_action_runs)").all() as Array<{ name: string }>;
+  const directiveColumnNames = new Set(directiveColumns.map((row) => row.name));
+  if (!directiveColumnNames.has("lease_until")) {
+    db.exec("ALTER TABLE directive_action_runs ADD COLUMN lease_until TEXT");
+  }
+  if (!directiveColumnNames.has("claim_token")) {
+    db.exec("ALTER TABLE directive_action_runs ADD COLUMN claim_token TEXT");
+  }
 }
 
 function insertSeedData(): void {
@@ -191,6 +203,8 @@ type DirectiveActionRunRow = {
   command_text: string | null;
   deliver_target: string | null;
   relay_worker_id: string | null;
+  lease_until: string | null;
+  claim_token: string | null;
   response_text: string | null;
   error: string | null;
   code: number | null;
@@ -208,6 +222,8 @@ function mapDirectiveActionRun(row: DirectiveActionRunRow): DirectiveActionRun {
     commandText: row.command_text,
     deliverTarget: row.deliver_target,
     relayWorkerId: row.relay_worker_id,
+    leaseUntil: row.lease_until,
+    claimToken: row.claim_token,
     responseText: row.response_text,
     error: row.error,
     code: row.code,
@@ -229,6 +245,8 @@ function getDirectiveActionRunById(id: string): DirectiveActionRun | null {
           command_text,
           deliver_target,
           relay_worker_id,
+          lease_until,
+          claim_token,
           response_text,
           error,
           code,
@@ -257,6 +275,8 @@ export function listRecentDirectiveActions(limit = 30): DirectiveActionRun[] {
           command_text,
           deliver_target,
           relay_worker_id,
+          lease_until,
+          claim_token,
           response_text,
           error,
           code,
@@ -301,12 +321,14 @@ export function queueDirectiveAction(event: EventLogEntry<DirectiveEventType>, d
           command_text,
           deliver_target,
           relay_worker_id,
+          lease_until,
+          claim_token,
           response_text,
           error,
           code,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL, ?, ?)
       `
     )
     .run(event.id, event.type, objective, status, commandText, deliverTarget, error, now, now);
@@ -320,51 +342,62 @@ export function queueDirectiveAction(event: EventLogEntry<DirectiveEventType>, d
   return run;
 }
 
-export function claimDirectiveAction(workerIdRaw: string): DirectiveActionRun | null {
+function futureIso(msFromNow: number): string {
+  return new Date(Date.now() + msFromNow).toISOString();
+}
+
+export function claimDirectiveAction(workerIdRaw: string, leaseMs = 60_000): DirectiveActionRun | null {
   initDb();
   const workerId = (workerIdRaw || "relay-worker").trim() || "relay-worker";
-  const row = db
-    .prepare(
-      `
-        SELECT
-          id,
-          event_id,
-          directive_type,
-          objective,
-          status,
-          command_text,
-          deliver_target,
-          relay_worker_id,
-          response_text,
-          error,
-          code,
-          created_at,
-          updated_at
-        FROM directive_action_runs
-        WHERE status = 'queued'
-        ORDER BY datetime(created_at) ASC, id ASC
-        LIMIT 1
-      `
-    )
-    .get() as DirectiveActionRunRow | undefined;
+  const claimOnce = db.transaction(() => {
+    const row = db
+      .prepare(
+        `
+          SELECT id
+          FROM directive_action_runs
+          WHERE status = 'queued'
+          ORDER BY datetime(created_at) ASC, id ASC
+          LIMIT 1
+        `
+      )
+      .get() as { id: number } | undefined;
 
-  if (!row) {
-    return null;
+    if (!row) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const leaseUntil = futureIso(Math.max(5_000, Math.trunc(leaseMs)));
+    const claimToken = randomUUID();
+    const result = db
+      .prepare(
+        `
+          UPDATE directive_action_runs
+          SET status = 'claimed', relay_worker_id = ?, lease_until = ?, claim_token = ?, updated_at = ?
+          WHERE id = ? AND status = 'queued'
+        `
+      )
+      .run(workerId, leaseUntil, claimToken, now, row.id) as { changes?: number };
+
+    return result.changes === 1 ? row.id : null;
+  });
+
+  while (true) {
+    const claimedId = claimOnce();
+    if (claimedId == null) {
+      return null;
+    }
+    const claimed = getDirectiveActionRunById(String(claimedId));
+    if (claimed) {
+      return claimed;
+    }
   }
-
-  db.prepare(
-    `
-      UPDATE directive_action_runs
-      SET status = 'claimed', relay_worker_id = ?, updated_at = ?
-      WHERE id = ?
-    `
-  ).run(workerId, new Date().toISOString(), row.id);
-
-  return getDirectiveActionRunById(String(row.id));
 }
 
 export function completeDirectiveAction(
   id: string,
+  workerIdRaw: string,
+  claimTokenRaw: string,
   result: { ok: boolean; code?: number | null; responseText?: string | null; error?: string | null }
 ): DirectiveActionRun | null {
   initDb();
@@ -372,13 +405,33 @@ export function completeDirectiveAction(
   if (!Number.isFinite(numericId) || numericId <= 0) {
     return null;
   }
+  const workerId = String(workerIdRaw || "").trim();
+  const claimToken = String(claimTokenRaw || "").trim();
+  if (!workerId || !claimToken) {
+    return null;
+  }
 
   const status: DirectiveActionStatus = result.ok ? "completed" : "failed";
+  const current = getDirectiveActionRunById(String(numericId));
+  if (!current || current.status !== "claimed" || current.relayWorkerId !== workerId || current.claimToken !== claimToken) {
+    return null;
+  }
+  if (!current.leaseUntil || Date.parse(current.leaseUntil) < Date.now()) {
+    db.prepare(
+      `
+        UPDATE directive_action_runs
+        SET status = 'failed', error = ?, lease_until = NULL, claim_token = NULL, updated_at = ?
+        WHERE id = ? AND status = 'claimed'
+      `
+    ).run("Relay lease expired before completion.", new Date().toISOString(), numericId);
+    return getDirectiveActionRunById(String(numericId));
+  }
+
   db.prepare(
     `
       UPDATE directive_action_runs
-      SET status = ?, code = ?, response_text = ?, error = ?, updated_at = ?
-      WHERE id = ?
+      SET status = ?, code = ?, response_text = ?, error = ?, lease_until = NULL, claim_token = NULL, updated_at = ?
+      WHERE id = ? AND status = 'claimed' AND relay_worker_id = ? AND claim_token = ?
     `
   ).run(
     status,
@@ -386,7 +439,9 @@ export function completeDirectiveAction(
     result.responseText ? String(result.responseText).trim() : null,
     result.error ? String(result.error).trim() : null,
     new Date().toISOString(),
-    numericId
+    numericId,
+    workerId,
+    claimToken
   );
 
   return getDirectiveActionRunById(String(numericId));

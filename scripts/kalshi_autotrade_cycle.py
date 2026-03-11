@@ -219,6 +219,10 @@ def _build_trade_argv(
     max_market_concentration_fraction: str,
     allow_live_writes: bool,
 ) -> list[str]:
+    ignore_zero_liquidity = _truthy_env(
+        "KALSHI_ARB_IGNORE_ZERO_LIQUIDITY",
+        default=("1" if (not bool(allow_live_writes)) else "0"),
+    )
     argv = [
         "python3",
         "scripts/kalshi_ref_arb.py",
@@ -262,18 +266,20 @@ def _build_trade_argv(
         "--bayes-obs-k-max",
         bayes_obs_k_max,
         "--max-orders-per-run",
-        os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "1"),
+        os.environ.get("KALSHI_ARB_MAX_ORDERS_PER_RUN", "6"),
         "--max-contracts-per-order",
-        os.environ.get("KALSHI_ARB_MAX_CONTRACTS_PER_ORDER", "1"),
+        os.environ.get("KALSHI_ARB_MAX_CONTRACTS_PER_ORDER", "3"),
         "--max-notional-per-run-usd",
-        os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "2"),
+        os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_RUN_USD", "20"),
         "--max-notional-per-market-usd",
-        os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "5"),
+        os.environ.get("KALSHI_ARB_MAX_NOTIONAL_PER_MARKET_USD", "12"),
         "--max-open-contracts-per-ticker",
-        os.environ.get("KALSHI_ARB_MAX_OPEN_CONTRACTS_PER_TICKER", "2"),
+        os.environ.get("KALSHI_ARB_MAX_OPEN_CONTRACTS_PER_TICKER", "8"),
         "--max-market-concentration-fraction",
         str(max_market_concentration_fraction),
     ]
+    if bool(ignore_zero_liquidity):
+        argv.append("--ignore-zero-liquidity")
     if allow_live_writes:
         argv.append("--allow-write")
     if str(vol_anomaly).strip().lower() in ("1", "true", "yes", "y", "on"):
@@ -1365,16 +1371,16 @@ def main() -> int:
                 return 0
         series_list, series_rotation = _maybe_expand_series_with_rotation(root, series_list_base)
         sigma = os.environ.get("KALSHI_ARB_SIGMA", "auto")
-        min_edge = os.environ.get("KALSHI_ARB_MIN_EDGE_BPS", "120")
-        uncertainty = os.environ.get("KALSHI_ARB_UNCERTAINTY_BPS", "50")
-        min_liq = os.environ.get("KALSHI_ARB_MIN_LIQUIDITY_USD", "200")
-        max_spread = os.environ.get("KALSHI_ARB_MAX_SPREAD", "0.05")
-        min_tte = os.environ.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY", "900")
-        min_px = os.environ.get("KALSHI_ARB_MIN_PRICE", "0.05")
+        min_edge = os.environ.get("KALSHI_ARB_MIN_EDGE_BPS", "70")
+        uncertainty = os.environ.get("KALSHI_ARB_UNCERTAINTY_BPS", "10")
+        min_liq = os.environ.get("KALSHI_ARB_MIN_LIQUIDITY_USD", "10")
+        max_spread = os.environ.get("KALSHI_ARB_MAX_SPREAD", "0.08")
+        min_tte = os.environ.get("KALSHI_ARB_MIN_SECONDS_TO_EXPIRY", "120")
+        min_px = os.environ.get("KALSHI_ARB_MIN_PRICE", "0.03")
         max_px = os.environ.get("KALSHI_ARB_MAX_PRICE", "0.95")
-        min_notional = os.environ.get("KALSHI_ARB_MIN_NOTIONAL_USD", "0.20")
-        min_notional_bypass = os.environ.get("KALSHI_ARB_MIN_NOTIONAL_BYPASS_EDGE_BPS", "4000")
-        persist = os.environ.get("KALSHI_ARB_PERSISTENCE_CYCLES", "2")
+        min_notional = os.environ.get("KALSHI_ARB_MIN_NOTIONAL_USD", "0.05")
+        min_notional_bypass = os.environ.get("KALSHI_ARB_MIN_NOTIONAL_BYPASS_EDGE_BPS", "2500")
+        persist = os.environ.get("KALSHI_ARB_PERSISTENCE_CYCLES", "1")
         persist_win = os.environ.get("KALSHI_ARB_PERSISTENCE_WINDOW_MIN", "30")
         sizing_mode = os.environ.get("KALSHI_ARB_SIZING_MODE", "fixed")
         kelly_fraction = os.environ.get("KALSHI_ARB_KELLY_FRACTION", "0.10")

@@ -11,6 +11,8 @@ Purpose:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import socket
@@ -22,6 +24,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 
 def _coalesce(*vals: str) -> str:
@@ -74,11 +77,25 @@ def get_token() -> str:
     )
 
 
+def _signature_headers(token: str, method: str, path: str, body_text: str) -> dict[str, str]:
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    nonce = str(uuid4())
+    payload = ".".join([timestamp, nonce, method.upper(), path, body_text]).encode("utf-8")
+    signature = hmac.new(token.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return {
+        "authorization": f"Bearer {token}",
+        "x-orion-relay-timestamp": timestamp,
+        "x-orion-relay-nonce": nonce,
+        "x-orion-relay-signature": signature,
+    }
+
+
 def http_post_json(url: str, token: str, body: dict[str, Any], timeout_s: float = 12.0) -> tuple[int, dict[str, Any] | None]:
     data = json.dumps(body, ensure_ascii=True).encode("utf-8")
+    parsed = urllib.parse.urlparse(url)
     headers = {"content-type": "application/json"}
     if token:
-        headers["authorization"] = f"Bearer {token}"
+        headers.update(_signature_headers(token, "POST", parsed.path or "/", data.decode("utf-8")))
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
@@ -238,6 +255,7 @@ def main() -> int:
             continue
 
         relay_id = str(cmd.get("id") or "").strip()
+        claim_token = str(cmd.get("claimToken") or "").strip()
         if not relay_id:
             if args.once:
                 return 1
@@ -251,6 +269,8 @@ def main() -> int:
             "code": rc,
             "responseText": response_text if ok else "",
             "error": fail_text if not ok else "",
+            "workerId": worker_id,
+            "claimToken": claim_token,
         }
         http_post_json(result_url, token, result_body)
 

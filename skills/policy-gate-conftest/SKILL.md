@@ -12,7 +12,7 @@ Use Conftest plus Rego policies to enforce policy-as-code gates on ORION artifac
 ## Prerequisites
 
 - `conftest` installed and available on `PATH`.
-- Run commands from repo root: `/Users/corystoner/src/ORION`.
+- Run commands from repo root: `.`.
 
 ## One-Command Helper
 
