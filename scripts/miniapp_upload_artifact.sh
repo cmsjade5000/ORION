@@ -41,6 +41,17 @@ if [[ -z "${MIME}" ]]; then
   MIME="${MIME:-application/octet-stream}"
 fi
 
+token_transport_allowed() {
+  case "$1" in
+    https://*|http://localhost|http://localhost/*|http://localhost:*|http://127.0.0.1|http://127.0.0.1/*|http://127.0.0.1:*|http://[::1]|http://[::1]/*|http://[::1]:*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # Fallback: if INGEST_TOKEN is not present in the current shell, try loading it
 # from OpenClaw config so agent-executed shell commands can still upload.
 if [[ -z "${INGEST_TOKEN:-}" ]]; then
@@ -64,30 +75,75 @@ PY
   fi
 fi
 
-if [[ -n "${INGEST_TOKEN:-}" && -n "${AGENT_ID}" ]]; then
-  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
-    -H "Authorization: Bearer ${INGEST_TOKEN}" \
-    -H "x-agent-id: ${AGENT_ID}" \
-    -H "Content-Type: ${MIME}" \
-    -H "x-artifact-name: ${NAME}" \
-    --data-binary @"${FILE_PATH}"
-elif [[ -n "${INGEST_TOKEN:-}" ]]; then
-  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
-    -H "Authorization: Bearer ${INGEST_TOKEN}" \
-    -H "Content-Type: ${MIME}" \
-    -H "x-artifact-name: ${NAME}" \
-    --data-binary @"${FILE_PATH}"
-elif [[ -n "${AGENT_ID}" ]]; then
-  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
-    -H "x-agent-id: ${AGENT_ID}" \
-    -H "Content-Type: ${MIME}" \
-    -H "x-artifact-name: ${NAME}" \
-    --data-binary @"${FILE_PATH}"
-else
-  curl -sS -X POST "${BASE_URL%/}/api/artifacts" \
-    -H "Content-Type: ${MIME}" \
-    -H "x-artifact-name: ${NAME}" \
-    --data-binary @"${FILE_PATH}"
+if [[ -n "${INGEST_TOKEN:-}" ]] && ! token_transport_allowed "${BASE_URL}"; then
+  echo "Refusing token-auth upload over non-HTTPS transport (HTTP allowed only for localhost)." >&2
+  exit 2
 fi
 
+upload_url="${BASE_URL%/}/api/artifacts"
+response_file="$(mktemp -t miniapp-upload-response.XXXXXX)"
+trap 'rm -f "${response_file}"' EXIT
+
+curl_args=(
+  -sS
+  -o "${response_file}"
+  -w "%{http_code}"
+  -X POST "${upload_url}"
+  -H "Content-Type: ${MIME}"
+  -H "x-artifact-name: ${NAME}"
+  --data-binary @"${FILE_PATH}"
+)
+
+if [[ -n "${INGEST_TOKEN:-}" ]]; then
+  curl_args+=(-H "Authorization: Bearer ${INGEST_TOKEN}")
+fi
+if [[ -n "${AGENT_ID}" ]]; then
+  curl_args+=(-H "x-agent-id: ${AGENT_ID}")
+fi
+
+http_code="$(curl "${curl_args[@]}")" || {
+  echo "Upload request failed." >&2
+  if [[ -s "${response_file}" ]]; then
+    cat "${response_file}" >&2
+    echo >&2
+  fi
+  exit 1
+}
+
+if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+  echo "Upload failed with HTTP ${http_code}." >&2
+  if [[ -s "${response_file}" ]]; then
+    cat "${response_file}" >&2
+    echo >&2
+  fi
+  exit 1
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  if ! python3 - "${response_file}" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+try:
+    obj = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
+if not isinstance(obj, dict) or obj.get("ok") is not True:
+    raise SystemExit(1)
+PY
+  then
+    echo "Upload response did not indicate success (expected JSON with ok=true)." >&2
+    cat "${response_file}" >&2 || true
+    echo >&2
+    exit 1
+  fi
+else
+  if ! grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "${response_file}"; then
+    echo "Upload response did not indicate success (expected ok=true)." >&2
+    cat "${response_file}" >&2 || true
+    echo >&2
+    exit 1
+  fi
+fi
+
+cat "${response_file}"
 echo

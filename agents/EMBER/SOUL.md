@@ -1,6 +1,6 @@
 # SOUL.md — EMBER
 
-**Generated:** 94fcdeb+dirty
+**Generated:** eb9f926+dirty
 **Source:** src/core/shared + USER.md + src/agents/EMBER.md
 
 ---

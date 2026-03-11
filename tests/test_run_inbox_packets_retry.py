@@ -1,7 +1,9 @@
 import importlib.util
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def _load_runner():
@@ -47,3 +49,10 @@ class TestRunInboxPacketsRetry(unittest.TestCase):
         fp3 = self.r._idempotency_fingerprint({"Idempotency Key": "def"}, before)  # type: ignore[attr-defined]
         self.assertEqual(fp1, fp2)
         self.assertNotEqual(fp1, fp3)
+
+    def test_command_timeout_seconds_prefers_packet_value(self):
+        with mock.patch.dict(os.environ, {"INBOX_RUNNER_CMD_TIMEOUT_S": "45"}, clear=False):
+            t_default = self.r._command_timeout_seconds({})  # type: ignore[attr-defined]
+            t_packet = self.r._command_timeout_seconds({"Command Timeout Seconds": "9"})  # type: ignore[attr-defined]
+        self.assertEqual(t_default, 45.0)
+        self.assertEqual(t_packet, 9.0)

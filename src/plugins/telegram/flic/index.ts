@@ -12,6 +12,7 @@ type ChatState = {
   flow?: FlowState;
   lastParams?: Record<string, string | number>;
   lastOffset?: number;
+  updatedAt: number;
 };
 
 type DeepLinkResponse = {
@@ -91,6 +92,11 @@ function envBool(name: string, fallback: boolean): boolean {
   const raw = String(process.env[name] || "").trim().toLowerCase();
   if (!raw) return fallback;
   return ["1", "true", "yes", "on"].includes(raw);
+}
+
+function envInt(name: string, fallback: number): number {
+  const raw = Number.parseInt(String(process.env[name] || ""), 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
 }
 
 function trimText(value: string, max = 120): string {
@@ -220,35 +226,65 @@ function getQuestion(step: FlowStep, seed: number): string {
 }
 
 async function postJson(url: string, payload: Record<string, unknown>) {
+  const timeoutMs = envInt("FLIC_DEEPLINK_TIMEOUT_MS", 8_000);
+  const retries = Math.max(0, envInt("FLIC_DEEPLINK_RETRIES", 1));
   const globalFetch = (globalThis as any).fetch as
     | ((input: string, init?: any) => Promise<any>)
     | undefined;
-  if (globalFetch) {
-    return globalFetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+  const body = JSON.stringify(payload);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      if (globalFetch) {
+        return await globalFetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          signal: controller.signal,
+        });
+      }
+
+      const nodeFetchModule = await import("node-fetch");
+      const nodeFetch: any =
+        (nodeFetchModule as any).default || (nodeFetchModule as any);
+      return await nodeFetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
-  const nodeFetchModule = await import("node-fetch");
-  const nodeFetch: any =
-    (nodeFetchModule as any).default || (nodeFetchModule as any);
-  return nodeFetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  throw lastError instanceof Error ? lastError : new Error("Deep link request failed");
+}
+
+function resolveVaultBaseUrl(): string {
+  const configured = String(process.env.FLIC_VAULT_BASE_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
+  if (configured) return configured;
+  if (String(process.env.NODE_ENV || "").trim() === "production") {
+    return "https://vault966-r2.fly.dev";
+  }
+  throw new Error("FLIC_VAULT_BASE_URL is required outside production.");
 }
 
 async function buildDeepLink(
   params: Record<string, string | number>,
   opts?: { reroll?: boolean; offset?: number }
 ): Promise<DeepLinkResponse> {
-  const base = String(process.env.FLIC_VAULT_BASE_URL || "https://vault966-r2.fly.dev").replace(
-    /\/+$/,
-    ""
-  );
+  const base = resolveVaultBaseUrl();
   const botUsername = String(process.env.FLIC_BOT_USERNAME || "Flic_GatewayBot");
   const appShortName = String(process.env.FLIC_APP_SHORT_NAME || "").trim();
   const response = await postJson(`${base}/api/webapp/deeplink/picks`, {
@@ -314,11 +350,50 @@ export function registerFlicChatRouter(bot: Bot) {
   if (!envBool("FLIC_ROUTER_ENABLED", true)) return;
 
   const states = new Map<number, ChatState>();
+  const ttlMs = envInt("FLIC_STATE_TTL_MS", 6 * 60 * 60 * 1000);
+  const maxChats = envInt("FLIC_STATE_MAX_CHATS", 500);
+
+  const pruneStates = () => {
+    const now = Date.now();
+    for (const [chatId, state] of states.entries()) {
+      if (now - state.updatedAt > ttlMs) states.delete(chatId);
+    }
+    if (states.size <= maxChats) return;
+    const oldestFirst = [...states.entries()].sort(
+      (a, b) => a[1].updatedAt - b[1].updatedAt
+    );
+    const toDrop = Math.max(0, states.size - maxChats);
+    for (let i = 0; i < toDrop; i += 1) {
+      const entry = oldestFirst[i];
+      if (entry) states.delete(entry[0]);
+    }
+  };
+
+  const getState = (chatId: number): ChatState | undefined => {
+    pruneStates();
+    const state = states.get(chatId);
+    if (!state) return undefined;
+    if (Date.now() - state.updatedAt > ttlMs) {
+      states.delete(chatId);
+      return undefined;
+    }
+    return state;
+  };
+
+  const setState = (chatId: number, state: ChatState): void => {
+    state.updatedAt = Date.now();
+    states.set(chatId, state);
+    pruneStates();
+  };
+
+  const deleteState = (chatId: number): void => {
+    states.delete(chatId);
+  };
 
   const beginFlow = async (ctx: any, chatId: number) => {
-    const state = states.get(chatId) || {};
+    const state = getState(chatId) || { updatedAt: Date.now() };
     state.flow = { step: "mood_genre", params: {}, turn: 0 };
-    states.set(chatId, state);
+    setState(chatId, state);
     await ctx.reply(
       "Flic on rails, but with banter. I’ll ask four quick questions and end with a locked Picks link."
     );
@@ -326,12 +401,12 @@ export function registerFlicChatRouter(bot: Bot) {
   };
 
   const resetFlow = async (ctx: any, chatId: number) => {
-    states.delete(chatId);
+    deleteState(chatId);
     await ctx.reply("Flow reset. Send /flic when you want a fresh recommendation run.");
   };
 
   const rerollFlow = async (ctx: any, chatId: number) => {
-    const state = states.get(chatId);
+    const state = getState(chatId);
     if (!state?.lastParams) {
       await ctx.reply('No previous picks context yet. Start with /flic and I will set one up.');
       return;
@@ -343,7 +418,7 @@ export function registerFlicChatRouter(bot: Bot) {
       });
       const nextOffset = Number.parseInt(reroll.normalized_params?.offset || "0", 10) || 0;
       state.lastOffset = nextOffset;
-      states.set(chatId, state);
+      setState(chatId, state);
       await ctx.reply(
         [
           "Reroll cut is ready. Same vibe, fresh stack.",
@@ -399,7 +474,7 @@ export function registerFlicChatRouter(bot: Bot) {
       return;
     }
 
-    const state = states.get(chatId) || {};
+    const state = getState(chatId) || { updatedAt: Date.now() };
 
     if (!state.flow) {
       if (!containsTrigger(text)) {
@@ -407,7 +482,7 @@ export function registerFlicChatRouter(bot: Bot) {
         return;
       }
       state.flow = { step: "mood_genre", params: {}, turn: 0 };
-      states.set(chatId, state);
+      setState(chatId, state);
       await ctx.reply(
         "Let's build tonight's cut. Four quick prompts, then I’ll drop a locked Picks link."
       );
@@ -421,7 +496,7 @@ export function registerFlicChatRouter(bot: Bot) {
     const upcoming = nextStep(flow.step);
     if (upcoming) {
       flow.step = upcoming;
-      states.set(chatId, state);
+      setState(chatId, state);
       await ctx.reply(getQuestion(upcoming, chatId + flow.turn));
       return;
     }
@@ -432,7 +507,7 @@ export function registerFlicChatRouter(bot: Bot) {
       state.lastParams = { ...flow.params };
       state.lastOffset = Number.parseInt(normalized.offset || "0", 10) || 0;
       state.flow = undefined;
-      states.set(chatId, state);
+      setState(chatId, state);
 
       const planBits: string[] = [];
       if (normalized.genres) planBits.push(`Genres ${normalized.genres}`);
@@ -459,7 +534,7 @@ export function registerFlicChatRouter(bot: Bot) {
       );
     } catch {
       state.flow = undefined;
-      states.set(chatId, state);
+      setState(chatId, state);
       await ctx.reply(
         "I hit a routing snag while generating the mini-app link. Send /flic and I’ll re-run the flow."
       );

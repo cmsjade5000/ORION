@@ -1,9 +1,15 @@
 import type { Bot } from "grammy";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { requireOperatorAccess } from "../access";
+import { runCommand } from "../process";
+import { BoundedExecutor, ChatTaskQueue } from "../queue";
 
 type Json = any;
+const digestExecutor = new BoundedExecutor(
+  Number.parseInt(String(process.env.KALSHI_DIGEST_MAX_CONCURRENCY || "1"), 10) || 1
+);
+const digestQueue = new ChatTaskQueue();
 
 function workspaceRoot(): string {
   const cands = [
@@ -101,17 +107,18 @@ function extractCashAndPv(run: any): { cashUsd: number | null; pvUsd: number | n
   return { cashUsd: null, pvUsd: null };
 }
 
-function runDigest(root: string, hours: number): { ok: boolean; message: string } {
-  const cmd = "python3";
-  const args = ["scripts/kalshi_digest.py", "--window-hours", String(hours)];
-  const proc = spawnSync(cmd, args, {
-    cwd: root,
-    encoding: "utf-8",
-    timeout: 30_000,
-    env: { ...process.env },
-  });
+async function runDigest(root: string, hours: number): Promise<{ ok: boolean; message: string }> {
+  const proc = await runCommand(
+    "python3",
+    ["scripts/kalshi_digest.py", "--window-hours", String(hours)],
+    {
+      cwd: root,
+      timeoutMs: 30_000,
+      env: { ...process.env },
+    }
+  );
   const stdout = String(proc.stdout || "").trim();
-  if (proc.status === 0 && stdout) {
+  if (proc.code === 0 && stdout) {
     try {
       const obj = JSON.parse(stdout);
       const msg = String(obj.message || "").trim();
@@ -121,6 +128,9 @@ function runDigest(root: string, hours: number): { ok: boolean; message: string 
     }
   }
   const err = String(proc.stderr || "").trim();
+  if (proc.timedOut) {
+    return { ok: false, message: "Kalshi digest timed out. Try again in a minute." };
+  }
   return { ok: false, message: err || "Digest generation failed." };
 }
 
@@ -153,6 +163,7 @@ function parseHoursArg(text: string): number | null {
 
 export function registerKalshiCommands(bot: Bot) {
   bot.command("kalshi_status", async (ctx) => {
+    if (!(await requireOperatorAccess(ctx, "Kalshi command"))) return;
     const root = workspaceRoot();
     const last = latestRunArtifact(root);
     const kill = killSwitchOn(root);
@@ -215,8 +226,10 @@ export function registerKalshiCommands(bot: Bot) {
   });
 
   bot.command("kalshi_digest", async (ctx) => {
+    if (!(await requireOperatorAccess(ctx, "Kalshi command"))) return;
     const root = workspaceRoot();
     const hours = parseHoursArg(ctx.message?.text || "") ?? 8;
+    const chatId = Number(ctx.chat?.id);
 
     // Prefer latest saved digest for speed; otherwise generate on-demand.
     const cached = readLatestDigest(root);
@@ -225,7 +238,14 @@ export function registerKalshiCommands(bot: Bot) {
       return;
     }
 
-    const out = runDigest(root, hours);
-    await ctx.reply(out.ok ? out.message : `Kalshi digest error: ${out.message}`);
+    const run = async () => {
+      const out = await digestExecutor.run(() => runDigest(root, hours));
+      await ctx.reply(out.ok ? out.message : `Kalshi digest error: ${out.message}`);
+    };
+    if (Number.isFinite(chatId)) {
+      await digestQueue.enqueue(chatId, run);
+      return;
+    }
+    await run();
   });
 }

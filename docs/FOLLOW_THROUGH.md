@@ -20,6 +20,20 @@ Notes:
   - Telegram: direct API call (token file or env var).
   - Discord: uses `openclaw message send --channel discord ...` (so this script never touches the Discord token).
 
+## Closed-Loop Enforcement
+
+To prevent packet/ticket drift, run:
+
+- `python3 scripts/task_execution_loop.py --apply`
+  - Reconciles safe lane/state drift:
+    - pending packet + referenced ticket -> `in-progress`
+    - terminal packet result + referenced ticket -> `testing`
+    - lane/status mismatch -> rewrites `Status:` to lane-derived value
+  - Regenerates `tasks/NOTES/status.md` and `tasks/NOTES/plan.md`
+- `python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24`
+  - Same reconcile behavior, but exits non-zero if pending packets exceed stale threshold.
+  - Intended for heartbeat/cron stop-gate style enforcement.
+
 ## Milestone-Only Updates (POLARIS Rollouts)
 
 For POLARIS/admin rollout work, prefer milestone updates over step-by-step chatter.
@@ -65,6 +79,25 @@ openclaw cron add \
   --session isolated \
   --message "Run python3 scripts/notify_inbox_results.py --require-notify-telegram. Respond NO_REPLY."
 
+openclaw cron add \
+  --name "task-loop-heartbeat" \
+  --description "Reconcile packet/ticket lifecycle and fail loud on stale pending packets" \
+  --cron "*/5 * * * *" \
+  --tz "America/New_York" \
+  --agent main \
+  --session isolated \
+  --message "Run python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24. Respond NO_REPLY."
+
+openclaw cron add \
+  --name "task-loop-weekly-reconcile" \
+  --description "Weekly reconcile sweep for inbox/results/tickets notes" \
+  --cron "15 9 * * 1" \
+  --tz "America/New_York" \
+  --agent main \
+  --session isolated \
+  --message "Run python3 scripts/task_execution_loop.py --apply --stale-hours 72. Respond NO_REPLY."
+```
+
 Discord variant (set a default target first):
 
 ```bash
@@ -77,7 +110,6 @@ openclaw cron add \
   --agent main \
   --session isolated \
   --message "Run python3 scripts/notify_inbox_results.py --require-notify-discord. Respond NO_REPLY."
-```
 ```
 
 ## Dry-Run / Testing

@@ -17,9 +17,12 @@ import mimetypes
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def _read_text(p: Path) -> str:
@@ -136,6 +139,21 @@ def _get_ingest_token() -> str:
     )
 
 
+def _token_auth_transport_allowed(url: str) -> bool:
+    raw = (url or "").strip()
+    if not raw:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(raw)
+    except Exception:
+        return False
+    if parsed.scheme == "https":
+        return True
+    if parsed.scheme != "http":
+        return False
+    return (parsed.hostname or "").lower() in LOCAL_HTTP_HOSTS
+
+
 def emit_event(body: dict[str, Any]) -> bool:
     """
     Best-effort fire-and-forget emit.
@@ -153,6 +171,8 @@ def emit_event(body: dict[str, Any]) -> bool:
     headers = {"content-type": "application/json"}
     tok = _get_ingest_token()
     if tok:
+        if not _token_auth_transport_allowed(url):
+            return False
         headers["authorization"] = f"Bearer {tok}"
 
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -225,6 +245,8 @@ def upload_artifact(
         headers["x-agent-id"] = str(agent_id).strip()
     tok = _get_ingest_token()
     if tok:
+        if not _token_auth_transport_allowed(url):
+            return None
         headers["authorization"] = f"Bearer {tok}"
 
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")

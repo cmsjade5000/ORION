@@ -1,10 +1,16 @@
 import type { Bot } from "grammy";
-import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { requireOperatorAccess } from "../access";
+import { runCommand } from "../process";
+import { BoundedExecutor, ChatTaskQueue } from "../queue";
 
 type PogoCmd = "help" | "voice" | "text" | "today" | "status";
 
 type SlashPogo = "pogo_help" | "pogo_voice" | "pogo_text" | "pogo_today" | "pogo_status";
+const pogoExecutor = new BoundedExecutor(
+  Number.parseInt(String(process.env.POGO_MAX_CONCURRENCY || "2"), 10) || 2
+);
+const pogoQueue = new ChatTaskQueue();
 
 function workspaceRoot(): string {
   const candidates = [
@@ -54,11 +60,10 @@ function parseJsonMessage(raw: string): string | null {
   return null;
 }
 
-function runPogoCommand(root: string, cmd: PogoCmd): { ok: boolean; message: string } {
-  const proc = spawnSync("python3", ["scripts/pogo_brief_commands.py", "--cmd", cmd], {
+async function runPogoCommand(root: string, cmd: PogoCmd): Promise<{ ok: boolean; message: string }> {
+  const proc = await runCommand("python3", ["scripts/pogo_brief_commands.py", "--cmd", cmd], {
     cwd: root,
-    encoding: "utf-8",
-    timeout: 180_000,
+    timeoutMs: 180_000,
     env: { ...process.env },
   });
 
@@ -66,8 +71,12 @@ function runPogoCommand(root: string, cmd: PogoCmd): { ok: boolean; message: str
   const stderr = String(proc.stderr || "");
   const parsed = parseJsonMessage(stdout) || parseJsonMessage(stderr);
 
-  if (proc.status === 0 && parsed) {
+  if (proc.code === 0 && parsed) {
     return { ok: true, message: parsed };
+  }
+
+  if (proc.timedOut) {
+    return { ok: false, message: "Pokemon GO command timed out. Try again in a minute." };
   }
 
   const fallback = parsed || stderr.trim() || stdout.trim() || "Pokemon GO command failed.";
@@ -91,10 +100,19 @@ export function parsePogoSlashCommand(text: string): SlashPogo | null {
 }
 
 async function handleSlash(ctx: any, slash: SlashPogo): Promise<void> {
+  if (!(await requireOperatorAccess(ctx, "Pogo command"))) return;
   const root = workspaceRoot();
   const cmd = mapSlashToCmd(slash);
-  const out = runPogoCommand(root, cmd);
-  await ctx.reply(out.message);
+  const chatId = Number(ctx.chat?.id);
+  const run = async () => {
+    const out = await pogoExecutor.run(() => runPogoCommand(root, cmd));
+    await ctx.reply(out.message);
+  };
+  if (Number.isFinite(chatId)) {
+    await pogoQueue.enqueue(chatId, run);
+    return;
+  }
+  await run();
 }
 
 export function registerPogoCommands(bot: Bot): void {

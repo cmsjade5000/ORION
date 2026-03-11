@@ -3,6 +3,7 @@ import re
 import sys
 import tempfile
 import unittest
+from subprocess import TimeoutExpired
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -153,6 +154,37 @@ class TestRunInboxPackets(unittest.TestCase):
             text = inbox.read_text(encoding="utf-8")
             self.assertEqual(text.count("Result:"), 1)
             self.assertIn("Status: OK", text)
+
+    def test_marks_packet_failed_when_allowlisted_command_times_out(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            inbox = self._write_inbox(root, "PIXEL", self._packet())
+            timeout_exc = TimeoutExpired(
+                cmd=["bash", "-lc", "scripts/diagnose_gateway.sh"],
+                timeout=120,
+                output="partial stdout",
+                stderr="partial stderr",
+            )
+            with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
+                self.runner.subprocess,
+                "run",
+                side_effect=timeout_exc,
+            ) as run_mock, mock.patch.object(self.runner.time, "strftime", return_value="20260101-120000"):
+                rc = self.runner.run(root, max_packets=10)
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(run_mock.call_count, 1)
+            self.assertEqual(run_mock.call_args.kwargs.get("timeout"), 120.0)
+
+            text = inbox.read_text(encoding="utf-8")
+            self.assertIn("Result:\nStatus: FAILED", text)
+
+            match = re.search(r"  - (tmp/inbox_runner/PIXEL/[^\n]+\.log)", text)
+            self.assertIsNotNone(match)
+            artifact = root / str(match.group(1))
+            self.assertTrue(artifact.exists())
+            artifact_text = artifact.read_text(encoding="utf-8")
+            self.assertIn("command timed out after 120.0s", artifact_text)
 
 
 if __name__ == "__main__":

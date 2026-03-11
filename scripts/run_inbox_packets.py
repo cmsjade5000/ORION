@@ -212,6 +212,12 @@ def _retry_params(fields: dict[str, str]) -> tuple[int, float, float, float]:
     return max_attempts, base, mult, maxb
 
 
+def _command_timeout_seconds(fields: dict[str, str]) -> float:
+    default_timeout = max(1.0, _parse_float(os.environ.get("INBOX_RUNNER_CMD_TIMEOUT_S", ""), 120.0))
+    configured = _parse_float(fields.get("Command Timeout Seconds", ""), default_timeout)
+    return max(1.0, configured)
+
+
 def _idempotency_fingerprint(fields: dict[str, str], pkt_before_result: list[str]) -> str:
     """
     Stable dedupe key for runner-backed packets.
@@ -336,6 +342,7 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     combined_out: list[str] = []
     combined_err: list[str] = []
     ok = True
+    command_timeout_s = _command_timeout_seconds(fields)
 
     for argv in argv_list:
         miniapp_emit(
@@ -343,24 +350,39 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
             agentId=owner,
             extra={"source": "inbox_runner", "tool": " ".join(argv[:4])},
         )
-        proc = subprocess.run(
-            argv,
-            cwd=str(repo_root),
-            text=True,
-            capture_output=True,
-            env={**os.environ},
-        )
-        combined_out.append(proc.stdout or "")
-        combined_err.append(proc.stderr or "")
-        if proc.returncode != 0:
+        try:
+            proc = subprocess.run(
+                argv,
+                cwd=str(repo_root),
+                text=True,
+                capture_output=True,
+                env={**os.environ},
+                timeout=command_timeout_s,
+            )
+            combined_out.append(proc.stdout or "")
+            combined_err.append(proc.stderr or "")
+            if proc.returncode != 0:
+                ok = False
+                miniapp_emit(
+                    "tool.failed",
+                    agentId=owner,
+                    extra={"source": "inbox_runner", "code": int(proc.returncode)},
+                )
+            else:
+                miniapp_emit("tool.finished", agentId=owner, extra={"source": "inbox_runner", "code": 0})
+        except subprocess.TimeoutExpired as exc:
             ok = False
+            timeout_out = exc.stdout if isinstance(exc.stdout, str) else ""
+            timeout_err = exc.stderr if isinstance(exc.stderr, str) else ""
+            combined_out.append(timeout_out)
+            msg = f"command timed out after {command_timeout_s:.1f}s: {' '.join(argv)}"
+            combined_err.append((timeout_err + "\n" if timeout_err else "") + msg + "\n")
             miniapp_emit(
                 "tool.failed",
                 agentId=owner,
-                extra={"source": "inbox_runner", "code": int(proc.returncode)},
+                extra={"source": "inbox_runner", "code": 124, "timeout": True, "timeoutSeconds": command_timeout_s},
             )
-        else:
-            miniapp_emit("tool.finished", agentId=owner, extra={"source": "inbox_runner", "code": 0})
+            break
 
     # Persist retry state on failure. If we still have retries left, do NOT write a Result block yet.
     if not ok:

@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= skills/llm-redteam-gate/examples/promptfooconfig.yaml
 THINKING ?= high
@@ -126,6 +126,18 @@ skill-discovery:
 ## One-shot coding-party batch (eval + reliability + canary health)
 party-batch-once:
 	@python3 scripts/party_batch_once.py --repo-root .
+
+## Reconcile inbox packet lifecycle with ticket lanes and refresh tasks/NOTES/*
+task-loop:
+	@python3 scripts/task_execution_loop.py --repo-root . --apply --stale-hours "$${STALE_HOURS:-24}"
+
+## Heartbeat-grade enforcement (non-zero exit when stale pending packets exist)
+task-loop-heartbeat:
+	@python3 scripts/task_execution_loop.py --repo-root . --apply --strict-stale --stale-hours "$${STALE_HOURS:-24}"
+
+## Weekly hygiene reconcile (longer threshold by default)
+task-loop-weekly:
+	@python3 scripts/task_execution_loop.py --repo-root . --apply --stale-hours "$${STALE_HOURS:-72}"
 
 ## Internal loop testing (no Telegram delivery); writes report to tmp/looptests/
 looptest:

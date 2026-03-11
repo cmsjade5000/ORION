@@ -1,4 +1,5 @@
 import type { EventInput } from "@orion-core/db";
+import { authorizeMutationRequest, mutationAuthErrorResponse } from "../../../lib/mutation-auth";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,11 @@ function asDeliverTarget(value: unknown): string | null {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const auth = authorizeMutationRequest(request);
+  if (!auth.ok) {
+    return mutationAuthErrorResponse(auth);
+  }
+
   try {
     const { appendEvent, getSnapshot, isDirectiveOnlyEvent, queueDirectiveAction, validateEventInput } = await import("@orion-core/db");
     const body = (await request.json()) as EventInput & {

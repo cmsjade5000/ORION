@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
 
 def _coalesce(*vals: str) -> str:
     for v in vals:
@@ -77,6 +79,21 @@ def get_token() -> str:
     )
 
 
+def _token_auth_transport_allowed(url: str) -> bool:
+    raw = (url or "").strip()
+    if not raw:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(raw)
+    except Exception:
+        return False
+    if parsed.scheme == "https":
+        return True
+    if parsed.scheme != "http":
+        return False
+    return (parsed.hostname or "").lower() in LOCAL_HTTP_HOSTS
+
+
 def _signature_headers(token: str, method: str, path: str, body_text: str) -> dict[str, str]:
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     nonce = str(uuid4())
@@ -92,6 +109,8 @@ def _signature_headers(token: str, method: str, path: str, body_text: str) -> di
 
 def http_post_json(url: str, token: str, body: dict[str, Any], timeout_s: float = 12.0) -> tuple[int, dict[str, Any] | None]:
     data = json.dumps(body, ensure_ascii=True).encode("utf-8")
+    if token and not _token_auth_transport_allowed(url):
+        return 0, None
     parsed = urllib.parse.urlparse(url)
     headers = {"content-type": "application/json"}
     if token:
@@ -231,6 +250,9 @@ def main() -> int:
         return 2
     if not token:
         print("missing relay token (set MINIAPP_COMMAND_RELAY_TOKEN or MINIAPP_INGEST_TOKEN)", file=sys.stderr)
+        return 2
+    if not _token_auth_transport_allowed(base):
+        print("refusing token-auth relay over non-HTTPS transport (allowed over HTTP only on localhost)", file=sys.stderr)
         return 2
 
     claim_url = f"{base}/api/relay/claim"

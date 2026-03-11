@@ -15,6 +15,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+SHELL_META_RE = re.compile(r"(\|\||&&|[|;`]|[<>]|\$\()")
+
 
 def _sanitize_candidate(value: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-")
@@ -31,22 +33,34 @@ def _resolve_output_json(repo_root: Path, output_json: str | None, candidate: st
     return repo_root / "eval" / "history" / f"canary-stage-{safe_candidate}-{ts}.json"
 
 
-def _run_command(command: list[str] | str, cwd: Path, *, shell: bool = False) -> dict[str, Any]:
+def _parse_command_string(raw: str) -> list[str]:
+    text = str(raw or "").strip()
+    if not text:
+        raise ValueError("command is empty")
+    try:
+        argv = shlex.split(text, posix=True)
+    except ValueError as exc:
+        raise ValueError(f"invalid quoting: {exc}") from exc
+    if not argv:
+        raise ValueError("command is empty")
+    for part in argv:
+        if SHELL_META_RE.search(part):
+            raise ValueError("shell metacharacters are not allowed; pass a direct argv-style command")
+    return argv
+
+
+def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
     started = dt.datetime.now(dt.timezone.utc)
     completed = subprocess.run(
         command,
         cwd=str(cwd),
-        shell=shell,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
     ended = dt.datetime.now(dt.timezone.utc)
 
-    if isinstance(command, str):
-        display = command
-    else:
-        display = " ".join(shlex.quote(part) for part in command)
+    display = " ".join(shlex.quote(part) for part in command)
 
     return {
         "cmd": display,
@@ -143,8 +157,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run staged canary harness with pre/post checks.")
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--repo-root", default=".")
-    parser.add_argument("--stage-cmd", required=True, help="Shell command for staged install/enable.")
-    parser.add_argument("--rollback-cmd", default=None, help="Shell command to rollback if stage fails.")
+    parser.add_argument("--stage-cmd", required=True, help="Command for staged install/enable (shlex split; no shell operators).")
+    parser.add_argument("--rollback-cmd", default=None, help="Command to rollback if stage fails (shlex split; no shell operators).")
     parser.add_argument("--skip-eval", action="store_true", default=False)
     parser.add_argument("--skip-reliability", action="store_true", default=False)
     parser.add_argument("--skip-side-effects", action="store_true", default=False)
@@ -152,6 +166,20 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
+    try:
+        stage_argv = _parse_command_string(args.stage_cmd)
+    except ValueError as exc:
+        print(f"invalid --stage-cmd: {exc}")
+        return 2
+
+    rollback_argv: list[str] | None = None
+    if args.rollback_cmd:
+        try:
+            rollback_argv = _parse_command_string(args.rollback_cmd)
+        except ValueError as exc:
+            print(f"invalid --rollback-cmd: {exc}")
+            return 2
+
     now_utc = dt.datetime.now(dt.timezone.utc)
     ts = now_utc.strftime("%Y%m%d-%H%M%S")
 
@@ -173,10 +201,10 @@ def main() -> int:
     if not args.skip_reliability:
         steps["pre_reliability"] = _run_command(["make", "eval-reliability-daily"], repo_root)
 
-    steps["stage"] = _run_command(args.stage_cmd, repo_root, shell=True)
+    steps["stage"] = _run_command(stage_argv, repo_root)
 
-    if steps["stage"]["returncode"] != 0 and args.rollback_cmd:
-        steps["rollback"] = _run_command(args.rollback_cmd, repo_root, shell=True)
+    if steps["stage"]["returncode"] != 0 and rollback_argv:
+        steps["rollback"] = _run_command(rollback_argv, repo_root)
 
     if steps["stage"]["returncode"] == 0:
         if not args.skip_eval:

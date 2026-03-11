@@ -70,6 +70,9 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make route-hygiene` | Enforce daily route hygiene guard (safe autofix + report artifact). |
 | `make lane-hotspots` | Detect lane-wait hot windows and correlate cron jobs. |
 | `make stop-gate-enforce` | Enforce canary stop gate and auto-disable promotion jobs after consecutive R1/R2 failures. |
+| `make task-loop` | Reconcile Task Packet lifecycle with ticket lanes and refresh `tasks/NOTES/*`. |
+| `make task-loop-heartbeat` | Heartbeat-grade run; exits non-zero if stale pending packets exist. |
+| `make task-loop-weekly` | Weekly hygiene reconcile with a longer stale threshold (default 72h). |
 | `make canary-stage` | Run one-shot staged canary harness with verdict artifact. |
 | `make avatar`       | Preview or update your agent's avatar.             |
 | `make audio-check`  | Test the audio (TTS) setup (ElevenLabs skill).     |
