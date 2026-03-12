@@ -22,6 +22,9 @@ MATRIX_PATH = ROOT / "config" / "llm_task_routing_matrix.json"
 TEMPLATE_PATH = ROOT / "config" / "llm_provider_benchmark_report.template.json"
 ALLOWED_PASS_FAIL = {"pass", "fail", "pending"}
 DEFAULT_TIMEOUT_S = float((os.getenv("LLM_BENCHMARK_TIMEOUT_S") or "45").strip())
+OPENROUTER_BASE_URL = (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").strip()
+OPENROUTER_HTTP_REFERER = (os.getenv("OPENROUTER_HTTP_REFERER") or "https://orion.local").strip()
+OPENROUTER_X_TITLE = (os.getenv("OPENROUTER_X_TITLE") or "ORION Provider Benchmark").strip()
 
 
 class BenchCase(dict):
@@ -113,7 +116,7 @@ def bench_case(task_id: str) -> BenchCase:
                 "required": ["provider", "scenario", "stance", "risk_flags", "safe_to_execute", "summary"],
             },
             user_prompt=(
-                "Benchmark scenario: provide a second-opinion assessment for a proposed production model swap. "
+                "Benchmark scenario: provide a second-opinion assessment for a non-sensitive production model swap. "
                 "List at least one risk flag."
             ),
         ),
@@ -385,6 +388,54 @@ def probe_openai_responses(key: str, model: str) -> tuple[bool, str]:
     return True, "ready"
 
 
+def openrouter_attribution_headers() -> dict[str, str]:
+    return {
+        "HTTP-Referer": OPENROUTER_HTTP_REFERER,
+        "X-Title": OPENROUTER_X_TITLE,
+    }
+
+
+def openrouter_headers(key: str) -> dict[str, str]:
+    return {"authorization": f"Bearer {key}", **openrouter_attribution_headers()}
+
+
+def probe_openrouter_chat_completions(key: str, model: str) -> tuple[bool, str]:
+    status, payload = http_post_json(
+        urllib.parse.urljoin(OPENROUTER_BASE_URL.rstrip("/") + "/", "chat/completions"),
+        openrouter_headers(key),
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": "Return exactly {\"ready\":true}"}],
+            "temperature": 0,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "openrouter_lane_probe",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"ready": {"type": "boolean", "const": True}},
+                        "required": ["ready"],
+                    },
+                    "strict": True,
+                },
+            },
+            "provider": {"require_parameters": True},
+            "max_tokens": 32,
+        },
+        timeout_s=min(DEFAULT_TIMEOUT_S, 20.0),
+    )
+    if status != 200 or not payload:
+        error = ((payload or {}).get("error") or {}) if isinstance(payload, dict) else {}
+        message = error.get("message") if isinstance(error, dict) else None
+        return False, f"openrouter probe failed ({status}): {message or 'no payload'}"
+    text = response_text_from_payload(payload)
+    parsed = parse_json_text(text)
+    if not isinstance(parsed, dict) or parsed.get("ready") is not True:
+        return False, "openrouter probe returned non-schema output"
+    return True, "ready"
+
+
 def provider_readiness(provider_id: str, provider: dict[str, Any], live: bool) -> dict[str, Any]:
     ready = False
     note = "unknown provider"
@@ -399,6 +450,15 @@ def provider_readiness(provider_id: str, provider: dict[str, Any], live: bool) -
         if not live:
             return {"provider_ready": True, "skip_reason": "ready (probe skipped in dry-run/readiness mode)", "model_requested": model}
         ok, message = probe_openai_responses(key, model)
+        return {"provider_ready": ok, "skip_reason": message if not ok else "", "model_requested": model}
+    elif provider_id.startswith("openrouter-"):
+        key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+        if not key:
+            return {"provider_ready": False, "skip_reason": "missing OPENROUTER_API_KEY"}
+        model = (os.getenv("OPENROUTER_BENCHMARK_MODEL") or provider["models"][0]).strip()
+        if not live:
+            return {"provider_ready": True, "skip_reason": "ready (probe skipped in dry-run/readiness mode)", "model_requested": model}
+        ok, message = probe_openrouter_chat_completions(key, model)
         return {"provider_ready": ok, "skip_reason": message if not ok else "", "model_requested": model}
     elif provider_id == "kimi-k2-5-nvidia-build":
         key = (os.getenv("NVIDIA_API_KEY") or "").strip()
@@ -581,6 +641,8 @@ def bench_openai_compatible(
     api_key: str,
     model: str,
     request_surface: str,
+    extra_headers: dict[str, str] | None = None,
+    require_parameters: bool = False,
 ) -> dict[str, Any]:
     case = bench_case(task_id)
     row = benchmark_row_base(provider_id, provider, task_id, case)
@@ -594,29 +656,40 @@ def bench_openai_compatible(
         }
     )
     if not api_key:
-        env_name = "NVIDIA_API_KEY" if provider_id == "kimi-k2-5-nvidia-build" else "LOCAL_LLM_API_KEY/LOCAL_LLM_BASE_URL"
+        if provider_id == "kimi-k2-5-nvidia-build":
+            env_name = "NVIDIA_API_KEY"
+        elif provider_id.startswith("openrouter-"):
+            env_name = "OPENROUTER_API_KEY"
+        else:
+            env_name = "LOCAL_LLM_API_KEY/LOCAL_LLM_BASE_URL"
         row["skip_reason"] = f"missing {env_name}"
         return row
+    request_headers = {"authorization": f"Bearer {api_key}"}
+    if isinstance(extra_headers, dict):
+        request_headers.update(extra_headers)
+    request_body: dict[str, Any] = {
+        "model": model,
+        "temperature": 0,
+        "messages": [
+            {"role": "system", "content": "Return only schema-valid JSON for the benchmark. No markdown, no prose."},
+            {"role": "user", "content": f"Provider id to emit: {provider_id}. {case['user_prompt']}"},
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": case["schema_name"],
+                "schema": case["schema"],
+                "strict": True,
+            },
+        },
+    }
+    if require_parameters:
+        request_body["provider"] = {"require_parameters": True}
     started = time.perf_counter()
     status, payload = http_post_json(
         urllib.parse.urljoin(base_url.rstrip("/") + "/", "chat/completions"),
-        {"authorization": f"Bearer {api_key}"},
-        {
-            "model": model,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": "Return only schema-valid JSON for the benchmark. No markdown, no prose."},
-                {"role": "user", "content": f"Provider id to emit: {provider_id}. {case['user_prompt']}"},
-            ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": case["schema_name"],
-                    "schema": case["schema"],
-                    "strict": True,
-                },
-            },
-        },
+        request_headers,
+        request_body,
     )
     row["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 2)
     row["http_status"] = status
@@ -757,6 +830,18 @@ def main() -> int:
                     model=str((provider.get("models") or [""])[0]),
                     request_surface="nvidia-build-chat-completions",
                 )
+            elif provider_id.startswith("openrouter-"):
+                row = bench_openai_compatible(
+                    provider_id,
+                    provider,
+                    task_id,
+                    base_url=OPENROUTER_BASE_URL,
+                    api_key=(os.getenv("OPENROUTER_API_KEY") or "").strip(),
+                    model=(os.getenv("OPENROUTER_BENCHMARK_MODEL") or str((provider.get("models") or [""])[0])).strip(),
+                    request_surface="openrouter-chat-completions",
+                    extra_headers=openrouter_attribution_headers(),
+                    require_parameters=True,
+                )
             else:
                 row = bench_openai_compatible(
                     provider_id,
@@ -777,7 +862,7 @@ def main() -> int:
         "run_mode": "dry_run" if args.dry_run else "live",
         "results": results,
         "summary": {
-            "primary_candidate": "gemini-openclaw",
+            "primary_candidate": "openrouter-auto-primary",
             "promotion_recommended": bool(results) and all(item["pass_fail"] == "pass" for item in results),
             "notes": "Dry-run rows are placeholders. Live promotion requires provider-ready pass results.",
             "unready_providers": sorted({item["provider"] for item in results if not item["provider_ready"]}),

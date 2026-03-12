@@ -46,6 +46,9 @@ Output Format:
 - `Execution Mode:` `direct` | `delegate` | `parallel` | `batch`
   - `parallel` is for independent, non-destructive work only.
   - `batch` is for bounded row-wise jobs (for example `spawn_agents_on_csv`) with explicit schema and limits.
+- `Policy Mode:` `audit` | `block`
+  - Optional runtime enforcement hint for automation packets that pass through ORION policy gating.
+  - Default is `audit`; use `block` only after clean-window promotion gates are satisfied.
 - `Tool Scope:` `read-only` | `write`
 - `Tool Plan:` compact list of intended tool families (for example `mcp-read`, `parallel-checks`, `subagents`)
 - `Retrieval Order:` `mcp-first` | `web-first`

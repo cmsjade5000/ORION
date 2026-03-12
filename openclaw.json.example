@@ -8,10 +8,12 @@
     "defaults": {
       "workspace": "/Users/corystoner/Desktop/ORION",
       "model": {
-        "_comment_model": "Default posture: use Google Gemini directly for production orchestration. OpenAI is a direct API control/eval lane outside the default OpenClaw model path.",
-        "_comment_fallbacks": "Keep fallbacks provider-restricted. Optional: add nvidia-build/moonshotai/kimi-k2-5 after you configure NVIDIA Build (see docs/NVIDIA_BUILD_KIMI.md).",
-        "primary": "google/gemini-2.5-flash-lite",
+        "_comment_model": "Default posture: use OpenRouter auto-routing for production orchestration. OpenAI remains a direct API control/eval lane outside the default OpenClaw model path.",
+        "_comment_fallbacks": "Keep fallbacks provider-restricted. Default: OpenRouter free router + curated free model, then Gemini, then optional NVIDIA Kimi.",
+        "primary": "openrouter/auto",
         "fallbacks": [
+          "openrouter/free",
+          "openai/gpt-oss-20b:free",
           "google/gemini-2.5-flash-lite"
         ]
       },

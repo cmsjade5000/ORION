@@ -3,12 +3,14 @@
 agents:
   defaults:
     model:
-      # Default posture: use Google Gemini directly for production orchestration.
+      # Default posture: use OpenRouter auto-routing for production orchestration.
       # OpenAI remains a direct API control/eval lane outside the default OpenClaw routing path.
-      primary: google/gemini-2.5-flash-lite
+      primary: openrouter/auto
       fallbacks:
+        - openrouter/free
+        - openai/gpt-oss-20b:free
         - google/gemini-2.5-flash-lite
-        # Optional (if configured): NVIDIA Build Kimi 2.5 as a secondary fallback.
+        # Optional (if configured): NVIDIA Build Kimi 2.5 as a tertiary fallback.
         # - nvidia-build/moonshotai/kimi-k2-5
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/Desktop/ORION
@@ -51,12 +53,15 @@ tools:
 #         - id: qwen3.5-4b-mlx
 #           name: Local bounded runtime
 #
-# Example routing (Gemini primary, NVIDIA Build fallback):
+# Example routing (OpenRouter primary with Gemini + NVIDIA compatibility fallbacks):
 # agents:
 #   defaults:
 #     model:
-#       primary: google/gemini-2.5-flash-lite
+#       primary: openrouter/auto
 #       fallbacks:
+#         - openrouter/free
+#         - openai/gpt-oss-20b:free
+#         - google/gemini-2.5-flash-lite
 #         - nvidia-build/moonshotai/kimi-k2-5
 
 channels:

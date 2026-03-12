@@ -87,6 +87,47 @@ class LlmProviderBenchmarksTest(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
 
+    def test_readiness_check_reports_missing_openrouter_key(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        script = repo / "scripts" / "run_llm_provider_benchmarks.py"
+        env = dict(os.environ)
+        env.pop("OPENROUTER_API_KEY", None)
+        proc = subprocess.run(
+            [sys.executable, str(script), "--check-readiness", "--providers", "openrouter-auto-primary"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["providers"][0]["provider"], "openrouter-auto-primary")
+        self.assertFalse(payload["providers"][0]["provider_ready"])
+        self.assertIn("OPENROUTER_API_KEY", payload["providers"][0]["skip_reason"])
+
+    def test_require_ready_fails_when_openrouter_key_missing(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        script = repo / "scripts" / "run_llm_provider_benchmarks.py"
+        env = dict(os.environ)
+        env.pop("OPENROUTER_API_KEY", None)
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--check-readiness",
+                "--require-ready",
+                "--providers",
+                "openrouter-auto-primary",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -164,3 +164,78 @@ class TestNotifyInboxResults(unittest.TestCase):
             obj = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertIsInstance(obj, dict)
 
+    def test_policy_block_mode_blocks_outbound_even_in_dry_run(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            pkt = (
+                "TASK_PACKET v1\n"
+                "Owner: PIXEL\n"
+                "Requester: ORION\n"
+                "Notify: telegram\n"
+                "Objective: Do the thing.\n"
+                "Success Criteria:\n"
+                "- done\n"
+                "Constraints:\n"
+                "- none\n"
+                "Inputs:\n"
+                "- (none)\n"
+                "Risks:\n"
+                "- low\n"
+                "Stop Gates:\n"
+                "- none\n"
+                "Output Format:\n"
+                "- short\n"
+                "Result:\n"
+                "- Status: OK\n"
+            )
+            self._write_inbox(root, "PIXEL", pkt)
+
+            cfg = root / "config"
+            cfg.mkdir(parents=True, exist_ok=True)
+            rules = {
+                "version": 1,
+                "name": "notify_block_test",
+                "default_mode": "audit",
+                "rules": [
+                    {
+                        "id": "NB1",
+                        "description": "force miss",
+                        "severity": "critical",
+                        "mode": "block",
+                        "validator": "phrase_contract",
+                        "applies_to": ["automated_summary"],
+                        "trigger_tags_any": ["automated_outbound"],
+                        "required_all": ["THIS_PHRASE_WILL_NOT_EXIST"],
+                        "remediation": "add phrase"
+                    }
+                ]
+            }
+            (cfg / "orion_policy_rules.json").write_text(json.dumps(rules, indent=2) + "\n", encoding="utf-8")
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--policy-rules",
+                    "config/orion_policy_rules.json",
+                    "--policy-mode",
+                    "block",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("blocked by policy gate", r.stderr.lower())
+            reports = list((root / "eval" / "history").glob("policy-gate-notify-telegram-*.json"))
+            self.assertTrue(reports)

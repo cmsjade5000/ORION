@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "name": "orion_runtime_policy",
+  "description": "Runtime policy rules for ORION safety/routing enforcement.",
+  "default_mode": "audit",
+  "rules": [
+    {
+      "id": "R1_CRON_DELEGATE_ATLAS",
+      "description": "Cron/scheduling setup requests must delegate to ATLAS and explicitly state not configured yet.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "phrase_contract",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["cron", "scheduling", "reminder"],
+      "required_any": [
+        "delegate to ATLAS",
+        "delegating this to ATLAS"
+      ],
+      "required_all": [
+        "not configured yet"
+      ],
+      "remediation": "Use the cron hard template and include: 'I’m delegating this to ATLAS; it is not configured yet.'"
+    },
+    {
+      "id": "R2_COMPLETION_PROOF",
+      "description": "Operational changes cannot be claimed complete without in-turn verification evidence or specialist result.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "operational_claim_requires_evidence",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["operational_change", "cron", "scheduling", "deployment", "ops"],
+      "claim_any": [
+        "i set up",
+        "i've set up",
+        "it is configured",
+        "configured",
+        "completed",
+        "done",
+        "finished",
+        "successfully"
+      ],
+      "allowed_progress_any": [
+        "queued",
+        "in progress",
+        "pending verification",
+        "not configured yet"
+      ],
+      "evidence_any": [
+        "proof:",
+        "verification",
+        "Result:",
+        "Status: OK",
+        "command",
+        "changed file",
+        "artifacts:"
+      ],
+      "remediation": "If verification is incomplete, report queued/in progress/pending verification. If complete, include explicit proof (command/output or specialist Result)."
+    },
+    {
+      "id": "R3_CRISIS_SAFETY_FIRST",
+      "description": "Crisis language requires safety-first guidance and EMBER handoff.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "phrase_contract",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["crisis"],
+      "required_any": [
+        "988",
+        "emergency",
+        "call 911",
+        "local emergency services"
+      ],
+      "required_all": [
+        "EMBER"
+      ],
+      "remediation": "Include immediate safety guidance (988/emergency services) and explicitly hand off to EMBER."
+    },
+    {
+      "id": "R4_DESTRUCTIVE_CONFIRMATION",
+      "description": "Destructive/reset requests require explicit confirmation language and a reversible first step.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "phrase_contract",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["destructive"],
+      "required_all": [
+        "destructive",
+        "confirm",
+        "reversible first step"
+      ],
+      "remediation": "State the action is destructive, require explicit confirmation, and propose a reversible first step."
+    },
+    {
+      "id": "R5_MIXED_INTENT_GATE",
+      "description": "Mixed-intent requests must ask the exact explore-vs-execute gate question.",
+      "severity": "high",
+      "mode": "audit",
+      "validator": "phrase_contract",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["mixed_intent"],
+      "exact_any": [
+        "Do you want to explore or execute right now?"
+      ],
+      "remediation": "Ask exactly: 'Do you want to explore or execute right now?' and wait for the one-word answer."
+    },
+    {
+      "id": "R6_ANNOUNCE_SKIP",
+      "description": "sessions_spawn announce prompts must be answered with exactly ANNOUNCE_SKIP.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "announce_skip_exact",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["announce_prompt"],
+      "exact_response": "ANNOUNCE_SKIP",
+      "remediation": "For announce prompts, output only ANNOUNCE_SKIP with no extra text."
+    }
+  ]
+}

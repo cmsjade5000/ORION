@@ -73,6 +73,8 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make task-loop` | Reconcile Task Packet lifecycle with ticket lanes and refresh `tasks/NOTES/*`. |
 | `make task-loop-heartbeat` | Heartbeat-grade run; exits non-zero if stale pending packets exist. |
 | `make task-loop-weekly` | Weekly hygiene reconcile with a longer stale threshold (default 72h). |
+| `make orion-policy-check` | Run ORION runtime policy gate regression tests. |
+| `make policy-scorecard` | Build policy gate scorecard and staged promotion recommendations. |
 | `make canary-stage` | Run one-shot staged canary harness with verdict artifact. |
 | `make avatar`       | Preview or update your agent's avatar.             |
 | `make audio-check`  | Test the audio (TTS) setup (ElevenLabs skill).     |

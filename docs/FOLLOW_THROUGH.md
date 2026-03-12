@@ -12,6 +12,9 @@ Goal: when a delegated packet completes, Cory gets a short Telegram or Discord u
 3. A periodic run executes:
    - `python3 scripts/notify_inbox_results.py --require-notify-telegram` (Telegram)
    - `python3 scripts/notify_inbox_results.py --require-notify-discord` (Discord)
+   - Optional policy gate hardening:
+     - `--policy-rules config/orion_policy_rules.json`
+     - `--policy-mode audit|block` (default `audit`)
 4. The notifier sends a concise update and remembers what it already notified (state in `tmp/inbox_notify_state.json`).
 
 Notes:

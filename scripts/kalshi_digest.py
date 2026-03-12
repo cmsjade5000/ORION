@@ -290,6 +290,91 @@ def _send_telegram(chat_id: int, text: str, *, cwd: str) -> bool:
         return False
 
 
+def _last_email_send_path(cwd: str) -> str:
+    return os.path.join(cwd, "tmp", "kalshi_ref_arb", "last_email_send.json")
+
+
+def _email_send_lock_path(cwd: str) -> str:
+    return os.path.join(cwd, "tmp", "kalshi_ref_arb", "email_send.lock")
+
+
+def _email_dedupe_window_s() -> int:
+    raw = os.environ.get("KALSHI_ARB_EMAIL_DEDUPE_WINDOW_S", "900")
+    try:
+        return max(0, int(raw))
+    except Exception:
+        return 900
+
+
+def _acquire_email_send_lock(cwd: str, *, wait_s: float = 20.0) -> Optional[int]:
+    lock_path = _email_send_lock_path(cwd)
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    deadline = time.time() + max(0.0, float(wait_s))
+    stale_after_s = max(120, _email_dedupe_window_s())
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            try:
+                os.write(fd, f"{int(time.time())} {int(os.getpid())}\n".encode("utf-8"))
+            except Exception:
+                pass
+            return fd
+        except FileExistsError:
+            try:
+                age_s = time.time() - os.path.getmtime(lock_path)
+                if age_s > float(stale_after_s):
+                    os.remove(lock_path)
+                    continue
+            except FileNotFoundError:
+                continue
+            except Exception:
+                pass
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.2)
+        except Exception:
+            return None
+
+
+def _release_email_send_lock(cwd: str, fd: Optional[int]) -> None:
+    try:
+        if fd is not None:
+            os.close(int(fd))
+    except Exception:
+        pass
+    try:
+        os.remove(_email_send_lock_path(cwd))
+    except Exception:
+        pass
+
+
+def _is_recent_duplicate_email_send(
+    cwd: str,
+    *,
+    to_email: str,
+    subject: str,
+    now_unix: int,
+    dedupe_window_s: int,
+) -> bool:
+    if int(dedupe_window_s) <= 0:
+        return False
+    last = _load_json(_last_email_send_path(cwd), default={})
+    if not bool(last.get("ok")):
+        return False
+    last_to = str(last.get("to") or "").strip().lower()
+    if last_to != str(to_email).strip().lower():
+        return False
+    if str(last.get("subject") or "") != str(subject):
+        return False
+    try:
+        ts_last = int(last.get("ts_unix") or 0)
+    except Exception:
+        return False
+    if ts_last <= 0:
+        return False
+    return int(now_unix) - ts_last <= int(dedupe_window_s)
+
+
 def _send_email_via_agentmail(to_email: str, subject: str, body: str, *, cwd: str) -> bool:
     """Send plain-text email using the repo AgentMail helper script."""
     try:
@@ -299,7 +384,7 @@ def _send_email_via_agentmail(to_email: str, subject: str, body: str, *, cwd: st
 
         def _write_last_send(obj: Dict[str, Any]) -> None:
             try:
-                p = os.path.join(cwd, "tmp", "kalshi_ref_arb", "last_email_send.json")
+                p = _last_email_send_path(cwd)
                 os.makedirs(os.path.dirname(p), exist_ok=True)
                 with open(p, "w", encoding="utf-8") as f:
                     json.dump(obj, f, indent=2, sort_keys=True)
@@ -373,7 +458,7 @@ def _send_email_html_via_agentmail(to_email: str, subject: str, *, text_body: st
 
         def _write_last_send(obj: Dict[str, Any]) -> None:
             try:
-                p = os.path.join(cwd, "tmp", "kalshi_ref_arb", "last_email_send.json")
+                p = _last_email_send_path(cwd)
                 os.makedirs(os.path.dirname(p), exist_ok=True)
                 with open(p, "w", encoding="utf-8") as f:
                     json.dump(obj, f, indent=2, sort_keys=True)
@@ -2427,25 +2512,45 @@ def main() -> int:
         except Exception:
             subj_ts = str(now)
         subject = f"ORION Kalshi • {int(args.window_hours)}h • {subj_ts}"
-        if bool(args.email_html):
-            html = _digest_html(subject=subject, window_hours=float(args.window_hours), payload=payload, now_unix=now)
-            ok = _send_email_html_via_agentmail(to_email, subject, text_body=payload["message"], html_body=html, cwd=root)
-        else:
-            ok = _send_email_via_agentmail(to_email, subject, payload["message"], cwd=root)
-        if not ok:
-            # If email sending fails, alert via Telegram (best-effort) so Cory knows to investigate.
-            try:
-                chat_id = _telegram_chat_id()
-                if chat_id is not None:
-                    _send_telegram(
-                        int(chat_id),
-                        "ORION: Kalshi digest email FAILED. Check tmp/kalshi_ref_arb/last_email_send.json",
-                        cwd=root,
-                    )
-            except Exception:
-                pass
-            print("ERROR: email send failed", file=os.sys.stderr)
-            return 5
+        lock_fd = _acquire_email_send_lock(root)
+        if lock_fd is None:
+            print("INFO: email send lock busy; skipping concurrent digest send attempt.", file=os.sys.stderr)
+            return 0
+        try:
+            dedupe_window_s = _email_dedupe_window_s()
+            if _is_recent_duplicate_email_send(
+                root,
+                to_email=to_email,
+                subject=subject,
+                now_unix=now,
+                dedupe_window_s=dedupe_window_s,
+            ):
+                print(
+                    f"INFO: duplicate digest email suppressed (within {dedupe_window_s}s window).",
+                    file=os.sys.stderr,
+                )
+                return 0
+            if bool(args.email_html):
+                html = _digest_html(subject=subject, window_hours=float(args.window_hours), payload=payload, now_unix=now)
+                ok = _send_email_html_via_agentmail(to_email, subject, text_body=payload["message"], html_body=html, cwd=root)
+            else:
+                ok = _send_email_via_agentmail(to_email, subject, payload["message"], cwd=root)
+            if not ok:
+                # If email sending fails, alert via Telegram (best-effort) so Cory knows to investigate.
+                try:
+                    chat_id = _telegram_chat_id()
+                    if chat_id is not None:
+                        _send_telegram(
+                            int(chat_id),
+                            "ORION: Kalshi digest email FAILED. Check tmp/kalshi_ref_arb/last_email_send.json",
+                            cwd=root,
+                        )
+                except Exception:
+                    pass
+                print("ERROR: email send failed", file=os.sys.stderr)
+                return 5
+        finally:
+            _release_email_send_lock(root, lock_fd)
     return 0
 
 

@@ -40,6 +40,12 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
         self.assertIn("profile: coding", self.yaml_example)
 
+    def test_examples_default_to_openrouter_auto(self):
+        model_defaults = self.json_example["agents"]["defaults"]["model"]
+        self.assertEqual(model_defaults["primary"], "openrouter/auto")
+        self.assertIn("openrouter/free", model_defaults["fallbacks"])
+        self.assertIn("primary: openrouter/auto", self.yaml_example)
+
     def test_examples_use_secretref_for_optional_credentials(self):
         discord_token = self.json_example["channels"]["discord"]["token"]
         self.assertEqual(

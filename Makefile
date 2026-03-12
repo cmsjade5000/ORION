@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= skills/llm-redteam-gate/examples/promptfooconfig.yaml
 THINKING ?= high
@@ -212,6 +212,19 @@ policy-gate-check:
 	@bash skills/policy-gate-conftest/scripts/run_policy_gate.sh \
 		skills/policy-gate-conftest/examples/task_packet.pass.json
 
+## Run ORION runtime policy gate regression tests
+orion-policy-check:
+	@set -e; \
+	PYTHON_BIN=python3; \
+	if [ -x .venv/bin/python ]; then \
+		PYTHON_BIN=.venv/bin/python; \
+	fi; \
+	$$PYTHON_BIN -m pytest -q tests/test_orion_policy_gate.py tests/test_orion_policy_scorecard.py tests/test_openclaw_guarded_turn.py tests/test_notify_inbox_results.py
+
+## Build ORION runtime policy scorecard + staged promotion recommendations
+policy-scorecard:
+	@python3 scripts/orion_policy_scorecard.py --history-dir eval/history --window-days "$${WINDOW_DAYS:-7}" --min-clean-days "$${MIN_CLEAN_DAYS:-7}" --max-false-positives "$${MAX_FALSE_POSITIVES:-0}"
+
 ## Run Semgrep preflight check (requires semgrep)
 secure-preflight-check:
 	@bash skills/secure-code-preflight/scripts/run_secure_code_preflight.sh
@@ -279,4 +292,4 @@ skill-guards-smoke:
 	@bash skills/secure-code-preflight/scripts/run_secure_code_preflight.sh --dry-run >/dev/null
 
 ## Must-pass CI gate (lint + tests + plan + task packet validation)
-ci: config-validate openclaw-compat shellcheck test plan-graph task-packets
+ci: config-validate openclaw-compat shellcheck test plan-graph task-packets orion-policy-check policy-gate-check

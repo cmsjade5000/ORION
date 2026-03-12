@@ -15,15 +15,36 @@ class LlmProviderArtifactsTest(unittest.TestCase):
 
     def test_registry_includes_required_provider_lanes(self) -> None:
         provider_ids = {item["provider_id"] for item in self.registry["providers"]}
-        self.assertEqual(
-            provider_ids,
-            {
-                "gemini-openclaw",
-                "openai-control-plane",
-                "kimi-k2-5-nvidia-build",
-                "local-bounded-runtime",
-            },
+        required = {
+            "gemini-openclaw",
+            "openai-control-plane",
+            "kimi-k2-5-nvidia-build",
+            "local-bounded-runtime",
+            "openrouter-auto-primary",
+            "openrouter-hunter-alpha",
+            "openrouter-free-bounded",
+        }
+        self.assertTrue(
+            required.issubset(provider_ids),
+            f"Missing provider lanes: {sorted(required - provider_ids)}",
         )
+
+    def test_openrouter_lanes_are_explicit(self) -> None:
+        by_id = {item["provider_id"]: item for item in self.registry["providers"]}
+        auto_primary = by_id["openrouter-auto-primary"]
+        hunter_alpha = by_id["openrouter-hunter-alpha"]
+        free_bounded = by_id["openrouter-free-bounded"]
+
+        def assert_openrouter_lane(provider: dict[str, object], model_signal: str) -> None:
+            api_path = str(provider["api_path"]).lower()
+            self.assertIn("openrouter", api_path)
+            self.assertTrue("chat/completions" in api_path or "/v1" in api_path)
+            model_text = " ".join(str(model) for model in provider.get("models", [])).lower()
+            self.assertIn(model_signal, model_text)
+
+        assert_openrouter_lane(auto_primary, "auto")
+        assert_openrouter_lane(hunter_alpha, "hunter")
+        assert_openrouter_lane(free_bounded, "free")
 
     def test_openai_and_kimi_lanes_are_explicit(self) -> None:
         by_id = {item["provider_id"]: item for item in self.registry["providers"]}

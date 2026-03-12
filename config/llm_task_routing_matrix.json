@@ -1,12 +1,16 @@
 {
   "version": 1,
-  "updated_at": "2026-03-11",
+  "updated_at": "2026-03-12",
   "tasks": [
     {
       "task_id": "routing_and_handoffs",
       "description": "ORION chooses owner, asks gates, and routes to specialists.",
-      "primary_provider": "gemini-openclaw",
-      "fallback_providers": ["openai-control-plane", "kimi-k2-5-nvidia-build"],
+      "primary_provider": "openrouter-auto-primary",
+      "fallback_providers": [
+        "gemini-openclaw",
+        "kimi-k2-5-nvidia-build",
+        "openai-control-plane"
+      ],
       "local_allowed": false,
       "requires_schema": true,
       "requires_hitl": true
@@ -15,7 +19,11 @@
       "task_id": "structured_output_validation",
       "description": "Generate or judge schema-constrained outputs and tool arguments.",
       "primary_provider": "openai-control-plane",
-      "fallback_providers": ["gemini-openclaw", "kimi-k2-5-nvidia-build"],
+      "fallback_providers": [
+        "openrouter-auto-primary",
+        "gemini-openclaw",
+        "kimi-k2-5-nvidia-build"
+      ],
       "local_allowed": false,
       "requires_schema": true,
       "requires_hitl": false
@@ -23,8 +31,13 @@
     {
       "task_id": "research_and_second_opinions",
       "description": "Deep synthesis, alternative plans, and second-pass reasoning.",
-      "primary_provider": "kimi-k2-5-nvidia-build",
-      "fallback_providers": ["openai-control-plane", "gemini-openclaw"],
+      "primary_provider": "openrouter-hunter-alpha",
+      "fallback_providers": [
+        "openrouter-auto-primary",
+        "kimi-k2-5-nvidia-build",
+        "openai-control-plane",
+        "gemini-openclaw"
+      ],
       "local_allowed": false,
       "requires_schema": true,
       "requires_hitl": true
@@ -33,7 +46,11 @@
       "task_id": "evals_and_trace_grading",
       "description": "Benchmark generation, trace grading, and red-team judging.",
       "primary_provider": "openai-control-plane",
-      "fallback_providers": ["gemini-openclaw", "kimi-k2-5-nvidia-build"],
+      "fallback_providers": [
+        "openrouter-auto-primary",
+        "gemini-openclaw",
+        "kimi-k2-5-nvidia-build"
+      ],
       "local_allowed": false,
       "requires_schema": true,
       "requires_hitl": false
@@ -41,8 +58,12 @@
     {
       "task_id": "bounded_local_utility",
       "description": "Summarization, extraction, tagging, and cheap preprocessing.",
-      "primary_provider": "local-bounded-runtime",
-      "fallback_providers": ["gemini-openclaw"],
+      "primary_provider": "openrouter-free-bounded",
+      "fallback_providers": [
+        "local-bounded-runtime",
+        "openrouter-auto-primary",
+        "gemini-openclaw"
+      ],
       "local_allowed": true,
       "requires_schema": true,
       "requires_hitl": false

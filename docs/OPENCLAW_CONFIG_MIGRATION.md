@@ -13,8 +13,8 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 ## Migrated To Runtime
 
 - `tools.profile = "coding"` (pin ORION to a local workspace posture; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset)
-- `agents.defaults.model.primary = "google/gemini-2.5-flash-lite"` (pinned)
-- `agents.defaults.model.fallbacks = ["google/gemini-2.5-flash-lite"]` (provider-restricted)
+- `agents.defaults.model.primary = "openrouter/auto"` (pinned)
+- `agents.defaults.model.fallbacks = ["openrouter/free","openai/gpt-oss-20b:free","google/gemini-2.5-flash-lite"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
 - `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","quest","ember","ledger","polaris","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
 - `channels.telegram.enabled = true`
@@ -133,7 +133,8 @@ For supported credential fields, prefer SecretRef objects over raw `${ENV}` stri
 ## Auth Required For Model Routing
 
 Current runtime model routing requires auth for:
-- `google` (for `google/gemini-2.5-flash-lite`)
+- `openrouter` (for `openrouter/auto`)
+- `google` (for `google/gemini-2.5-flash-lite` compatibility fallback)
 
 Set auth with either:
 - `openclaw models auth login --provider <provider>`

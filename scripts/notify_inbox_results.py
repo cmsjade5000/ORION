@@ -35,6 +35,11 @@ except Exception:  # pragma: no cover
     from scripts.inbox_state import load_kv_state, parse_notify_channels, save_kv_state  # type: ignore
 
 try:
+    from orion_policy_gate import evaluate_policy, load_rule_set, render_markdown
+except Exception:  # pragma: no cover
+    from scripts.orion_policy_gate import evaluate_policy, load_rule_set, render_markdown  # type: ignore
+
+try:
     # Optional dependency: Mini App dashboard progress visibility.
     # When executed as `python3 scripts/notify_inbox_results.py`, sys.path[0] is `scripts/`,
     # so `miniapp_ingest` is importable as a sibling module.
@@ -503,7 +508,31 @@ def _miniapp_emit_results(items: list[PacketResult]) -> None:
         )
 
 
+def _policy_history_paths(*, repo_root: Path, output_dir: str, channel: str, msg: str) -> tuple[Path, Path]:
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    digest = hashlib.sha256(msg.encode("utf-8", errors="replace")).hexdigest()[:10]
+    out_dir = (repo_root / output_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"policy-gate-notify-{channel}-{ts}-{digest}"
+    return out_dir / f"{stem}.json", out_dir / f"{stem}.md"
+
+
+def _resolve_rules_path(repo_root: Path, configured_path: str) -> Path:
+    raw = Path(configured_path)
+    if raw.is_absolute():
+        return raw.resolve()
+    primary = (repo_root / raw).resolve()
+    if primary.exists():
+        return primary
+    fallback = (Path(__file__).resolve().parent.parent / raw).resolve()
+    return fallback
+
+
 def main() -> int:
+    env_policy_mode = os.environ.get("ORION_POLICY_MODE", "audit").strip().lower()
+    if env_policy_mode not in {"audit", "block"}:
+        env_policy_mode = "audit"
+
     ap = argparse.ArgumentParser(
         description="Notify Cory on Telegram and/or Discord when new Task Packet Result blocks appear."
     )
@@ -528,6 +557,22 @@ def main() -> int:
         "--notify-queued",
         action="store_true",
         help="Also send one-time notifications when new packets are queued (Notify: <channel>, but no Result yet).",
+    )
+    ap.add_argument(
+        "--policy-rules",
+        default="config/orion_policy_rules.json",
+        help="Policy rules JSON path (default: config/orion_policy_rules.json)",
+    )
+    ap.add_argument(
+        "--policy-mode",
+        choices=["audit", "block"],
+        default=env_policy_mode,
+        help="Policy gate mode (default: ORION_POLICY_MODE or audit).",
+    )
+    ap.add_argument(
+        "--policy-output-dir",
+        default="eval/history",
+        help="Directory for policy gate artifacts (default: eval/history)",
     )
     args = ap.parse_args()
 
@@ -602,13 +647,84 @@ def main() -> int:
     suppress_tg = dry_all or _env_truthy("ORION_SUPPRESS_TELEGRAM") or _env_truthy("TELEGRAM_SUPPRESS")
     suppress_dc = dry_all or _env_truthy("ORION_SUPPRESS_DISCORD") or _env_truthy("DISCORD_SUPPRESS")
 
+    policy_rules_path = _resolve_rules_path(repo_root, args.policy_rules)
+    try:
+        rule_set = load_rule_set(policy_rules_path)
+    except Exception as e:
+        print(f"ERROR: Could not load policy rules: {e}", file=sys.stderr)
+        return 2
+
+    tg_msg = ""
+    dc_msg = ""
+    if new_queued_tg or new_results_tg:
+        tg_msg = _sanitize_outbound(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
+    if new_queued_dc or new_results_dc:
+        dc_msg = _sanitize_outbound(_format_message(queued=new_queued_dc, results=new_results_dc, max_len=1900))
+
+    def _gate_message(*, channel: str, message: str, queued_count: int, result_count: int) -> tuple[bool, dict[str, object]]:
+        payload = {
+            "scope": "automated_summary",
+            "request_text": "Automated delegated-result summary notification.",
+            "response_text": message,
+            "tags": [
+                "automated_outbound",
+                "delegated_result_summary",
+                f"notify_{channel}",
+            ],
+            "metadata": {
+                "source": "notify_inbox_results",
+                "channel": channel,
+                "queued_count": queued_count,
+                "result_count": result_count,
+                "has_specialist_result": result_count > 0,
+            },
+        }
+        report = evaluate_policy(payload=payload, rule_set=rule_set, run_mode=args.policy_mode)
+        out_json, out_md = _policy_history_paths(
+            repo_root=repo_root,
+            output_dir=args.policy_output_dir,
+            channel=channel,
+            msg=message,
+        )
+        out_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        out_md.write_text(render_markdown(report), encoding="utf-8")
+        blocked = bool((report.get("summary") or {}).get("blocked"))
+        violations = int((report.get("summary") or {}).get("violations") or 0)
+        if violations > 0:
+            print(
+                f"POLICY_{channel.upper()} violations={violations} blocked={blocked} report={out_json}",
+                file=sys.stderr,
+            )
+        return blocked, {"json": str(out_json), "md": str(out_md), "report": report}
+
+    if tg_msg:
+        blocked, _ = _gate_message(
+            channel="telegram",
+            message=tg_msg,
+            queued_count=len(new_queued_tg),
+            result_count=len(new_results_tg),
+        )
+        if blocked:
+            print("ERROR: Telegram outbound notification blocked by policy gate.", file=sys.stderr)
+            return 2
+    if dc_msg:
+        blocked, _ = _gate_message(
+            channel="discord",
+            message=dc_msg,
+            queued_count=len(new_queued_dc),
+            result_count=len(new_results_dc),
+        )
+        if blocked:
+            print("ERROR: Discord outbound notification blocked by policy gate.", file=sys.stderr)
+            return 2
+
     if dry_all:
         if new_queued_tg or new_results_tg:
             print("TELEGRAM:")
-            print(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
+            print(tg_msg)
         if new_queued_dc or new_results_dc:
             print("DISCORD:")
-            print(_format_message(queued=new_queued_dc, results=new_results_dc, max_len=1900))
+            print(dc_msg)
     else:
         if (new_queued_tg or new_results_tg) and not suppress_tg:
             chat_id = _get_telegram_chat_id()
@@ -620,9 +736,8 @@ def main() -> int:
                 )
                 return 2
 
-            msg = _sanitize_outbound(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
             try:
-                _telegram_send_message(chat_id=chat_id, token=token, text=msg)
+                _telegram_send_message(chat_id=chat_id, token=token, text=tg_msg)
             except urllib.error.HTTPError as e:
                 print(f"ERROR: Telegram HTTP error: {e.code}", file=sys.stderr)
                 return 2
@@ -633,8 +748,7 @@ def main() -> int:
         if (new_queued_dc or new_results_dc) and not suppress_dc:
             try:
                 target = _get_discord_default_target(repo_root)
-                msg = _sanitize_outbound(_format_message(queued=new_queued_dc, results=new_results_dc, max_len=1900))
-                _discord_send_message(repo_root=repo_root, target=target, text=msg)
+                _discord_send_message(repo_root=repo_root, target=target, text=dc_msg)
             except Exception as e:
                 print(f"ERROR: Discord send failed: {e}", file=sys.stderr)
                 return 2
