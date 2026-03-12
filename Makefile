@@ -37,7 +37,7 @@ eval-routing:
 		--out-dir eval/history \
 		--latest-path eval/latest_report.json
 
-## Run routing eval with Codex 0.110 tools extension prompts (11+)
+## Run routing eval with Codex tools extension prompts (11+)
 eval-routing-tools:
 	@ORION_SUPPRESS_TELEGRAM=1 TELEGRAM_SUPPRESS=1 ORION_SUPPRESS_DISCORD=1 DISCORD_SUPPRESS=1 NOTIFY_DRY_RUN=1 \
 		python3 scripts/loop_test_routing_sim.py \

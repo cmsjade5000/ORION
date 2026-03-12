@@ -1,0 +1,32 @@
+{
+  "generatedAt": "2026-03-12T14:14:08.096346+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1773238447822,
+    "analysisStart": "2026-03-11T14:14:07.822000+00:00",
+    "analysisEndMs": 1773324847822,
+    "analysisEnd": "2026-03-12T14:14:07.822000+00:00",
+    "eventsInScope": 0,
+    "runsInScope": 1760,
+    "uniqueLanes": 0,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 0,
+    "uniqueCorrelatedJobs": 0,
+    "warningCount": 0
+  },
+  "windows": [],
+  "warnings": []
+}

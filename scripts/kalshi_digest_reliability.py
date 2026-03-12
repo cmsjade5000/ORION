@@ -149,7 +149,9 @@ def load_agentmail_sent(
 
 
 def _is_slot_run(run: CronRun, *, day: dt.date, hour: int) -> bool:
-    return run.run_at.date() == day and run.run_at.hour == hour and run.run_at.minute == 0
+    # Cron jobs can start a few minutes late when the queue is busy.
+    # Treat any run within the slot hour as the scheduled slot run.
+    return run.run_at.date() == day and run.run_at.hour == hour
 
 
 def _find_slot_run(runs: list[CronRun], *, day: dt.date, hour: int) -> CronRun | None:

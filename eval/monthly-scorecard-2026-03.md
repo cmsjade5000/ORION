@@ -6,7 +6,7 @@ Verification window: March 2026
 
 ## Baseline Snapshot
 
-Baseline capture source: `/Users/corystoner/Desktop/ORION/eval/history/baseline-2026-03.json`
+Baseline capture source: `/Users/corystoner/src/ORION/eval/history/baseline-2026-03.json`
 
 | Metric | Baseline |
 | --- | --- |
@@ -20,8 +20,8 @@ Baseline capture source: `/Users/corystoner/Desktop/ORION/eval/history/baseline-
 
 ## After Snapshot
 
-Latest reliability source: `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260311-141122.json`
-Latest compare source: `/Users/corystoner/Desktop/ORION/eval/latest_compare.json`
+Latest reliability source: `/Users/corystoner/src/ORION/eval/history/reliability-20260311-141122.json`
+Latest compare source: `/Users/corystoner/src/ORION/eval/latest_compare.json`
 
 | Metric | After | Delta vs Baseline |
 | --- | --- | --- |
@@ -53,9 +53,9 @@ Gate verdict: `PASS`
 
 ## Canary Progress
 
-Canary results source: `/Users/corystoner/Desktop/ORION/docs/skills/canary-results-2026-03.md`
+Canary results source: `/Users/corystoner/src/ORION/docs/skills/canary-results-2026-03.md`
 - Source type: `canary-check json`
-- Source artifact: `/Users/corystoner/Desktop/ORION/eval/history/canary-check-20260303-082535.json`
+- Source artifact: `/Users/corystoner/src/ORION/eval/history/canary-check-20260303-082535.json`
 - Candidate: `openprose-workflow-2026-03`
 - Latest decision: `hold (0/7)`
 - Decision timestamp (ET): `2026-03-03 03:26`
@@ -66,22 +66,22 @@ Canary results source: `/Users/corystoner/Desktop/ORION/docs/skills/canary-resul
 
 | Date (ET) | Lane Wait Count | Lane Wait P95 (ms) | Cron Enabled | Delivery Queue | Eval Gate | Snapshot |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
-| 2026-03-02 | 21 | 34034 | 21 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260303-032031.json` |
-| 2026-03-03 | 21 | 34034 | 21 | 0 | fail | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260303-082621.json` |
-| 2026-03-04 | 0 | 0 | 20 | 0 | fail | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260304-151118.json` |
-| 2026-03-05 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260305-175514.json` |
-| 2026-03-06 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260306-151109.json` |
-| 2026-03-07 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260307-151119.json` |
-| 2026-03-08 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260308-141107.json` |
-| 2026-03-09 | 3 | 7659 | 15 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260309-141117.json` |
-| 2026-03-10 | 10 | 45757 | 16 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260310-141139.json` |
-| 2026-03-11 | 3 | 7790 | 16 | 0 | pass | `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260311-141122.json` |
+| 2026-03-02 | 21 | 34034 | 21 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260303-032031.json` |
+| 2026-03-03 | 21 | 34034 | 21 | 0 | fail | `/Users/corystoner/src/ORION/eval/history/reliability-20260303-082621.json` |
+| 2026-03-04 | 0 | 0 | 20 | 0 | fail | `/Users/corystoner/src/ORION/eval/history/reliability-20260304-151118.json` |
+| 2026-03-05 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260305-175514.json` |
+| 2026-03-06 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260306-151109.json` |
+| 2026-03-07 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260307-151119.json` |
+| 2026-03-08 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260308-141107.json` |
+| 2026-03-09 | 3 | 7659 | 15 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260309-141117.json` |
+| 2026-03-10 | 10 | 45757 | 16 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260310-141139.json` |
+| 2026-03-11 | 3 | 7790 | 16 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260311-141122.json` |
 
 ## Artifact References
 
-- Baseline JSON: `/Users/corystoner/Desktop/ORION/eval/history/baseline-2026-03.json`
-- Latest compare JSON: `/Users/corystoner/Desktop/ORION/eval/latest_compare.json`
-- Reliability history dir: `/Users/corystoner/Desktop/ORION/eval/history`
-- Canary results markdown: `/Users/corystoner/Desktop/ORION/docs/skills/canary-results-2026-03.md`
-- Latest reliability snapshot: `/Users/corystoner/Desktop/ORION/eval/history/reliability-20260311-141122.json`
-- Latest canary status artifact: `/Users/corystoner/Desktop/ORION/eval/history/canary-check-20260303-082535.json`
+- Baseline JSON: `/Users/corystoner/src/ORION/eval/history/baseline-2026-03.json`
+- Latest compare JSON: `/Users/corystoner/src/ORION/eval/latest_compare.json`
+- Reliability history dir: `/Users/corystoner/src/ORION/eval/history`
+- Canary results markdown: `/Users/corystoner/src/ORION/docs/skills/canary-results-2026-03.md`
+- Latest reliability snapshot: `/Users/corystoner/src/ORION/eval/history/reliability-20260311-141122.json`
+- Latest canary status artifact: `/Users/corystoner/src/ORION/eval/history/canary-check-20260303-082535.json`

@@ -1,8 +1,8 @@
-# Codex 0.114.0 Compatibility Report
+# Codex 0.114.x Compatibility Report
 
-Date: 2026-03-11
-Target: Codex CLI `0.114.0`
-Validated in repo: `/Users/corystoner/Desktop/ORION`
+Date: 2026-03-12
+Target: Codex CLI `0.114.x` (verified at `0.114.0`)
+Validated in repo: `/Users/corystoner/src/ORION` (Desktop symlink path also valid)
 
 ## Dependency Graph
 
@@ -35,6 +35,8 @@ Upstream Codex `0.114.0` signals:
 Local runtime checks:
 
 - `codex --version` -> `codex-cli 0.114.0`
+- `brew upgrade --cask codex` -> latest already installed (no newer stable release available)
+- `brew info --cask codex` -> installed from Homebrew cask at `0.114.0`
 - `codex --help` -> approval mode `on-request`, deprecated `on-failure`, sandbox mode `workspace-write`
 - `codex app-server --help` -> app-server tooling is present in the local `0.114.0` install
 - `openclaw --version` -> `OpenClaw 2026.3.8 (3caab92)`
@@ -45,7 +47,7 @@ Local runtime checks:
 
 ## Change Matrix
 
-| Area | Codex 0.114.0 behavior | Orion before validation | Result |
+| Area | Codex 0.114.x behavior | Orion before validation | Result |
 | --- | --- | --- | --- |
 | Handoffs | Realtime transcript context is passed across handoffs | Task Packet docs did not tell operators to avoid transcript restuffing | Updated docs/contracts |
 | Resume | Reopened threads no longer stay stuck in-progress | Orion already required `queued` / `in progress` / `pending verification`, but lacked resume-specific guidance | Updated docs/contracts |
@@ -88,7 +90,7 @@ These still require one live operator smoke test outside this repo-only pass:
 
 ## Operator Checklist
 
-1. Confirm local/runtime Codex is still `0.114.0`: `codex --version`
+1. Confirm local/runtime Codex is still on `0.114.x`: `codex --version`
 2. Confirm readiness probe: `curl -fsS http://127.0.0.1:<port>/readyz`
 3. Confirm liveness probe: `curl -fsS http://127.0.0.1:<port>/healthz`
 4. Run one delegated ORION -> specialist -> ORION thread and confirm no duplicate announce output appears.

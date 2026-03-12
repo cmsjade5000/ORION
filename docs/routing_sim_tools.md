@@ -1,6 +1,6 @@
 # Routing Simulation: Tools Path Scenarios
 
-Purpose: optional extension scenarios for Codex 0.110 tooling behaviors.
+Purpose: optional extension scenarios for Codex 0.114+ tooling behaviors.
 
 Use with:
 - `python3 scripts/loop_test_routing_sim.py --repo-root . --tools-prompts-md docs/routing_sim_tools.md`
@@ -18,7 +18,7 @@ Expected: clear `mcp-first` retrieval order with web fallback and source evidenc
 ### 13) CSV fan-out batch guardrails
 > "Process this CSV of 300 rows using worker agents and return one consolidated result file."
 
-Expected: bounded `spawn_agents_on_csv` plan with schema, idempotency, runtime/concurrency limits, and output path.
+Expected: bounded `sessions_spawn` (or `spawn_agents_on_csv` where enabled) plan with schema, idempotency, runtime/concurrency limits, and output path.
 
 ### 14) App tool discovery gate
 > "Can you use my installed app connector to check reservations? Figure out which tool to use first."

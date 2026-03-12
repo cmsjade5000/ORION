@@ -49,9 +49,11 @@ openclaw config validate --json
 
 This checks the live runtime config at `~/.openclaw/openclaw.json` without starting the gateway.
 
-## Codex 0.114.0 Compatibility Notes
+## Codex 0.114.x Compatibility Notes
 
-Codex `0.114.0` changed a few runtime behaviors that matter to ORION-style orchestration:
+Latest local verification (2026-03-12): `codex-cli 0.114.0` via Homebrew cask.
+
+Codex `0.114.x` introduced runtime behaviors that matter to ORION-style orchestration:
 
 - Handoffs now inherit realtime transcript context. Keep Task Packets concise and avoid stuffing the full prior transcript into delegation templates.
 - `request_permissions` approvals now persist across turns, work with reject-style configs, and preserve legacy `workspace-write` behavior on older builds. ORION policy stays the same: security gates still come from `SECURITY.md` and `TOOLS.md`.
