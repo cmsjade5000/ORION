@@ -16,21 +16,25 @@ class TestInstallOrionAssistantCrons(unittest.TestCase):
         self.assertIn('--name "assistant-inbox-notify"', self.script)
         self.assertIn('--name "assistant-task-loop"', self.script)
         self.assertIn('--name "orion-error-review"', self.script)
+        self.assertIn('--name "orion-session-maintenance"', self.script)
         self.assertIn("remove_matching_jobs", self.script)
         self.assertIn('"inbox-result-notify"', self.script)
+        self.assertIn('"orion-session-maintenance"', self.script)
         self.assertIn("openclaw cron rm --json", self.script)
-        self.assertGreaterEqual(self.script.count("--no-deliver"), 4)
-        self.assertEqual(self.script.count("Then respond exactly NO_REPLY."), 4)
-        self.assertEqual(self.script.count("Ignore stdout/stderr unless it fails."), 4)
+        self.assertGreaterEqual(self.script.count("--no-deliver"), 5)
+        self.assertEqual(self.script.count("Then respond exactly NO_REPLY."), 5)
+        self.assertEqual(self.script.count("Ignore stdout/stderr unless it fails."), 5)
         self.assertIn("scripts/orion_error_db.py", self.script)
+        self.assertIn("scripts/session_maintenance.py", self.script)
 
     def test_follow_through_examples_use_no_deliver(self):
         self.assertIn('bash scripts/install_orion_assistant_crons.sh', self.follow_through)
         self.assertIn('--name "assistant-inbox-notify"', self.follow_through)
         self.assertIn('--name "task-loop-heartbeat"', self.follow_through)
         self.assertIn('--name "task-loop-weekly-reconcile"', self.follow_through)
+        self.assertIn('--name "orion-session-maintenance"', self.follow_through)
         self.assertIn('--name "inbox-result-notify-discord"', self.follow_through)
-        self.assertGreaterEqual(self.follow_through.count("--no-deliver"), 4)
+        self.assertGreaterEqual(self.follow_through.count("--no-deliver"), 5)
 
 
 if __name__ == "__main__":

@@ -50,15 +50,34 @@ Current safe review commands:
 
 These are intentionally bounded. Nightly review should not perform broad/destructive remediations.
 
+## Deliberate Session Maintenance
+
+Session cleanup is intentionally split from error review.
+
+Use:
+
+```bash
+python3 /Users/corystoner/src/ORION/scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --json
+AUTO_OK=1 python3 /Users/corystoner/src/ORION/scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json
+```
+
+This writes:
+
+- `tasks/NOTES/session-maintenance.md`
+
+and only applies cleanup when drift crosses the configured thresholds.
+
 ## Cron
 
 The assistant cron installer includes:
 
 - `orion-error-review`
+- `orion-session-maintenance`
 
 It runs nightly in an isolated main-agent session and writes a report to:
 
 - `tasks/NOTES/error-review.md`
+- `tasks/NOTES/session-maintenance.md`
 
 ## Degraded vs Failed
 

@@ -82,6 +82,8 @@ Nightly reliability review:
 
 - `python3 scripts/orion_error_db.py review --window-hours 24 --apply-safe-fixes --escalate-incidents --json`
 - Report artifact: `tasks/NOTES/error-review.md`
+- Deliberate session maintenance: `AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json`
+- Report artifact: `tasks/NOTES/session-maintenance.md`
 
 Equivalent manual commands:
 
@@ -125,6 +127,16 @@ openclaw cron add \
   --agent main \
   --session isolated \
   --message "Use system.run to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+
+openclaw cron add \
+  --name "orion-session-maintenance" \
+  --description "Prune stale ORION session metadata when drift exceeds threshold" \
+  --cron "45 2 * * *" \
+  --tz "America/New_York" \
+  --no-deliver \
+  --agent main \
+  --session isolated \
+  --message "Use system.run to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 ```
 
 Discord variant (set a default target first):

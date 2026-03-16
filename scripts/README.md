@@ -33,6 +33,33 @@ AUTO_OK=1 ./scripts/sessions_hygiene.sh --agent main --fix-missing --doctor --ap
 
 ---
 
+## session_maintenance.py
+
+### Purpose
+Run deliberate thresholded session-store maintenance, write a markdown report, and only apply cleanup when drift is large enough to justify mutation.
+
+### Usage
+
+Preview only:
+
+```bash
+python3 /Users/corystoner/src/ORION/scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --json
+```
+
+Apply when thresholds are met:
+
+```bash
+AUTO_OK=1 python3 /Users/corystoner/src/ORION/scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json
+```
+
+Report artifact:
+
+```text
+tasks/NOTES/session-maintenance.md
+```
+
+---
+
 ## telegram_topic_bindings_bootstrap.sh
 
 ### Purpose

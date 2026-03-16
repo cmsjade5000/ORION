@@ -21,6 +21,7 @@ legacy_names=(
   "inbox-result-notify"
   "assistant-task-loop"
   "orion-error-review"
+  "orion-session-maintenance"
 )
 
 remove_matching_jobs() {
@@ -101,9 +102,21 @@ openclaw cron add \
   --message "Use system.run to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 EOF
 
+read -r -d '' CMD5 <<'EOF' || true
+openclaw cron add \
+  --name "orion-session-maintenance" \
+  --description "Prune stale ORION session metadata when drift exceeds threshold" \
+  --cron "45 2 * * *" \
+  --tz "America/New_York" \
+  --no-deliver \
+  --agent main \
+  --session isolated \
+  --message "Use system.run to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+EOF
+
 remove_matching_jobs
 
-for cmd in "$CMD1" "$CMD2" "$CMD3" "$CMD4"; do
+for cmd in "$CMD1" "$CMD2" "$CMD3" "$CMD4" "$CMD5"; do
   if [[ "$APPLY" -eq 1 ]]; then
     eval "$cmd"
   else

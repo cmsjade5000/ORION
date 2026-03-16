@@ -53,6 +53,7 @@ Notes:
 Script (runs on the Mac mini):
 - `scripts/gateway_maintenance_apply.sh`
 - `scripts/sessions_hygiene.sh` (called by maintenance script in preview mode)
+- `scripts/session_maintenance.py` (thresholded apply path for explicit cleanup)
 
 Check-only (safe):
 - `scripts/gateway_maintenance_apply.sh`
@@ -79,9 +80,16 @@ Apply session cleanup:
 AUTO_OK=1 scripts/sessions_hygiene.sh --agent main --fix-missing --doctor --apply
 ```
 
+Deliberate thresholded maintenance path:
+
+```bash
+AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json
+```
+
 What this does:
 - runs `openclaw sessions cleanup ... --dry-run` first
 - optionally applies `--enforce` cleanup
 - optionally runs `openclaw doctor --non-interactive` when `--doctor` is set
+- writes `tasks/NOTES/session-maintenance.md` so cleanup remains auditable
 
 Hard rule: do not enable unattended `AUTO_OK` automation until Telegram inbound is verified and you are comfortable with drift.

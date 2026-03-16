@@ -129,7 +129,9 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("POLARIS", self.assistant_workflows)
         self.assertIn("assistant-agenda.md", self.workflow)
         self.assertIn("orion_error_db.py", self.error_review)
+        self.assertIn("session_maintenance.py", self.error_review)
         self.assertIn("error-review.md", self.readme)
+        self.assertIn("session-maintenance.md", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
         self.assertIn("OpenClaw 2026.3.13", self.readme)
@@ -160,6 +162,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("/Users/corystoner/src/ORION", self.app_readme)
         self.assertIn("/Users/corystoner/src/ORION", self.scripts_readme)
         self.assertIn("/Users/corystoner/src/ORION", self.polaris_inbox)
+        self.assertIn("/Users/corystoner/src/ORION", self.error_review)
 
     def test_codex_0114_health_contract_is_implemented(self):
         self.assertIn('path = "/readyz"', self.fly_toml)

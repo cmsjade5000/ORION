@@ -27,7 +27,7 @@ Options:
   --fix        Run: openclaw security audit --deep --fix
   --update     Run: openclaw update --yes
   --repair     Run: openclaw doctor --repair --non-interactive
-  --sessions   Run: scripts/sessions_hygiene.sh --apply --fix-missing
+  --sessions   Run thresholded session maintenance with report output
   --commit     Commit any repo changes (after secrets scan)
   --push       Push to origin (implies --commit)
   --restart    Restart OpenClaw gateway service (openclaw gateway restart)
@@ -74,8 +74,8 @@ else
   openclaw update --json status || true
 fi
 
-echo "3) Session hygiene dry-run"
-"${repo_root}/scripts/sessions_hygiene.sh" --agent main --fix-missing || true
+echo "3) Session maintenance preview"
+python3 "${repo_root}/scripts/session_maintenance.py" --repo-root "${repo_root}" --agent main --fix-missing --json || true
 
 if [[ "$DO_FIX" = "1" ]]; then
   echo "4) Apply safe security fixes"
@@ -94,7 +94,15 @@ fi
 
 if [[ "$DO_SESSIONS" = "1" ]]; then
   echo "7) Session hygiene maintenance"
-  AUTO_OK=1 "${repo_root}/scripts/sessions_hygiene.sh" --agent main --fix-missing --doctor --apply || true
+  AUTO_OK=1 python3 "${repo_root}/scripts/session_maintenance.py" \
+    --repo-root "${repo_root}" \
+    --agent main \
+    --fix-missing \
+    --apply \
+    --doctor \
+    --min-missing "${SESSION_MIN_MISSING:-50}" \
+    --min-reclaim "${SESSION_MIN_RECLAIM:-25}" \
+    --json || true
 fi
 
 if [[ "$DO_COMMIT" = "1" ]]; then
