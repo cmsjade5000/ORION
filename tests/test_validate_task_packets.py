@@ -36,6 +36,30 @@ Output Format:
 - Short checklist.
 """
 
+VALID_POLARIS_PACKET = """\
+TASK_PACKET v1
+Owner: POLARIS
+Requester: ORION
+Notify: telegram
+Opened: 2026-03-12
+Due: 2026-03-14
+Execution Mode: direct
+Tool Scope: read-only
+Objective: Do a thing.
+Success Criteria:
+- It worked.
+Constraints:
+- Read-only.
+Inputs:
+- (none)
+Risks:
+- low
+Stop Gates:
+- Any destructive command.
+Output Format:
+- Short checklist.
+"""
+
 
 class TestValidateTaskPackets(unittest.TestCase):
     @classmethod
@@ -154,11 +178,21 @@ class TestValidateTaskPackets(unittest.TestCase):
         self.assertTrue(any("Requester" in e for e in errs), errs)
 
     def test_polaris_requires_orion(self):
-        pkt = VALID_PACKET.format(owner="POLARIS", requester="ATLAS")
+        pkt = VALID_POLARIS_PACKET.replace("Requester: ORION", "Requester: ATLAS")
         path, td = self._write_inbox("POLARIS", pkt)
         errs = self.v.validate_inbox_file(path)
         td.cleanup()
         self.assertTrue(any("Requester" in e for e in errs), errs)
+
+    def test_polaris_requires_admin_fields(self):
+        pkt = VALID_PACKET.format(owner="POLARIS", requester="ORION")
+        path, td = self._write_inbox("POLARIS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("Opened" in e for e in errs), errs)
+        self.assertTrue(any("Execution Mode" in e for e in errs), errs)
+        self.assertTrue(any("Tool Scope" in e for e in errs), errs)
+        self.assertTrue(any("Notify" in e for e in errs), errs)
 
     def test_ignores_fenced_examples(self):
         body = textwrap.dedent(
@@ -345,8 +379,11 @@ class TestValidateTaskPackets(unittest.TestCase):
             "TASK_PACKET v1\n"
             "Owner: POLARIS\n"
             "Requester: ORION\n"
+            "Notify: telegram\n"
             "Opened: 2026-02-20\n"
             "Due: 2026-02-27\n"
+            "Execution Mode: direct\n"
+            "Tool Scope: read-only\n"
             "Objective: Do a thing.\n"
             "Success Criteria:\n"
             "- It worked.\n"

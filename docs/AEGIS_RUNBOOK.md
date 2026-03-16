@@ -252,7 +252,7 @@ Common flow:
 
 If you want ORION to proactively DM you in Telegram when a new defense plan appears:
 - Install the Mac mini LaunchAgent:
-  - `scripts/install_orion_aegis_defense_watch_launchagent.sh /Users/corystoner/Desktop/ORION`
+  - `scripts/install_orion_aegis_defense_watch_launchagent.sh /Users/corystoner/src/ORION`
 - It polls `aegis-defend list` on Hetzner every ~2 minutes and sends a private DM when it sees a new plan.
 - To force the DM target chat id, set env var `ORION_TELEGRAM_CHAT_ID` for the LaunchAgent (recommended). Otherwise it will fall back to `AEGIS_TELEGRAM_CHAT_ID` from `/etc/aegis-monitor.env` on Hetzner.
 

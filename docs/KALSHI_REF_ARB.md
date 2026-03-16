@@ -141,7 +141,7 @@ Paper execution emulator (paper mode only):
 - `KALSHI_ARB_RETRY_BASE_MS=250`
 - `KALSHI_ARB_MILESTONE_NOTIFY=1` (milestone/error style Telegram updates only)
 - `KALSHI_ARB_METRICS_ENABLED=1`
-- `KALSHI_ARB_METRICS_PATH=/Users/corystoner/Desktop/ORION/tmp/kalshi_ref_arb/metrics.prom`
+- `KALSHI_ARB_METRICS_PATH=/Users/corystoner/src/ORION/tmp/kalshi_ref_arb/metrics.prom`
 
 Metrics file is emitted in Prometheus textfile format each cycle.
 

@@ -1,35 +1,37 @@
 # Working Memory
 
-Last verified: 2026-02-17
+Last verified: 2026-03-12
 
 ## Current Goal
 
-Go live locally on the Mac mini:
+Refocus ORION into a bounded-proactive admin copilot:
 
-- ORION is the only Telegram-facing bot.
-- Specialists run as isolated OpenClaw agents (`atlas`, `node`, `pulse`, etc.) with ORION delegating via Task Packets.
+- Telegram remains the primary user-facing channel.
+- POLARIS is the default route for reminders, calendar prep, notes capture, follow-through, and daily review.
+- Mini App surfaces are experimental and out of the assistant critical path.
 
 ## Current Status
 
 - OpenClaw workspace points at this repo.
 - Isolated specialist agents are configured locally.
+- Assistant command scaffolding is repo-backed: `/today`, `/capture`, `/followups`, `/review`.
 
 ## Known Blockers / Risks
 
-- Telegram inbound (DM -> ORION auto-reply) must be verified before enabling cron-driven automation.
+- Telegram inbound (DM -> ORION auto-reply) must be verified before enabling assistant crons.
+- Hook/plugin settings still live in the runtime config under `~/.openclaw/openclaw.json`; repo files only provide the template.
 - Ensure no secrets ever land in Git (run `skills/secrets-scan` before pushes).
 
-## Next Steps (Go-Live Checklist)
+## Next Steps
 
-1. Run hardening checks:
-   - `openclaw doctor --repair`
-   - `openclaw security audit --deep`
-2. Verify Telegram channel health:
-   - `openclaw channels status --probe`
-3. Verify Telegram inbound DM works:
+1. Verify Telegram inbound DM works:
    - DM `@Orion_GatewayBot` and confirm ORION responds.
-4. Verify delegation:
-   - ORION sends one Task Packet to `atlas` and receives a result.
-5. Add minimal cron jobs (deliver=false by default):
-   - heartbeat (15m)
-   - daily review (21:00 America/New_York)
+2. Refresh the assistant agenda:
+   - `python3 scripts/assistant_status.py --cmd refresh --json`
+3. Verify assistant command flow:
+   - `/today`
+   - `/capture test item`
+   - `/followups`
+   - `/review`
+4. Enable assistant crons after Telegram verification:
+   - `./scripts/install_orion_assistant_crons.sh`

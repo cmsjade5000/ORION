@@ -29,7 +29,7 @@
       "role_summary": "Default live ORION orchestration lane via OpenRouter auto-routing.",
       "docs": [
         "https://openrouter.ai/docs/quickstart",
-        "/Users/corystoner/Desktop/ORION/docs/LLM_ACCESS.md"
+        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
       ]
     },
     {
@@ -58,8 +58,8 @@
       "requires_hitl": true,
       "role_summary": "Compatibility fallback lane for production orchestration.",
       "docs": [
-        "/Users/corystoner/Desktop/ORION/docs/LLM_ACCESS.md",
-        "/Users/corystoner/Desktop/ORION/docs/OPENCLAW_CONFIG_MIGRATION.md"
+        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md",
+        "/Users/corystoner/src/ORION/docs/OPENCLAW_CONFIG_MIGRATION.md"
       ]
     },
     {
@@ -86,8 +86,8 @@
       "requires_hitl": true,
       "role_summary": "Hosted tertiary fallback lane that must pass ORION-specific evals before promotion.",
       "docs": [
-        "/Users/corystoner/Desktop/ORION/docs/NVIDIA_BUILD_KIMI.md",
-        "/Users/corystoner/Desktop/ORION/scripts/openclaw_enable_nvidia_kimi.sh"
+        "/Users/corystoner/src/ORION/docs/NVIDIA_BUILD_KIMI.md",
+        "/Users/corystoner/src/ORION/scripts/openclaw_enable_nvidia_kimi.sh"
       ]
     },
     {
@@ -149,7 +149,7 @@
       "role_summary": "Non-sensitive research lane only; provider may log prompts and completions.",
       "docs": [
         "https://openrouter.ai/docs/api-reference/overview",
-        "/Users/corystoner/Desktop/ORION/docs/LLM_PROVIDER_MATRIX.md"
+        "/Users/corystoner/src/ORION/docs/LLM_PROVIDER_MATRIX.md"
       ]
     },
     {
@@ -184,7 +184,7 @@
       "role_summary": "Low-cost bounded utility lane using OpenRouter free router plus curated free models.",
       "docs": [
         "https://openrouter.ai/docs/features/provider-routing",
-        "/Users/corystoner/Desktop/ORION/docs/LLM_ACCESS.md"
+        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
       ]
     },
     {
@@ -217,7 +217,7 @@
       "requires_hitl": false,
       "role_summary": "Offline/local bounded utility backup lane.",
       "docs": [
-        "/Users/corystoner/Desktop/ORION/docs/LLM_PROVIDER_MATRIX.md"
+        "/Users/corystoner/src/ORION/docs/LLM_PROVIDER_MATRIX.md"
       ]
     }
   ]

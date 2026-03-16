@@ -169,6 +169,10 @@ class TestOrionInstructionContracts(unittest.TestCase):
             "If a requested note is not found, do not propose creating a new note unless Cory explicitly asks to create one.",
             self.orion_role_text,
         )
+        self.assertIn(
+            "Treat reminders, notes capture, follow-through, daily agenda requests, and weekly review requests as POLARIS-first",
+            self.orion_role_text,
+        )
 
     def test_agentmail_identity_contract(self):
         self.assertIn("orion_gatewaybot@agentmail.to", self.orion_role_text)
@@ -179,6 +183,9 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("Only claim capabilities you can verify in-turn.", self.orion_role_text)
         self.assertIn("Never emit raw `<tool_code>`", self.orion_role_text)
         self.assertIn("Never emit raw `<error>` blocks", self.orion_role_text)
+        self.assertIn("JSON error injected into SSE stream", self.orion_role_text)
+        self.assertIn("do not dump raw CLI JSON into the reply path", self.orion_role_text)
+        self.assertIn("Never surface raw gateway/CLI diagnostics, cron internals, or JSON blobs", self.orion_role_text)
         self.assertIn("Mac control capability question:", self.orion_role_text)
 
     def test_tool_execution_contracts(self):

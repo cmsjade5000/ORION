@@ -20,7 +20,11 @@ try:
         has_series_mapping,
         latest_binance_funding_rate_bps,
         parse_ref_feeds,
+        ref_spot_btc_usd,
+        ref_spot_doge_usd,
+        ref_spot_eth_usd,
         ref_spot_snapshot,
+        ref_spot_xrp_usd,
     )
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
     from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
@@ -45,7 +49,11 @@ except ModuleNotFoundError:
         has_series_mapping,
         latest_binance_funding_rate_bps,
         parse_ref_feeds,
+        ref_spot_btc_usd,
+        ref_spot_doge_usd,
+        ref_spot_eth_usd,
         ref_spot_snapshot,
+        ref_spot_xrp_usd,
     )
     from scripts.arb.kalshi import KalshiClient, KalshiMarket, KalshiNoFillError, KalshiOrder  # type: ignore
     from scripts.arb.kalshi_runtime import load_runtime_from_env  # type: ignore
@@ -771,7 +779,30 @@ def _ref_spot_for_series(series: str, *, feeds: Optional[List[str]] = None) -> t
     try:
         return (float(m), snap if isinstance(snap, dict) else {})
     except Exception:
-        return (None, snap if isinstance(snap, dict) else {})
+        pass
+
+    legacy_ref = _legacy_ref_spot_for_series(series)
+    try:
+        if legacy_ref is not None:
+            fallback_meta = dict(snap) if isinstance(snap, dict) else {}
+            fallback_meta["legacy_ref_fallback_used"] = True
+            return (float(legacy_ref), fallback_meta)
+    except Exception:
+        pass
+    return (None, snap if isinstance(snap, dict) else {})
+
+
+def _legacy_ref_spot_for_series(series: str) -> Optional[float]:
+    s = str(series or "").upper()
+    if "BTC" in s:
+        return ref_spot_btc_usd()
+    if "ETH" in s:
+        return ref_spot_eth_usd()
+    if "XRP" in s:
+        return ref_spot_xrp_usd()
+    if "DOGE" in s:
+        return ref_spot_doge_usd()
+    return None
 
 
 def _signal_for_market(

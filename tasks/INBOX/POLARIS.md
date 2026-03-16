@@ -6,6 +6,7 @@ Scope examples:
 - reminders/calendar workflow orchestration
 - contact organization and follow-through tracking
 - email-prep packet coordination
+- daily agenda prep and quick capture triage
 
 Append new Task Packets below. Spec: `docs/TASK_PACKET.md`.
 
@@ -21,10 +22,20 @@ Milestone update protocol:
   - `Routing + gates complete`
   - `Tests green + config active`
 
+Required admin fields for new POLARIS packets:
+- `Notify: telegram`
+- `Opened: YYYY-MM-DD`
+- `Due: YYYY-MM-DD`
+- `Execution Mode: direct|delegate`
+- `Tool Scope: read-only|write`
+
+Canonical packet shapes:
+- `docs/POLARIS_ADMIN_WORKFLOWS.md`
+
 ## Weekly Routing Audit Runbook
 
 Run location:
-- ORION main workspace session at `/Users/corystoner/Desktop/ORION`.
+- ORION main workspace session at `/Users/corystoner/src/ORION`.
 
 Cadence:
 - Weekly (Friday ET recommended).

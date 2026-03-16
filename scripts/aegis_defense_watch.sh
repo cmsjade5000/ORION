@@ -18,6 +18,38 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# run_with_timeout: run a command with a hard timeout to prevent hangs.
+# Usage: run_with_timeout <seconds> <command> [args...]
+run_with_timeout() {
+  local timeout_sec="${1:-30}"
+  shift
+  local cmd=("$@")
+  
+  # Run the command in background
+  "${cmd[@]}" &
+  local cmd_pid=$!
+  
+  # Timer to kill after timeout
+  (
+    sleep "$timeout_sec"
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      echo "run_with_timeout: killing ${cmd[*]} after ${timeout_sec}s" >&2
+      kill -TERM "$cmd_pid" 2>/dev/null || kill -KILL "$cmd_pid" 2>/dev/null
+    fi
+  ) &
+  local timer_pid=$!
+  
+  # Wait for command to finish
+  wait "$cmd_pid" 2>/dev/null
+  local exit_code=$?
+  
+  # Cleanup timer
+  kill -TERM "$timer_pid" 2>/dev/null || true
+  wait "$timer_pid" 2>/dev/null || true
+  
+  return $exit_code
+}
+
 AEGIS_HOST="${AEGIS_HOST:-100.75.104.54}"
 AEGIS_SSH_USER="${AEGIS_SSH_USER:-root}"
 STATE_FILE="${STATE_FILE:-${repo_root}/tmp/aegis_defense_plans.seen}"
@@ -35,7 +67,8 @@ get_chat_id() {
   # Best-effort fallback: use whatever chat id AEGIS is configured to alert.
   # (This is often Cory's DM chat_id.)
   local line val
-  line="$(ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
+  # Use run_with_timeout to prevent SSH hangs; on error/timeout, treat as no output.
+  line="$(run_with_timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
     "${AEGIS_SSH_USER}@${AEGIS_HOST}" \
     "grep -E '^AEGIS_TELEGRAM_CHAT_ID=' /etc/aegis-monitor.env 2>/dev/null | tail -n 1" || true)"
   val="${line#*=}"
@@ -50,7 +83,8 @@ if [[ -z "${chat_id}" ]]; then
   exit 0
 fi
 
-plans="$("${repo_root}/scripts/aegis_defense.sh" list 2>/dev/null || true)"
+# Fetch plans with a timeout to prevent SSH hang
+plans="$(run_with_timeout 30 "${repo_root}/scripts/aegis_defense.sh" list 2>/dev/null || true)"
 if [[ -z "${plans}" ]]; then
   exit 0
 fi

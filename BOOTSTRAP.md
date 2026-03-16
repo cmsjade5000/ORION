@@ -58,6 +58,10 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
    - Specialists never message Telegram directly
 10. Add minimal cron jobs (optional; keep delivery off unless explicitly wanted):
    - Use `skills/cron-manager`
+   - For assistant follow-through once Telegram inbound is verified:
+     ```bash
+     ./scripts/install_orion_assistant_crons.sh
+     ```
 11. (Optional) Email toolchain (ORION-only):
    - Store AgentMail key at `~/.openclaw/secrets/agentmail.api_key` (chmod `600`)
    - Smoke test:
@@ -69,3 +73,4 @@ When this checklist is complete and the gateway is stable, delete `BOOTSTRAP.md`
 
 - Delete this file (`BOOTSTRAP.md`) after go-live so it stops being injected.
 - Keep ongoing state in `memory/WORKING.md` and `tasks/`.
+- For assistant posture, keep `memory/ASSISTANT_PROFILE.md` and `tasks/NOTES/assistant-agenda.md` current.

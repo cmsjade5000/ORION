@@ -16,12 +16,27 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.migration = (cls.repo / "docs" / "OPENCLAW_CONFIG_MIGRATION.md").read_text(
             encoding="utf-8"
         )
+        cls.assistant_workflows = (cls.repo / "docs" / "POLARIS_ADMIN_WORKFLOWS.md").read_text(
+            encoding="utf-8"
+        )
+        cls.upgrade_notes = (cls.repo / "docs" / "OPENCLAW_2026_3_13_UPGRADE_NOTES.md").read_text(
+            encoding="utf-8"
+        )
+        cls.single_bot = (cls.repo / "docs" / "ORION_SINGLE_BOT_ORCHESTRATION.md").read_text(
+            encoding="utf-8"
+        )
+        cls.follow_through = (cls.repo / "docs" / "FOLLOW_THROUGH.md").read_text(
+            encoding="utf-8"
+        )
         cls.pdf_workflow = (cls.repo / "docs" / "PDF_REVIEW_WORKFLOW.md").read_text(
             encoding="utf-8"
         )
         cls.makefile = (cls.repo / "Makefile").read_text(encoding="utf-8")
         cls.discord_setup = (cls.repo / "docs" / "DISCORD_SETUP.md").read_text(encoding="utf-8")
         cls.nvim = (cls.repo / "docs" / "NVIDIA_BUILD_KIMI.md").read_text(encoding="utf-8")
+        cls.app_readme = (cls.repo / "app" / "README.md").read_text(encoding="utf-8")
+        cls.scripts_readme = (cls.repo / "scripts" / "README.md").read_text(encoding="utf-8")
+        cls.polaris_inbox = (cls.repo / "tasks" / "INBOX" / "POLARIS.md").read_text(encoding="utf-8")
         cls.fly_toml = (cls.repo / "fly.orion-core.toml").read_text(encoding="utf-8")
         cls.compat_0114 = (cls.repo / "docs" / "CODEX_0114_COMPATIBILITY_REPORT.md").read_text(
             encoding="utf-8"
@@ -39,6 +54,25 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
     def test_examples_pin_tools_profile(self):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
         self.assertIn("profile: coding", self.yaml_example)
+
+    def test_examples_enable_assistant_hooks_and_memory_slot(self):
+        self.assertEqual(
+            self.json_example["hooks"]["internal"]["enabled"],
+            ["session-memory", "command-logger"],
+        )
+        self.assertEqual(self.json_example["plugins"]["slots"]["memory"], "memory-lancedb")
+        self.assertTrue(self.json_example["plugins"]["entries"]["open-prose"]["enabled"])
+        self.assertTrue(self.json_example["plugins"]["entries"]["memory-lancedb"]["enabled"])
+        embedding = self.json_example["plugins"]["entries"]["memory-lancedb"]["config"]["embedding"]
+        self.assertEqual(embedding["apiKey"], "${OPENROUTER_API_KEY}")
+        self.assertEqual(embedding["baseUrl"], "https://openrouter.ai/api/v1")
+        self.assertEqual(embedding["model"], "text-embedding-3-small")
+        self.assertIn("session-memory", self.yaml_example)
+        self.assertIn("command-logger", self.yaml_example)
+        self.assertIn("memory: memory-lancedb", self.yaml_example)
+        self.assertIn("apiKey: ${OPENROUTER_API_KEY}", self.yaml_example)
+        self.assertIn("baseUrl: https://openrouter.ai/api/v1", self.yaml_example)
+        self.assertIn("model: text-embedding-3-small", self.yaml_example)
 
     def test_examples_default_to_openrouter_auto(self):
         model_defaults = self.json_example["agents"]["defaults"]["model"]
@@ -83,6 +117,43 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("SecretRef", self.discord_setup)
         self.assertIn("SecretRef", self.nvim)
         self.assertIn("SecretRef", self.migration)
+        self.assertIn("${OPENROUTER_API_KEY}", self.migration)
+        self.assertIn("openai/text-embedding-3-small", self.migration)
+
+    def test_assistant_docs_are_wired(self):
+        self.assertIn("/today", self.readme)
+        self.assertIn("/capture", self.readme)
+        self.assertIn("POLARIS", self.assistant_workflows)
+        self.assertIn("assistant-agenda.md", self.workflow)
+        self.assertIn("POLARIS", self.single_bot)
+        self.assertIn("Notify: telegram", self.polaris_inbox)
+        self.assertIn("OpenClaw 2026.3.13", self.readme)
+        self.assertIn("sessions_yield", self.upgrade_notes)
+        self.assertIn("isolated cron", self.upgrade_notes)
+        self.assertIn("cross-agent workspace", self.upgrade_notes)
+
+    def test_live_docs_use_src_workspace_path(self):
+        live_texts = (
+            self.readme,
+            self.workflow,
+            self.migration,
+            self.upgrade_notes,
+            self.single_bot,
+            self.follow_through,
+            self.app_readme,
+            self.scripts_readme,
+            self.polaris_inbox,
+        )
+        for text in live_texts:
+            self.assertNotIn("/Users/corystoner/Desktop/ORION", text)
+
+        self.assertEqual(self.json_example["agents"]["defaults"]["workspace"], "/Users/corystoner/src/ORION")
+        self.assertIn("/Users/corystoner/src/ORION", self.migration)
+        self.assertIn("/Users/corystoner/src/ORION", self.single_bot)
+        self.assertIn("/Users/corystoner/src/ORION", self.follow_through)
+        self.assertIn("/Users/corystoner/src/ORION", self.app_readme)
+        self.assertIn("/Users/corystoner/src/ORION", self.scripts_readme)
+        self.assertIn("/Users/corystoner/src/ORION", self.polaris_inbox)
 
     def test_codex_0114_health_contract_is_implemented(self):
         self.assertIn('path = "/readyz"', self.fly_toml)

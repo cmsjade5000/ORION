@@ -2,7 +2,7 @@
 
 This document defines the group chat conventions, agent roles, reaction mappings, and onboarding steps for inviting Gateway specialist agents into a shared Telegram group.
 
-**Current mode:** Single bot only (ORION). Multi-bot group chat is deferred. Keep the multi-bot sections below as a future plan.
+**Current mode:** Single bot only (ORION). Multi-bot group chat is deferred. Keep the multi-bot sections below as a future plan. The Mini App is experimental and not part of the assistant critical path.
 
 ---
 ## 1. Bot Identities (Telegram Handles)
@@ -16,6 +16,10 @@ Active now:
 **Note:** Specialists do not have Telegram access in the current runtime. ORION invokes them internally via swarm/session tools.
 
 Current Telegram commands (implemented by the Telegram plugin, not by specialist chat bots):
+- `/today` returns today's agenda from local assistant artifacts.
+- `/capture <text>` queues a quick admin capture to POLARIS.
+- `/followups` summarizes waiting-on items and POLARIS queue state.
+- `/review` returns a bounded daily review.
 - `/agents` shows the Agent Dashboard inline keyboard.
 - `/miniapp` sends an inline `web_app` button for the ORION Mini App (requires `ORION_MINIAPP_URL`).
 - `/core` is an alias for `/miniapp`.

@@ -18,9 +18,9 @@ Constraints:
 - Do not change secrets/credentials.
 - Keep a rollback path (backup the prior remote script before overwriting).
 Inputs:
-- /Users/corystoner/Desktop/ORION/scripts/deploy_aegis_remote.sh
-- /Users/corystoner/Desktop/ORION/scripts/aegis_remote/aegis-sentinel
-- AEGIS host defaults: `AEGIS_HOST=100.75.104.54`, `AEGIS_SSH_USER=root` (also referenced by /Users/corystoner/Desktop/ORION/status.sh)
+- /Users/corystoner/src/ORION/scripts/deploy_aegis_remote.sh
+- /Users/corystoner/src/ORION/scripts/aegis_remote/aegis-sentinel
+- AEGIS host defaults: `AEGIS_HOST=100.75.104.54`, `AEGIS_SSH_USER=root` (also referenced by /Users/corystoner/src/ORION/status.sh)
 Risks:
 - Remote deploy restarts `aegis-sentinel.service` and may briefly delay monitoring; mitigate by verifying service health and logs immediately after.
 Stop Gates:
@@ -29,5 +29,5 @@ Output Format:
 - Commands run + short verification output snippets (systemctl status lines + log tail).
 Commands to run:
 - ssh "${AEGIS_SSH_USER:-root}@${AEGIS_HOST:-100.75.104.54}" 'set -euo pipefail; if [ -f /usr/local/bin/aegis-sentinel ]; then cp -a /usr/local/bin/aegis-sentinel "/usr/local/bin/aegis-sentinel.bak.$(date -u +%Y%m%dT%H%M%SZ)"; fi'
-- AEGIS_HOST="${AEGIS_HOST:-100.75.104.54}" AEGIS_SSH_USER="${AEGIS_SSH_USER:-root}" /Users/corystoner/Desktop/ORION/scripts/deploy_aegis_remote.sh
+- AEGIS_HOST="${AEGIS_HOST:-100.75.104.54}" AEGIS_SSH_USER="${AEGIS_SSH_USER:-root}" /Users/corystoner/src/ORION/scripts/deploy_aegis_remote.sh
 - ssh "${AEGIS_SSH_USER:-root}@${AEGIS_HOST:-100.75.104.54}" 'set -euo pipefail; systemctl --no-pager --full status aegis-sentinel.timer aegis-sentinel.service | sed -n "1,80p"; echo "---"; tail -n 80 /var/log/aegis-sentinel/sentinel.log'

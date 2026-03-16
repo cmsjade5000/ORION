@@ -11,6 +11,7 @@ For repo-native file-first execution tickets, use:
 
 ## Ready (ORION triage)
 - [ ] Send Telegram wrap-up summary of recent platform work (draft ready: `tasks/INBOX/SCRIBE.md` under Result; ORION sends)
+- [ ] Verify `/today`, `/capture`, `/followups`, and `/review` from Telegram DM once inbound is confirmed
 
 ## Specialist Assignments (ORION-only)
 

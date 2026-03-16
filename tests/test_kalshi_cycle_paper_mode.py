@@ -183,6 +183,43 @@ class TestKalshiCyclePaperMode(unittest.TestCase):
         merged = cyc._merge_series_lists(["KXBTC", "KXETH"], ["KXETH", "KXBTCD"])
         self.assertEqual(merged, ["KXBTC", "KXETH", "KXBTCD"])
 
+    def test_resolve_sigma_arg_falls_back_when_auto_unavailable(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        with patch.object(cyc, "conservative_sigma_auto", return_value=None):
+            self.assertEqual(cyc._resolve_sigma_arg("KXSOL15M", sigma="auto", sigma_window_h=168), "0.8500")
+
+    def test_scan_series_uses_numeric_sigma_when_auto_unavailable(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        captured: dict[str, list[str]] = {}
+
+        def fake_run_cmd_json(argv: list[str], cwd: str, timeout_s: int):
+            captured["argv"] = list(argv)
+            return 0, "", {"inputs": {}, "signals": []}
+
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(cyc, "conservative_sigma_auto", return_value=None):
+                with patch.object(cyc, "_run_cmd_json", side_effect=fake_run_cmd_json):
+                    out = cyc._scan_series(
+                        td,
+                        "KXSOL15M",
+                        sigma="auto",
+                        sigma_window_h=168,
+                        min_edge="200",
+                        uncertainty="50",
+                        min_liq="115",
+                        max_spread="0.1",
+                        min_tte="180",
+                        min_px="0.05",
+                        max_px="0.97",
+                        min_notional="0.50",
+                        min_notional_bypass="2500",
+                    )
+
+        self.assertEqual(captured["argv"][captured["argv"].index("--sigma-annual") + 1], "0.8500")
+        self.assertEqual(out["_sigma_arg"], "0.8500")
+
 
 if __name__ == "__main__":
     unittest.main()

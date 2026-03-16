@@ -926,8 +926,8 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     include_raw = status in ("WARN", "PAUSED")
 
     commands = [
-        "python3 /Users/corystoner/Desktop/ORION/scripts/kalshi_ref_arb.py balance",
-        f"python3 /Users/corystoner/Desktop/ORION/scripts/kalshi_digest.py --window-hours {int(window_hours)} --send-email --email-html",
+        "python3 /Users/corystoner/src/ORION/scripts/kalshi_ref_arb.py balance",
+        f"python3 /Users/corystoner/src/ORION/scripts/kalshi_digest.py --window-hours {int(window_hours)} --send-email --email-html",
     ]
 
     why_lines: List[str] = []

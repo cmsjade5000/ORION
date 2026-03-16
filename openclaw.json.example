@@ -6,7 +6,7 @@
   },
   "agents": {
     "defaults": {
-      "workspace": "/Users/corystoner/Desktop/ORION",
+      "workspace": "/Users/corystoner/src/ORION",
       "model": {
         "_comment_model": "Default posture: use OpenRouter auto-routing for production orchestration. OpenAI remains a direct API control/eval lane outside the default OpenClaw model path.",
         "_comment_fallbacks": "Keep fallbacks provider-restricted. Default: OpenRouter free router + curated free model, then Gemini, then optional NVIDIA Kimi.",
@@ -52,6 +52,14 @@
         }
       }
     ]
+  },
+  "hooks": {
+    "internal": {
+      "enabled": [
+        "session-memory",
+        "command-logger"
+      ]
+    }
   },
   "channels": {
     "telegram": {
@@ -163,9 +171,25 @@
     }
   },
   "plugins": {
+    "slots": {
+      "memory": "memory-lancedb"
+    },
     "entries": {
       "telegram": {
         "enabled": true
+      },
+      "open-prose": {
+        "enabled": true
+      },
+      "memory-lancedb": {
+        "enabled": true,
+        "config": {
+          "embedding": {
+            "apiKey": "${OPENROUTER_API_KEY}",
+            "baseUrl": "https://openrouter.ai/api/v1",
+            "model": "text-embedding-3-small"
+          }
+        }
       },
       "discord": {
         "enabled": false

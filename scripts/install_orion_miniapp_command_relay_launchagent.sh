@@ -22,7 +22,7 @@ mkdir -p "${launch_agents_dir}"
 if [[ ! -x "${run_script}" ]]; then
   echo "Relay run script not found or not executable: ${run_script}" >&2
   echo "Run this installer with the ORION repo path, e.g.:" >&2
-  echo "  scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/Desktop/ORION" >&2
+  echo "  scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/src/ORION" >&2
   exit 1
 fi
 

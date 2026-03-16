@@ -15,8 +15,9 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `tools.profile = "coding"` (pin ORION to a local workspace posture; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset)
 - `agents.defaults.model.primary = "openrouter/auto"` (pinned)
 - `agents.defaults.model.fallbacks = ["openrouter/free","openai/gpt-oss-20b:free","google/gemini-2.5-flash-lite"]` (provider-restricted)
-- `agents.defaults.workspace = "/Users/corystoner/Desktop/ORION"`
+- `agents.defaults.workspace = "/Users/corystoner/src/ORION"`
 - `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","quest","ember","ledger","polaris","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
+- `hooks.internal.enabled = ["session-memory","command-logger"]`
 - `channels.telegram.enabled = true`
 - `channels.telegram.commands.native = true`
 - `channels.telegram.commands.nativeSkills = false`
@@ -28,6 +29,12 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `channels.telegram.groups = { "<TELEGRAM_GROUP_ID>": {} }`
 - `channels.telegram.streamMode = "partial"`
 - `channels.telegram.reactionLevel = "ack"`
+- `plugins.slots.memory = "memory-lancedb"`
+- `plugins.entries."memory-lancedb".enabled = true`
+- `plugins.entries."memory-lancedb".config.embedding.apiKey = "${OPENROUTER_API_KEY}"`
+- `plugins.entries."memory-lancedb".config.embedding.baseUrl = "https://openrouter.ai/api/v1"`
+- `plugins.entries."memory-lancedb".config.embedding.model = "text-embedding-3-small"`
+- `plugins.entries."open-prose".enabled = true`
 - Optional (Discord):
   - `channels.discord.enabled = true`
   - `channels.discord.token = { source: "env", provider: "default", id: "DISCORD_BOT_TOKEN" }`
@@ -38,6 +45,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
   - `channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_PRIMARY_CHANNEL_ID>".autoThread = true`
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
+Mini App surfaces remain optional and experimental; the assistant core should not depend on them.
 
 ## Config Validation (OpenClaw 2026.3.x)
 
@@ -48,6 +56,44 @@ openclaw config validate --json
 ```
 
 This checks the live runtime config at `~/.openclaw/openclaw.json` without starting the gateway.
+
+Recommended assistant-specific checks:
+
+```bash
+openclaw hooks list
+openclaw plugins list --json
+openclaw agents bindings --json
+```
+
+## Operational Notes (OpenClaw 2026.3.13)
+
+Latest local upgrade verification: 2026-03-15 on ORION's Mac runtime.
+
+Important upstream behavior changes for this workspace:
+
+- Isolated cron deadlock handling improved in `2026.3.13`, which benefits assistant agenda refresh, inbox notify, and follow-through loops.
+- Cross-agent workspace resolution improved for subagent spawns, which pairs with this repo's canonical `/Users/corystoner/src/ORION` workspace path.
+- Agent memory injection was hardened on case-insensitive filesystems, which matters on macOS.
+- Gateway health/reporting is stricter around degraded reachability and unanswered client requests.
+- Channel/binding collisions now fail fast, so `openclaw agents bindings --json` is part of the recommended post-change check path.
+
+See:
+- `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
+
+## Memory Plugin Note
+
+`memory-lancedb` no longer boots with `enabled = true` alone. It requires an
+explicit `embedding` config block.
+
+Practical rule:
+
+- If you use OpenRouter for embeddings, keep the model string bare:
+  `text-embedding-3-small`
+- Do not use provider-prefixed forms such as
+  `openai/text-embedding-3-small`; the plugin rejects them before startup.
+- This plugin schema currently expects a plain string API key, so `${ENV}`
+  interpolation is the portable runtime pattern here rather than a `SecretRef`
+  object.
 
 ## Codex 0.114.x Compatibility Notes
 
@@ -145,8 +191,12 @@ Or via environment variables (`GEMINI_API_KEY`) if your gateway service is confi
 
 ```bash
 openclaw models status
+openclaw hooks list
+openclaw plugins list --json
 openclaw config get agents.defaults.workspace
 openclaw config get 'agents.list[0].subagents.allowAgents'
+openclaw config get 'hooks.internal.enabled'
+openclaw config get 'plugins.slots.memory'
 openclaw config get channels.telegram
 openclaw sessions cleanup --agent main --dry-run --fix-missing --json
 openclaw agents bindings --json

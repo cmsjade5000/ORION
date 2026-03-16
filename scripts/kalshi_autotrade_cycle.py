@@ -996,6 +996,22 @@ def _stuck_notification_text(stuck: Dict[str, Any]) -> str:
     )
 
 
+def _resolve_sigma_arg(series: str, *, sigma: str, sigma_window_h: int, fallback: float = 0.85) -> str:
+    raw = str(sigma).strip()
+    if raw.lower() != "auto":
+        try:
+            return f"{float(raw):.4f}"
+        except Exception:
+            return f"{float(fallback):.4f}"
+    try:
+        v = conservative_sigma_auto(series, window_hours=int(sigma_window_h))
+    except Exception:
+        v = None
+    if isinstance(v, (int, float)):
+        return f"{float(v):.4f}"
+    return f"{float(fallback):.4f}"
+
+
 def _best_series_from_scan(root: str, series_list: list[str], *, sigma: str, sigma_window_h: int, min_edge: str, uncertainty: str, min_liq: str, max_spread: str, min_tte: str, min_px: str, max_px: str) -> tuple[str, dict[str, Any]]:
     """Pick a single series to trade this cycle based on scan results (no state writes)."""
     best_series = series_list[0] if series_list else "KXBTC"
@@ -1003,14 +1019,7 @@ def _best_series_from_scan(root: str, series_list: list[str], *, sigma: str, sig
     summary: dict[str, Any] = {"series": []}
 
     for s in series_list:
-        sigma_arg = sigma
-        if str(sigma).strip().lower() == "auto":
-            try:
-                v = conservative_sigma_auto(s, window_hours=int(sigma_window_h))
-            except Exception:
-                v = None
-            if v is not None:
-                sigma_arg = f"{float(v):.4f}"
+        sigma_arg = _resolve_sigma_arg(s, sigma=sigma, sigma_window_h=int(sigma_window_h))
         argv = [
             "python3",
             "scripts/kalshi_ref_arb.py",
@@ -1093,14 +1102,7 @@ def _scan_series(
     min_notional: str,
     min_notional_bypass: str,
 ) -> Dict[str, Any]:
-    sigma_arg = sigma
-    if str(sigma).strip().lower() == "auto":
-        try:
-            v = conservative_sigma_auto(series, window_hours=int(sigma_window_h))
-        except Exception:
-            v = None
-        if v is not None:
-            sigma_arg = f"{float(v):.4f}"
+    sigma_arg = _resolve_sigma_arg(series, sigma=sigma, sigma_window_h=int(sigma_window_h))
 
     argv = [
         "python3",
@@ -1585,14 +1587,7 @@ def main() -> int:
             _write_cycle_status(root, status="scan_failed", detail="all series scans failed", extra={"artifact": artifact_path})
             return 0
 
-        sigma_arg = sigma
-        if str(sigma).strip().lower() == "auto":
-            try:
-                v = conservative_sigma_auto(selected_series, window_hours=int(sigma_window_h))
-            except Exception:
-                v = None
-            if v is not None:
-                sigma_arg = f"{float(v):.4f}"
+        sigma_arg = _resolve_sigma_arg(selected_series, sigma=sigma, sigma_window_h=int(sigma_window_h))
 
         cycle_inputs = {
             "series": selected_series,

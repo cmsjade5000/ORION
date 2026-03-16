@@ -85,7 +85,7 @@ Shortcut:
 If you want the Mac mini to run a best-effort “resurrection” once on login after reboot:
 
 - Install the LaunchAgent:
-  - `scripts/install_orion_resurrector_launchagent.sh /Users/corystoner/Desktop/ORION`
+  - `scripts/install_orion_resurrector_launchagent.sh /Users/corystoner/src/ORION`
 - Logs:
   - `~/Library/Logs/orion_resurrector.log`
 

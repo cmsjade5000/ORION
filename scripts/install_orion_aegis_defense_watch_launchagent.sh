@@ -22,7 +22,7 @@ mkdir -p "${launch_agents_dir}"
 if [[ ! -x "${watch_script}" ]]; then
   echo "Watch script not found or not executable: ${watch_script}" >&2
   echo "Run this installer with the ORION repo path, e.g.:" >&2
-  echo "  scripts/install_orion_aegis_defense_watch_launchagent.sh /Users/corystoner/Desktop/ORION" >&2
+  echo "  scripts/install_orion_aegis_defense_watch_launchagent.sh /Users/corystoner/src/ORION" >&2
   exit 1
 fi
 
@@ -34,4 +34,3 @@ launchctl load "${plist_target}"
 
 echo "Installed LaunchAgent: ${plist_target}"
 echo "Logs: ${HOME}/Library/Logs/orion_aegis_defense_watch.log"
-

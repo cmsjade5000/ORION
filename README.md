@@ -8,6 +8,7 @@ Design goals:
 - identities are generated to reduce drift
 - delegation is structured and auditable (Task Packets)
 - secrets never enter Git
+- admin-copilot usefulness over dashboards or novelty surfaces
 
 ## Runtime Model
 
@@ -37,14 +38,35 @@ openclaw agents list --bindings
 openclaw models status
 ```
 
+Latest local runtime verification:
+- Upgraded on 2026-03-15 to `OpenClaw 2026.3.13`
+- Notes: `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
+
 ## Recovery
 
 Runbook:
 - `docs/RECOVERY.md`
 
-## Telegram Mini App (Optional)
+## Assistant Focus
 
-This repo includes an optional Telegram Mini App dashboard:
+Primary assistant posture:
+- ORION is a bounded-proactive admin copilot.
+- POLARIS is the default internal route for reminders, calendar prep, notes capture, follow-through, and daily review.
+- Telegram remains the primary user-facing surface.
+
+Deterministic assistant commands:
+- `/today` -> agenda from calendar + reminders + delegated work + open tickets
+- `/capture <text>` -> quick admin capture queued to POLARIS
+- `/followups` -> waiting-on items and POLARIS queue
+- `/review` -> concise daily review / next actions
+
+Generated assistant artifacts:
+- `memory/ASSISTANT_PROFILE.md`
+- `tasks/NOTES/assistant-agenda.md`
+
+## Telegram Mini App (Experimental / Archived)
+
+This repo still contains Mini App experiments, but they are not part of the assistant critical path:
 - App: `apps/telegram-miniapp-dashboard/`
 - ORION commands: `/miniapp` and `/core` (both send a `web_app` button via the Telegram plugin)
 - Paper-trading quick commands in ORION DM:
@@ -64,6 +86,7 @@ Config:
   - `FLIC_BOT_USERNAME=Flic_GatewayBot`
   - Optional: `FLIC_APP_SHORT_NAME=<telegram-miniapp-short-name>`
 - Security note: do not enable command routing from the Mini App into ORION unless you explicitly accept the risk (see `SECURITY.md` and the Mini App README).
+- Keep the Mini App code for reference and future experiments, but do not treat it as required for assistant behavior.
 
 ## Discord (Optional)
 
@@ -135,6 +158,11 @@ make ci
 What it checks:
 - Python unit tests + Task Packet validation (`npm test`)
 - ShellCheck over bash scripts (`scripts/ci_shellcheck.sh`)
+
+Supported validation path:
+- Preferred: `npm test`
+- TypeScript-only: `npm --prefix app run typecheck`
+- Bare `pytest -q` is not the repo default and may use the wrong Python interpreter on macOS.
 
 Opt-in live routing lane:
 

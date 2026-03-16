@@ -4,16 +4,16 @@ ORION Core is a new, standalone Telegram Mini App + bot pair designed for mobile
 
 ## Project Layout
 
-- `/Users/corystoner/Desktop/ORION/app` → Next.js (TypeScript) Mini App UI + API routes
-- `/Users/corystoner/Desktop/ORION/db` → SQLite + event log + reducer core
-- `/Users/corystoner/Desktop/ORION/bot/orion-core-bot` → Telegram bot that opens the Mini App
+- `/Users/corystoner/src/ORION/app` → Next.js (TypeScript) Mini App UI + API routes
+- `/Users/corystoner/src/ORION/db` → SQLite + event log + reducer core
+- `/Users/corystoner/src/ORION/bot/orion-core-bot` → Telegram bot that opens the Mini App
 
 ## Local Development
 
 ### 1) Install app dependencies
 
 ```bash
-cd /Users/corystoner/Desktop/ORION/app
+cd /Users/corystoner/src/ORION/app
 npm install
 ```
 
@@ -35,7 +35,7 @@ Default URL: `http://localhost:3000`
 Example:
 
 ```bash
-ORION_CORE_DB_PATH=/Users/corystoner/Desktop/ORION/db/orion-core.sqlite ORION_CORE_TIMEZONE=America/New_York npm run dev
+ORION_CORE_DB_PATH=/Users/corystoner/src/ORION/db/orion-core.sqlite ORION_CORE_TIMEZONE=America/New_York npm run dev
 ```
 
 ## Telegram Bot + Mini App Setup
@@ -55,7 +55,7 @@ For local testing with Telegram, expose localhost via HTTPS tunnel (Cloudflare T
 ### 3) Configure and run ORION Core bot
 
 ```bash
-cd /Users/corystoner/Desktop/ORION/bot/orion-core-bot
+cd /Users/corystoner/src/ORION/bot/orion-core-bot
 npm install
 BOT_TOKEN=your_bot_token WEBAPP_URL=https://your-miniapp-url npm run dev
 ```
@@ -77,7 +77,7 @@ Bot commands:
 
 ### App (Vercel or Node host)
 
-- Deploy `/Users/corystoner/Desktop/ORION/app` as a Next.js app.
+- Deploy `/Users/corystoner/src/ORION/app` as a Next.js app.
 - Ensure runtime supports native Node modules (`better-sqlite3`).
 - For persistent SQLite in production, attach persistent storage (or move to managed DB later).
 
@@ -105,8 +105,8 @@ If app hosting cannot execute `openclaw` directly (for example Fly/Vercel), use 
 3. Install/start LaunchAgent worker on your Mac:
 
 ```bash
-cd /Users/corystoner/Desktop/ORION
-./scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/Desktop/ORION
+cd /Users/corystoner/src/ORION
+./scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/src/ORION
 ```
 
 4. Optional fallback delivery target (if Telegram WebApp user id is unavailable):
@@ -117,7 +117,7 @@ With relay enabled, action status appears in `Directives -> Live Actions` as `Qu
 
 ### Bot (any Node host)
 
-- Deploy `/Users/corystoner/Desktop/ORION/bot/orion-core-bot`
+- Deploy `/Users/corystoner/src/ORION/bot/orion-core-bot`
 - Set env vars:
   - `BOT_TOKEN`
   - `WEBAPP_URL`

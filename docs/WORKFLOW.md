@@ -30,11 +30,17 @@ This document outlines the recommended workflow for developing and maintaining t
    - For model provider setup (where to get keys + how to wire them into OpenClaw), see `docs/LLM_ACCESS.md`.
    - See `docs/OPENCLAW_CONFIG_MIGRATION.md` for mapping details.
    - For single-bot delegation behavior, follow `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`.
+   - For admin-copilot routing and POLARIS packet shapes, follow `docs/POLARIS_ADMIN_WORKFLOWS.md`.
    - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.
    - For Discord setup and ongoing practice/evaluation, follow `docs/DISCORD_SETUP.md` and `docs/DISCORD_TRAINING_LOOP.md`.
-   - Optional Mini App dashboard:
+   - Optional Mini App dashboard (experimental only):
      - Set `ORION_MINIAPP_URL` (deployed HTTPS URL). ORION exposes `/miniapp`.
      - See `apps/telegram-miniapp-dashboard/README.md` for deployment + security notes.
+   - Assistant commands:
+     - `/today`
+     - `/capture`
+     - `/followups`
+     - `/review`
    - For best gateway-service reliability, store model/provider auth using `openclaw models auth paste-token` (LaunchAgent services may not inherit your shell env vars).
    - For email, follow `docs/EMAIL_POLICY.md` (ORION-only inbox; threat preflight; draft-first outbound).
    - For structured administrative intelligence (reports, comparisons, triage, dashboards), follow `docs/ADMIN_INTELLIGENCE_PLAYBOOK.md`.
@@ -73,6 +79,8 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make task-loop` | Reconcile Task Packet lifecycle with ticket lanes and refresh `tasks/NOTES/*`. |
 | `make task-loop-heartbeat` | Heartbeat-grade run; exits non-zero if stale pending packets exist. |
 | `make task-loop-weekly` | Weekly hygiene reconcile with a longer stale threshold (default 72h). |
+| `make assistant-agenda-refresh` | Refresh the generated assistant agenda artifact. |
+| `make assistant-skill-refresh` | Print the monthly assistant skill-refresh commands. |
 | `make orion-policy-check` | Run ORION runtime policy gate regression tests. |
 | `make policy-scorecard` | Build policy gate scorecard and staged promotion recommendations. |
 | `make canary-stage` | Run one-shot staged canary harness with verdict artifact. |
@@ -212,6 +220,8 @@ The memory stack organizes notes and session data:
 
 - **Working memory** (`memory/WORKING.md`): active task tracking
 - **Long-term memory** (`MEMORY.md`): persistent notes and guardrails
+- **Assistant profile** (`memory/ASSISTANT_PROFILE.md`): curated routines, lists, calendars, obligations, and preferences
+- **Assistant agenda** (`tasks/NOTES/assistant-agenda.md`): generated local status artifact for `/today` and `/review`
 
 On session start, the system should load `memory/WORKING.md` as working memory.
 

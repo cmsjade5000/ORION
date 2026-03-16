@@ -21,7 +21,7 @@ mkdir -p "${launch_agents_dir}"
 if [[ ! -x "${resurrect_script}" ]]; then
   echo "Resurrection script not found or not executable: ${resurrect_script}" >&2
   echo "Run this installer with the ORION repo path, e.g.:" >&2
-  echo "  scripts/install_orion_resurrector_launchagent.sh /Users/corystoner/Desktop/ORION" >&2
+  echo "  scripts/install_orion_resurrector_launchagent.sh /Users/corystoner/src/ORION" >&2
   exit 1
 fi
 

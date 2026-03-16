@@ -174,7 +174,7 @@ python3 scripts/miniapp_command_relay.py --once
 Persistent macOS service (LaunchAgent):
 
 ```bash
-./scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/Desktop/ORION
+./scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/src/ORION
 ```
 
 ---
@@ -194,6 +194,75 @@ Optional URL override:
 
 ```bash
 ./scripts/telegram_open_miniapp.sh https://<miniapp-host>
+```
+
+---
+
+## assistant_status.py
+
+### Purpose
+Build the generated assistant agenda/status views used by `/today`, `/followups`, and `/review`.
+
+### Usage
+
+```bash
+python3 scripts/assistant_status.py --cmd today --json
+python3 scripts/assistant_status.py --cmd refresh --json
+```
+
+---
+
+## assistant_capture.py
+
+### Purpose
+Create a quick intake item and queue a POLARIS packet for bounded admin follow-through.
+
+### Usage
+
+```bash
+python3 scripts/assistant_capture.py --text "Follow up with the contractor next Tuesday." --json
+```
+
+---
+
+## assistant_memory.py
+
+### Purpose
+Persist and recall small local assistant-memory items. This complements OpenClaw memory hooks; it does not replace them.
+
+### Usage
+
+```bash
+python3 scripts/assistant_memory.py remember --text "Cory prefers bounded proactive follow-through."
+python3 scripts/assistant_memory.py recall --query "bounded proactive" --json
+```
+
+---
+
+## install_orion_assistant_crons.sh
+
+### Purpose
+Print or install the lightweight assistant crons for agenda refresh, inbox notifications, and stale-work reconciliation.
+
+### Usage
+
+```bash
+./scripts/install_orion_assistant_crons.sh
+./scripts/install_orion_assistant_crons.sh --apply
+```
+
+---
+
+## assistant_skill_refresh.sh
+
+### Purpose
+Print or run the monthly assistant skill-refresh commands (ClawHub plus local discovery scan).
+
+### Usage
+
+```bash
+./scripts/assistant_skill_refresh.sh
+./scripts/assistant_skill_refresh.sh --apply
 ```
 
 ---

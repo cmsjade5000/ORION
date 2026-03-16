@@ -18,10 +18,14 @@ Rules:
   - Current objectives, active projects, constraints, key decisions, known issues.
 - `memory/WORKING.md`
   - Current goal, blockers, "what is happening right now".
+- `memory/ASSISTANT_PROFILE.md`
+  - Curated admin-copilot profile: routines, lists, calendars, obligations, preferences.
 - `tasks/QUEUE.md`
   - Active queue ORION can triage.
 - `tasks/INBOX/<AGENT>.md`
   - ORION assigns specialist work as Task Packets.
+- `tasks/NOTES/assistant-agenda.md`
+  - Generated assistant status artifact for `/today` and `/review`.
 
 ## What Must Never Go In Git
 

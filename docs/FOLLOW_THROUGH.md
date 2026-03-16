@@ -4,6 +4,8 @@ Problem: ORION can delegate multi-step work to specialists, but results may land
 
 Goal: when a delegated packet completes, Cory gets a short Telegram or Discord update automatically.
 
+For the admin-copilot posture, this is required infrastructure rather than optional polish.
+
 ## Mechanism (Single-Bot Mode)
 
 1. ORION creates a Task Packet in `tasks/INBOX/<AGENT>.md` and includes:
@@ -52,7 +54,7 @@ Guidelines:
 - Do not emit high-frequency progress pings between milestones.
 
 Weekly routing audit cadence:
-- ORION runs a weekly routing audit from `/Users/corystoner/Desktop/ORION`.
+- ORION runs a weekly routing audit from `/Users/corystoner/src/ORION`.
 - Audit/report format is defined in `tasks/INBOX/POLARIS.md` and policy ownership in `docs/AGENT_OWNERSHIP_MATRIX.md`.
 
 ## Recommended Packet Result Format
@@ -70,7 +72,13 @@ Keep it short; avoid tool logs and secrets.
 
 ## Cron (Recommended)
 
-Add a lightweight cron that runs every 2 minutes:
+Add the assistant follow-through crons after Telegram inbound is verified:
+
+```bash
+./scripts/install_orion_assistant_crons.sh
+```
+
+Equivalent manual commands:
 
 ```bash
 openclaw cron add \
@@ -78,27 +86,30 @@ openclaw cron add \
   --description "Notify Cory when Notify: telegram inbox packets get Result blocks" \
   --cron "*/2 * * * *" \
   --tz "America/New_York" \
+  --no-deliver \
   --agent main \
   --session isolated \
-  --message "Run python3 scripts/notify_inbox_results.py --require-notify-telegram. Respond NO_REPLY."
+  --message "Use system.run to execute exactly: python3 scripts/notify_inbox_results.py --require-notify-telegram. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 
 openclaw cron add \
   --name "task-loop-heartbeat" \
   --description "Reconcile packet/ticket lifecycle and fail loud on stale pending packets" \
   --cron "*/5 * * * *" \
   --tz "America/New_York" \
+  --no-deliver \
   --agent main \
   --session isolated \
-  --message "Run python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24. Respond NO_REPLY."
+  --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 
 openclaw cron add \
   --name "task-loop-weekly-reconcile" \
   --description "Weekly reconcile sweep for inbox/results/tickets notes" \
   --cron "15 9 * * 1" \
   --tz "America/New_York" \
+  --no-deliver \
   --agent main \
   --session isolated \
-  --message "Run python3 scripts/task_execution_loop.py --apply --stale-hours 72. Respond NO_REPLY."
+  --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --stale-hours 72. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 ```
 
 Discord variant (set a default target first):
@@ -110,9 +121,10 @@ openclaw cron add \
   --description "Notify Cory on Discord when Notify: discord inbox packets get Result blocks" \
   --cron "*/2 * * * *" \
   --tz "America/New_York" \
+  --no-deliver \
   --agent main \
   --session isolated \
-  --message "Run python3 scripts/notify_inbox_results.py --require-notify-discord. Respond NO_REPLY."
+  --message "Use system.run to execute exactly: python3 scripts/notify_inbox_results.py --require-notify-discord. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 ```
 
 ## Dry-Run / Testing

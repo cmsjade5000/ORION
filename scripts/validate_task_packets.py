@@ -231,6 +231,9 @@ def validate_inbox_file(path: str) -> list[str]:
         if expected_owner == "POLARIS":
             opened = fields.get("Opened", "").strip()
             due = fields.get("Due", "").strip()
+            execution_mode = fields.get("Execution Mode", "").strip()
+            tool_scope = fields.get("Tool Scope", "").strip()
+            notify = fields.get("Notify", "").strip()
             if not opened:
                 errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Opened:'")
             elif not _is_yyyy_mm_dd(opened):
@@ -239,6 +242,12 @@ def validate_inbox_file(path: str) -> list[str]:
                 errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Due:'")
             elif not _is_yyyy_mm_dd(due):
                 errors.append(f"{path}:{pkt.start_line}: packet {n}: 'Due:' must be YYYY-MM-DD (got {due!r})")
+            if not execution_mode:
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Execution Mode:'")
+            if not tool_scope:
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Tool Scope:'")
+            if not notify:
+                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Notify:'")
 
         # Emergency bypass packets must be incident-linked for auditability.
         if emergency == "ATLAS_UNAVAILABLE" and not incident:

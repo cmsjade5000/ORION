@@ -142,6 +142,19 @@ Inbox files are append-only queues of Task Packets.
   - POLARIS inbox: `Requester: ORION`.
   - ATLAS-directed sub-agents (`NODE`, `PULSE`, `STRATUS`): `Requester: ATLAS` (or `Requester: ORION` only with `Emergency: ATLAS_UNAVAILABLE`).
 
+### POLARIS Admin Packets
+
+For admin-copilot workflows, POLARIS packets should also include:
+- `Notify: telegram`
+- `Opened: YYYY-MM-DD`
+- `Due: YYYY-MM-DD`
+- `Execution Mode: direct|delegate`
+- `Tool Scope: read-only|write`
+
+Default posture:
+- prepare/draft first
+- no external side effects without explicit approval relayed by ORION
+
 ## Kalshi Risk-Gated Change Packets
 
 For Kalshi policy/risk/parameter changes:

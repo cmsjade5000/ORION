@@ -11,7 +11,7 @@ Use this skill when decisions, tradeoffs, prioritization, or “should I do/buy 
 
 ## Source Of Truth
 
-- `/Users/corystoner/Desktop/ORION/docs/DECISION_KERNEL.md`
+- `/Users/corystoner/src/ORION/docs/DECISION_KERNEL.md`
 
 ## Output Shape (Recommended)
 
@@ -30,4 +30,3 @@ If you have structured numbers, you can use:
 ```bash
 python3 scripts/sensitivity_matrix.py --input decision.json
 ```
-

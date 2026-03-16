@@ -1,1 +1,3 @@
-# Intentionally empty: allows `from scripts.<module> import ...` for repo-local helpers.
+"""
+Repo-local Python scripts package.
+"""

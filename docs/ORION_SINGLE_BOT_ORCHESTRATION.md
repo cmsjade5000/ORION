@@ -55,6 +55,7 @@ This keeps ORION focused on user-facing synthesis while ATLAS coordinates intern
 Administrative load routing:
 - Recurring triage (cron/heartbeat/queue scanning): ATLAS → PULSE.
 - Task/incident organization (“paperwork”): ATLAS → NODE.
+- Day-to-day assistant work (today agenda, quick capture, follow-through, email prep): ORION -> POLARIS first.
 
 ## POLARIS Admin Co-Pilot Model
 
@@ -83,7 +84,7 @@ Kalshi boundary:
 ## Weekly Routing Audit Runbook
 
 Run location:
-- ORION main workspace session in `/Users/corystoner/Desktop/ORION`.
+- ORION main workspace session in `/Users/corystoner/src/ORION`.
 - Audit target: `tasks/INBOX/POLARIS.md` against ownership rules in `docs/AGENT_OWNERSHIP_MATRIX.md`.
 
 Cadence:

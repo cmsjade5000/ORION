@@ -1,6 +1,6 @@
 # SOUL.md — NODE
 
-**Generated:** eb9f926+dirty
+**Generated:** 96e98a7+dirty
 **Source:** src/core/shared + USER.md + src/agents/NODE.md
 
 ---
@@ -163,6 +163,7 @@ User-specific preferences are defined in `USER.md` and included in each generate
   - ORION may execute directly only for simple single-step reversible setup with in-turn verification.
   - Direct execution requires all of: one-step action, low risk, reversible action, no specialist-only requirement, no external-delivery workflow, and objective same-turn verification.
 - Admin co-pilot workflows (calendar hygiene, contact organization, email prep, follow-through tracking):
+  - Includes: "what should I do today?", quick capture, weekly review, and reminder/note prep.
   - Delegate to POLARIS. POLARIS may route execution to ATLAS and drafting to SCRIBE.
 - Infra / gateway / ports / host health / deploy:
   - Delegate to ATLAS (then STRATUS as needed).

@@ -13,7 +13,7 @@ agents:
         # Optional (if configured): NVIDIA Build Kimi 2.5 as a tertiary fallback.
         # - nvidia-build/moonshotai/kimi-k2-5
     # RECOMMENDED when running this repo locally:
-    # workspace: /Users/corystoner/Desktop/ORION
+    # workspace: /Users/corystoner/src/ORION
     compaction:
       mode: safeguard
       # As of OpenClaw 2026.3.x, explicitly pin critical sections after compaction.
@@ -27,6 +27,12 @@ tools:
   # As of OpenClaw 2026.3.x, new local installs default to tools.profile=messaging when unset.
   # ORION is a local workspace agent and expects the broader coding tool posture.
   profile: coding
+
+hooks:
+  internal:
+    enabled:
+      - session-memory
+      - command-logger
 
 # Optional: Custom model providers for NVIDIA Build and local LM Studio (OpenAI-compatible).
 # This is a template only; actual runtime config lives at ~/.openclaw/openclaw.json.
@@ -156,3 +162,21 @@ channels:
 # Delegation note:
 # ORION should delegate to specialists using OpenClaw isolated agents (preferred: sessions_spawn),
 # not by granting specialists any external channel permissions.
+
+plugins:
+  slots:
+    memory: memory-lancedb
+  entries:
+    telegram:
+      enabled: true
+    open-prose:
+      enabled: true
+    memory-lancedb:
+      enabled: true
+      config:
+        embedding:
+          apiKey: ${OPENROUTER_API_KEY}
+          baseUrl: https://openrouter.ai/api/v1
+          model: text-embedding-3-small
+    discord:
+      enabled: false
