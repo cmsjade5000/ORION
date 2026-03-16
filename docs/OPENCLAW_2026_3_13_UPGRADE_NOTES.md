@@ -74,6 +74,7 @@ To align ORION with the newer runtime:
 1. Keep using isolated cron lanes for assistant automation now that the upstream deadlock fix is in place.
 2. Add `openclaw agents bindings --json` and `openclaw plugins list --json` to post-change verification whenever routing or channel config changes.
 3. Evaluate `sessions_yield` for long-running ATLAS/POLARIS workflows where ORION should end the current turn quickly and let work continue in the next turn.
+   - Good candidates: overnight review, long director-style ATLAS execution, and bounded admin follow-through that already has a user-facing acknowledgement.
 4. Keep workspace-path normalization strict. The upstream cross-agent workspace fix is most useful when ORION's workspace path is unambiguous.
 5. Treat gateway health as `healthy` vs `degraded`, not just `up` vs `down`, when wiring future watchdogs or recovery scripts.
 

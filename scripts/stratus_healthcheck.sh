@@ -120,18 +120,50 @@ elif [[ ! -x "$OPENCLAW" ]]; then
 fi
 
 tmp="${TMPDIR:-/tmp}/stratus_health.$$.$RANDOM.out"
-trap 'rm -f "$tmp" 2>/dev/null || true' EXIT
+status_json="${TMPDIR:-/tmp}/stratus_status.$$.$RANDOM.json"
+trap 'rm -f "$tmp" "$status_json" 2>/dev/null || true' EXIT
 
 health="FAIL"
 if "$OPENCLAW" health >"$tmp" 2>&1; then
   health="OK"
 fi
 
-gateway_status="unknown"
-if "$OPENCLAW" gateway status >/dev/null 2>&1; then
-  gateway_status="OK"
+gateway_service="UNKNOWN"
+gateway_rpc="UNKNOWN"
+gateway_config_audit="UNKNOWN"
+gateway_overall="UNKNOWN"
+
+if "$OPENCLAW" gateway status --json >"$status_json" 2>/dev/null; then
+  parsed="$(
+    python3 - "$status_json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, "r", encoding="utf-8"))
+service_loaded = bool(((data.get("service") or {}).get("loaded")))
+runtime_status = str((((data.get("service") or {}).get("runtime") or {}).get("status") or "")).strip().lower()
+rpc_ok = (data.get("rpc") or {}).get("ok")
+config_ok = ((data.get("service") or {}).get("configAudit") or {}).get("ok")
+service = "OK" if service_loaded and runtime_status == "running" else "FAIL"
+rpc = "OK" if rpc_ok is True else ("DEGRADED" if rpc_ok is False else "UNKNOWN")
+cfg = "OK" if config_ok is True else ("DEGRADED" if config_ok is False else "UNKNOWN")
+overall = "OK" if service == "OK" and rpc == "OK" and cfg == "OK" else ("FAIL" if service == "FAIL" else "DEGRADED")
+print("|".join([service, rpc, cfg, overall]))
+PY
+  )"
+  gateway_service="${parsed%%|*}"
+  rest="${parsed#*|}"
+  gateway_rpc="${rest%%|*}"
+  rest="${rest#*|}"
+  gateway_config_audit="${rest%%|*}"
+  gateway_overall="${rest##*|}"
 else
-  gateway_status="FAIL"
+  if "$OPENCLAW" gateway status >/dev/null 2>&1; then
+    gateway_service="OK"
+    gateway_overall="OK"
+  else
+    gateway_service="FAIL"
+    gateway_overall="FAIL"
+  fi
 fi
 
 app_readyz="SKIP"
@@ -155,7 +187,10 @@ fi
 
 printf 'CHECKS:\n'
 printf -- '- gateway health: %s\n' "$health"
-printf -- '- gateway service: %s\n' "$gateway_status"
+printf -- '- gateway service: %s\n' "$gateway_service"
+printf -- '- gateway rpc: %s\n' "$gateway_rpc"
+printf -- '- gateway config audit: %s\n' "$gateway_config_audit"
+printf -- '- gateway overall: %s\n' "$gateway_overall"
 if [[ -n "$app_server_base" ]]; then
   printf -- '- codex app-server readyz: %s\n' "$app_readyz"
   printf -- '- codex app-server healthz: %s\n' "$app_healthz"
@@ -186,7 +221,7 @@ if [[ "$skip_host" -eq 0 ]]; then
   fi
 fi
 
-if [[ "$health" == "OK" && "$app_probe_failed" -eq 0 ]]; then
+if [[ "$health" == "OK" && "$gateway_overall" == "OK" && "$app_probe_failed" -eq 0 ]]; then
   printf 'NEXT:\n'
   printf -- '- No action needed.\n'
   exit 0
@@ -196,6 +231,8 @@ printf -- '- health output: %s\n' "$(sed -n '1p' "$tmp" 2>/dev/null | tr -d '\r'
 printf 'NEXT:\n'
 if [[ "$app_probe_failed" -eq 1 ]]; then
   printf -- '- Check the Codex app-server listener and verify /readyz + /healthz on %s.\n' "$app_server_base"
+elif [[ "$gateway_overall" == "DEGRADED" ]]; then
+  printf -- '- Gateway is up but degraded; run openclaw gateway status --json, openclaw agents bindings --json, and openclaw plugins list --json.\n'
 else
   printf -- '- Run scripts/diagnose_gateway.sh, then consider: openclaw gateway restart\n'
 fi

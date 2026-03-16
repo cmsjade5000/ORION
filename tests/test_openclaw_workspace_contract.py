@@ -19,6 +19,9 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.assistant_workflows = (cls.repo / "docs" / "POLARIS_ADMIN_WORKFLOWS.md").read_text(
             encoding="utf-8"
         )
+        cls.error_review = (cls.repo / "docs" / "ORION_ERROR_REVIEW.md").read_text(
+            encoding="utf-8"
+        )
         cls.upgrade_notes = (cls.repo / "docs" / "OPENCLAW_2026_3_13_UPGRADE_NOTES.md").read_text(
             encoding="utf-8"
         )
@@ -125,6 +128,8 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("/capture", self.readme)
         self.assertIn("POLARIS", self.assistant_workflows)
         self.assertIn("assistant-agenda.md", self.workflow)
+        self.assertIn("orion_error_db.py", self.error_review)
+        self.assertIn("error-review.md", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
         self.assertIn("OpenClaw 2026.3.13", self.readme)
@@ -137,6 +142,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
             self.readme,
             self.workflow,
             self.migration,
+            self.error_review,
             self.upgrade_notes,
             self.single_bot,
             self.follow_through,

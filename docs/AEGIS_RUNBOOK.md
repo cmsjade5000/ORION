@@ -154,6 +154,7 @@ Availability monitor:
 - `AEGIS: ORION was unhealthy; restart succeeded.`
 - `AEGIS: ORION is unhealthy after restart attempt (INC-AEGIS-...).`
 - `AEGIS: ORION recovered.`
+- `AEGIS: ORION is reachable but degraded.`
 
 Security sentinel:
 - `AEGIS: SSH auth anomalies detected (... in ~5m).`
@@ -171,6 +172,22 @@ Throttling:
 - Alerts are throttled to prevent spam loops.
 - Typical windows are 10–30 minutes per alert type.
 - The Tailscale peer-change alert is intentionally more conservative (currently 60 minutes) to avoid noise from normal device flapping.
+
+## Health Classification
+
+For ORION recovery, treat health as a three-state model:
+
+- `healthy`: gateway service, RPC probe, and config audit are all clean
+- `degraded`: gateway is reachable, but RPC/config audit/probe surfaces are not fully clean
+- `down`: gateway service or probe path is failing
+
+For local triage on the Mac host, use:
+
+```bash
+scripts/stratus_healthcheck.sh
+```
+
+This keeps AEGIS and local recovery language aligned with the stricter `2026.3.13` gateway semantics.
 
 ## Deploy / Update AEGIS Scripts (Hetzner)
 

@@ -33,6 +33,7 @@ Related docs:
    - `openclaw gateway start`
 5. Confirm health:
    - `openclaw health`
+   - `scripts/stratus_healthcheck.sh`
 6. If health still fails:
    - `openclaw doctor --repair`
    - `openclaw channels status --probe`
@@ -57,6 +58,13 @@ AEGIS can only revive ORION once the Mac mini is reachable over Tailscale SSH an
    - Optional manual clear is documented in `docs/AEGIS_RUNBOOK.md`.
 4. If ORION is up but gateway is not:
    - Run locally: `scripts/resurrect_orion_mac.sh`
+5. If ORION is reachable but degraded:
+   - Run locally: `scripts/stratus_healthcheck.sh`
+   - Then verify:
+     - `openclaw gateway status --json`
+     - `openclaw agents bindings --json`
+     - `openclaw plugins list --json`
+     - `openclaw hooks list`
 
 ## Manual Recovery (Local-First)
 
@@ -73,8 +81,12 @@ When ORION is down and you have local access to the Mac mini:
    - `openclaw doctor --repair`
    - `openclaw security audit --deep`
    - `openclaw channels status --probe`
+   - `scripts/stratus_healthcheck.sh`
 4. Validate bindings and model routing:
    - `openclaw agents list --bindings`
+   - `openclaw agents bindings --json`
+   - `openclaw plugins list --json`
+   - `openclaw hooks list`
    - `openclaw models status`
 
 Shortcut:
@@ -95,6 +107,9 @@ This is intentionally login-scoped (LaunchAgent). It is not a boot-level daemon.
 
 1. Append an `INCIDENT v1` entry to `tasks/INCIDENTS.md` if you restarted anything or hit a safety bypass.
 2. Create a follow-up Task Packet for prevention if the issue can repeat (bad config, provider outage, auth drift, disk pressure).
+3. Review nightly ORION error findings if present:
+   - `python3 scripts/orion_error_db.py review --window-hours 24 --json`
+   - `tasks/NOTES/error-review.md`
 
 ## March 2026 Reliability Hardening Checks
 

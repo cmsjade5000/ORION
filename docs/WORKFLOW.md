@@ -41,6 +41,8 @@ This document outlines the recommended workflow for developing and maintaining t
      - `/capture`
      - `/followups`
      - `/review`
+   - Internal reliability review:
+     - `python3 scripts/orion_error_db.py review --window-hours 24 --json`
    - For best gateway-service reliability, store model/provider auth using `openclaw models auth paste-token` (LaunchAgent services may not inherit your shell env vars).
    - For email, follow `docs/EMAIL_POLICY.md` (ORION-only inbox; threat preflight; draft-first outbound).
    - For structured administrative intelligence (reports, comparisons, triage, dashboards), follow `docs/ADMIN_INTELLIGENCE_PLAYBOOK.md`.
@@ -81,6 +83,7 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make task-loop-weekly` | Weekly hygiene reconcile with a longer stale threshold (default 72h). |
 | `make assistant-agenda-refresh` | Refresh the generated assistant agenda artifact. |
 | `make assistant-skill-refresh` | Print the monthly assistant skill-refresh commands. |
+| `python3 scripts/orion_error_db.py review --window-hours 24 --json` | Review recurring ORION errors and refresh the nightly report. |
 | `make orion-policy-check` | Run ORION runtime policy gate regression tests. |
 | `make policy-scorecard` | Build policy gate scorecard and staged promotion recommendations. |
 | `make canary-stage` | Run one-shot staged canary harness with verdict artifact. |
@@ -222,6 +225,8 @@ The memory stack organizes notes and session data:
 - **Long-term memory** (`MEMORY.md`): persistent notes and guardrails
 - **Assistant profile** (`memory/ASSISTANT_PROFILE.md`): curated routines, lists, calendars, obligations, and preferences
 - **Assistant agenda** (`tasks/NOTES/assistant-agenda.md`): generated local status artifact for `/today` and `/review`
+- **Error review DB** (`db/orion-ops.sqlite`): repo-local machine store for ORION operational errors and recurring-failure review
+- **Error review report** (`tasks/NOTES/error-review.md`): nightly recurring-error summary and safe-fix output
 
 On session start, the system should load `memory/WORKING.md` as working memory.
 

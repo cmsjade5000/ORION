@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh error-review party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= skills/llm-redteam-gate/examples/promptfooconfig.yaml
 THINKING ?= high
@@ -130,6 +130,10 @@ assistant-skill-refresh:
 ## Refresh the generated assistant agenda artifact
 assistant-agenda-refresh:
 	@python3 scripts/assistant_status.py --cmd refresh --json
+
+## Review recurring ORION errors and refresh the nightly report
+error-review:
+	@python3 scripts/orion_error_db.py --repo-root . review --window-hours "$${WINDOW_HOURS:-24}" --json
 
 ## One-shot coding-party batch (eval + reliability + canary health)
 party-batch-once:

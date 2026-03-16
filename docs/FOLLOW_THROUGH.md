@@ -75,14 +75,19 @@ Keep it short; avoid tool logs and secrets.
 Add the assistant follow-through crons after Telegram inbound is verified:
 
 ```bash
-./scripts/install_orion_assistant_crons.sh
+bash scripts/install_orion_assistant_crons.sh
 ```
+
+Nightly reliability review:
+
+- `python3 scripts/orion_error_db.py review --window-hours 24 --apply-safe-fixes --escalate-incidents --json`
+- Report artifact: `tasks/NOTES/error-review.md`
 
 Equivalent manual commands:
 
 ```bash
 openclaw cron add \
-  --name "inbox-result-notify" \
+  --name "assistant-inbox-notify" \
   --description "Notify Cory when Notify: telegram inbox packets get Result blocks" \
   --cron "*/2 * * * *" \
   --tz "America/New_York" \
@@ -110,6 +115,16 @@ openclaw cron add \
   --agent main \
   --session isolated \
   --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --stale-hours 72. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+
+openclaw cron add \
+  --name "orion-error-review" \
+  --description "Review recurring ORION errors and apply safe remediations" \
+  --cron "15 2 * * *" \
+  --tz "America/New_York" \
+  --no-deliver \
+  --agent main \
+  --session isolated \
+  --message "Use system.run to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 ```
 
 Discord variant (set a default target first):

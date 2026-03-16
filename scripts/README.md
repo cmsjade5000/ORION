@@ -239,10 +239,26 @@ python3 scripts/assistant_memory.py recall --query "bounded proactive" --json
 
 ---
 
+## orion_error_db.py
+
+### Purpose
+Track recurring ORION operational errors in a repo-local sqlite DB and run a nightly review that can apply a small allowlist of safe remediations.
+
+### Usage
+
+```bash
+python3 scripts/orion_error_db.py stats --json
+python3 scripts/orion_error_db.py review --window-hours 24 --json
+python3 scripts/orion_error_db.py review --window-hours 24 --apply-safe-fixes --escalate-incidents --json
+```
+
+---
+
 ## install_orion_assistant_crons.sh
 
 ### Purpose
 Print or install the lightweight assistant crons for agenda refresh, inbox notifications, and stale-work reconciliation.
+It also installs the nightly ORION error-review cron.
 
 ### Usage
 

@@ -15,6 +15,44 @@ if ! command -v openclaw >/dev/null 2>&1; then
   exit 2
 fi
 
+legacy_names=(
+  "assistant-agenda-refresh"
+  "assistant-inbox-notify"
+  "inbox-result-notify"
+  "assistant-task-loop"
+  "orion-error-review"
+)
+
+remove_matching_jobs() {
+  local jobs_json ids
+  jobs_json="$(openclaw cron list --json)"
+  ids="$(
+    python3 - "$jobs_json" "${legacy_names[@]}" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1]
+start = raw.find("{")
+if start < 0:
+    raise SystemExit(0)
+payload = json.loads(raw[start:])
+names = set(sys.argv[2:])
+for job in payload.get("jobs", []):
+    if job.get("name") in names and job.get("id"):
+        print(job["id"])
+PY
+  )"
+
+  while IFS= read -r job_id; do
+    [[ -z "${job_id}" ]] && continue
+    if [[ "$APPLY" -eq 1 ]]; then
+      openclaw cron rm --json "${job_id}" >/dev/null
+    else
+      printf 'openclaw cron rm --json %s\n\n' "${job_id}"
+    fi
+  done <<< "${ids}"
+}
+
 read -r -d '' CMD1 <<'EOF' || true
 openclaw cron add \
   --name "assistant-agenda-refresh" \
@@ -51,7 +89,21 @@ openclaw cron add \
   --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 EOF
 
-for cmd in "$CMD1" "$CMD2" "$CMD3"; do
+read -r -d '' CMD4 <<'EOF' || true
+openclaw cron add \
+  --name "orion-error-review" \
+  --description "Review recurring ORION errors and apply safe remediations" \
+  --cron "15 2 * * *" \
+  --tz "America/New_York" \
+  --no-deliver \
+  --agent main \
+  --session isolated \
+  --message "Use system.run to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+EOF
+
+remove_matching_jobs
+
+for cmd in "$CMD1" "$CMD2" "$CMD3" "$CMD4"; do
   if [[ "$APPLY" -eq 1 ]]; then
     eval "$cmd"
   else

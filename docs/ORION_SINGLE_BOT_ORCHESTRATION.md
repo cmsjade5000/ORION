@@ -16,6 +16,7 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 2. ORION decides direct answer vs specialist delegation.
 3. If delegation is needed:
    - Preferred: delegate via `sessions_spawn` using a Task Packet.
+   - For long specialist work where ORION should end the current turn immediately after handoff, prefer `sessions_yield` when the runtime path supports it.
    - Optional: swarm planning (`swarm-planner`) and parallel execution (`parallel-task`) when you explicitly want it.
    - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run the specialist turn manually with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
 4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
@@ -70,6 +71,7 @@ Boundary rules:
 - POLARIS is internal-only and never messages Cory directly.
 - ORION remains the only external messenger.
 - Side effects stay confirmation-gated by default.
+- Use `sessions_yield` for long admin workflows only when ORION has already delivered the user-facing handoff/progress state and the remaining work is safe to continue asynchronously.
 
 Kalshi boundary:
 - Routine operations/diagnostics: ORION -> ATLAS -> STRATUS/PULSE.

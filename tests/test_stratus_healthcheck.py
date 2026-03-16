@@ -29,6 +29,12 @@ case "$cmd" in
   gateway)
     sub="${{1-}}"
     if [[ "$sub" == "status" ]]; then
+      if [[ "${{2-}}" == "--json" ]]; then
+        cat <<'JSON'
+{{"service":{{"loaded":true,"runtime":{{"status":"running"}},"configAudit":{{"ok":true}}}},"rpc":{{"ok":true}}}}
+JSON
+        exit 0
+      fi
       echo "simulated gateway status"
       exit 0
     fi
@@ -79,6 +85,7 @@ exit 2
             td.cleanup()
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("gateway health: OK", r.stdout)
+            self.assertIn("gateway overall: OK", r.stdout)
 
     def test_fail_exit_1(self):
         with tempfile.TemporaryDirectory() as d:
@@ -99,6 +106,53 @@ exit 2
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn("gateway health: FAIL", r.stdout)
             self.assertIn("NEXT:", r.stdout)
+
+    def test_gateway_degraded_when_rpc_or_config_audit_is_not_clean(self):
+        with tempfile.TemporaryDirectory() as d:
+            td = tempfile.TemporaryDirectory(dir=d)
+            p = Path(td.name) / "openclaw"
+            p.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1-}"
+shift || true
+case "$cmd" in
+  health)
+    exit 0
+    ;;
+  gateway)
+    sub="${1-}"
+    if [[ "$sub" == "status" && "${2-}" == "--json" ]]; then
+      cat <<'JSON'
+{"service":{"loaded":true,"runtime":{"status":"running"},"configAudit":{"ok":false}},"rpc":{"ok":true}}
+JSON
+      exit 0
+    fi
+    if [[ "$sub" == "status" ]]; then
+      exit 0
+    fi
+    ;;
+esac
+exit 2
+""",
+                encoding="utf-8",
+            )
+            p.chmod(p.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            env = dict(os.environ)
+            env["PATH"] = f"{td.name}:{env.get('PATH','')}"
+            env["STRATUS_SKIP_HOST"] = "1"
+            r = subprocess.run(
+                [str(self._script_path()), "--no-host"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            td.cleanup()
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("gateway config audit: DEGRADED", r.stdout)
+            self.assertIn("gateway overall: DEGRADED", r.stdout)
 
     def test_missing_openclaw_exit_2(self):
         env = dict(os.environ)

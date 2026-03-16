@@ -63,6 +63,11 @@ Deterministic assistant commands:
 Generated assistant artifacts:
 - `memory/ASSISTANT_PROFILE.md`
 - `tasks/NOTES/assistant-agenda.md`
+- `tasks/NOTES/error-review.md`
+
+Internal reliability review:
+- `python3 scripts/orion_error_db.py review --window-hours 24 --json`
+- `docs/ORION_ERROR_REVIEW.md`
 
 ## Telegram Mini App (Experimental / Archived)
 
