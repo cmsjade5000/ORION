@@ -1,0 +1,9 @@
+Weekly admin reset for ORION.
+
+Goal:
+- Review open commitments, stale delegated work, overdue reminders, and follow-ups.
+- Return keep, do, defer, and close recommendations.
+
+Constraints:
+- Local-first artifacts.
+- No external writes without approval.

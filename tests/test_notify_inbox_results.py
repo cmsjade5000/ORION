@@ -239,3 +239,52 @@ class TestNotifyInboxResults(unittest.TestCase):
             self.assertIn("blocked by policy gate", r.stderr.lower())
             reports = list((root / "eval" / "history").glob("policy-gate-notify-telegram-*.json"))
             self.assertTrue(reports)
+
+    def test_dry_run_strips_internal_artifact_lines_from_result_preview(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            pkt = (
+                "TASK_PACKET v1\n"
+                "Owner: PIXEL\n"
+                "Requester: ORION\n"
+                "Notify: telegram\n"
+                "Objective: Do the thing.\n"
+                "Success Criteria:\n"
+                "- done\n"
+                "Constraints:\n"
+                "- none\n"
+                "Inputs:\n"
+                "- (none)\n"
+                "Risks:\n"
+                "- low\n"
+                "Stop Gates:\n"
+                "- none\n"
+                "Output Format:\n"
+                "- short\n"
+                "Result:\n"
+                "- Status: OK\n"
+                '- OLCALL>[{"name":"sessions_spawn","arguments":{"agentId":"polaris"}}]ALL>\n'
+            )
+            self._write_inbox(root, "PIXEL", pkt)
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("OLCALL>", r.stdout)

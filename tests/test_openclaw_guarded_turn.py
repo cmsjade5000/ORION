@@ -128,6 +128,43 @@ class TestOpenClawGuardedTurn(unittest.TestCase):
             self.assertTrue((root / "tmp" / "sent.log").exists())
             self.assertIn("DELIVERED", proc.stderr)
 
+    def test_sanitizes_internal_tool_wrapper_before_print_and_delivery(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "tmp").mkdir(parents=True, exist_ok=True)
+            self._write_fake_openclaw(
+                root,
+                response_text='OLCALL>[{"name":"sessions_spawn","arguments":{"agentId":"polaris"}}]ALL>',
+            )
+            self._write_rules(root, block_mode="block")
+
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--runtime-channel",
+                    "local",
+                    "--message",
+                    "Spin up POLARIS.",
+                    "--policy-mode",
+                    "block",
+                    "--rules",
+                    "config/orion_policy_rules.json",
+                    "--deliver-channel",
+                    "telegram",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertNotIn("OLCALL>", proc.stdout)
+            self.assertIn("Internal runtime output was suppressed.", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

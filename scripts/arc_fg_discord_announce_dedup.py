@@ -14,6 +14,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from outbound_text_guard import sanitize_outbound_text
+except Exception:  # pragma: no cover
+    from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
+
 OPENCLAW_BIN = (
     os.environ.get("OPENCLAW_BIN")
     or shutil.which("openclaw")
@@ -119,7 +124,7 @@ def format_message(summary: str, run_at_ms: int | None) -> str:
     if run_at_ms:
         ts = datetime.fromtimestamp(run_at_ms / 1000).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
         prefix = f"{prefix} ({ts})"
-    body = summary.strip()
+    body = sanitize_outbound_text(summary.strip())
     max_len = 1800
     if len(body) > max_len:
         body = body[: max_len - 17].rstrip() + "\n\n[truncated]"

@@ -55,6 +55,8 @@ fi
 : "${ORION_HOST:=}"
 : "${ORION_SSH_USER:=}"
 : "${SSH_IDENTITY:=}"
+: "${ORION_SSH_STRICT_HOST_KEY_CHECKING:=yes}"
+: "${ORION_SSH_KNOWN_HOSTS:=/home/aegis/.ssh/known_hosts}"
 
 # Must match Mac mini forced-command allowlist (`~/.openclaw/bin/aegis-ssh-command`).
 : "${ORION_OPENCLAW_SECURITY_AUDIT_CMD:=/Users/corystoner/.npm-global/bin/openclaw security audit --deep --json}"
@@ -70,7 +72,8 @@ SSH_BASE=(
   ssh
   -o BatchMode=yes
   -o ConnectTimeout=15
-  -o StrictHostKeyChecking=accept-new
+  -o "StrictHostKeyChecking=${ORION_SSH_STRICT_HOST_KEY_CHECKING}"
+  -o "UserKnownHostsFile=${ORION_SSH_KNOWN_HOSTS}"
   -i "$SSH_IDENTITY"
   "${ORION_SSH_USER}@${ORION_HOST}"
 )

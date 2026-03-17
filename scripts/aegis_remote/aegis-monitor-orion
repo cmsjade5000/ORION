@@ -82,6 +82,8 @@ fi
 : "${ORION_HOST:=}"
 : "${ORION_SSH_USER:=corystoner}"
 : "${SSH_IDENTITY:=/home/aegis/.ssh/aegis_orion_ed25519}"
+: "${ORION_SSH_STRICT_HOST_KEY_CHECKING:=yes}"
+: "${ORION_SSH_KNOWN_HOSTS:=/home/aegis/.ssh/known_hosts}"
 : "${ORION_OPENCLAW_HEALTH_CMD:=openclaw health}"
 : "${ORION_OPENCLAW_RESTART_CMD:=openclaw gateway restart}"
 : "${SLACK_BOT_TOKEN:=}"
@@ -304,7 +306,8 @@ SSH_BASE=(
   ssh
   -o BatchMode=yes
   -o ConnectTimeout=10
-  -o StrictHostKeyChecking=accept-new
+  -o "StrictHostKeyChecking=${ORION_SSH_STRICT_HOST_KEY_CHECKING}"
+  -o "UserKnownHostsFile=${ORION_SSH_KNOWN_HOSTS}"
   -i "$SSH_IDENTITY"
   "${ORION_SSH_USER}@${ORION_HOST}"
 )

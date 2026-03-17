@@ -52,6 +52,8 @@ run_with_timeout() {
 
 AEGIS_HOST="${AEGIS_HOST:-100.75.104.54}"
 AEGIS_SSH_USER="${AEGIS_SSH_USER:-root}"
+AEGIS_SSH_STRICT_HOST_KEY_CHECKING="${AEGIS_SSH_STRICT_HOST_KEY_CHECKING:-yes}"
+AEGIS_SSH_KNOWN_HOSTS="${AEGIS_SSH_KNOWN_HOSTS:-${HOME}/.ssh/known_hosts}"
 STATE_FILE="${STATE_FILE:-${repo_root}/tmp/aegis_defense_plans.seen}"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -68,7 +70,9 @@ get_chat_id() {
   # (This is often Cory's DM chat_id.)
   local line val
   # Use run_with_timeout to prevent SSH hangs; on error/timeout, treat as no output.
-  line="$(run_with_timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
+  line="$(run_with_timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 \
+    -o "StrictHostKeyChecking=${AEGIS_SSH_STRICT_HOST_KEY_CHECKING}" \
+    -o "UserKnownHostsFile=${AEGIS_SSH_KNOWN_HOSTS}" \
     "${AEGIS_SSH_USER}@${AEGIS_HOST}" \
     "grep -E '^AEGIS_TELEGRAM_CHAT_ID=' /etc/aegis-monitor.env 2>/dev/null | tail -n 1" || true)"
   val="${line#*=}"

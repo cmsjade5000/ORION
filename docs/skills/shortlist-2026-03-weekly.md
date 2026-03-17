@@ -1,6 +1,6 @@
 # Weekly Skill Shortlist (March 2026)
 
-Last updated: 2026-03-09
+Last updated: 2026-03-16
 Cadence: Weekly refresh (keep this file rolling through March 2026).
 Policy: Any candidate that survives intake must follow staged canary in `docs/skills/canary-protocol.md`.
 
@@ -36,11 +36,11 @@ Policy: Any candidate that survives intake must follow staged canary in `docs/sk
 
 ## Automated Discovery (Generated)
 
-- Generated at (ET): `2026-03-09 11:02`
+- Generated at (ET): `2026-03-16 11:02`
 - Sources: `https://docs.openclaw.ai/sitemap.xml, https://github.com/openclaw/openclaw/releases.atom`
 - Limit: `8`
-- JSON artifact: `eval/history/skills-discovery-20260309-150224.json`
-- Markdown artifact: `eval/history/skills-discovery-20260309-150224.md`
+- JSON artifact: `eval/history/skills-discovery-20260316-150213.json`
+- Markdown artifact: `eval/history/skills-discovery-20260316-150213.md`
 
 | Source | Capability | Risk | Expected ROI | Test Plan | Trust Score | Fit Score | Intake Score | Status |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |
@@ -50,5 +50,5 @@ Policy: Any candidate that survives intake must follow staged canary in `docs/sk
 | docs: [automation/webhook](https://docs.openclaw.ai/automation/webhook) | Automation trigger orchestration | Trigger misconfiguration can create duplicate or noisy executions. | Lower polling overhead and faster event-to-action latency. | Stage one trigger in sandbox, replay sample events, compare latency and errors. | 5.0 | 4.8 | 87.2 | intake-ready |
 | docs: [prose](https://docs.openclaw.ai/prose) | Workflow quality and output structure | Higher process complexity can increase runtime cost if over-applied. | Improve output consistency and reduce rerun/edit loops. | A/B test representative tasks for quality score, revision count, and turnaround. | 5.0 | 4.4 | 86.8 | intake-ready |
 | docs: [concepts/system-prompt](https://docs.openclaw.ai/concepts/system-prompt) | Workflow quality and output structure | Higher process complexity can increase runtime cost if over-applied. | Improve output consistency and reduce rerun/edit loops. | A/B test representative tasks for quality score, revision count, and turnaround. | 5.0 | 4.0 | 85.2 | intake-ready |
-| release: [openclaw 2026.3.8](https://github.com/openclaw/openclaw/releases/tag/v2026.3.8) | Core runtime upgrade candidate | Release changes can introduce regressions without staged validation. | Adopt upstream fixes and capabilities with lower long-term drift. | Pin release in staging, run regression suite, compare reliability metrics, confirm rollback. | 5.0 | 4.4 | 82.6 | intake-ready |
-| release: [openclaw 2026.3.7](https://github.com/openclaw/openclaw/releases/tag/v2026.3.7) | Core runtime upgrade candidate | Release changes can introduce regressions without staged validation. | Adopt upstream fixes and capabilities with lower long-term drift. | Pin release in staging, run regression suite, compare reliability metrics, confirm rollback. | 5.0 | 4.4 | 82.6 | intake-ready |
+| release: [openclaw 2026.3.13](https://github.com/openclaw/openclaw/releases/tag/v2026.3.13-1) | Core runtime upgrade candidate | Release changes can introduce regressions without staged validation. | Adopt upstream fixes and capabilities with lower long-term drift. | Pin release in staging, run regression suite, compare reliability metrics, confirm rollback. | 5.0 | 4.4 | 82.6 | intake-ready |
+| release: [openclaw 2026.3.12](https://github.com/openclaw/openclaw/releases/tag/v2026.3.12) | Core runtime upgrade candidate | Release changes can introduce regressions without staged validation. | Adopt upstream fixes and capabilities with lower long-term drift. | Pin release in staging, run regression suite, compare reliability metrics, confirm rollback. | 5.0 | 4.4 | 82.6 | intake-ready |

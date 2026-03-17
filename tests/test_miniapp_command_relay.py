@@ -49,6 +49,10 @@ class TestMiniappCommandRelay(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("non-HTTPS transport", stderr.getvalue())
 
+    def test_extract_reply_text_suppresses_internal_wrapper(self):
+        raw = 'OLCALL>[{"name":"sessions_spawn","arguments":{"agentId":"polaris"}}]ALL>'
+        self.assertEqual(self.m.extract_reply_text(raw), "Internal runtime output was suppressed.")
+
 
 if __name__ == "__main__":
     unittest.main()

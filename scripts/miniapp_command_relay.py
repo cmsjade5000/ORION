@@ -26,6 +26,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+try:
+    from outbound_text_guard import sanitize_outbound_text
+except Exception:  # pragma: no cover
+    from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
+
 LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
@@ -180,8 +185,8 @@ def extract_reply_text(raw: str) -> str:
         ]
         for item in reply:
             if isinstance(item, str) and item.strip():
-                return item.strip()
-    return s
+                return sanitize_outbound_text(item.strip())
+    return sanitize_outbound_text(s)
 
 
 def run_openclaw(command: dict[str, Any], timeout_s: float) -> tuple[bool, int | None, str, str]:

@@ -61,6 +61,30 @@ Check-only (safe):
 Apply changes (requires explicit opt-in):
 - `AUTO_OK=1 scripts/gateway_maintenance_apply.sh --fix --repair --update --sessions --commit --push --restart`
 
+## Release-Aware Post-Upgrade Checks
+
+When OpenClaw is upgraded on the AEGIS host, do these extra checks before
+calling the pass complete:
+
+- Review heartbeat/default-delivery behavior on the upgraded AEGIS host and
+  verify that no new direct-delivery default conflicts with the single-bot
+  policy.
+- Run `openclaw secrets audit` on the AEGIS host and confirm there are no
+  unintended secret-materialization regressions.
+- Run `openclaw sessions cleanup --dry-run` on the AEGIS host to verify the
+  newer cleanup path is healthy before using any enforced cleanup.
+- Run `openclaw gateway call status --json` in addition to `openclaw health`
+  when validating an upgraded host. In `2026.3.12+`, pairing and operator-scope
+  regressions can show up there before they are obvious elsewhere.
+- Verify the built-in health endpoints directly:
+  - `curl -fsS http://127.0.0.1:18889/readyz`
+  - `curl -fsS http://127.0.0.1:18889/healthz`
+- Re-run `openclaw security audit --deep` and verify loopback-only findings are
+  still the only expected warnings.
+
+Reference:
+- `docs/AEGIS_OPENCLAW_RELEASE_NOTES_2026_1_30_to_2026_3_13.md`
+
 ## Session Hygiene (2026.3.7+)
 
 OpenClaw 2026.3.7 adds first-class session cleanup commands. This repo now

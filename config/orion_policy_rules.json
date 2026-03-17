@@ -113,6 +113,26 @@
       "trigger_tags_any": ["announce_prompt"],
       "exact_response": "ANNOUNCE_SKIP",
       "remediation": "For announce prompts, output only ANNOUNCE_SKIP with no extra text."
+    },
+    {
+      "id": "R7_INTERNAL_ARTIFACT_LEAK",
+      "description": "User-facing replies and automated summaries must not contain internal tool-call or thought artifacts.",
+      "severity": "critical",
+      "mode": "block",
+      "validator": "phrase_contract",
+      "applies_to": ["orion_reply", "automated_summary"],
+      "forbidden_any": [
+        "OLCALL>",
+        "\"type\":\"toolCall\"",
+        "\"type\": \"toolCall\"",
+        "\"type\":\"toolResult\"",
+        "\"type\": \"toolResult\"",
+        "\"type\":\"thinking\"",
+        "\"type\": \"thinking\"",
+        "<think>",
+        "<final>"
+      ],
+      "remediation": "Strip internal tool-call, tool-result, and thinking artifacts before any user-facing delivery."
     }
   ]
 }

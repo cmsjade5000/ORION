@@ -1,0 +1,10 @@
+Daily admin review for ORION.
+
+Goal:
+- Summarize today's calendar, reminders, delegated work, and open follow-through.
+- Return a concise next-actions list with approval gates.
+
+Constraints:
+- Prefer local artifacts first.
+- No external side effects.
+- Escalate to POLARIS for admin execution and SCRIBE for send-ready drafting when needed.

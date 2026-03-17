@@ -51,6 +51,11 @@ except Exception:  # pragma: no cover
         def miniapp_emit(*args, **kwargs):  # type: ignore[no-redef]
             return False
 
+try:
+    from outbound_text_guard import sanitize_outbound_text
+except Exception:  # pragma: no cover
+    from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
+
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
@@ -454,7 +459,7 @@ def _format_message(*, queued: list[PacketQueued], results: list[PacketResult], 
 def _sanitize_outbound(text: str) -> str:
     # Prevent accidental mass-mentions in Discord (and keep Telegram clean too).
     # We keep it simple: break the "@" token.
-    return (
+    return sanitize_outbound_text(
         text.replace("@everyone", "@ everyone")
         .replace("@here", "@ here")
     )

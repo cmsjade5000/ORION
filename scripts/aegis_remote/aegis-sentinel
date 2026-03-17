@@ -420,6 +420,7 @@ fi
 
 # 4) UFW/sshd/systemd drift (signal only)
 files=(
+  /etc/aegis-monitor.env
   /etc/ssh/sshd_config
   /etc/ssh/sshd_config.d/99-aegis-hardening.conf
   /etc/ufw/user.rules
@@ -433,6 +434,7 @@ files=(
 
 hash_file="$STATE_DIR/config_hashes.sha256"
 current_tmp="$STATE_DIR/config_hashes.current"
+drift_tmp="$STATE_DIR/config_hashes.drift"
 : >"$current_tmp"
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
@@ -449,7 +451,9 @@ else
       "config_drift" 900 \
       "$(msg_security "Security config changed on the AEGIS server." "One or more SSH/UFW/systemd config files changed." "Confirm this change was expected (update/maintenance). If not, investigate immediately.")" \
       "P1" "AEGIS_SECURITY_ALERT" "Security config drift detected on AEGIS server." "Alerted only; requires review."
-    cp "$current_tmp" "$hash_file"
+    cp "$current_tmp" "$drift_tmp"
+    chmod 0640 "$drift_tmp" 2>/dev/null || true
+    log "INFO: drift snapshot saved to $drift_tmp (baseline unchanged pending review)"
   fi
 fi
 

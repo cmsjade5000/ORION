@@ -1,0 +1,10 @@
+Trip, purchase, appointment, or commitment preparation workflow.
+
+Goal:
+- Gather local context first.
+- Retrieve external facts only when needed.
+- Produce tradeoffs, next steps, and any approval gates.
+
+Constraints:
+- Keep user-facing output concise.
+- Route costs to LEDGER and scheduling/admin work to POLARIS.

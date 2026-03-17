@@ -24,6 +24,11 @@ try:
 except Exception:  # pragma: no cover
     from scripts.orion_policy_gate import evaluate_policy, load_rule_set, render_markdown  # type: ignore
 
+try:
+    from outbound_text_guard import sanitize_outbound_text
+except Exception:  # pragma: no cover
+    from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
+
 
 def _extract_response_text(run_obj: dict[str, Any]) -> str:
     payloads = (((run_obj or {}).get("result") or {}).get("payloads") or [])
@@ -32,7 +37,7 @@ def _extract_response_text(run_obj: dict[str, Any]) -> str:
         txt = (payload or {}).get("text")
         if isinstance(txt, str) and txt.strip():
             parts.append(txt.strip())
-    return "\n\n".join(parts).strip()
+    return sanitize_outbound_text("\n\n".join(parts).strip())
 
 
 def _run_openclaw_agent(*, cmd: list[str], agent: str, channel: str, message: str, thinking: str, timeout_s: int, session_id: str | None) -> tuple[int, str, str]:

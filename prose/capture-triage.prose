@@ -1,0 +1,9 @@
+Capture triage workflow for ORION and POLARIS.
+
+Goal:
+- Classify a captured item as reminder, note, follow-up, agenda item, or email-prep.
+- Queue the safest next step and identify any approval gate.
+
+Constraints:
+- Draft/prepare first.
+- Keep the result concise and actionable.

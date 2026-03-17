@@ -31,6 +31,33 @@ Implication for AEGIS alerting:
 - Prefer Slack alerts from AEGIS (or no outbound alerts).
 - If you enable Telegram alerts from the Hetzner host anyway, use them only for critical P0 “ORION unreachable” scenarios, and treat the Telegram token on the Hetzner host as sensitive credential material.
 
+## OpenClaw Release Adoption Notes
+
+The AEGIS host was originally onboarded on `2026.1.30`. When upgrading into the
+`2026.2.x` and `2026.3.x` line, the changes that materially matter to AEGIS are:
+
+- Explicit heartbeat policy review:
+  heartbeat delivery defaults changed across `2026.2.x`, so review the AEGIS
+  runtime after upgrade and confirm it still does not perform any unintended
+  direct outbound delivery. Do not assume an older heartbeat config key still
+  exists unchanged across releases; validate the live schema first.
+- Secrets workflow:
+  use `openclaw secrets audit` after upgrades and during maintenance checks to
+  confirm the host is still using the intended secret file references and that
+  migrations did not materialize sensitive values in config.
+- Session cleanup:
+  prefer first-class `openclaw sessions cleanup ... --dry-run` / `--enforce`
+  for deliberate session-store hygiene on the AEGIS host instead of ad hoc file
+  deletion.
+- Gateway/container health:
+  newer OpenClaw releases add built-in `/health`, `/healthz`, `/ready`, and
+  `/readyz` endpoints plus stricter gateway/websocket security. These are
+  useful for future containerized or proxied AEGIS deployments, even though the
+  current Hetzner setup remains loopback-only and systemd-managed.
+
+Detailed release review:
+- `docs/AEGIS_OPENCLAW_RELEASE_NOTES_2026_1_30_to_2026_3_13.md`
+
 ## Services (Hetzner)
 
 These are installed as `systemd` units and are enabled at boot.
@@ -97,6 +124,13 @@ Required fields:
 - `ORION_HOST=` Tailscale IP or hostname of the Mac mini (example `100.112.98.18`)
 - `ORION_SSH_USER=` macOS user used for SSH (example `corystoner`)
 - `SSH_IDENTITY=` AEGIS private key path on the server
+- `ORION_SSH_STRICT_HOST_KEY_CHECKING=` SSH host-key policy for ORION probes (recommended: `yes`)
+- `ORION_SSH_KNOWN_HOSTS=` path to the pinned ORION known-hosts file on the AEGIS host (recommended: `/home/aegis/.ssh/known_hosts`)
+
+Recommended OpenClaw posture on the AEGIS host:
+- Keep the runtime aligned with the single-bot policy and verify after upgrades
+  that heartbeat/default-delivery behavior has not regressed into direct user
+  delivery.
 
 Availability commands (must match the Mac mini forced-command allowlist):
 - `ORION_OPENCLAW_HEALTH_CMD="/Users/corystoner/.npm-global/bin/openclaw health"`
@@ -141,6 +175,7 @@ Mac mini key restrictions:
   - `from="<AEGIS_TAILSCALE_IP>"`
   - `command="<forced command path>"`
   - `no-pty`, `no-port-forwarding`, etc.
+- Pin the Mac mini host key in the AEGIS known-hosts file and keep `StrictHostKeyChecking=yes`; avoid `accept-new` for privileged automation.
 
 Verification (run from Hetzner as the `aegis` user):
 - Allowed:
@@ -234,6 +269,10 @@ Optional helper (does the same steps):
 ```bash
 scripts/deploy_aegis_remote.sh
 ```
+
+Local ORION wrappers that connect to Hetzner also support pinned-host settings:
+- `AEGIS_SSH_STRICT_HOST_KEY_CHECKING=` (recommended: `yes`)
+- `AEGIS_SSH_KNOWN_HOSTS=` (recommended: `${HOME}/.ssh/known_hosts` or a dedicated pinned file)
 
 ## Incident Logging (Auditable History)
 
@@ -352,6 +391,16 @@ Smoke test (controlled):
 - Do not commit `/etc/aegis-monitor.env` or any secrets to this repository.
 - Treat any bot tokens posted in chat as compromised; rotate them and update `/etc/aegis-monitor.env`.
 - Keep AEGIS “alert-only” for security findings. If you want defensive actions later, add a separate approval flow and post-incident review.
+- After OpenClaw upgrades, run `openclaw secrets audit` on the AEGIS host and
+  verify the runtime still points at the intended secret sources without
+  inlining sensitive values.
+- After the March 16, 2026 upgrade, do not assume all local loopback probes are
+  equivalent. Validate at least:
+  - `openclaw health`
+  - `openclaw gateway call status --json`
+  - `curl -fsS http://127.0.0.1:18889/readyz`
+  If they disagree, treat it as an OpenClaw upgrade follow-up and inspect
+  `journalctl -u openclaw-aegis.service`.
 
 ## Power Failure / Reboot Behavior (What To Expect)
 
