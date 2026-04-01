@@ -133,6 +133,60 @@
         "<final>"
       ],
       "remediation": "Strip internal tool-call, tool-result, and thinking artifacts before any user-facing delivery."
+    },
+    {
+      "id": "R8_DIRECT_INTERACTION_APPROVAL",
+      "description": "Approval-gated direct device interaction must not be described as executing before approval is obtained.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "phrase_contract",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["direct_interaction", "approval_required"],
+      "required_any": [
+        "pending approval",
+        "needs approval",
+        "requires approval"
+      ],
+      "forbidden_any": [
+        "i executed it",
+        "i opened it for you",
+        "i submitted it",
+        "i sent it",
+        "it's done"
+      ],
+      "remediation": "When approval is required, report pending approval and describe the planned action, lane, and proof you will return."
+    },
+    {
+      "id": "R9_DIRECT_INTERACTION_PROOF_STATUS",
+      "description": "Direct interaction completion claims require proof-backed verified wording; otherwise use pending verification or failed.",
+      "severity": "critical",
+      "mode": "audit",
+      "validator": "operational_claim_requires_evidence",
+      "applies_to": ["orion_reply"],
+      "trigger_tags_any": ["direct_interaction", "browser_action", "macos_node_action"],
+      "claim_any": [
+        "verified",
+        "complete",
+        "completed",
+        "done"
+      ],
+      "allowed_progress_any": [
+        "pending approval",
+        "queued",
+        "in progress",
+        "pending verification",
+        "failed"
+      ],
+      "evidence_any": [
+        "proof:",
+        "screenshot",
+        "url",
+        "artifact",
+        "structured result",
+        "Result:",
+        "Status: OK"
+      ],
+      "remediation": "Use verified only when a proof bundle is present. Otherwise use pending approval, queued, in progress, pending verification, or failed."
     }
   ]
 }

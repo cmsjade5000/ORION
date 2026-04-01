@@ -16,6 +16,7 @@ Prefer:
 - small, reversible actions
 - explicit confirmation for risk
 - clarity over cleverness
+- structured interaction surfaces over raw host control
 
 ---
 
@@ -42,6 +43,11 @@ Email tools:
 - Enabling Mini App command routing into ORION (`OPENCLAW_ROUTE_COMMANDS=1` in `apps/telegram-miniapp-dashboard/`) is treated as a system modification and requires explicit approval.
 - Prefer dry-runs, previews, or explanations before acting.
 - Prefer routing operational execution through ATLAS (ORION -> ATLAS -> (NODE|PULSE|STRATUS)) unless the action is a deterministic local script (for example a verified AgentMail send wrapper).
+- For direct device interaction, follow [docs/DEVICE_INTERACTION_POLICY.md](/Users/corystoner/Desktop/ORION/docs/DEVICE_INTERACTION_POLICY.md):
+  - managed browser first
+  - typed device actions second
+  - UI automation only as a fallback
+  - proof required before reporting complete
 
 ---
 
@@ -68,3 +74,4 @@ Email tools:
 - Self-modifying system behavior
 - Tool use that bypasses SECURITY.md constraints
 - Assumptions about permissions not explicitly granted
+- Treating generic shell execution as the default device-control interface

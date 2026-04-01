@@ -33,3 +33,13 @@ def test_latest_issue_balance_stderr_head():
     assert iss.get("kind") == "balance"
     assert "Unauthorized" in str(iss.get("detail") or "")
 
+
+def test_followup_commands_use_repo_root():
+    import scripts.kalshi_digest as dig
+
+    cmds = dig._followup_commands(window_hours=8)
+    root = dig._repo_root()
+    assert cmds == [
+        f"python3 {root}/scripts/kalshi_ref_arb.py balance",
+        f"python3 {root}/scripts/kalshi_digest.py --window-hours 8 --send-email --email-html",
+    ]

@@ -435,6 +435,8 @@ files=(
 hash_file="$STATE_DIR/config_hashes.sha256"
 current_tmp="$STATE_DIR/config_hashes.current"
 drift_tmp="$STATE_DIR/config_hashes.drift"
+drift_fingerprint_file="$STATE_DIR/config_hashes.drift.fingerprint"
+drift_incident_file="$STATE_DIR/config_hashes.drift.incident"
 : >"$current_tmp"
 for f in "${files[@]}"; do
   [ -f "$f" ] || continue
@@ -447,13 +449,31 @@ if [ ! -f "$hash_file" ]; then
 else
   if ! cmp -s "$hash_file" "$current_tmp"; then
     log "ALERT: config drift detected"
-    alert_throttled \
-      "config_drift" 900 \
-      "$(msg_security "Security config changed on the AEGIS server." "One or more SSH/UFW/systemd config files changed." "Confirm this change was expected (update/maintenance). If not, investigate immediately.")" \
-      "P1" "AEGIS_SECURITY_ALERT" "Security config drift detected on AEGIS server." "Alerted only; requires review."
+    current_fingerprint="$(sha256sum "$current_tmp" | awk '{print $1}')"
+    last_drift_fingerprint=""
+    [ -f "$drift_fingerprint_file" ] && last_drift_fingerprint=$(cat "$drift_fingerprint_file" 2>/dev/null || true)
+    if [ "$current_fingerprint" != "$last_drift_fingerprint" ]; then
+      incident_id="INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')"
+      alert_throttled \
+        "config_drift_${current_fingerprint}" 31536000 \
+        "$(msg_security "Security config changed on the AEGIS server." "One or more SSH/UFW/systemd config files changed." "Confirm this change was expected (update/maintenance). If not, investigate immediately.")" \
+        "P1" "AEGIS_SECURITY_ALERT" "Security config drift detected on AEGIS server." "Alerted only; requires review." \
+        "$incident_id"
+      printf '%s\n' "$current_fingerprint" >"$drift_fingerprint_file"
+      printf '%s\n' "$incident_id" >"$drift_incident_file"
+      chmod 0640 "$drift_fingerprint_file" "$drift_incident_file" 2>/dev/null || true
+      log "INFO: config drift incident recorded incident=$incident_id fingerprint=$current_fingerprint"
+    else
+      incident_id=""
+      [ -f "$drift_incident_file" ] && incident_id=$(cat "$drift_incident_file" 2>/dev/null || true)
+      log "INFO: config drift unchanged; suppressing repeat alert incident=${incident_id:-unknown} fingerprint=$current_fingerprint"
+    fi
     cp "$current_tmp" "$drift_tmp"
     chmod 0640 "$drift_tmp" 2>/dev/null || true
     log "INFO: drift snapshot saved to $drift_tmp (baseline unchanged pending review)"
+  elif [ -f "$drift_tmp" ] || [ -f "$drift_fingerprint_file" ] || [ -f "$drift_incident_file" ]; then
+    rm -f "$drift_tmp" "$drift_fingerprint_file" "$drift_incident_file"
+    log "INFO: config drift resolved; state cleared"
   fi
 fi
 

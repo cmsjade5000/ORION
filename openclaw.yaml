@@ -10,8 +10,8 @@ agents:
         - openrouter/free
         - openai/gpt-oss-20b:free
         - google/gemini-2.5-flash-lite
-        # Optional (if configured): NVIDIA Build Kimi 2.5 as a tertiary fallback.
-        # - nvidia-build/moonshotai/kimi-k2-5
+        # Keep Kimi out of the default production fallback chain.
+        # Route it intentionally via a specialist lane instead.
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/src/ORION
     compaction:
@@ -22,11 +22,46 @@ agents:
         - Red Lines
       # Keep a short recent-turn tail before synthesis.
       recentTurnsPreserve: 8
+  list:
+    - id: main
+      memorySearch:
+        qmd:
+          extraCollections:
+            - name: ledger
+              path: ~/.openclaw/agents/ledger/sessions
+            - name: polaris
+              path: ~/.openclaw/agents/polaris/sessions
+    - id: ember
+      # Optional Kimi lane for intentional writing/style-sensitive work.
+      model:
+        primary: nvidia-build/moonshotai/kimi-k2.5
+        fallbacks:
+          - google/gemini-2.5-flash-lite
+          - openrouter/free
+
+auth:
+  cooldowns:
+    failureWindowHours: 12
+    overloadedProfileRotations: 0
+    overloadedBackoffMs: 45000
 
 tools:
   # As of OpenClaw 2026.3.x, new local installs default to tools.profile=messaging when unset.
   # ORION is a local workspace agent and expects the broader coding tool posture.
   profile: coding
+  web:
+    search:
+      enabled: true
+      # Optional: let Codex-capable lanes use provider-native web_search.
+      openaiCodex:
+        enabled: true
+        mode: cached
+        contextSize: high
+        userLocation:
+          country: US
+          region: PA
+          city: Pittsburgh
+          timezone: America/New_York
 
 hooks:
   internal:
@@ -49,7 +84,7 @@ hooks:
 #         provider: default
 #         id: NVIDIA_API_KEY
 #       models:
-#         - id: moonshotai/kimi-k2-5
+#         - id: moonshotai/kimi-k2.5
 #           name: Kimi K2.5 (NVIDIA Build)
 #     lmstudio:
 #       api: openai-completions
@@ -59,7 +94,7 @@ hooks:
 #         - id: qwen3.5-4b-mlx
 #           name: Local bounded runtime
 #
-# Example routing (OpenRouter primary with Gemini + NVIDIA compatibility fallbacks):
+# Example routing (OpenRouter primary with Gemini, plus an intentional Kimi lane):
 # agents:
 #   defaults:
 #     model:
@@ -68,7 +103,12 @@ hooks:
 #         - openrouter/free
 #         - openai/gpt-oss-20b:free
 #         - google/gemini-2.5-flash-lite
-#         - nvidia-build/moonshotai/kimi-k2-5
+#   list:
+#     - id: ember
+#       model:
+#         primary: nvidia-build/moonshotai/kimi-k2.5
+#         fallbacks:
+#           - google/gemini-2.5-flash-lite
 
 channels:
   telegram:
@@ -80,6 +120,11 @@ channels:
       # Enable Telegram native slash-command registration.
       native: true
       nativeSkills: false
+    execApprovals:
+      enabled: true
+      approvers:
+        - "<CORY_TELEGRAM_USER_ID>"
+      target: dm
     # Token file contains only the raw bot token + trailing newline.
     # Keep secrets out of Git (see KEEP.md).
     tokenFile: ~/.openclaw/secrets/telegram.token
@@ -120,6 +165,11 @@ channels:
     commands:
       native: auto
       nativeSkills: auto
+    execApprovals:
+      enabled: true
+      approvers:
+        - "<CORY_DISCORD_USER_ID>"
+      target: dm
     # Reply-to behavior inside Discord threads/channels.
     # off = never reply-to a specific message, first = reply-to the first triggering message, all = reply-to every triggering message.
     # For Discord threads, "first" can attempt to reply to the thread-starter

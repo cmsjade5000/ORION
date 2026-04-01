@@ -37,6 +37,9 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.makefile = (cls.repo / "Makefile").read_text(encoding="utf-8")
         cls.discord_setup = (cls.repo / "docs" / "DISCORD_SETUP.md").read_text(encoding="utf-8")
         cls.nvim = (cls.repo / "docs" / "NVIDIA_BUILD_KIMI.md").read_text(encoding="utf-8")
+        cls.provider_matrix = (cls.repo / "docs" / "LLM_PROVIDER_MATRIX.md").read_text(
+            encoding="utf-8"
+        )
         cls.app_readme = (cls.repo / "app" / "README.md").read_text(encoding="utf-8")
         cls.scripts_readme = (cls.repo / "scripts" / "README.md").read_text(encoding="utf-8")
         cls.polaris_inbox = (cls.repo / "tasks" / "INBOX" / "POLARIS.md").read_text(encoding="utf-8")
@@ -83,6 +86,40 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("openrouter/free", model_defaults["fallbacks"])
         self.assertIn("primary: openrouter/auto", self.yaml_example)
 
+    def test_examples_include_cooldowns_codex_search_and_exec_approvals(self):
+        cooldowns = self.json_example["auth"]["cooldowns"]
+        self.assertEqual(cooldowns["failureWindowHours"], 12)
+        self.assertEqual(cooldowns["overloadedProfileRotations"], 0)
+        self.assertEqual(cooldowns["overloadedBackoffMs"], 45000)
+
+        codex_search = self.json_example["tools"]["web"]["search"]["openaiCodex"]
+        self.assertTrue(codex_search["enabled"])
+        self.assertEqual(codex_search["mode"], "cached")
+        self.assertEqual(codex_search["contextSize"], "high")
+        self.assertEqual(codex_search["userLocation"]["timezone"], "America/New_York")
+
+        self.assertTrue(self.json_example["channels"]["telegram"]["execApprovals"]["enabled"])
+        self.assertTrue(self.json_example["channels"]["discord"]["execApprovals"]["enabled"])
+        self.assertIn("overloadedBackoffMs: 45000", self.yaml_example)
+        self.assertIn("openaiCodex:", self.yaml_example)
+        self.assertIn("execApprovals:", self.yaml_example)
+
+    def test_examples_show_targeted_cross_agent_memory(self):
+        main_agent = self.json_example["agents"]["list"][0]
+        collections = main_agent["memorySearch"]["qmd"]["extraCollections"]
+        self.assertEqual([item["name"] for item in collections], ["ledger", "polaris"])
+        ember_agent = next(agent for agent in self.json_example["agents"]["list"] if agent["id"] == "ember")
+        self.assertEqual(ember_agent["model"]["primary"], "nvidia-build/moonshotai/kimi-k2.5")
+        self.assertIn("extraCollections:", self.yaml_example)
+        self.assertIn("name: ledger", self.yaml_example)
+        self.assertIn("name: polaris", self.yaml_example)
+        self.assertIn("- id: ember", self.yaml_example)
+
+    def test_provider_matrix_keeps_kimi_specialized(self):
+        self.assertIn("kimi-specialist", self.provider_matrix)
+        self.assertIn("explicit specialist lane", self.provider_matrix)
+        self.assertIn("Keep it out of hot-path production fallback chains", self.provider_matrix)
+
     def test_examples_use_secretref_for_optional_credentials(self):
         discord_token = self.json_example["channels"]["discord"]["token"]
         self.assertEqual(
@@ -118,6 +155,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
 
     def test_secretref_guidance_is_documented(self):
         self.assertIn("SecretRef", self.discord_setup)
+        self.assertIn("channels.discord.execApprovals.enabled true", self.discord_setup)
         self.assertIn("SecretRef", self.nvim)
         self.assertIn("SecretRef", self.migration)
         self.assertIn("${OPENROUTER_API_KEY}", self.migration)

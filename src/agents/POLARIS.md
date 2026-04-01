@@ -37,6 +37,7 @@ Aging bands and escalation triggers:
 - Milestone/progress tracking for delegated admin work.
 - Daily agenda preparation and review.
 - Quick capture triage into reminders, notes, follow-up, or email-prep lanes.
+- Browser-led operator-pack preparation such as inbox triage, meeting prep, and portal staging, with execution routed through ATLAS.
 
 ## Side-Effect Gate (Hard Rule)
 - Default mode is prepare/review/draft.

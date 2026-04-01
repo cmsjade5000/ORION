@@ -84,6 +84,8 @@ Nightly reliability review:
 - Report artifact: `tasks/NOTES/error-review.md`
 - Deliberate session maintenance: `AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json`
 - Report artifact: `tasks/NOTES/session-maintenance.md`
+- Incident bundle snapshot: `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
+- Report artifact: `tasks/NOTES/orion-ops-status.md`
 
 Equivalent manual commands:
 
@@ -96,6 +98,7 @@ openclaw cron add \
   --no-deliver \
   --agent main \
   --session isolated \
+  --wake next-heartbeat \
   --message "Use system.run to execute exactly: python3 scripts/notify_inbox_results.py --require-notify-telegram. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 
 openclaw cron add \
@@ -106,6 +109,7 @@ openclaw cron add \
   --no-deliver \
   --agent main \
   --session isolated \
+  --wake next-heartbeat \
   --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 
 openclaw cron add \
@@ -116,6 +120,7 @@ openclaw cron add \
   --no-deliver \
   --agent main \
   --session isolated \
+  --wake next-heartbeat \
   --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --stale-hours 72. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 
 openclaw cron add \
@@ -126,6 +131,7 @@ openclaw cron add \
   --no-deliver \
   --agent main \
   --session isolated \
+  --wake next-heartbeat \
   --message "Use system.run to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 
 openclaw cron add \
@@ -136,7 +142,19 @@ openclaw cron add \
   --no-deliver \
   --agent main \
   --session isolated \
+  --wake next-heartbeat \
   --message "Use system.run to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+
+openclaw cron add \
+  --name "orion-ops-bundle" \
+  --description "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence" \
+  --cron "30 3 * * *" \
+  --tz "America/New_York" \
+  --no-deliver \
+  --agent main \
+  --session isolated \
+  --wake next-heartbeat \
+  --message "Use system.run to execute exactly: python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 ```
 
 Discord variant (set a default target first):

@@ -20,13 +20,13 @@ Baseline capture source: `/Users/corystoner/src/ORION/eval/history/baseline-2026
 
 ## After Snapshot
 
-Latest reliability source: `/Users/corystoner/src/ORION/eval/history/reliability-20260316-141208.json`
+Latest reliability source: `/Users/corystoner/src/ORION/eval/history/reliability-20260331-141012.json`
 Latest compare source: `/Users/corystoner/src/ORION/eval/latest_compare.json`
 
 | Metric | After | Delta vs Baseline |
 | --- | --- | --- |
-| Lane wait (count / p95 ms) | `21 / 479113` | `+2 / +444586 ms` |
-| Cron enabled / total | `18 / 37` | `-1 enabled` |
+| Lane wait (count / p95 ms) | `4 / 20083` | `-15 / -14444 ms` |
+| Cron enabled / total | `23 / 42` | `+4 enabled` |
 | Delivery backlog size | `0` | `-16` |
 | Eval gate status | `pass` | `compare gate: PASS` |
 | Eval confidence | `100` | `+60` |
@@ -36,8 +36,8 @@ Latest compare source: `/Users/corystoner/src/ORION/eval/latest_compare.json`
 
 | SLO | Target | Baseline | After | Delta | Status |
 | --- | --- | --- | --- | --- | --- |
-| SLO-R1 lane wait count | `<= 6` | `19` | `21` | `+2` | `FAIL` |
-| SLO-R2 lane wait p95 (ms) | `<= 10000` | `34527` | `479113` | `+444586 ms` | `FAIL` |
+| SLO-R1 lane wait count | `<= 6` | `19` | `4` | `-15` | `PASS` |
+| SLO-R2 lane wait p95 (ms) | `<= 10000` | `34527` | `20083` | `-14444 ms` | `FAIL` |
 | SLO-R3 enabled cron to disabled channels/plugins | `0` | `unknown` | `0` | `unknown` | `PASS` |
 | SLO-R4 delivery backlog | `<= 0` | `16` | `0` | `-16` | `PASS` |
 
@@ -77,6 +77,17 @@ Canary results source: `/Users/corystoner/src/ORION/docs/skills/canary-results-2
 | 2026-03-10 | 10 | 45757 | 16 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260310-141139.json` |
 | 2026-03-11 | 3 | 7790 | 16 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260311-141122.json` |
 | 2026-03-16 | 21 | 479113 | 18 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260316-141208.json` |
+| 2026-03-17 | 3 | 182454 | 18 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260317-141427.json` |
+| 2026-03-19 | 3 | 30175 | 18 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260319-141613.json` |
+| 2026-03-20 | 2 | 183393 | 18 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260320-141958.json` |
+| 2026-03-21 | 1 | 3023 | 18 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260321-141040.json` |
+| 2026-03-23 | 1 | 477989 | 18 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260323-141120.json` |
+| 2026-03-24 | 1 | 5242 | 19 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260324-142119.json` |
+| 2026-03-26 | 0 | 0 | 20 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260326-145931.json` |
+| 2026-03-27 | 6 | 58542 | 20 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260327-141009.json` |
+| 2026-03-28 | 1 | 208472 | 21 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260328-141610.json` |
+| 2026-03-30 | 0 | 0 | 23 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260330-193534.json` |
+| 2026-03-31 | 4 | 20083 | 23 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260331-141012.json` |
 
 ## Artifact References
 
@@ -84,5 +95,5 @@ Canary results source: `/Users/corystoner/src/ORION/docs/skills/canary-results-2
 - Latest compare JSON: `/Users/corystoner/src/ORION/eval/latest_compare.json`
 - Reliability history dir: `/Users/corystoner/src/ORION/eval/history`
 - Canary results markdown: `/Users/corystoner/src/ORION/docs/skills/canary-results-2026-03.md`
-- Latest reliability snapshot: `/Users/corystoner/src/ORION/eval/history/reliability-20260316-141208.json`
+- Latest reliability snapshot: `/Users/corystoner/src/ORION/eval/history/reliability-20260331-141012.json`
 - Latest canary status artifact: `/Users/corystoner/src/ORION/eval/history/canary-check-20260303-082535.json`

@@ -40,7 +40,25 @@ openclaw models status
 
 Latest local runtime verification:
 - Upgraded on 2026-03-15 to `OpenClaw 2026.3.13`
+- Gateway LaunchAgent refresh + post-restart probes verified on 2026-03-22
 - Notes: `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
+
+Current verification snapshot (2026-03-22):
+- `openclaw gateway start` restarted the LaunchAgent cleanly.
+- `openclaw gateway status` returned `RPC probe: ok`.
+- `openclaw channels status --probe` reported Telegram and Discord as working.
+- `openclaw config validate --json` returned `{"valid":true,...}`.
+- `codex --version` returned `codex-cli 0.115.0`.
+- `make incident-bundle` writes a read-only ORION ops bundle under `tmp/incidents/` plus a stable summary at `tasks/NOTES/orion-ops-status.md`.
+- Remaining follow-ups in the live runtime:
+  - `openrouter/auto` probe returned a billing error (insufficient OpenRouter credits).
+  - `nvidia-build/moonshotai/kimi-k2-5` probe returned `HTTP 404`.
+  - `openclaw models status --probe` warns that `tools.profile=coding` includes shipped core tools (`apply_patch`, `memory_search`, `memory_get`, `cron`) that are currently unavailable under the active runtime/provider/model/config.
+  - The current investigation points to provider-state gating rather than a missing OpenClaw binary: `openrouter/auto` is failing billing, and `memory-lancedb` recall is also failing against OpenRouter credits.
+
+Capability intake brief:
+- `docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md`
+- `docs/ORION_TOOLSET_ADOPTION_2026_03_22.md`
 
 ## Recovery
 
@@ -69,6 +87,7 @@ Generated assistant artifacts:
 Internal reliability review:
 - `python3 scripts/orion_error_db.py review --window-hours 24 --json`
 - `AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json`
+- `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
 - `docs/ORION_ERROR_REVIEW.md`
 
 ## Telegram Mini App (Experimental / Archived)
@@ -165,6 +184,8 @@ make ci
 What it checks:
 - Python unit tests + Task Packet validation (`npm test`)
 - ShellCheck over bash scripts (`scripts/ci_shellcheck.sh`)
+- Promptfoo config validation and optional redteam gate:
+  - `docs/PROMPTFOO_GATE.md`
 
 Supported validation path:
 - Preferred: `npm test`

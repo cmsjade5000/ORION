@@ -1,0 +1,194 @@
+{
+  "generatedAt": "2026-03-20T14:26:33.451302+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1773930392554,
+    "analysisStart": "2026-03-19T14:26:32.554000+00:00",
+    "analysisEndMs": 1774016792554,
+    "analysisEnd": "2026-03-20T14:26:32.554000+00:00",
+    "eventsInScope": 2,
+    "runsInScope": 1101,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 2,
+    "uniqueCorrelatedJobs": 3,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1774006440000,
+      "windowEndMs": 1774006500000,
+      "windowStart": "2026-03-20T11:34:00+00:00",
+      "windowEnd": "2026-03-20T11:35:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 480846,
+      "avgWaitMs": 480846.0,
+      "lanes": [
+        {
+          "lane": "nested",
+          "count": 1,
+          "maxWaitMs": 480846,
+          "avgWaitMs": 480846.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-03-20T07:34:04.872-04:00",
+          "timestampMs": 1774006444872,
+          "lane": "nested",
+          "waitedMs": 480846,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1774006350000,
+        "windowEndMs": 1774006590000,
+        "windowStart": "2026-03-20T11:32:30+00:00",
+        "windowEnd": "2026-03-20T11:36:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-03-20T11:34:30.458000+00:00",
+          "runAtMs": 1774006470458,
+          "jobId": "bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 41589,
+          "deltaFromWindowStartMs": 30458,
+          "deltaFromWindowCenterMs": 458,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/bd523bc9-ba21-4c44-99ca-97c84e85f827.jsonl"
+        },
+        {
+          "runAt": "2026-03-20T11:35:12.047000+00:00",
+          "runAtMs": 1774006512047,
+          "jobId": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+          "jobName": "polymarket-sports-paper-60s",
+          "durationMs": 40006,
+          "deltaFromWindowStartMs": 72047,
+          "deltaFromWindowCenterMs": 42047,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3adbdf11-8d7e-4eb2-8552-80cbf5384812.jsonl"
+        },
+        {
+          "runAt": "2026-03-20T11:35:52.053000+00:00",
+          "runAtMs": 1774006552053,
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "durationMs": 65555,
+          "deltaFromWindowStartMs": 112053,
+          "deltaFromWindowCenterMs": 82053,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/2707d448-d6eb-42b7-919c-faf75b16b38f.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "runCount": 1,
+          "maxDurationMs": 65555,
+          "avgDurationMs": 65555.0
+        },
+        {
+          "jobId": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+          "jobName": "polymarket-sports-paper-60s",
+          "runCount": 1,
+          "maxDurationMs": 40006,
+          "avgDurationMs": 40006.0
+        },
+        {
+          "jobId": "bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 41589,
+          "avgDurationMs": 41589.0
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "windowStartMs": 1773985500000,
+      "windowEndMs": 1773985560000,
+      "windowStart": "2026-03-20T05:45:00+00:00",
+      "windowEnd": "2026-03-20T05:46:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 183393,
+      "avgWaitMs": 183393.0,
+      "lanes": [
+        {
+          "lane": "nested",
+          "count": 1,
+          "maxWaitMs": 183393,
+          "avgWaitMs": 183393.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-03-20T01:45:38.941-04:00",
+          "timestampMs": 1773985538941,
+          "lane": "nested",
+          "waitedMs": 183393,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1773985410000,
+        "windowEndMs": 1773985650000,
+        "windowStart": "2026-03-20T05:43:30+00:00",
+        "windowEnd": "2026-03-20T05:47:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-03-20T05:46:00.933000+00:00",
+          "runAtMs": 1773985560933,
+          "jobId": "bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 23332,
+          "deltaFromWindowStartMs": 60933,
+          "deltaFromWindowCenterMs": 30933,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/bd523bc9-ba21-4c44-99ca-97c84e85f827.jsonl"
+        },
+        {
+          "runAt": "2026-03-20T05:46:24.265000+00:00",
+          "runAtMs": 1773985584265,
+          "jobId": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+          "jobName": "polymarket-sports-paper-60s",
+          "durationMs": 120021,
+          "deltaFromWindowStartMs": 84265,
+          "deltaFromWindowCenterMs": 54265,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3adbdf11-8d7e-4eb2-8552-80cbf5384812.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+          "jobName": "polymarket-sports-paper-60s",
+          "runCount": 1,
+          "maxDurationMs": 120021,
+          "avgDurationMs": 120021.0
+        },
+        {
+          "jobId": "bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 23332,
+          "avgDurationMs": 23332.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -1,0 +1,105 @@
+{
+  "generatedAt": "2026-03-21T14:17:59.032724+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1774016278051,
+    "analysisStart": "2026-03-20T14:17:58.051000+00:00",
+    "analysisEndMs": 1774102678051,
+    "analysisEnd": "2026-03-21T14:17:58.051000+00:00",
+    "eventsInScope": 1,
+    "runsInScope": 1142,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 1,
+    "uniqueCorrelatedJobs": 2,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1774090320000,
+      "windowEndMs": 1774090380000,
+      "windowStart": "2026-03-21T10:52:00+00:00",
+      "windowEnd": "2026-03-21T10:53:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 3023,
+      "avgWaitMs": 3023.0,
+      "lanes": [
+        {
+          "lane": "nested",
+          "count": 1,
+          "maxWaitMs": 3023,
+          "avgWaitMs": 3023.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-03-21T06:52:31.729-04:00",
+          "timestampMs": 1774090351729,
+          "lane": "nested",
+          "waitedMs": 3023,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1774090230000,
+        "windowEndMs": 1774090470000,
+        "windowStart": "2026-03-21T10:50:30+00:00",
+        "windowEnd": "2026-03-21T10:54:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-03-21T10:52:28.081000+00:00",
+          "runAtMs": 1774090348081,
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "durationMs": 120702,
+          "deltaFromWindowStartMs": 28081,
+          "deltaFromWindowCenterMs": -1919,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/2707d448-d6eb-42b7-919c-faf75b16b38f.jsonl"
+        },
+        {
+          "runAt": "2026-03-21T10:54:28.783000+00:00",
+          "runAtMs": 1774090468783,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 76044,
+          "deltaFromWindowStartMs": 148783,
+          "deltaFromWindowCenterMs": 118783,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "runCount": 1,
+          "maxDurationMs": 120702,
+          "avgDurationMs": 120702.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 76044,
+          "avgDurationMs": 76044.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

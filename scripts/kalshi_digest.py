@@ -45,6 +45,16 @@ def _repo_root() -> str:
     return os.path.abspath(os.path.join(here, ".."))
 
 
+def _followup_commands(*, window_hours: float) -> List[str]:
+    root = _repo_root()
+    ref_arb = os.path.join(root, "scripts", "kalshi_ref_arb.py")
+    digest = os.path.join(root, "scripts", "kalshi_digest.py")
+    return [
+        f"python3 {ref_arb} balance",
+        f"python3 {digest} --window-hours {int(window_hours)} --send-email --email-html",
+    ]
+
+
 def _load_dotenv(path: str) -> None:
     # Minimal dotenv loader to support unattended cron runs (OpenClaw env).
     def _try(p: str) -> bool:
@@ -925,10 +935,7 @@ def _digest_html(*, subject: str, window_hours: float, payload: Dict[str, Any], 
     raw_message = payload.get("message") if isinstance(payload.get("message"), str) else ""
     include_raw = status in ("WARN", "PAUSED")
 
-    commands = [
-        "python3 /Users/corystoner/src/ORION/scripts/kalshi_ref_arb.py balance",
-        f"python3 /Users/corystoner/src/ORION/scripts/kalshi_digest.py --window-hours {int(window_hours)} --send-email --email-html",
-    ]
+    commands = _followup_commands(window_hours=window_hours)
 
     why_lines: List[str] = []
     if isinstance(no_trade.get("headline"), str) and no_trade["headline"].strip():

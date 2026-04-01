@@ -3,9 +3,7 @@ set -euo pipefail
 
 repo_root="${1:-}"
 if [[ -z "${repo_root}" ]]; then
-  if [[ -d "${HOME}/Desktop/ORION" ]]; then
-    repo_root="${HOME}/Desktop/ORION"
-  elif repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  if repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
     true
   else
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,6 +34,15 @@ launchctl bootout "gui/$(id -u)" "${plist_target}" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/$(id -u)" "${plist_target}"
 launchctl enable "gui/$(id -u)/com.openclaw.orion.polymarket_sports_paper_cycle" >/dev/null 2>&1 || true
 launchctl kickstart -k "gui/$(id -u)/com.openclaw.orion.polymarket_sports_paper_cycle" >/dev/null 2>&1 || true
+
+cron_matches="$(openclaw cron list --all --json 2>/dev/null | jq -r '.jobs[]? | select(.name == "polymarket-sports-paper-60s") | .id')"
+if [[ -n "${cron_matches}" ]]; then
+  while IFS= read -r job_id; do
+    [[ -n "${job_id}" ]] || continue
+    openclaw cron disable "${job_id}" >/dev/null
+    echo "Disabled duplicate OpenClaw cron job: ${job_id} (polymarket-sports-paper-60s)"
+  done <<< "${cron_matches}"
+fi
 
 echo "Installed LaunchAgent: ${plist_target}"
 echo "Label: com.openclaw.orion.polymarket_sports_paper_cycle"

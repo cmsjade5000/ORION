@@ -15,6 +15,46 @@ Observed result after upgrade:
 - Gateway runtime: healthy RPC probe on the local LaunchAgent
 - Runtime config: valid
 
+## March 22, 2026 Refresh Verification
+
+The local ORION gateway did not require a newer binary upgrade on 2026-03-22 because the installed CLI was still the current upstream release:
+
+- Installed CLI: `OpenClaw 2026.3.13 (61d171a)`
+- Latest upstream release checked: `openclaw 2026.3.13` on GitHub Releases (`v2026.3.13-1` tag; npm version remains `2026.3.13`)
+
+Operational refresh commands run:
+
+```bash
+openclaw gateway install
+openclaw gateway start
+openclaw gateway status
+openclaw channels status --probe
+openclaw models status --probe
+openclaw plugins list --json
+```
+
+Observed result after the refresh:
+
+- `openclaw gateway install` reported `Gateway service already loaded.`
+- `openclaw gateway start` restarted the LaunchAgent successfully.
+- `openclaw gateway status` returned `Runtime: running` and `RPC probe: ok`.
+- `openclaw channels status --probe` reported:
+  - Telegram default: `works`
+  - Discord default: `works`
+- `openclaw models status --probe` showed runtime-level follow-ups rather than gateway failure:
+  - `openrouter/auto`: billing error due to insufficient OpenRouter credits
+  - `nvidia-build/moonshotai/kimi-k2-5`: `HTTP 404`
+  - `google/gemini-2.5-flash-lite`: `ok`
+  - `minimax/MiniMax-M2.5-highspeed`: `ok`
+- `tools.profile=coding` emitted allowlist warnings for `apply_patch`, `memory_search`, `memory_get`, and `cron`, but the probe text explicitly classified them as shipped core tools that were unavailable under the current runtime/provider/model/config
+- During the same probe window, `memory-lancedb` recall also failed with `402 Insufficient credits` against OpenRouter, which further supports a provider-state/tool-resolution issue rather than a missing local binary
+
+Interpretation:
+
+- The gateway update itself is complete and verified.
+- Remaining issues are provider/auth/tool-availability follow-ups in the live runtime, not a failed gateway restart.
+- The current warning should be read as "tool profile and active provider/model state are out of sync," not "OpenClaw no longer ships these tools."
+
 Official upstream sources:
 - `v2026.3.12`: <https://github.com/openclaw/openclaw/releases/tag/v2026.3.12>
 - `v2026.3.13-1`: <https://github.com/openclaw/openclaw/releases/tag/v2026.3.13-1>

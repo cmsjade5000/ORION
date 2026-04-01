@@ -92,6 +92,25 @@ def _parse_regime_mults(raw: str) -> tuple[Dict[str, float], str | None]:
     return out, None
 
 
+def _normalize_metrics_path(metrics_path: str, *, repo_root: str) -> tuple[str, str | None]:
+    raw = str(metrics_path or "").strip()
+    if not raw:
+        return os.path.join(repo_root, "tmp", "kalshi_ref_arb", "metrics.prom"), None
+
+    default_path = os.path.join(repo_root, "tmp", "kalshi_ref_arb", "metrics.prom")
+    abs_default = os.path.abspath(default_path)
+    if not os.path.isabs(raw):
+        return raw, None
+
+    abs_raw = os.path.abspath(raw)
+    legacy_suffix = os.path.join("tmp", "kalshi_ref_arb", "metrics.prom")
+    if abs_raw == abs_default:
+        return abs_raw, None
+    if abs_raw.endswith(legacy_suffix):
+        return abs_default, f"KALSHI_ARB_METRICS_PATH pointed at another ORION checkout; using {abs_default!r}."
+    return abs_raw, None
+
+
 @dataclass(frozen=True)
 class KalshiArbRuntime:
     execution_mode: str
@@ -246,14 +265,15 @@ def load_runtime_from_env(*, repo_root: str) -> tuple[KalshiArbRuntime, List[str
     if e:
         errs.append(e)
 
-    metrics_path = str(
+    metrics_path_raw = str(
         os.environ.get(
             "KALSHI_ARB_METRICS_PATH",
             os.path.join(repo_root, "tmp", "kalshi_ref_arb", "metrics.prom"),
         )
     ).strip()
-    if not metrics_path:
-        metrics_path = os.path.join(repo_root, "tmp", "kalshi_ref_arb", "metrics.prom")
+    metrics_path, e = _normalize_metrics_path(metrics_path_raw, repo_root=repo_root)
+    if e:
+        errs.append(e)
 
     cfg = KalshiArbRuntime(
         execution_mode=mode,

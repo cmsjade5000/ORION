@@ -121,6 +121,8 @@ fi
 
 tmp="${TMPDIR:-/tmp}/stratus_health.$$.$RANDOM.out"
 status_json="${TMPDIR:-/tmp}/stratus_status.$$.$RANDOM.json"
+gateway_log_path="${OPENCLAW_GATEWAY_LOG:-$HOME/.openclaw/logs/gateway.log}"
+gateway_err_log_path="${OPENCLAW_GATEWAY_ERR_LOG:-$HOME/.openclaw/logs/gateway.err.log}"
 trap 'rm -f "$tmp" "$status_json" 2>/dev/null || true' EXIT
 
 health="FAIL"
@@ -191,6 +193,17 @@ printf -- '- gateway service: %s\n' "$gateway_service"
 printf -- '- gateway rpc: %s\n' "$gateway_rpc"
 printf -- '- gateway config audit: %s\n' "$gateway_config_audit"
 printf -- '- gateway overall: %s\n' "$gateway_overall"
+
+discord_restart_count=0
+telegram_fallback_count=0
+if [[ -f "$gateway_log_path" ]]; then
+  discord_restart_count="$(tail -n 120 "$gateway_log_path" | grep -E 'stale-socket|auto-restart attempt' -c || true)"
+fi
+if [[ -f "$gateway_err_log_path" ]]; then
+  telegram_fallback_count="$(tail -n 120 "$gateway_err_log_path" | grep -E 'sticky IPv4-only dispatcher' -c || true)"
+fi
+printf -- '- discord restart indicators: %s\n' "$discord_restart_count"
+printf -- '- telegram ipv4 fallback indicators: %s\n' "$telegram_fallback_count"
 if [[ -n "$app_server_base" ]]; then
   printf -- '- codex app-server readyz: %s\n' "$app_readyz"
   printf -- '- codex app-server healthz: %s\n' "$app_healthz"
@@ -221,7 +234,7 @@ if [[ "$skip_host" -eq 0 ]]; then
   fi
 fi
 
-if [[ "$health" == "OK" && "$gateway_overall" == "OK" && "$app_probe_failed" -eq 0 ]]; then
+if [[ "$health" == "OK" && "$gateway_overall" == "OK" && "$app_probe_failed" -eq 0 && "$discord_restart_count" -eq 0 && "$telegram_fallback_count" -eq 0 ]]; then
   printf 'NEXT:\n'
   printf -- '- No action needed.\n'
   exit 0
@@ -231,6 +244,8 @@ printf -- '- health output: %s\n' "$(sed -n '1p' "$tmp" 2>/dev/null | tr -d '\r'
 printf 'NEXT:\n'
 if [[ "$app_probe_failed" -eq 1 ]]; then
   printf -- '- Check the Codex app-server listener and verify /readyz + /healthz on %s.\n' "$app_server_base"
+elif [[ "$discord_restart_count" -gt 0 || "$telegram_fallback_count" -gt 0 ]]; then
+  printf -- '- Build an ORION incident bundle and inspect recent gateway logs for Discord restarts or Telegram network fallback loops.\n'
 elif [[ "$gateway_overall" == "DEGRADED" ]]; then
   printf -- '- Gateway is up but degraded; run openclaw gateway status --json, openclaw agents bindings --json, and openclaw plugins list --json.\n'
 else

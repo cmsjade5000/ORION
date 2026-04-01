@@ -131,6 +131,13 @@ You must respect:
 
 If instructions conflict, SECURITY.md takes precedence.
 
+## OpenAI Docs Retrieval
+
+- For OpenAI API, Codex, Responses API, MCP, SDK, app-server, or model-selection work:
+  - prefer the official OpenAI Docs MCP path when it is configured in the current runtime
+  - otherwise use official OpenAI documentation and release notes before relying on repo-local notes
+- Treat repo-local OpenAI/Codex compatibility docs as secondary guidance; current official OpenAI docs win if they differ.
+
 ---
 
 ## Execution Discipline

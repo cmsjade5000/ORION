@@ -195,10 +195,20 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("request_permissions", self.orion_role_text)
         self.assertIn("@plugin", self.orion_role_text)
         self.assertIn("mcp-first", self.orion_role_text)
+        self.assertIn("skills/mcporter/SKILL.md", self.orion_role_text)
+        self.assertIn("config/mcporter.json", self.orion_role_text)
+        self.assertIn("must not expose raw MCP payloads", self.orion_role_text)
         self.assertIn("parallel tool calls only for independent, non-destructive checks", self.orion_role_text)
         self.assertIn("Tool orchestration rules:", self.atlas_role_text)
         self.assertIn("multi_tool_use.parallel", self.atlas_role_text)
         self.assertIn("spawn_agents_on_csv", self.atlas_role_text)
+
+    def test_new_skill_routing_contracts(self):
+        self.assertIn("skills/social-intelligence/SKILL.md", self.orion_role_text)
+        self.assertIn("auth is missing, say setup is required", self.orion_role_text)
+        self.assertIn("skills/phone-voice/SKILL.md", self.orion_role_text)
+        self.assertIn("treat it as a setup project until the bridge, tunnel, and provider credentials are verified", self.orion_role_text)
+        self.assertIn("skills/postgres-job-queue/SKILL.md", self.orion_role_text)
 
     def test_task_packet_tool_fields_contract(self):
         self.assertIn("transcript-aware runtimes", self.task_packet_text)

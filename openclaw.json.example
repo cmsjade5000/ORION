@@ -2,14 +2,39 @@
   "_comment": "Example OpenClaw config for ORION local development. Runtime config lives at ~/.openclaw/openclaw.json. Do not store secrets in Git.",
   "tools": {
     "_comment": "As of OpenClaw 2026.3.x, new local installs default to tools.profile=messaging when unset. ORION is a local workspace agent and expects the broader coding tool posture.",
-    "profile": "coding"
+    "profile": "coding",
+    "web": {
+      "search": {
+        "enabled": true,
+        "_comment_openaiCodex": "Optional: when a Codex-capable lane is selected, prefer provider-native web_search instead of duplicating the managed search path.",
+        "openaiCodex": {
+          "enabled": true,
+          "mode": "cached",
+          "contextSize": "high",
+          "userLocation": {
+            "country": "US",
+            "region": "PA",
+            "city": "Pittsburgh",
+            "timezone": "America/New_York"
+          }
+        }
+      }
+    }
+  },
+  "auth": {
+    "_comment": "Reliability-first cooldowns reduce repeat overload churn before fallback and keep bursty providers from re-entering too quickly.",
+    "cooldowns": {
+      "failureWindowHours": 12,
+      "overloadedProfileRotations": 0,
+      "overloadedBackoffMs": 45000
+    }
   },
   "agents": {
     "defaults": {
       "workspace": "/Users/corystoner/src/ORION",
       "model": {
         "_comment_model": "Default posture: use OpenRouter auto-routing for production orchestration. OpenAI remains a direct API control/eval lane outside the default OpenClaw model path.",
-        "_comment_fallbacks": "Keep fallbacks provider-restricted. Default: OpenRouter free router + curated free model, then Gemini, then optional NVIDIA Kimi.",
+        "_comment_fallbacks": "Keep Kimi out of the default production fallback chain. Use Gemini/OpenRouter for general orchestration and reserve Kimi for an intentional specialist lane.",
         "primary": "openrouter/auto",
         "fallbacks": [
           "openrouter/free",
@@ -35,6 +60,20 @@
     "list": [
       {
         "id": "main",
+        "memorySearch": {
+          "qmd": {
+            "extraCollections": [
+              {
+                "name": "ledger",
+                "path": "~/.openclaw/agents/ledger/sessions"
+              },
+              {
+                "name": "polaris",
+                "path": "~/.openclaw/agents/polaris/sessions"
+              }
+            ]
+          }
+        },
         "subagents": {
           "allowAgents": [
             "atlas",
@@ -48,6 +87,17 @@
             "polaris",
             "scribe",
             "wire"
+          ]
+        }
+      },
+      {
+        "_comment": "Optional: route style-sensitive or long-context work intentionally through Kimi instead of letting cron lanes hit it opportunistically.",
+        "id": "ember",
+        "model": {
+          "primary": "nvidia-build/moonshotai/kimi-k2.5",
+          "fallbacks": [
+            "google/gemini-2.5-flash-lite",
+            "openrouter/free"
           ]
         }
       }
@@ -87,6 +137,11 @@
         "native": true,
         "nativeSkills": false
       },
+      "execApprovals": {
+        "enabled": true,
+        "approvers": ["<CORY_TELEGRAM_USER_ID>"],
+        "target": "dm"
+      },
       "reactionLevel": "ack",
       "streamMode": "partial"
     },
@@ -102,6 +157,11 @@
       "commands": {
         "native": "auto",
         "nativeSkills": "auto"
+      },
+      "execApprovals": {
+        "enabled": true,
+        "approvers": ["<CORY_DISCORD_USER_ID>"],
+        "target": "dm"
       },
       "_comment_replyToMode": "For Discord threads, replyToMode=first can attempt to reply to the thread-starter system message. Keep it off for reliable delivery.",
       "replyToMode": "off",
@@ -152,7 +212,7 @@
         },
         "models": [
           {
-            "id": "moonshotai/kimi-k2-5",
+            "id": "moonshotai/kimi-k2.5",
             "name": "Kimi K2.5 (NVIDIA Build)"
           }
         ]

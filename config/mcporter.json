@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codex": {
+      "command": "codex",
+      "args": [
+        "mcp-server"
+      ],
+      "description": "Codex MCP server via stdio"
+    }
+  },
+  "imports": []
+}

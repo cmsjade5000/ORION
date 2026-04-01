@@ -220,6 +220,115 @@ class TestKalshiCyclePaperMode(unittest.TestCase):
         self.assertEqual(captured["argv"][captured["argv"].index("--sigma-annual") + 1], "0.8500")
         self.assertEqual(out["_sigma_arg"], "0.8500")
 
+    def test_scan_series_invalid_timeout_env_uses_default(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        captured: dict[str, int] = {}
+
+        def fake_run_cmd_json(argv: list[str], cwd: str, timeout_s: int):
+            captured["timeout_s"] = int(timeout_s)
+            return 0, "", {"inputs": {"spot_ref": 1.0}, "signals": []}
+
+        with tempfile.TemporaryDirectory() as td:
+            with patch.dict("os.environ", {"KALSHI_ARB_SCAN_TIMEOUT_S": "oops"}, clear=False):
+                with patch.object(cyc, "_run_cmd_json", side_effect=fake_run_cmd_json):
+                    out = cyc._scan_series(
+                        td,
+                        "KXBTC",
+                        sigma="auto",
+                        sigma_window_h=168,
+                        min_edge="200",
+                        uncertainty="50",
+                        min_liq="115",
+                        max_spread="0.1",
+                        min_tte="180",
+                        min_px="0.05",
+                        max_px="0.97",
+                        min_notional="0.50",
+                        min_notional_bypass="2500",
+                    )
+
+        self.assertEqual(captured["timeout_s"], 30)
+        self.assertEqual(int(out["_rc"]), 0)
+
+    def test_main_invalid_sigma_window_env_completes_with_default(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        class DummyRuntime:
+            allow_live_writes = False
+            metrics_path = "tmp/kalshi_ref_arb/metrics.prom"
+            metrics_enabled = False
+            execution_mode = "paper"
+            max_market_concentration_fraction = 0.35
+            router_enabled = True
+            router_max_series_share = 0.35
+            router_min_obs = 12
+            milestone_notify = True
+
+            def as_dict(self) -> dict[str, object]:
+                return {"execution_mode": "paper", "allow_live_writes": False}
+
+        def fake_run_cmd_json(argv: list[str], cwd: str, timeout_s: int = 60):
+            if "balance" in argv:
+                return 0, "", {"cash_balance": 100.0}
+            if "portfolio" in argv:
+                return 0, "", {"balance": {"portfolio_value": 0.0}, "positions": {"market_positions": [], "event_positions": []}}
+            if "trade" in argv:
+                return 0, "", {"status": "ok", "placed": [], "skipped": [], "diagnostics": {"top_blockers": []}}
+            raise AssertionError(f"unexpected argv: {argv}")
+
+        fake_scan = {"_rc": 0, "_sigma_arg": "0.8500", "_spot_ok": True, "inputs": {"spot_ref": 1.0}, "signals": []}
+
+        with tempfile.TemporaryDirectory() as td:
+            status_path = os.path.join(td, "tmp", "kalshi_ref_arb", "last_cycle_status.json")
+            with patch.dict("os.environ", {"KALSHI_ARB_SIGMA_WINDOW_H": "oops"}, clear=False):
+                with patch.object(cyc, "_repo_root", return_value=td), patch.object(cyc, "_load_dotenv"), patch.object(
+                    cyc, "load_runtime_from_env", return_value=(DummyRuntime(), [])
+                ), patch.object(cyc, "_acquire_lock", return_value=True), patch.object(cyc, "_release_lock"), patch.object(
+                    cyc, "apply_overrides_to_environ"
+                ), patch.object(cyc, "load_overrides", return_value={}), patch.object(
+                    cyc, "maybe_autotune", return_value=None
+                ), patch.object(
+                    cyc, "cooldown_active", return_value={"active": False}
+                ), patch.object(
+                    cyc, "_scan_series", return_value=dict(fake_scan)
+                ), patch.object(
+                    cyc, "_run_cmd_json", side_effect=fake_run_cmd_json
+                ), patch.object(
+                    cyc, "_telegram_chat_id", return_value=None
+                ):
+                    rc = cyc.main()
+
+            self.assertEqual(rc, 0)
+            with open(status_path, "r", encoding="utf-8") as f:
+                status = json.load(f)
+            self.assertEqual(status["status"], "completed")
+            self.assertEqual(status["detail"], "cycle complete")
+
+    def test_main_exception_marks_failed_status(self) -> None:
+        import scripts.kalshi_autotrade_cycle as cyc
+
+        class DummyRuntime:
+            allow_live_writes = False
+
+            def as_dict(self) -> dict[str, object]:
+                return {"execution_mode": "paper", "allow_live_writes": False}
+
+        with tempfile.TemporaryDirectory() as td:
+            status_path = os.path.join(td, "tmp", "kalshi_ref_arb", "last_cycle_status.json")
+            with patch.object(cyc, "_repo_root", return_value=td), patch.object(cyc, "_load_dotenv"), patch.object(
+                cyc, "load_runtime_from_env", return_value=(DummyRuntime(), [])
+            ), patch.object(cyc, "_acquire_lock", return_value=True), patch.object(cyc, "_release_lock"), patch.object(
+                cyc, "cooldown_active", side_effect=RuntimeError("boom")
+            ):
+                rc = cyc.main()
+
+            self.assertEqual(rc, 1)
+            with open(status_path, "r", encoding="utf-8") as f:
+                status = json.load(f)
+            self.assertEqual(status["status"], "failed")
+            self.assertIn("RuntimeError: boom", status["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

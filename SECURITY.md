@@ -48,6 +48,26 @@ Rules:
   - Only enable when the Mini App server runs on the same trusted host/network boundary as OpenClaw.
   - Never enable it on an Internet-deployed Mini App (Fly/Render/etc.) unless Cory explicitly accepts the risk and the routing path is tightly restricted/allowlisted.
 
+## Direct Device Interaction
+Direct interaction with Cory's browser sessions or local devices must follow the policy in [docs/DEVICE_INTERACTION_POLICY.md](/Users/corystoner/Desktop/ORION/docs/DEVICE_INTERACTION_POLICY.md).
+
+Required order of preference:
+- managed browser first
+- typed local-device actions second
+- UI automation only as a last-mile fallback
+
+Security posture:
+- Treat personal browser relay/control as an identity-bearing surface.
+- Treat typed local-device actions as privileged host actions even when they seem small.
+- Do not silently expand from typed actions into generic shell execution.
+- Do not report direct-action work as complete without proof artifacts.
+
+Any change that expands device-control reach requires explicit confirmation, including:
+- enabling remote control paths beyond current trust boundaries
+- attaching to live personal browser sessions as a default workflow
+- broad AppleScript or shell-based host control
+- new persistent automation that can trigger host-side effects without review
+
 ## Agent Safety Rules
 Agents must not:
 - Exfiltrate secrets into prompts, logs, Git commits, or third-party services.

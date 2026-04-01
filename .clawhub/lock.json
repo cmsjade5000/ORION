@@ -20,6 +20,34 @@
     "session-logs": {
       "version": "1.0.0",
       "installedAt": 1770773390229
+    },
+    "apple-calendar-macos": {
+      "version": "1.0.0",
+      "installedAt": 1774299197562
+    },
+    "macos-contacts": {
+      "version": "1.0.1",
+      "installedAt": 1774299203561
+    },
+    "web-monitor": {
+      "version": "1.0.0",
+      "installedAt": 1774299209932
+    },
+    "mcporter": {
+      "version": "1.0.0",
+      "installedAt": 1774302301293
+    },
+    "social-intelligence": {
+      "version": "1.1.1",
+      "installedAt": 1774302301577
+    },
+    "phone-voice": {
+      "version": "2.0.0",
+      "installedAt": 1774302315207
+    },
+    "postgres-job-queue": {
+      "version": "1.0.0",
+      "installedAt": 1774302315248
     }
   }
 }

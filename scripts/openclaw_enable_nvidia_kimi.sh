@@ -15,14 +15,18 @@ openclaw config set models.mode merge
 openclaw config set --json 'models.providers["nvidia-build"]' '{
   api: "openai-completions",
   baseUrl: "https://integrate.api.nvidia.com/v1",
-  apiKey: "${NVIDIA_API_KEY}",
+  apiKey: {
+    source: "env",
+    provider: "default",
+    id: "NVIDIA_API_KEY"
+  },
   models: [
-    { id: "moonshotai/kimi-k2-5", name: "Kimi K2.5 (NVIDIA Build)" }
+    { id: "moonshotai/kimi-k2.5", name: "Kimi K2.5 (NVIDIA Build)" }
   ]
 }'
 
-# Optional: add NVIDIA Build as a fallback.
-# openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2-5
+# Optional: add NVIDIA Build as the last fallback only.
+# openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2.5
 #
 # Optional: ensure Gemini stays primary (recommended).
 # openclaw models set google/gemini-2.5-flash-lite

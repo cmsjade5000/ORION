@@ -16,15 +16,18 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime as dt
+import json
 import os
 import re
+import subprocess
+import sys
 import time
 from pathlib import Path
 
-try:
-    from inbox_state import load_kv_state, save_kv_state, sha256_lines
-except Exception:  # pragma: no cover
-    from scripts.inbox_state import load_kv_state, save_kv_state, sha256_lines  # type: ignore
+# Ensure the script's directory is on the Python path for local imports.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from inbox_state import load_kv_state, save_kv_state, sha256_lines
 
 
 LANES = ("backlog", "in-progress", "testing", "done")
@@ -33,6 +36,13 @@ LANE_TO_STATUS = {
     "in-progress": "in-progress",
     "testing": "testing",
     "done": "done",
+}
+CANONICAL_CRON_LABELS = {
+    "assistant-agenda-refresh",
+    "assistant-inbox-notify",
+    "assistant-task-loop",
+    "orion-error-review",
+    "orion-session-maintenance",
 }
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
@@ -68,6 +78,55 @@ class Action:
     kind: str
     ticket: str
     detail: str
+
+
+@dataclasses.dataclass
+class CommandSnapshot:
+    argv: list[str]
+    returncode: int
+    stdout: str
+    stderr: str
+    data: dict | list | None
+
+
+@dataclasses.dataclass
+class OpenClawSnapshot:
+    gateway_health: CommandSnapshot
+    gateway_status: CommandSnapshot
+    channels_status: CommandSnapshot
+    tasks_list: CommandSnapshot
+    tasks_audit: CommandSnapshot
+
+
+def _safe_json(text: str) -> dict | list | None:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        stripped = text.strip()
+        if not stripped:
+            return None
+        lines = stripped.splitlines()
+        for idx, line in enumerate(lines):
+            trimmed = line.lstrip()
+            if not trimmed.startswith(("{", "[")):
+                continue
+            try:
+                return json.loads("\n".join(lines[idx:]))
+            except json.JSONDecodeError:
+                pass
+        for opener, closer in (("{", "}"), ("[", "]")):
+            start = stripped.find(opener)
+            end = stripped.rfind(closer)
+            if start >= 0 and end > start:
+                try:
+                    return json.loads(stripped[start : end + 1])
+                except json.JSONDecodeError:
+                    continue
+        return None
+
+
+def _json_payload(stdout: str, stderr: str) -> dict | list | None:
+    return _safe_json(stdout) or _safe_json(stderr)
 
 
 def _split_packets(lines: list[str], *, start_line_offset: int = 0) -> list[tuple[int, list[str]]]:
@@ -260,6 +319,139 @@ def _append_note(md: str, note: str) -> str:
     return md.rstrip() + f"\n\n## Notes\n- {note}\n"
 
 
+def _run_capture(argv: list[str]) -> CommandSnapshot:
+    try:
+        cp = subprocess.run(argv, capture_output=True, text=True, check=False)
+    except FileNotFoundError as exc:
+        return CommandSnapshot(argv=argv, returncode=127, stdout="", stderr=str(exc), data=None)
+
+    stdout = cp.stdout or ""
+    stderr = cp.stderr or ""
+    data: dict | list | None = None
+    if stdout.strip() or stderr.strip():
+        data = _json_payload(stdout, stderr)
+    return CommandSnapshot(argv=argv, returncode=cp.returncode, stdout=stdout, stderr=stderr, data=data)
+
+
+def _collect_openclaw_snapshot() -> OpenClawSnapshot:
+    return OpenClawSnapshot(
+        gateway_health=_run_capture(["openclaw", "gateway", "health"]),
+        gateway_status=_run_capture(["openclaw", "gateway", "status", "--json"]),
+        channels_status=_run_capture(["openclaw", "channels", "status", "--probe", "--json"]),
+        tasks_list=_run_capture(["openclaw", "tasks", "list", "--json"]),
+        tasks_audit=_run_capture(["openclaw", "tasks", "audit", "--json"]),
+    )
+
+
+def _task_summary(snapshot: OpenClawSnapshot) -> dict[str, object]:
+    tasks_payload = snapshot.tasks_list.data if isinstance(snapshot.tasks_list.data, dict) else {}
+    audit_payload = snapshot.tasks_audit.data if isinstance(snapshot.tasks_audit.data, dict) else {}
+    if isinstance(snapshot.tasks_list.data, list):
+        tasks = snapshot.tasks_list.data
+    else:
+        tasks = tasks_payload.get("tasks", []) if isinstance(tasks_payload, dict) else []
+    findings = audit_payload.get("findings", []) if isinstance(audit_payload, dict) else []
+    summary = audit_payload.get("summary", {}) if isinstance(audit_payload, dict) else {}
+
+    counts = {
+        "total": len(tasks),
+        "running": 0,
+        "queued": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "timed_out": 0,
+        "cancelled": 0,
+        "lost": 0,
+        "canonical_issues": 0,
+        "approval_followups": 0,
+    }
+    recent_failures: list[str] = []
+    stale_running: list[str] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        status = str(task.get("status") or "")
+        if status in counts:
+            counts[status] += 1
+        label = str(task.get("label") or task.get("task") or "")
+        error = str(task.get("error") or "")
+        terminal_summary = str(task.get("terminalSummary") or "")
+        task_text = "\n".join(part for part in (error, terminal_summary) if part)
+        if "approval-timeout" in task_text or "approval" in task_text.lower():
+            counts["approval_followups"] += 1
+        if label in CANONICAL_CRON_LABELS and (
+            status in {"failed", "timed_out", "lost"} or "no approval client" in task_text.lower()
+        ):
+            counts["canonical_issues"] += 1
+            recent_failures.append(f"{label}: {status or 'unknown'}")
+        elif status in {"failed", "timed_out", "lost"} and label:
+            recent_failures.append(f"{label}: {status}")
+
+    warnings = int(summary.get("warnings") or 0) if isinstance(summary, dict) else 0
+    errors = int(summary.get("errors") or 0) if isinstance(summary, dict) else 0
+    for finding in findings:
+        if not isinstance(finding, dict) or str(finding.get("code") or "") != "stale_running":
+            continue
+        task = finding.get("task") if isinstance(finding.get("task"), dict) else {}
+        label = str(task.get("label") or task.get("task") or task.get("taskId") or "unknown")
+        detail = str(finding.get("detail") or "").strip()
+        stale_running.append(f"{label}: {detail or 'stuck'}")
+    return {
+        "counts": counts,
+        "audit_warnings": warnings,
+        "audit_errors": errors,
+        "audit_codes": summary.get("byCode", {}) if isinstance(summary, dict) else {},
+        "recent_failures": recent_failures[:8],
+        "findings_count": len(findings),
+        "stale_running": stale_running[:6],
+    }
+
+
+def _channel_summary(snapshot: OpenClawSnapshot) -> dict[str, object]:
+    payload = snapshot.channels_status.data if isinstance(snapshot.channels_status.data, dict) else {}
+    channels = payload.get("channels", {}) if isinstance(payload, dict) else {}
+    states: list[str] = []
+    alerts: list[str] = []
+    for channel_id in ("telegram", "discord", "slack", "mochat"):
+        channel = channels.get(channel_id, {}) if isinstance(channels, dict) else {}
+        if not isinstance(channel, dict):
+            continue
+        configured = bool(channel.get("configured"))
+        running = bool(channel.get("running"))
+        probe = channel.get("probe") if isinstance(channel.get("probe"), dict) else {}
+        probe_ok = probe.get("ok") if isinstance(probe, dict) else None
+        last_error = str(channel.get("lastError") or "").strip()
+        if not configured:
+            states.append(f"{channel_id}=off")
+            continue
+        if running and (probe_ok is True or probe_ok is None):
+            states.append(f"{channel_id}=ok")
+        elif last_error == "disabled":
+            states.append(f"{channel_id}=disabled")
+        else:
+            states.append(f"{channel_id}=degraded")
+            detail = last_error or str(probe.get("error") or "probe failed")
+            alerts.append(f"{channel_id}: {detail}")
+    return {"states": states, "alerts": alerts[:6]}
+
+
+def _gateway_summary(snapshot: OpenClawSnapshot) -> dict[str, object]:
+    payload = snapshot.gateway_status.data if isinstance(snapshot.gateway_status.data, dict) else {}
+    rpc = payload.get("rpc", {}) if isinstance(payload, dict) else {}
+    health = payload.get("health", {}) if isinstance(payload, dict) else {}
+    service = payload.get("service", {}) if isinstance(payload, dict) else {}
+    runtime = service.get("runtime", {}) if isinstance(service, dict) else {}
+    config_audit = service.get("configAudit", {}) if isinstance(service, dict) else {}
+    health_line = next((line.strip() for line in snapshot.gateway_health.stdout.splitlines() if line.strip()), "")
+    return {
+        "health_line": health_line,
+        "rpc_ok": bool(rpc.get("ok")),
+        "healthy": bool(health.get("healthy")),
+        "runtime_status": str(runtime.get("status") or "unknown"),
+        "config_audit_ok": config_audit.get("ok") if isinstance(config_audit.get("ok"), bool) else None,
+    }
+
+
 def _update_ticket_status(ticket: Ticket, new_status: str) -> None:
     raw = ticket.path.read_text(encoding="utf-8")
     out = _rewrite_status(raw, new_status)
@@ -302,6 +494,7 @@ def _write_status_md(
     stale_pending: list[tuple[Packet, float]],
     actions: list[Action],
     stale_hours: float,
+    openclaw_snapshot: OpenClawSnapshot,
 ) -> None:
     p = repo_root / "tasks" / "NOTES" / "status.md"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -320,6 +513,52 @@ def _write_status_md(
     lines.append(
         f"- Stale pending (>{stale_hours:.1f}h): {len(stale_pending)}"
     )
+    lines.append("")
+
+    gateway_summary = _gateway_summary(openclaw_snapshot)
+    channel_summary = _channel_summary(openclaw_snapshot)
+    task_summary = _task_summary(openclaw_snapshot)
+
+    lines.append("## OpenClaw Runtime")
+    lines.append(
+        f"- Gateway: {gateway_summary['health_line'] or 'unavailable'} | rpc_ok={gateway_summary['rpc_ok']} | healthy={gateway_summary['healthy']} | runtime={gateway_summary['runtime_status']} | config_audit_ok={gateway_summary['config_audit_ok']}"
+    )
+    if channel_summary["states"]:
+        lines.append("- Channels: " + " | ".join(channel_summary["states"]))
+    else:
+        lines.append("- Channels: unavailable")
+    if channel_summary["alerts"]:
+        for alert in channel_summary["alerts"]:
+            lines.append(f"- Alert: {alert}")
+    else:
+        lines.append("- Alert: none")
+    lines.append("")
+
+    counts = task_summary["counts"]
+    lines.append("## OpenClaw Tasks")
+    lines.append(
+        "- Ledger: "
+        f"total={counts['total']} running={counts['running']} queued={counts['queued']} "
+        f"succeeded={counts['succeeded']} failed={counts['failed']} timed_out={counts['timed_out']} lost={counts['lost']}"
+    )
+    lines.append(
+        "- Audit: "
+        f"warnings={task_summary['audit_warnings']} errors={task_summary['audit_errors']} findings={task_summary['findings_count']}"
+    )
+    lines.append(
+        "- Canonical cron issues: "
+        f"{counts['canonical_issues']} | stale_running={len(task_summary['stale_running'])} | approval_followups={counts['approval_followups']}"
+    )
+    if task_summary["recent_failures"]:
+        for failure in task_summary["recent_failures"]:
+            lines.append(f"- Recent failure: {failure}")
+    else:
+        lines.append("- Recent failure: none")
+    if task_summary["stale_running"]:
+        for entry in task_summary["stale_running"]:
+            lines.append(f"- Stale running: {entry}")
+    else:
+        lines.append("- Stale running: none")
     lines.append("")
 
     lines.append("## Stale Pending Packets")
@@ -408,6 +647,7 @@ def run(
 
     tickets = _load_tickets(repo_root)
     packets = _load_packets(repo_root)
+    openclaw_snapshot = _collect_openclaw_snapshot()
 
     pending_packets = [p for p in packets if p.result_status is None]
     terminal_packets = [p for p in packets if p.result_status is not None]
@@ -489,6 +729,7 @@ def run(
         stale_pending=sorted(stale_pending, key=lambda x: x[1], reverse=True),
         actions=actions,
         stale_hours=stale_hours,
+        openclaw_snapshot=openclaw_snapshot,
     )
     _write_plan_md(
         repo_root=repo_root,

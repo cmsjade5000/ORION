@@ -1,7 +1,7 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh error-review session-maintenance party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh incident-bundle error-review session-maintenance party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
-PROMPTFOO_CONFIG ?= skills/llm-redteam-gate/examples/promptfooconfig.yaml
+PROMPTFOO_CONFIG ?= config/promptfoo/orion-safety-gate.yaml
 THINKING ?= high
 
 ## Regenerate all agent SOUL.md files
@@ -131,6 +131,10 @@ assistant-skill-refresh:
 assistant-agenda-refresh:
 	@python3 scripts/assistant_status.py --cmd refresh --json
 
+## Build a read-only ORION ops incident bundle for review
+incident-bundle:
+	@python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json
+
 ## Review recurring ORION errors and refresh the nightly report
 error-review:
 	@python3 scripts/orion_error_db.py --repo-root . review --window-hours "$${WINDOW_HOURS:-24}" --json
@@ -185,6 +189,12 @@ config-validate:
 ## Validate required OpenClaw CLI surface with compatibility fallbacks
 openclaw-compat:
 	@bash scripts/openclaw_cli_compat_check.sh
+
+## Audit local ORION runtime/tool adoption posture and write refreshable artifacts
+toolset-audit:
+	@python3 scripts/orion_toolset_audit.py \
+		--output-json tmp/orion_toolset_audit_latest.json \
+		--output-md tmp/orion_toolset_audit_latest.md
 
 ## Validate Task Packets in per-agent inbox files
 task-packets:

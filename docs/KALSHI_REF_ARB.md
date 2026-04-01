@@ -3,7 +3,7 @@
 This bot is designed for the setup you described:
 - **Live trading from the US**
 - **Execution venue:** Kalshi
-- **Reference prices:** Coinbase + Kraken spot
+- **Reference prices:** Coinbase + Kraken spot, with Binance read-only quotes enabled by default for cross-venue diagnostics unless `KALSHI_ARB_REF_FEEDS` overrides it
 
 This is not strict “arb” against another prediction market. It is:
 - “Kalshi mispricing vs a reference-implied fair probability model”
@@ -12,8 +12,8 @@ This is not strict “arb” against another prediction market. It is:
 ## What It Trades (Initial Scope)
 
 Kalshi binary markets that expose:
-- `strike_type` in `{greater, less}`
-- a numeric strike (`floor_strike`)
+- `strike_type` in `{greater, less, between}`
+- a numeric strike (`floor_strike` for `greater`, `cap_strike` for `less`, both for `between`)
 - a known expiration timestamp (`expected_expiration_time`)
 
 Example: Bitcoin markets under series like `KXBTC`.
@@ -21,7 +21,7 @@ Example: Bitcoin markets under series like `KXBTC`.
 ## Model (Initial)
 
 Fair probability uses a simple lognormal approximation:
-- spot `S` from (Coinbase, Kraken)
+- spot `S` from the configured read-only reference feeds
 - strike `K` from Kalshi
 - time-to-expiry `T`
 - volatility `sigma_annual` (configurable)
@@ -31,6 +31,7 @@ Then:
 
 Notes:
 - Kalshi resolves crypto markets off CF Benchmarks indexes; Coinbase/Kraken is an approximation.
+- Default feed selection is `coinbase,kraken,binance`; override with `KALSHI_ARB_REF_FEEDS` if you want a narrower feed set.
 - This is a starting point. For production-grade signals you’ll want options/perp-implied distributions.
 
 ## Tracking (Positions / Fills / Settlements)
@@ -135,13 +136,19 @@ Paper execution emulator (paper mode only):
 - `KALSHI_ARB_PAPER_EXEC_LATENCY_MS=250`
 - `KALSHI_ARB_PAPER_EXEC_SLIPPAGE_BPS=5`
 
+Optional live paired hedge:
+- `KALSHI_ARB_PAIRED_HEDGE=1`
+- `KALSHI_ARB_PAIRED_MIN_PROFIT_BPS=50`
+
+When enabled, the hedge leg is only attempted after the primary live order is confirmed filled or explicitly reported as executed, and it still respects the hard run/market/cash/concentration budget checks.
+
 ## Reliability / Ops Knobs
 
 - `KALSHI_ARB_RETRY_MAX_ATTEMPTS=4`
 - `KALSHI_ARB_RETRY_BASE_MS=250`
 - `KALSHI_ARB_MILESTONE_NOTIFY=1` (milestone/error style Telegram updates only)
 - `KALSHI_ARB_METRICS_ENABLED=1`
-- `KALSHI_ARB_METRICS_PATH=/Users/corystoner/src/ORION/tmp/kalshi_ref_arb/metrics.prom`
+- `KALSHI_ARB_METRICS_PATH=tmp/kalshi_ref_arb/metrics.prom`
 
 Metrics file is emitted in Prometheus textfile format each cycle.
 

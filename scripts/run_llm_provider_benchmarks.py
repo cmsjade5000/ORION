@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -188,6 +189,48 @@ def parse_json_text(text: str) -> dict[str, Any] | None:
                 return obj if isinstance(obj, dict) else None
             except Exception:
                 return None
+    return None
+
+
+def extract_json_object(text: str) -> dict[str, Any] | None:
+    txt = (text or "").strip()
+    if not txt:
+        return None
+    try:
+        obj = json.loads(txt)
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        pass
+
+    start = txt.find("{")
+    while start >= 0:
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(txt)):
+            ch = txt[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        obj = json.loads(txt[start : index + 1])
+                        return obj if isinstance(obj, dict) else None
+                    except Exception:
+                        break
+        start = txt.find("{", start + 1)
     return None
 
 
@@ -514,8 +557,21 @@ def bench_openclaw(provider_id: str, provider: dict[str, Any], task_id: str) -> 
             "model_requested": provider["models"][0],
         }
     )
-    started = time.perf_counter()
+    config_path = Path.home() / ".openclaw" / "openclaw.json"
+    temp_config_path: Path | None = None
     try:
+        config = load_json(config_path)
+        config.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})["primary"] = provider["models"][0]
+        config["agents"]["defaults"]["model"]["fallbacks"] = []
+        config.setdefault("plugins", {}).setdefault("entries", {}).setdefault("memory-lancedb", {})["enabled"] = False
+        fd, temp_name = tempfile.mkstemp(prefix="openclaw-bench-", suffix=".json")
+        os.close(fd)
+        temp_config_path = Path(temp_name)
+        temp_config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        started = time.perf_counter()
+        env = os.environ.copy()
+        env["OPENCLAW_CONFIG_PATH"] = str(temp_config_path)
         proc = subprocess.run(
             [
                 "openclaw",
@@ -523,9 +579,8 @@ def bench_openclaw(provider_id: str, provider: dict[str, Any], task_id: str) -> 
                 "--agent",
                 "main",
                 "--local",
-                "--json",
                 "--thinking",
-                "minimal",
+                "low",
                 "--message",
                 embedded_schema_prompt(case, provider_id),
             ],
@@ -533,34 +588,32 @@ def bench_openclaw(provider_id: str, provider: dict[str, Any], task_id: str) -> 
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
+        row["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 2)
     except FileNotFoundError:
         row.update({"error_message": "openclaw binary not found", "schema_failure_rate": 1.0})
         return row
-    row["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 2)
+    except Exception as exc:
+        row.update({"pass_fail": "fail", "error_message": str(exc)[:400], "schema_failure_rate": 1.0})
+        return row
+    finally:
+        if temp_config_path is not None:
+            temp_config_path.unlink(missing_ok=True)
+
     row["exit_code"] = int(proc.returncode)
     if proc.returncode != 0:
         row.update({"pass_fail": "fail", "error_message": (proc.stderr or proc.stdout).strip()[:400], "schema_failure_rate": 1.0})
         return row
-    try:
-        payload = json.loads(proc.stdout)
-    except Exception:
-        row.update({"pass_fail": "fail", "error_message": "openclaw output was not valid JSON envelope", "schema_failure_rate": 1.0})
-        return row
-    texts: list[str] = []
-    for item in (((payload or {}).get("result") or {}).get("payloads") or []):
-        text = item.get("text")
-        if isinstance(text, str) and text.strip():
-            texts.append(text.strip())
-    raw_text = "\n".join(texts)
-    parsed = parse_json_text(raw_text)
+    parsed = parse_json_text(proc.stdout)
     ok = validate_case_payload(case, parsed)
     row.update(
         {
             "pass_fail": "pass" if ok else "fail",
+            "model_used": provider["models"][0] if ok else "",
             "tool_success_rate": 1.0 if ok else 0.0,
             "schema_failure_rate": 0.0 if ok else 1.0,
-            "notes": "schema validated via embedded prompt contract" if ok else raw_text[:400],
+            "notes": "schema validated via embedded prompt contract" if ok else proc.stdout[:400],
         }
     )
     return row
@@ -686,20 +739,37 @@ def bench_openai_compatible(
     if require_parameters:
         request_body["provider"] = {"require_parameters": True}
     started = time.perf_counter()
-    status, payload = http_post_json(
-        urllib.parse.urljoin(base_url.rstrip("/") + "/", "chat/completions"),
-        request_headers,
-        request_body,
-    )
+    status = 0
+    payload = None
+    try:
+        status, payload = http_post_json(
+            urllib.parse.urljoin(base_url.rstrip("/") + "/", "chat/completions"),
+            request_headers,
+            request_body,
+            timeout_s=min(DEFAULT_TIMEOUT_S, 15.0) if provider_id == "local-bounded-runtime" else DEFAULT_TIMEOUT_S,
+        )
+    except TimeoutError:
+        row["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 2)
+        row.update(
+            {
+                "pass_fail": "fail",
+                "error_message": "local runtime timed out before returning any bytes",
+                "schema_failure_rate": 1.0,
+            }
+        )
+        return row
     row["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 2)
     row["http_status"] = status
     if status != 200 or not payload:
         error = ((payload or {}).get("error") or {}) if isinstance(payload, dict) else {}
+        default_message = "chat completions request failed"
+        if provider_id == "local-bounded-runtime" and status == 0 and not payload:
+            default_message = "local runtime timed out or returned no response"
         row.update(
             {
                 "pass_fail": "fail",
                 "error_code": str(error.get("code") or ""),
-                "error_message": str(error.get("message") or "chat completions request failed"),
+                "error_message": str(error.get("message") or default_message),
                 "schema_failure_rate": 1.0,
             }
         )
@@ -827,7 +897,7 @@ def main() -> int:
                     task_id,
                     base_url="https://integrate.api.nvidia.com/v1",
                     api_key=(os.getenv("NVIDIA_API_KEY") or "").strip(),
-                    model=str((provider.get("models") or [""])[0]),
+                    model=(os.getenv("NVIDIA_BENCHMARK_MODEL") or str((provider.get("models") or [""])[0])).strip(),
                     request_surface="nvidia-build-chat-completions",
                 )
             elif provider_id.startswith("openrouter-"):

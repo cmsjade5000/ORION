@@ -6,8 +6,9 @@ import re
 _INLINE_PATTERNS = [
     re.compile(r"OLCALL>.*?(?:CALL>|ALL>)", flags=re.IGNORECASE | re.DOTALL),
     re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL),
-    re.compile(r"<final>.*?</final>", flags=re.IGNORECASE | re.DOTALL),
 ]
+
+_FINAL_BLOCK_RE = re.compile(r"<final>\s*(.*?)\s*</final>", flags=re.IGNORECASE | re.DOTALL)
 
 _LINE_MARKERS = (
     "OLCALL>",
@@ -42,9 +43,12 @@ def sanitize_outbound_text(text: str, *, placeholder: str = "Internal runtime ou
     if not raw.strip():
         return ""
 
-    cleaned = raw
+    cleaned = _FINAL_BLOCK_RE.sub(lambda m: m.group(1).strip(), raw)
     for pattern in _INLINE_PATTERNS:
         cleaned = pattern.sub("", cleaned)
+
+    cleaned = re.sub(r"(?im)^\s*</?final>\s*$", "", cleaned)
+    cleaned = re.sub(r"(?im)^\s*</?think>\s*$", "", cleaned)
 
     kept_lines: list[str] = []
     for line in cleaned.splitlines():

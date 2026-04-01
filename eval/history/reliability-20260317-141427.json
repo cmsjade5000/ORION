@@ -1,0 +1,63 @@
+{
+  "cron": {
+    "by_agent": {
+      "ledger": 2,
+      "main": 15,
+      "quest": 1
+    },
+    "by_channel": {
+      "last": 17,
+      "telegram": 1
+    },
+    "disabled": 19,
+    "enabled": 18,
+    "total": 37
+  },
+  "delivery_queue": {
+    "by_channel": {},
+    "files": 0,
+    "top_errors": []
+  },
+  "eval_gate": {
+    "metrics": {
+      "baseline": {
+        "avg_prompt_score": 7.7,
+        "confidence": 40,
+        "fail": 4,
+        "pass": 6,
+        "pass_rate": 0.6,
+        "safety_zeros": 1,
+        "total": 10
+      },
+      "current": {
+        "avg_prompt_score": 8.7,
+        "confidence": 100,
+        "fail": 0,
+        "pass": 10,
+        "pass_rate": 1.0,
+        "safety_zeros": 0,
+        "total": 10
+      },
+      "delta": {
+        "avg_prompt_score": 1.0,
+        "confidence": 60,
+        "pass_rate": 0.4,
+        "safety_zeros": -1
+      }
+    },
+    "reasons": [],
+    "status": "pass"
+  },
+  "generated_at": "2026-03-17T14:14:27.021992+00:00",
+  "kind": "reliability_snapshot",
+  "lane_wait_24h": {
+    "avg_ms": 241060.7,
+    "by_lane": {
+      "nested": 3
+    },
+    "count": 3,
+    "hours": 24,
+    "max_ms": 480406,
+    "p95_ms": 182454
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "generatedAt": "2026-03-28T14:17:15.375095+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1774621033899,
+    "analysisStart": "2026-03-27T14:17:13.899000+00:00",
+    "analysisEndMs": 1774707433899,
+    "analysisEnd": "2026-03-28T14:17:13.899000+00:00",
+    "eventsInScope": 1,
+    "runsInScope": 1381,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 1,
+    "uniqueCorrelatedJobs": 1,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1774622580000,
+      "windowEndMs": 1774622640000,
+      "windowStart": "2026-03-27T14:43:00+00:00",
+      "windowEnd": "2026-03-27T14:44:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 208472,
+      "avgWaitMs": 208472.0,
+      "lanes": [
+        {
+          "lane": "session:agent:main:cron:3e398876-2b45-4865-8319-0ecec041bb3f",
+          "count": 1,
+          "maxWaitMs": 208472,
+          "avgWaitMs": 208472.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-03-27T10:43:52.994-04:00",
+          "timestampMs": 1774622632994,
+          "lane": "session:agent:main:cron:3e398876-2b45-4865-8319-0ecec041bb3f",
+          "waitedMs": 208472,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1774622490000,
+        "windowEndMs": 1774622730000,
+        "windowStart": "2026-03-27T14:41:30+00:00",
+        "windowEnd": "2026-03-27T14:45:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-03-27T14:44:06.114000+00:00",
+          "runAtMs": 1774622646114,
+          "jobId": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+          "jobName": "polymarket-sports-paper-60s",
+          "durationMs": 120023,
+          "deltaFromWindowStartMs": 66114,
+          "deltaFromWindowCenterMs": 36114,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3adbdf11-8d7e-4eb2-8552-80cbf5384812.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+          "jobName": "polymarket-sports-paper-60s",
+          "runCount": 1,
+          "maxDurationMs": 120023,
+          "avgDurationMs": 120023.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

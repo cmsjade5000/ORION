@@ -63,3 +63,4 @@ Typical flow:
 - ORION delegates retrieval to WIRE.
 - ORION hands WIRE’s items to SCRIBE to draft an email/Slack post.
 - ORION sends externally.
+- For browser-led operator packs, WIRE may also provide current background context that ATLAS or POLARIS uses to prepare a meeting, inbox triage summary, or portal workflow safely.

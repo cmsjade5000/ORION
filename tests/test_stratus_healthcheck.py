@@ -67,13 +67,23 @@ exit 2
         thread.start()
         return server, f"http://127.0.0.1:{server.server_address[1]}"
 
+    def _write_logs(self, root: Path, *, gateway_lines: list[str] | None = None, err_lines: list[str] | None = None) -> tuple[Path, Path]:
+        gateway_log = root / "gateway.log"
+        gateway_err = root / "gateway.err.log"
+        gateway_log.write_text("\n".join(gateway_lines or []) + ("\n" if gateway_lines else ""), encoding="utf-8")
+        gateway_err.write_text("\n".join(err_lines or []) + ("\n" if err_lines else ""), encoding="utf-8")
+        return gateway_log, gateway_err
+
     def test_ok_exit_0(self):
         with tempfile.TemporaryDirectory() as d:
             td = tempfile.TemporaryDirectory(dir=d)
             self._write_fake_openclaw(td, health_ok=True)
+            gateway_log, gateway_err = self._write_logs(Path(td.name))
             env = dict(os.environ)
             env["PATH"] = f"{td.name}:{env.get('PATH','')}"
             env["STRATUS_SKIP_HOST"] = "1"
+            env["OPENCLAW_GATEWAY_LOG"] = str(gateway_log)
+            env["OPENCLAW_GATEWAY_ERR_LOG"] = str(gateway_err)
             r = subprocess.run(
                 [str(self._script_path()), "--no-host"],
                 env=env,
@@ -91,9 +101,12 @@ exit 2
         with tempfile.TemporaryDirectory() as d:
             td = tempfile.TemporaryDirectory(dir=d)
             self._write_fake_openclaw(td, health_ok=False)
+            gateway_log, gateway_err = self._write_logs(Path(td.name))
             env = dict(os.environ)
             env["PATH"] = f"{td.name}:{env.get('PATH','')}"
             env["STRATUS_SKIP_HOST"] = "1"
+            env["OPENCLAW_GATEWAY_LOG"] = str(gateway_log)
+            env["OPENCLAW_GATEWAY_ERR_LOG"] = str(gateway_err)
             r = subprocess.run(
                 [str(self._script_path()), "--no-host"],
                 env=env,
@@ -138,9 +151,12 @@ exit 2
                 encoding="utf-8",
             )
             p.chmod(p.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            gateway_log, gateway_err = self._write_logs(Path(td.name))
             env = dict(os.environ)
             env["PATH"] = f"{td.name}:{env.get('PATH','')}"
             env["STRATUS_SKIP_HOST"] = "1"
+            env["OPENCLAW_GATEWAY_LOG"] = str(gateway_log)
+            env["OPENCLAW_GATEWAY_ERR_LOG"] = str(gateway_err)
             r = subprocess.run(
                 [str(self._script_path()), "--no-host"],
                 env=env,
@@ -177,11 +193,14 @@ exit 2
         with tempfile.TemporaryDirectory() as d:
             td = tempfile.TemporaryDirectory(dir=d)
             self._write_fake_openclaw(td, health_ok=True)
+            gateway_log, gateway_err = self._write_logs(Path(td.name))
             server, base_url = self._start_http_server()
             try:
                 env = dict(os.environ)
                 env["PATH"] = f"{td.name}:{env.get('PATH','')}"
                 env["STRATUS_SKIP_HOST"] = "1"
+                env["OPENCLAW_GATEWAY_LOG"] = str(gateway_log)
+                env["OPENCLAW_GATEWAY_ERR_LOG"] = str(gateway_err)
                 r = subprocess.run(
                     [str(self._script_path()), "--no-host", "--app-server", base_url],
                     env=env,
@@ -203,11 +222,14 @@ exit 2
         with tempfile.TemporaryDirectory() as d:
             td = tempfile.TemporaryDirectory(dir=d)
             self._write_fake_openclaw(td, health_ok=True)
+            gateway_log, gateway_err = self._write_logs(Path(td.name))
             server, base_url = self._start_http_server(readyz=503, healthz=200)
             try:
                 env = dict(os.environ)
                 env["PATH"] = f"{td.name}:{env.get('PATH','')}"
                 env["STRATUS_SKIP_HOST"] = "1"
+                env["OPENCLAW_GATEWAY_LOG"] = str(gateway_log)
+                env["OPENCLAW_GATEWAY_ERR_LOG"] = str(gateway_err)
                 r = subprocess.run(
                     [str(self._script_path()), "--no-host", f"--app-server={base_url}"],
                     env=env,
@@ -224,3 +246,35 @@ exit 2
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn("codex app-server readyz: FAIL", r.stdout)
             self.assertIn("Check the Codex app-server listener", r.stdout)
+
+    def test_recent_channel_stability_signals_degrade_healthcheck(self):
+        with tempfile.TemporaryDirectory() as d:
+            td = tempfile.TemporaryDirectory(dir=d)
+            self._write_fake_openclaw(td, health_ok=True)
+            gateway_log, gateway_err = self._write_logs(
+                Path(td.name),
+                gateway_lines=[
+                    "2026-03-31T21:40:42.159-04:00 [discord] [default] auto-restart attempt 1/10 in 5s",
+                ],
+                err_lines=[
+                    "2026-03-31T21:40:53.645-04:00 [telegram] fetch fallback: enabling sticky IPv4-only dispatcher (codes=ETIMEDOUT,EHOSTUNREACH)",
+                ],
+            )
+            env = dict(os.environ)
+            env["PATH"] = f"{td.name}:{env.get('PATH','')}"
+            env["STRATUS_SKIP_HOST"] = "1"
+            env["OPENCLAW_GATEWAY_LOG"] = str(gateway_log)
+            env["OPENCLAW_GATEWAY_ERR_LOG"] = str(gateway_err)
+            r = subprocess.run(
+                [str(self._script_path()), "--no-host"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            td.cleanup()
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("discord restart indicators: 1", r.stdout)
+            self.assertIn("telegram ipv4 fallback indicators: 1", r.stdout)
+            self.assertIn("Build an ORION incident bundle", r.stdout)

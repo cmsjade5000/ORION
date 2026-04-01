@@ -1,0 +1,115 @@
+{
+  "generatedAt": "2026-03-24T14:31:59.810380+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1774276318549,
+    "analysisStart": "2026-03-23T14:31:58.549000+00:00",
+    "analysisEndMs": 1774362718549,
+    "analysisEnd": "2026-03-24T14:31:58.549000+00:00",
+    "eventsInScope": 1,
+    "runsInScope": 840,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 1,
+    "uniqueCorrelatedJobs": 2,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1774306320000,
+      "windowEndMs": 1774306380000,
+      "windowStart": "2026-03-23T22:52:00+00:00",
+      "windowEnd": "2026-03-23T22:53:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 5242,
+      "avgWaitMs": 5242.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "count": 1,
+          "maxWaitMs": 5242,
+          "avgWaitMs": 5242.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-03-23T18:52:29.080-04:00",
+          "timestampMs": 1774306349080,
+          "lane": "session:agent:ledger:cron:bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "waitedMs": 5242,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1774306230000,
+        "windowEndMs": 1774306470000,
+        "windowStart": "2026-03-23T22:50:30+00:00",
+        "windowEnd": "2026-03-23T22:54:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-03-23T22:52:29.311000+00:00",
+          "runAtMs": 1774306349311,
+          "jobId": "6425b337-0c5d-482e-86a6-20e0d347af8f",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 15931,
+          "deltaFromWindowStartMs": 29311,
+          "deltaFromWindowCenterMs": -689,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/6425b337-0c5d-482e-86a6-20e0d347af8f.jsonl"
+        },
+        {
+          "runAt": "2026-03-23T22:52:45.242000+00:00",
+          "runAtMs": 1774306365242,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 56604,
+          "deltaFromWindowStartMs": 45242,
+          "deltaFromWindowCenterMs": 15242,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-03-23T22:54:00.018000+00:00",
+          "runAtMs": 1774306440018,
+          "jobId": "6425b337-0c5d-482e-86a6-20e0d347af8f",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 16193,
+          "deltaFromWindowStartMs": 120018,
+          "deltaFromWindowCenterMs": 90018,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/6425b337-0c5d-482e-86a6-20e0d347af8f.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "6425b337-0c5d-482e-86a6-20e0d347af8f",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 16193,
+          "avgDurationMs": 16062.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 56604,
+          "avgDurationMs": 56604.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

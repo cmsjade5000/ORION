@@ -1,0 +1,1 @@
+ERROR: --require-notify-telegram flag not recognized. Script expects --require flag with proper parameter. Check script usage or add --require-notify-telegram as a valid flag.

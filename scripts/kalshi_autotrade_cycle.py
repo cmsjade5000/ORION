@@ -414,6 +414,26 @@ def _send_telegram(chat_id: int, text: str, *, cwd: str) -> None:
         return
 
 
+def _env_int(name: str, default: int, *, minimum: Optional[int] = None) -> int:
+    try:
+        value = int(str(os.environ.get(name, default) or default).strip())
+    except Exception:
+        value = int(default)
+    if minimum is not None:
+        value = max(int(minimum), int(value))
+    return int(value)
+
+
+def _env_float(name: str, default: float, *, minimum: Optional[float] = None) -> float:
+    try:
+        value = float(str(os.environ.get(name, default) or default).strip())
+    except Exception:
+        value = float(default)
+    if minimum is not None:
+        value = max(float(minimum), float(value))
+    return float(value)
+
+
 def _truthy_env(name: str, default: str = "0") -> bool:
     v = str(os.environ.get(name, default) or "").strip().lower()
     return v in ("1", "true", "yes", "y", "on")
@@ -868,9 +888,9 @@ def _maybe_expand_series_with_rotation(root: str, series_list: list[str]) -> tup
         return (series_list, meta)
 
     primary = series_list[0]
-    round_cycles = max(6, int(os.environ.get("KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES", "12") or 12))
-    dry_rounds = max(2, int(os.environ.get("KALSHI_ARB_SERIES_ROTATION_DRY_ROUNDS", "3") or 3))
-    min_blocker_share = float(os.environ.get("KALSHI_ARB_SERIES_ROTATION_MIN_BLOCKER_SHARE", "0.60") or 0.60)
+    round_cycles = _env_int("KALSHI_ARB_TUNE_SWEEP_ROUND_CYCLES", 12, minimum=6)
+    dry_rounds = _env_int("KALSHI_ARB_SERIES_ROTATION_DRY_ROUNDS", 3, minimum=2)
+    min_blocker_share = _env_float("KALSHI_ARB_SERIES_ROTATION_MIN_BLOCKER_SHARE", 0.60, minimum=0.0)
     lookback_cycles = int(round_cycles * dry_rounds)
 
     entries = _load_sweep_entries(root, window_s=max(6 * 3600, lookback_cycles * 360))
@@ -938,9 +958,9 @@ def _detect_stuck_state(root: str, *, now_unix: int) -> Dict[str, Any]:
     if not enabled:
         return out
 
-    window_s = max(3600, int(os.environ.get("KALSHI_ARB_STUCK_WINDOW_S", str(24 * 3600)) or (24 * 3600)))
-    min_cycles = max(12, int(os.environ.get("KALSHI_ARB_STUCK_MIN_CYCLES", "24") or 24))
-    min_share = float(os.environ.get("KALSHI_ARB_STUCK_DOMINANT_BLOCKER_SHARE", "0.70") or 0.70)
+    window_s = _env_int("KALSHI_ARB_STUCK_WINDOW_S", 24 * 3600, minimum=3600)
+    min_cycles = _env_int("KALSHI_ARB_STUCK_MIN_CYCLES", 24, minimum=12)
+    min_share = _env_float("KALSHI_ARB_STUCK_DOMINANT_BLOCKER_SHARE", 0.70, minimum=0.0)
     entries = _load_sweep_entries(root, window_s=int(window_s))
     out["cycles"] = int(len(entries))
     if len(entries) < min_cycles:
@@ -1133,7 +1153,7 @@ def _scan_series(
         "--min-notional-bypass-edge-bps",
         str(min_notional_bypass),
     ]
-    scan_timeout_s = int(os.environ.get("KALSHI_ARB_SCAN_TIMEOUT_S", "30"))
+    scan_timeout_s = _env_int("KALSHI_ARB_SCAN_TIMEOUT_S", 30, minimum=1)
     rc, _, obj = _run_cmd_json(argv, cwd=root, timeout_s=scan_timeout_s)
     out = obj if isinstance(obj, dict) else {"raw": obj}
     out["_rc"] = int(rc)
@@ -1212,7 +1232,7 @@ def main() -> int:
     _load_dotenv(os.environ.get("OPENCLAW_ENV_PATH", "~/.openclaw/.env"))
     rt_cfg, rt_errs = load_runtime_from_env(repo_root=root)
 
-    if not _acquire_lock(root, ttl_s=int(os.environ.get("KALSHI_ARB_LOCK_TTL_S", "240"))):
+    if not _acquire_lock(root, ttl_s=_env_int("KALSHI_ARB_LOCK_TTL_S", 240, minimum=30)):
         _write_cycle_status(
             root,
             status="skipped_lock",
@@ -1254,9 +1274,9 @@ def main() -> int:
         health_state = _load_json(health_state_path, default={"window_start_ts": 0, "last_run_had_error": False})
 
         # Closed-loop safety thresholds (evaluated post-run to avoid old transient errors re-tripping kill switch).
-        lookback = int(os.environ.get("KALSHI_ARB_AUTO_PAUSE_LOOKBACK", "6"))
-        max_err = int(os.environ.get("KALSHI_ARB_AUTO_PAUSE_MAX_ERRORS", "3"))
-        max_of = int(os.environ.get("KALSHI_ARB_AUTO_PAUSE_MAX_ORDER_FAILED", "2"))
+        lookback = _env_int("KALSHI_ARB_AUTO_PAUSE_LOOKBACK", 6, minimum=1)
+        max_err = _env_int("KALSHI_ARB_AUTO_PAUSE_MAX_ERRORS", 3, minimum=1)
+        max_of = _env_int("KALSHI_ARB_AUTO_PAUSE_MAX_ORDER_FAILED", 2, minimum=1)
 
         # If a cooldown is active, do not run the trading step (prevents repeated errors from escalating to kill switch).
         if cooldown_active(RiskConfig(), root).get("active"):
@@ -1295,10 +1315,7 @@ def main() -> int:
         bal_rc, _, bal = _run_cmd_json(["python3", "scripts/kalshi_ref_arb.py", "balance"], cwd=root, timeout_s=30)
 
         # Daily loss gate (best-effort, local ledger): if exceeded, cooldown until tomorrow.
-        try:
-            limit = float(os.environ.get("KALSHI_ARB_DAILY_LOSS_LIMIT_USD", "10") or 0.0)
-        except Exception:
-            limit = 0.0
+        limit = _env_float("KALSHI_ARB_DAILY_LOSS_LIMIT_USD", 10.0, minimum=0.0)
         if limit > 0.0:
             pnl_today = _daily_realized_pnl_usd(root, now_unix=ts, tz="America/New_York")
             if isinstance(pnl_today, (int, float)) and float(pnl_today) <= -float(limit):
@@ -1307,7 +1324,7 @@ def main() -> int:
                     _, end = _day_bounds_unix(tz="America/New_York", now_unix=ts)
                     seconds = max(60, int(end - ts))
                 except Exception:
-                    seconds = int(os.environ.get("KALSHI_ARB_COOLDOWN_S", "1800"))
+                    seconds = _env_int("KALSHI_ARB_COOLDOWN_S", 1800, minimum=60)
                 set_cooldown(RiskConfig(), root, seconds=seconds, reason="daily_loss_limit")
                 post_rc, _, post = _run_cmd_json(
                     ["python3", "scripts/kalshi_ref_arb.py", "portfolio", "--hours", "1", "--limit", "50"],
@@ -1391,7 +1408,7 @@ def main() -> int:
         bayes_obs_k_max = os.environ.get("KALSHI_ARB_BAYES_OBS_K_MAX", "30")
         vol_anomaly = os.environ.get("KALSHI_ARB_VOL_ANOMALY", "0")
         vol_anomaly_window_h = os.environ.get("KALSHI_ARB_VOL_ANOMALY_WINDOW_H", "24")
-        sigma_window_h = int(os.environ.get("KALSHI_ARB_SIGMA_WINDOW_H", "168"))
+        sigma_window_h = _env_int("KALSHI_ARB_SIGMA_WINDOW_H", 168, minimum=1)
         max_market_concentration_fraction = str(rt_cfg.max_market_concentration_fraction)
         try:
             select_min_liq = float(os.environ.get("KALSHI_ARB_SCAN_SELECT_MIN_LIQUIDITY_USD", min_liq) or min_liq)
@@ -1406,7 +1423,7 @@ def main() -> int:
         except Exception:
             select_min_tte = float(min_tte)
         try:
-            select_min_candidates = int(os.environ.get("KALSHI_ARB_SCAN_SELECT_MIN_CANDIDATES", "1") or 1)
+            select_min_candidates = _env_int("KALSHI_ARB_SCAN_SELECT_MIN_CANDIDATES", 1, minimum=1)
         except Exception:
             select_min_candidates = 1
         try:
@@ -1421,7 +1438,7 @@ def main() -> int:
         selected_eff = None
         selected_score = None
         selected_eligible = False
-        router_stats = _series_share_stats(root, window_s=max(3600, int(os.environ.get("KALSHI_ARB_ROUTER_WINDOW_S", str(24 * 3600)) or (24 * 3600))))
+        router_stats = _series_share_stats(root, window_s=_env_int("KALSHI_ARB_ROUTER_WINDOW_S", 24 * 3600, minimum=3600))
         for s in series_list:
             sobj = _scan_series(
                 root,
@@ -1730,7 +1747,7 @@ def main() -> int:
                 set_cooldown(
                     cfg,
                     root,
-                    seconds=int(os.environ.get("KALSHI_ARB_COOLDOWN_S", "1800")),
+                    seconds=_env_int("KALSHI_ARB_COOLDOWN_S", 1800, minimum=60),
                     reason=("cycle_error" if any_error else "order_failed"),
                 )
 
@@ -1739,7 +1756,7 @@ def main() -> int:
         can_notify = chat_id is not None
         now = ts
         last = int(notify_state.get("last_notify_ts") or 0)
-        rate_limit_s = int(os.environ.get("KALSHI_ARB_NOTIFY_MIN_INTERVAL_S", "900"))  # 15m
+        rate_limit_s = _env_int("KALSHI_ARB_NOTIFY_MIN_INTERVAL_S", 900, minimum=0)  # 15m
         allowed = (now - last) >= rate_limit_s
         notify_trades = _truthy_env("KALSHI_ARB_NOTIFY_TRADES", default="0")
 
@@ -1839,6 +1856,14 @@ def main() -> int:
             },
         )
         return 0
+    except Exception as e:
+        _write_cycle_status(
+            root,
+            status="failed",
+            detail=f"{type(e).__name__}: {str(e)[:200]}",
+            extra={"runtime": rt_cfg.as_dict(), "runtime_errors": rt_errs},
+        )
+        return 1
     finally:
         _release_lock(root)
 

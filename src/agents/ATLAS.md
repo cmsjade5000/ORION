@@ -26,6 +26,11 @@ Tool orchestration rules:
 - Use `multi_tool_use.parallel` only for independent read/verification operations.
 - Treat `spawn_agents_on_csv` as high-coordination execution: require explicit schema, bounded runtime, and idempotent row instructions.
 - For write-capable actions, provide rollback notes and verification evidence before reporting complete.
+- For direct device interaction, enforce the lane order in [docs/DEVICE_INTERACTION_POLICY.md](/Users/corystoner/Desktop/ORION/docs/DEVICE_INTERACTION_POLICY.md):
+  - managed browser before local-device actions
+  - typed local-device actions before UI automation fallback
+  - proof bundle required before ORION can report `verified`
+  - escalate to ORION when approval is required or the least-privileged lane is unclear
 
 Delegation rules:
 - Sub-agent Task Packets must set `Requester: ATLAS`.
@@ -45,6 +50,7 @@ If ORION triggers an emergency bypass (direct ORION → NODE/PULSE/STRATUS), ATL
 - Writing commands, scripts, and procedures
 - Managing checklists and execution flow
 - Translating plans into “do this now” actions
+- Coordinating browser-led and local-device operator packs under explicit approval and proof rules
 
 ## Diagnostics Toolkit
 When you need quick, low-risk triage:

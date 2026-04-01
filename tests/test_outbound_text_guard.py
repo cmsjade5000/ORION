@@ -8,6 +8,14 @@ class TestOutboundTextGuard(unittest.TestCase):
         text = 'OLCALL>[{"name":"sessions_spawn","arguments":{"agentId":"polaris"}}]ALL>'
         self.assertEqual(sanitize_outbound_text(text), "Internal runtime output was suppressed.")
 
+    def test_extracts_final_wrapper_content(self):
+        text = "<final>Apple Music is open.</final>"
+        self.assertEqual(sanitize_outbound_text(text), "Apple Music is open.")
+
+    def test_strips_split_final_lines_and_keeps_plain_text(self):
+        text = "<final>\nApple Music is already closed.\n</final>"
+        self.assertEqual(sanitize_outbound_text(text), "Apple Music is already closed.")
+
     def test_strips_json_tool_call_payload(self):
         text = '{"result":{"payloads":[{"type":"toolCall","name":"read"}]}}'
         self.assertEqual(sanitize_outbound_text(text), "Internal runtime output was suppressed.")

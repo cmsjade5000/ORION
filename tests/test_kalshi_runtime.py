@@ -72,6 +72,20 @@ class TestKalshiRuntime(unittest.TestCase):
         self.assertAlmostEqual(cfg.dynamic_edge_regime_mults.get("hot") or 0.0, 1.5, places=9)
         self.assertAlmostEqual(cfg.portfolio_allocator_edge_power, 1.3, places=9)
 
+    def test_runtime_rewrites_legacy_orion_metrics_path_to_current_repo(self) -> None:
+        from scripts.arb.kalshi_runtime import load_runtime_from_env
+
+        with patch.dict(
+            "os.environ",
+            {
+                "KALSHI_ARB_METRICS_PATH": "/Users/corystoner/src/ORION/tmp/kalshi_ref_arb/metrics.prom",
+            },
+            clear=True,
+        ):
+            cfg, errs = load_runtime_from_env(repo_root="/Users/corystoner/Desktop/ORION")
+        self.assertEqual(cfg.metrics_path, "/Users/corystoner/Desktop/ORION/tmp/kalshi_ref_arb/metrics.prom")
+        self.assertTrue(any("another ORION checkout" in err for err in errs))
+
 
 if __name__ == "__main__":
     unittest.main()

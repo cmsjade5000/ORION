@@ -66,10 +66,10 @@
       "provider_id": "kimi-k2-5-nvidia-build",
       "display_name": "Kimi K2.5 via NVIDIA Build",
       "lane": "reasoning-tertiary",
-      "api_path": "openclaw://nvidia-build/moonshotai/kimi-k2-5",
+      "api_path": "openclaw://nvidia-build/moonshotai/kimi-k2.5",
       "api_surface": "OpenAI-compatible provider via OpenClaw",
       "models": [
-        "moonshotai/kimi-k2-5"
+        "moonshotai/kimi-k2.5"
       ],
       "allowed_tasks": [
         "research_synthesis",

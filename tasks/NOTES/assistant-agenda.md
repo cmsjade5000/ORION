@@ -1,12 +1,12 @@
 # Assistant Agenda
 
-Generated: 2026-03-16 22:06 EDT
+Generated: 2026-03-31 22:30 EDT
 
 ## Calendar
-- No upcoming calendar events found.
+- 12:00 AM: Apple’s 50th Birthday (Work)
 
 ## Reminders
-- 2026-03-15T18:00:00Z: Check parking card balance (Reminders)
+- No reminders found.
 
 ## Open Tickets
 - 0001-scaffold-tickets-workflow [backlog]

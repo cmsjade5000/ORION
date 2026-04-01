@@ -83,6 +83,11 @@ openclaw config set channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISC
 # the gateway to produce no visible reply. For reliability, keep replyToMode off.
 openclaw config set channels.discord.replyToMode off
 
+# Exec approvals routed over Discord DM
+openclaw config set channels.discord.execApprovals.enabled true
+openclaw config set channels.discord.execApprovals.approvers '["<CORY_DISCORD_USER_ID>"]'
+openclaw config set channels.discord.execApprovals.target dm
+
 # Proactive updates target (used by scripts/notify_inbox_results.py)
 export DISCORD_DEFAULT_POST_TARGET="channel:<DISCORD_UPDATES_CHANNEL_ID>"
 ```
@@ -90,6 +95,7 @@ export DISCORD_DEFAULT_POST_TARGET="channel:<DISCORD_UPDATES_CHANNEL_ID>"
 Notes:
 - SecretRef is preferred on supported credential surfaces in OpenClaw `2026.3.2`.
 - `${DISCORD_BOT_TOKEN}` interpolation remains compatible, but SecretRef gives better `openclaw secrets` planning/audit behavior.
+- Keep `execApprovals.target=dm` unless you explicitly want approval prompts visible in a trusted channel.
 
 ## High-Autonomy Bootstrap (Server-Wide ORION Operations)
 

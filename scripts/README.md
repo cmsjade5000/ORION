@@ -239,6 +239,35 @@ python3 scripts/assistant_status.py --cmd refresh --json
 
 ---
 
+## orion_incident_bundle.py
+
+### Purpose
+Capture a read-only ORION operations bundle with gateway health, gateway status, doctor output, task ledger visibility, Codex posture, and recent gateway log tails.
+
+### Usage
+
+Print JSON to stdout and write a stable latest summary:
+
+```bash
+python3 scripts/orion_incident_bundle.py --repo-root /Users/corystoner/src/ORION --write-latest --json
+```
+
+Artifacts:
+
+```text
+tmp/incidents/<timestamp>/
+tmp/orion_incident_bundle_latest.json
+tasks/NOTES/orion-ops-status.md
+```
+
+Make target:
+
+```bash
+make incident-bundle
+```
+
+---
+
 ## assistant_capture.py
 
 ### Purpose
@@ -248,6 +277,35 @@ Create a quick intake item and queue a POLARIS packet for bounded admin follow-t
 
 ```bash
 python3 scripts/assistant_capture.py --text "Follow up with the contractor next Tuesday." --json
+```
+
+---
+
+## orion_toolset_audit.py
+
+### Purpose
+Run a non-destructive local audit of ORION's OpenClaw/Codex posture and write JSON/markdown artifacts for the current toolset adoption plan.
+
+### Usage
+
+Print JSON to stdout:
+
+```bash
+python3 scripts/orion_toolset_audit.py
+```
+
+Write refreshable artifacts:
+
+```bash
+python3 scripts/orion_toolset_audit.py \
+  --output-json tmp/orion_toolset_audit_latest.json \
+  --output-md tmp/orion_toolset_audit_latest.md
+```
+
+Make target:
+
+```bash
+make toolset-audit
 ```
 
 ---
@@ -728,6 +786,7 @@ Single-cycle runner for unattended paper sports execution:
 
 ```bash
 python3 scripts/polymarket_sports_paper_cycle.py
+bash scripts/install_orion_polymarket_sports_paper_cycle_launchagent.sh
 ```
 
 ### Key Env Knobs
@@ -742,3 +801,4 @@ python3 scripts/polymarket_sports_paper_cycle.py
 Notes:
 - Cycle overlap is prevented with a lock at `tmp/polymarket_sports_paper/cycle.lock`.
 - If a prior cycle is still running, status is recorded as `skipped_lock` (not an error).
+- For unattended local execution, prefer the LaunchAgent installer above. It refreshes the plist to the current repo path and disables the duplicate OpenClaw cron job that would otherwise trigger `system.run` approvals.

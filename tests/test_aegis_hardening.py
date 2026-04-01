@@ -61,6 +61,12 @@ printf '%s\n' "$@" > "${MOCK_SSH_LOG:?}"
         self.assertIn("/etc/aegis-monitor.env", script)
         self.assertIn('cp "$current_tmp" "$drift_tmp"', script)
         self.assertIn("baseline unchanged pending review", script)
+        self.assertIn('drift_fingerprint_file="$STATE_DIR/config_hashes.drift.fingerprint"', script)
+        self.assertIn('drift_incident_file="$STATE_DIR/config_hashes.drift.incident"', script)
+        self.assertIn('if [ "$current_fingerprint" != "$last_drift_fingerprint" ]; then', script)
+        self.assertIn('"config_drift_${current_fingerprint}" 31536000', script)
+        self.assertIn("config drift unchanged; suppressing repeat alert", script)
+        self.assertIn('rm -f "$drift_tmp" "$drift_fingerprint_file" "$drift_incident_file"', script)
         drift_section = script.split('if ! cmp -s "$hash_file" "$current_tmp"; then', 1)[1]
         drift_section = drift_section.split("\nfi\n\n# 5) Tailscale peer changes", 1)[0]
         self.assertNotIn('cp "$current_tmp" "$hash_file"', drift_section)

@@ -76,6 +76,11 @@ Output Format:
 - `Due:` `YYYY-MM-DD` target completion date (required for POLARIS inbox packets)
 - `Approval Gate:` optional explicit policy gate (example: `LEDGER_RESULT_REQUIRED`)
 - `Gate Evidence:` short pointer to the gating result/source (example: `tasks/INBOX/LEDGER.md packet@line ...`)
+- Device-control fields when relevant:
+  - `Device Target:` for example `managed-browser`, `personal-browser`, `macos-node`
+  - `Action Class:` for example `read_like`, `local_write`, `identity_bearing`, `destructive`, `persistent_change`
+  - `Action Id:` typed action identifier such as `open_app`, `open_url`, `shortcut`
+  - `Inputs Summary:` concise parameter summary safe to log/review
 
 ## Cron Payload Guidance
 
@@ -115,6 +120,107 @@ Suggested additions for tool-heavy cron packets:
 - `Tool Scope: read-only` unless explicitly approved otherwise
 - `Evidence Required:` command output path or report path
 - `Rollback:` if packet can write or modify system state
+- For any device-interaction prep packet, prefer queue/stage semantics over direct side effects unless prior approval is explicit
+
+## Device-Control Packet Shape
+
+For browser-led or local-device workflows, prefer adding these fields:
+
+```text
+Device Target: managed-browser | personal-browser | macos-node
+Action Class: read_like | local_write | identity_bearing | destructive | persistent_change
+Action Id: <typed action or workflow id>
+Inputs Summary:
+- <safe-to-log parameter summary>
+Evidence Required:
+- <artifact or screenshot path>
+- <structured result or check line>
+Rollback:
+- <reversible fallback or "none">
+```
+
+Guidance:
+- `Device Target: managed-browser` is the default when browser automation is sufficient.
+- `Device Target: personal-browser` should be explicit and treated as higher trust/risk.
+- `Device Target: macos-node` should point to a typed action from [docs/MACOS_NODE_ACTION_MODEL.md](/Users/corystoner/Desktop/ORION/docs/MACOS_NODE_ACTION_MODEL.md).
+- `Action Class:` should match the approval class, not the user intent.
+- `Inputs Summary:` must be review-safe and should not echo secrets or full sensitive payloads.
+
+## Device-Control Examples
+
+### Example: Browser-Led Review Packet
+
+```text
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Objective: Open the expense portal, navigate to the pending report, and stage the draft for Cory's approval.
+Execution Mode: delegate
+Tool Scope: write
+Device Target: managed-browser
+Action Class: identity_bearing
+Action Id: expense_report_stage
+Inputs Summary:
+- expense portal
+- pending March report
+Success Criteria:
+- Draft is opened and staged for review.
+- No submission occurs.
+Constraints:
+- Managed browser only.
+- Do not submit, send, or approve the report.
+Inputs:
+- docs/operator-packs/expense-report.md
+Risks:
+- Acts inside Cory's authenticated session; mitigate by staging only and capturing proof.
+Stop Gates:
+- Any submit, send, payment, or account-setting change.
+Evidence Required:
+- Screenshot of staged draft.
+- Portal URL for the staged page.
+- Final action summary.
+Rollback:
+- Close draft without submitting.
+Output Format:
+- Short checklist + proof bundle paths.
+```
+
+### Example: Typed macOS Node Packet
+
+```text
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Objective: Open Notes and reveal the meeting-prep folder for review.
+Execution Mode: delegate
+Tool Scope: write
+Device Target: macos-node
+Action Class: local_write
+Action Id: open_app
+Inputs Summary:
+- Notes.app
+- meeting-prep folder reveal
+Success Criteria:
+- Notes is opened.
+- Target folder is visible for Cory.
+Constraints:
+- Use typed actions only.
+- No arbitrary shell execution.
+Inputs:
+- docs/MACOS_NODE_ACTION_MODEL.md
+Risks:
+- Low local UI side effect; mitigate with typed action and proof.
+Stop Gates:
+- Any request to modify note contents without explicit approval.
+Evidence Required:
+- Structured action result.
+- Timestamp.
+- Optional screenshot if part of a visible workflow.
+Rollback:
+- None.
+Output Format:
+- Structured result + proof summary.
+```
 
 ## ORION → Specialist Session Guidance
 
@@ -141,6 +247,11 @@ Inbox files are append-only queues of Task Packets.
   - Most specialist inboxes: `Requester: ORION`.
   - POLARIS inbox: `Requester: ORION`.
   - ATLAS-directed sub-agents (`NODE`, `PULSE`, `STRATUS`): `Requester: ATLAS` (or `Requester: ORION` only with `Emergency: ATLAS_UNAVAILABLE`).
+
+Device-control routing guidance:
+- Browser-led direct interaction packets should default to `Owner: ATLAS`.
+- Local device-node execution packets should default to `Owner: ATLAS`, with ATLAS routing host-side implementation work to STRATUS when needed.
+- Scheduled prep or approval-queue packets may use `Owner: PULSE` only when the packet is bounded, retry-safe, and does not perform approval-gated side effects on its own.
 
 ### POLARIS Admin Packets
 

@@ -1,19 +1,19 @@
 # Session Maintenance
 
 - Agent: `main`
-- Apply requested: `false`
+- Apply requested: `true`
 - Applied: `false`
 - Reason: preview reports no mutation needed
 
 ## Preview
-- beforeCount: `81`
-- afterCount: `81`
+- beforeCount: `418`
+- afterCount: `418`
 - missing: `0`
 - reclaimable: `0`
 - wouldMutate: `false`
 
 ## Post-Run Preview
-- beforeCount: `81`
-- afterCount: `81`
+- beforeCount: `418`
+- afterCount: `418`
 - missing: `0`
 - wouldMutate: `false`

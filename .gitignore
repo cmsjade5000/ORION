@@ -6,6 +6,7 @@ keep/telegram.env
 # generated / local
 node_modules/
 tmp/
+.promptfoo/
 res.json
 package-lock.json
 agent-lightning-dev.tar

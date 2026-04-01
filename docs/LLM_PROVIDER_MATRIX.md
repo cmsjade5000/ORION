@@ -25,17 +25,17 @@ Operational helpers:
 | --- | --- | --- | --- |
 | Gemini via OpenClaw | production-fallback | Legacy production fallback and rollback lane | Can be promoted only with benchmark evidence and rollback notes |
 | OpenAI Responses API | control-eval | Structured outputs, tool contract tests, eval generation, trace grading | Never becomes primary silently |
-| Kimi K2.5 via NVIDIA Build | reasoning-tertiary | Tertiary hosted reasoning fallback | Must pass ORION-specific evals before fallback promotion |
+| Kimi K2.5 via NVIDIA Build | kimi-specialist | Deliberate long-context, style-sensitive, and second-opinion lane; only a last-resort hosted fallback outside specialist routing | Must pass ORION-specific evals before fallback promotion |
 | Local runtime | bounded-local-backup | Optional local bounded utility work | Never owns high-stakes orchestration |
 
 ## Task routing defaults
 
 | Task | Primary | Fallbacks | Local allowed |
 | --- | --- | --- | --- |
-| Routing and specialist handoffs | openrouter-auto-primary | Gemini, OpenAI, Kimi (tertiary) | no |
-| Structured output and tool validation | OpenAI | openrouter-auto-primary, Gemini, Kimi (tertiary) | no |
-| Research and second opinions | openrouter-hunter-alpha | openrouter-auto-primary, OpenAI, Kimi (tertiary) | no |
-| Evals and trace grading | OpenAI | openrouter-auto-primary, Gemini, Kimi (tertiary) | no |
+| Routing and specialist handoffs | openrouter-auto-primary | Gemini, OpenAI; hand off to Kimi only through an explicit specialist lane | no |
+| Structured output and tool validation | OpenAI | openrouter-auto-primary, Gemini; keep Kimi behind stable compatibility lanes | no |
+| Research and second opinions | openrouter-hunter-alpha | openrouter-auto-primary, OpenAI; Kimi is an explicit specialist lane for long-context or alternate reasoning | no |
+| Evals and trace grading | OpenAI | openrouter-auto-primary, Gemini; Kimi only when the eval explicitly targets that lane | no |
 | Bounded utility work | openrouter-free-bounded | Local, openrouter-auto-primary | yes |
 
 ## Hard rules
@@ -44,7 +44,7 @@ Operational helpers:
 - High-risk, destructive, or external-delivery actions still require human approval.
 - Hunter Alpha is non-sensitive-only because provider logs prompts/completions; do not send secrets, credentials, or regulated personal data.
 - Local models do not own specialist orchestration, approval gates, or external messaging decisions.
-- NVIDIA Build Kimi remains a tertiary fallback lane unless benchmark evidence explicitly promotes it.
+- NVIDIA Build Kimi is an intentional specialist lane. Keep it out of hot-path production fallback chains for `main`/`ledger`, and place it after stable compatibility providers when it is present as a fallback at all.
 - Provider changes require benchmark evidence and rollback notes.
 
 ## Benchmark contract

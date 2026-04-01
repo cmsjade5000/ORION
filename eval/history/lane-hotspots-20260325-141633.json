@@ -1,0 +1,88 @@
+{
+  "generatedAt": "2026-03-25T14:16:33.483961+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1774361792148,
+    "analysisStart": "2026-03-24T14:16:32.148000+00:00",
+    "analysisEndMs": 1774448192148,
+    "analysisEnd": "2026-03-25T14:16:32.148000+00:00",
+    "eventsInScope": 1,
+    "runsInScope": 1083,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 1,
+    "uniqueCorrelatedJobs": 1,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1774393260000,
+      "windowEndMs": 1774393320000,
+      "windowStart": "2026-03-24T23:01:00+00:00",
+      "windowEnd": "2026-03-24T23:02:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 14544,
+      "avgWaitMs": 14544.0,
+      "lanes": [
+        {
+          "lane": "nested",
+          "count": 1,
+          "maxWaitMs": 14544,
+          "avgWaitMs": 14544.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-03-24T19:01:36.685-04:00",
+          "timestampMs": 1774393296685,
+          "lane": "nested",
+          "waitedMs": 14544,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1774393170000,
+        "windowEndMs": 1774393410000,
+        "windowStart": "2026-03-24T22:59:30+00:00",
+        "windowEnd": "2026-03-24T23:03:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-03-24T23:01:21.955000+00:00",
+          "runAtMs": 1774393281955,
+          "jobId": "bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 420016,
+          "deltaFromWindowStartMs": 21955,
+          "deltaFromWindowCenterMs": -8045,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/bd523bc9-ba21-4c44-99ca-97c84e85f827.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "bd523bc9-ba21-4c44-99ca-97c84e85f827",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 420016,
+          "avgDurationMs": 420016.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

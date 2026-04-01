@@ -14,112 +14,156 @@ if ! command -v openclaw >/dev/null 2>&1; then
   echo "openclaw is required" >&2
   exit 2
 fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required" >&2
+  exit 2
+fi
 
 legacy_names=(
   "assistant-agenda-refresh"
   "assistant-inbox-notify"
+  "assistant-task-loop"
   "inbox-result-notify"
+  "inbox-result-notify-discord"
+  "task-loop-heartbeat"
+  "task-loop-weekly-reconcile"
+  "orion-error-review"
+  "orion-session-maintenance"
+  "orion-ops-bundle"
+)
+
+canonical_names=(
+  "assistant-agenda-refresh"
+  "assistant-inbox-notify"
   "assistant-task-loop"
   "orion-error-review"
   "orion-session-maintenance"
+  "orion-ops-bundle"
 )
 
-remove_matching_jobs() {
-  local jobs_json ids
-  jobs_json="$(openclaw cron list --json)"
-  ids="$(
-    python3 - "$jobs_json" "${legacy_names[@]}" <<'PY'
-import json
-import sys
-
-raw = sys.argv[1]
-start = raw.find("{")
-if start < 0:
-    raise SystemExit(0)
-payload = json.loads(raw[start:])
-names = set(sys.argv[2:])
-for job in payload.get("jobs", []):
-    if job.get("name") in names and job.get("id"):
-        print(job["id"])
-PY
-  )"
-
-  while IFS= read -r job_id; do
-    [[ -z "${job_id}" ]] && continue
-    if [[ "$APPLY" -eq 1 ]]; then
-      openclaw cron rm --json "${job_id}" >/dev/null
-    else
-      printf 'openclaw cron rm --json %s\n\n' "${job_id}"
-    fi
-  done <<< "${ids}"
+run_cmd() {
+  if [[ "$APPLY" -eq 1 ]]; then
+    "$@"
+  else
+    printf '%q' "$1"
+    shift
+    for arg in "$@"; do
+      printf ' %q' "$arg"
+    done
+    printf '\n\n'
+  fi
 }
 
-read -r -d '' CMD1 <<'EOF' || true
-openclaw cron add \
-  --name "assistant-agenda-refresh" \
-  --description "Refresh ORION assistant agenda artifact" \
-  --cron "*/15 * * * *" \
-  --tz "America/New_York" \
-  --no-deliver \
-  --agent main \
-  --session isolated \
-  --message "Use system.run to execute exactly: python3 scripts/assistant_status.py --cmd refresh --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-EOF
+find_job_matches() {
+  local jobs_json="$1"
+  local job_name="$2"
 
-read -r -d '' CMD2 <<'EOF' || true
-openclaw cron add \
-  --name "assistant-inbox-notify" \
-  --description "Notify Cory when assistant packets complete" \
-  --cron "*/2 * * * *" \
-  --tz "America/New_York" \
-  --no-deliver \
-  --agent main \
-  --session isolated \
-  --message "Use system.run to execute exactly: python3 scripts/notify_inbox_results.py --require-notify-telegram. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-EOF
+  jq -c --arg name "$job_name" '
+    [
+      .jobs[]
+      | select(.name == $name)
+    ]
+    | sort_by((.updatedAtMs // .createdAtMs // 0))
+    | reverse
+  ' <<<"$jobs_json"
+}
 
-read -r -d '' CMD3 <<'EOF' || true
-openclaw cron add \
-  --name "assistant-task-loop" \
-  --description "Reconcile assistant tickets and fail loudly on stale admin work" \
-  --cron "*/5 * * * *" \
-  --tz "America/New_York" \
-  --no-deliver \
-  --agent main \
-  --session isolated \
-  --message "Use system.run to execute exactly: python3 scripts/task_execution_loop.py --apply --strict-stale --stale-hours 24. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-EOF
+remove_job_ids() {
+  local ids_json="$1"
 
-read -r -d '' CMD4 <<'EOF' || true
-openclaw cron add \
-  --name "orion-error-review" \
-  --description "Review recurring ORION errors and apply safe remediations" \
-  --cron "15 2 * * *" \
-  --tz "America/New_York" \
-  --no-deliver \
-  --agent main \
-  --session isolated \
-  --message "Use system.run to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-EOF
+  jq -r '.[]' <<<"$ids_json" | while IFS= read -r job_id; do
+    [[ -z "${job_id}" ]] && continue
+    run_cmd openclaw cron rm --json "$job_id"
+  done
+}
 
-read -r -d '' CMD5 <<'EOF' || true
-openclaw cron add \
-  --name "orion-session-maintenance" \
-  --description "Prune stale ORION session metadata when drift exceeds threshold" \
-  --cron "45 2 * * *" \
-  --tz "America/New_York" \
-  --no-deliver \
-  --agent main \
-  --session isolated \
-  --message "Use system.run to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-EOF
+prune_jobs() {
+  local jobs_json="$1"
+  local name matches ids_to_remove
 
-remove_matching_jobs
+  for name in "${canonical_names[@]}"; do
+    matches="$(find_job_matches "$jobs_json" "$name")"
+    ids_to_remove="$(
+      jq '
+        [
+          .[]
+          | select(
+              (.sessionTarget // "") != "isolated"
+              or ((.delivery.mode // "") != "none")
+            )
+          | .id
+        ]
+      ' <<<"$matches"
+    )"
+    remove_job_ids "$ids_to_remove"
+    matches="$(find_job_matches "$jobs_json" "$name")"
+    ids_to_remove="$(jq '[.[1:][]?.id]' <<<"$matches")"
+    remove_job_ids "$ids_to_remove"
+  done
 
-for cmd in "$CMD1" "$CMD2" "$CMD3" "$CMD4" "$CMD5"; do
-  if [[ "$APPLY" -eq 1 ]]; then
-    eval "$cmd"
-  else
-    printf '%s\n\n' "$cmd"
+  for name in "${legacy_names[@]}"; do
+    case " ${canonical_names[*]} " in
+      *" ${name} "*) continue ;;
+    esac
+    matches="$(find_job_matches "$jobs_json" "$name")"
+    ids_to_remove="$(jq '[.[].id]' <<<"$matches")"
+    remove_job_ids "$ids_to_remove"
+  done
+}
+
+upsert_job() {
+  local jobs_json="$1"
+  local job_name="$2"
+  local description="$3"
+  local cron_expr="$4"
+  local message="$5"
+  local matches match_count job_id
+
+  matches="$(find_job_matches "$jobs_json" "$job_name")"
+  match_count="$(jq 'length' <<<"$matches")"
+
+  if ((match_count == 0)); then
+    run_cmd openclaw cron add \
+      --name "$job_name" \
+      --description "$description" \
+      --cron "$cron_expr" \
+      --tz "America/New_York" \
+      --no-deliver \
+      --agent main \
+      --session isolated \
+      --wake next-heartbeat \
+      --message "$message"
+    return
   fi
-done
+
+  job_id="$(jq -r '.[0].id' <<<"$matches")"
+  run_cmd openclaw cron edit "$job_id" \
+    --name "$job_name" \
+    --description "$description" \
+    --cron "$cron_expr" \
+    --tz "America/New_York" \
+    --enable \
+    --no-deliver \
+    --agent main \
+    --session isolated \
+    --wake next-heartbeat \
+    --message "$message"
+}
+
+CMD1="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/assistant_status.py --cmd refresh --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD2="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/notify_inbox_results.py --require-notify-telegram. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD3="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/task_execution_loop.py --apply --stale-hours 24. Do not request elevated execution. Do not add --strict-stale. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD4="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD5="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD6="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+
+jobs_json="$(openclaw cron list --all --json)"
+prune_jobs "$jobs_json"
+jobs_json="$(openclaw cron list --all --json)"
+
+upsert_job "$jobs_json" "assistant-agenda-refresh" "Refresh ORION assistant agenda artifact" "*/15 * * * *" "$CMD1"
+upsert_job "$jobs_json" "assistant-inbox-notify" "Notify Cory when assistant packets complete" "*/2 * * * *" "$CMD2"
+upsert_job "$jobs_json" "assistant-task-loop" "Reconcile assistant tickets and fail loudly on stale admin work" "*/5 * * * *" "$CMD3"
+upsert_job "$jobs_json" "orion-error-review" "Review recurring ORION errors and apply safe remediations" "15 2 * * *" "$CMD4"
+upsert_job "$jobs_json" "orion-session-maintenance" "Prune stale ORION session metadata when drift exceeds threshold" "45 2 * * *" "$CMD5"
+upsert_job "$jobs_json" "orion-ops-bundle" "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence" "30 3 * * *" "$CMD6"

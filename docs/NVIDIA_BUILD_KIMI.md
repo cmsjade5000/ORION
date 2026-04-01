@@ -1,6 +1,6 @@
 # NVIDIA Build API (nvapi-...) + Kimi K2.5 (OpenClaw wiring)
 
-Goal: let ORION use **Google Gemini** as the primary chat model, and fall back to **NVIDIA Build** for Kimi K2.5 when Gemini is missing/unavailable.
+Goal: keep ORION production lanes on **Google Gemini/OpenRouter**, while exposing **NVIDIA Build Kimi K2.5** as an intentional specialist lane instead of a noisy generic fallback.
 
 This repo does **not** store secrets. Do not paste API keys into Git.
 
@@ -38,26 +38,54 @@ openclaw config set --json 'models.providers["nvidia-build"]' '{
     id: "NVIDIA_API_KEY"
   },
   models: [
-    { id: "moonshotai/kimi-k2-5", name: "Kimi K2.5 (NVIDIA Build)" }
+    { id: "moonshotai/kimi-k2.5", name: "Kimi K2.5 (NVIDIA Build)" }
   ]
 }'
 ```
 
 Notes:
-- The NVIDIA docs commonly spell this model id as `moonshotai/kimi-k2-5`.
+- The NVIDIA docs currently spell this model id as `moonshotai/kimi-k2.5`.
 - This config references `NVIDIA_API_KEY` via SecretRef; it does not store the key itself.
 
-## 3) Set routing: Gemini primary, NVIDIA Build fallback
+## 3) Set routing: keep production on Gemini, reserve Kimi for a dedicated lane
 
-Set routing: Gemini primary, NVIDIA Build fallback:
+Recommended posture:
 
 ```bash
 openclaw models set google/gemini-2.5-flash-lite
 openclaw models fallbacks add google/gemini-2.5-flash-lite
-openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2-5
 ```
 
-(Keep the fallback list provider-restricted. Avoid OpenRouter/OpenAI/Anthropic for now.)
+Then pin Kimi only on an intentional specialist agent, for example `ember`, by setting:
+
+```json
+{
+  "id": "ember",
+  "model": {
+    "primary": "nvidia-build/moonshotai/kimi-k2.5",
+    "fallbacks": [
+      "google/gemini-2.5-flash-lite",
+      "openrouter/free"
+    ]
+  }
+}
+```
+
+Recommended reliability knobs when NVIDIA Build is bursty:
+
+```json
+{
+  "auth": {
+    "cooldowns": {
+      "failureWindowHours": 12,
+      "overloadedProfileRotations": 0,
+      "overloadedBackoffMs": 45000
+    }
+  }
+}
+```
+
+Avoid putting Kimi in the default cron-heavy fallback chain for `main` and `ledger` if you are already seeing repeated `429` responses.
 
 ## 4) Verify
 

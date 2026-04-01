@@ -127,11 +127,88 @@ class TestTaskExecutionLoop(unittest.TestCase):
         return int(result) if isinstance(result, int) else 0
 
     def _run_with_fixed_time(self, root: Path, *, apply: bool, strict: bool, stale_seconds: int, now: float = 1700000000.0) -> int:
-        if hasattr(self.loop, "time") and hasattr(self.loop.time, "time"):
-            with mock.patch.object(self.loop.time, "time", return_value=now):
-                return self._run_loop(root, apply=apply, strict=strict, stale_seconds=stale_seconds)
-        with mock.patch("time.time", return_value=now):
+        time_patch = (
+            mock.patch.object(self.loop.time, "time", return_value=now)
+            if hasattr(self.loop, "time") and hasattr(self.loop.time, "time")
+            else mock.patch("time.time", return_value=now)
+        )
+        with self._mock_openclaw(), time_patch:
             return self._run_loop(root, apply=apply, strict=strict, stale_seconds=stale_seconds)
+
+    def _mock_openclaw(self):
+        command_map = {
+            ("openclaw", "gateway", "health"): mock.Mock(returncode=0, stdout="Gateway Health\nOK (123ms)\nTelegram: ok\nDiscord: degraded\n", stderr=""),
+            (
+                "openclaw",
+                "gateway",
+                "status",
+                "--json",
+            ): mock.Mock(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "rpc": {"ok": True},
+                        "health": {"healthy": True},
+                        "service": {"runtime": {"status": "running"}},
+                    }
+                ),
+                stderr="",
+            ),
+            (
+                "openclaw",
+                "channels",
+                "status",
+                "--probe",
+                "--json",
+            ): mock.Mock(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "channels": {
+                            "telegram": {"configured": True, "running": True, "probe": {"ok": True}},
+                            "discord": {
+                                "configured": True,
+                                "running": False,
+                                "lastError": "stale socket",
+                                "probe": {"ok": True},
+                            },
+                            "slack": {"configured": True, "running": False, "lastError": "disabled"},
+                        }
+                    }
+                ),
+                stderr="",
+            ),
+            ("openclaw", "tasks", "list", "--json"): mock.Mock(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "tasks": [
+                            {"label": "assistant-task-loop", "status": "failed", "error": "approval-timeout"},
+                            {"label": "ledger-cycle", "status": "running"},
+                        ]
+                    }
+                ),
+                stderr="",
+            ),
+            ("openclaw", "tasks", "audit", "--json"): mock.Mock(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "summary": {"warnings": 2, "errors": 1, "byCode": {"inconsistent_timestamps": 2}},
+                        "findings": [{"code": "inconsistent_timestamps"}, {"code": "lost"}],
+                    }
+                ),
+                stderr="",
+            ),
+        }
+
+        def _runner(argv, capture_output, text, check):
+            key = tuple(argv)
+            if key not in command_map:
+                raise AssertionError(f"Unexpected command: {argv}")
+            return command_map[key]
+
+        return mock.patch.object(self.loop.subprocess, "run", side_effect=_runner)
 
     def test_strict_mode_fails_on_stale_pending_packet(self):
         with tempfile.TemporaryDirectory() as td:
@@ -258,6 +335,130 @@ class TestTaskExecutionLoop(unittest.TestCase):
             self.assertNotEqual(plan_md, "# Plan\n\n- (empty)")
             self.assertNotIn("(empty)", status_md.lower())
             self.assertNotIn("(empty)", plan_md.lower())
+            self.assertIn("## OpenClaw Runtime", status_md)
+            self.assertIn("## OpenClaw Tasks", status_md)
+            self.assertIn("Alert: discord: stale socket", status_md)
+            self.assertIn("Canonical cron issues: 1", status_md)
+
+    def test_task_summary_accepts_list_payloads_from_tasks_list(self):
+        snapshot = self.loop.OpenClawSnapshot(
+            gateway_health=self.loop.CommandSnapshot(["openclaw"], 0, "", "", None),
+            gateway_status=self.loop.CommandSnapshot(["openclaw"], 0, json.dumps({"rpc": {"ok": True}, "health": {"healthy": True}, "service": {"runtime": {"status": "running"}}}), "", {"rpc": {"ok": True}, "health": {"healthy": True}, "service": {"runtime": {"status": "running"}}}),
+            channels_status=self.loop.CommandSnapshot(["openclaw"], 0, json.dumps({"channels": {}}), "", {"channels": {}}),
+            tasks_list=self.loop.CommandSnapshot(
+                ["openclaw", "tasks", "list", "--json"],
+                0,
+                json.dumps(
+                    [
+                        {"label": "assistant-task-loop", "status": "running"},
+                        {"label": "other-task", "status": "failed"},
+                    ]
+                ),
+                "",
+                [
+                    {"label": "assistant-task-loop", "status": "running"},
+                    {"label": "other-task", "status": "failed"},
+                ],
+            ),
+            tasks_audit=self.loop.CommandSnapshot(
+                ["openclaw", "tasks", "audit", "--json"],
+                0,
+                json.dumps({"summary": {"warnings": 0, "errors": 0}, "findings": []}),
+                "",
+                {"summary": {"warnings": 0, "errors": 0}, "findings": []},
+            ),
+        )
+
+        summary = self.loop._task_summary(snapshot)
+
+        self.assertEqual(summary["counts"]["total"], 2)
+        self.assertEqual(summary["counts"]["running"], 1)
+        self.assertEqual(summary["counts"]["failed"], 1)
+
+    def test_notes_status_parses_json_with_leading_warning_noise(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+
+            warning_prefix = "warning: gateway token audit pending\n"
+            command_map = {
+                ("openclaw", "gateway", "health"): mock.Mock(returncode=0, stdout="Gateway Health\nOK (123ms)\n", stderr=""),
+                (
+                    "openclaw",
+                    "gateway",
+                    "status",
+                    "--json",
+                ): mock.Mock(
+                    returncode=0,
+                    stdout=warning_prefix + json.dumps(
+                        {
+                            "rpc": {"ok": True},
+                            "health": {"healthy": True},
+                            "service": {"runtime": {"status": "running"}},
+                        }
+                    ),
+                    stderr="",
+                ),
+                (
+                    "openclaw",
+                    "channels",
+                    "status",
+                    "--probe",
+                    "--json",
+                ): mock.Mock(
+                    returncode=0,
+                    stdout=warning_prefix
+                    + json.dumps(
+                        {
+                            "channels": {
+                                "telegram": {"configured": True, "running": True, "probe": {"ok": True}},
+                                "discord": {"configured": True, "running": False, "lastError": "stale socket", "probe": {"ok": True}},
+                            }
+                        }
+                    ),
+                    stderr="",
+                ),
+                ("openclaw", "tasks", "list", "--json"): mock.Mock(
+                    returncode=0,
+                    stdout=warning_prefix
+                    + json.dumps(
+                        {
+                            "tasks": [
+                                {"label": "assistant-task-loop", "status": "failed", "error": "approval-timeout"},
+                                {"label": "assistant-inbox-notify", "status": "running"},
+                            ]
+                        }
+                    ),
+                    stderr="",
+                ),
+                ("openclaw", "tasks", "audit", "--json"): mock.Mock(
+                    returncode=0,
+                    stdout=warning_prefix
+                    + json.dumps(
+                        {
+                            "summary": {"warnings": 1, "errors": 1, "byCode": {"stale_running": 1}},
+                            "findings": [{"code": "stale_running"}],
+                        }
+                    ),
+                    stderr="",
+                ),
+            }
+
+            def _runner(argv, capture_output, text, check):
+                key = tuple(argv)
+                if key not in command_map:
+                    raise AssertionError(f"Unexpected command: {argv}")
+                return command_map[key]
+
+            with mock.patch.object(self.loop.subprocess, "run", side_effect=_runner):
+                rc = self._run_loop(root, apply=False, strict=False, stale_seconds=86400)
+
+            self.assertEqual(rc, 0)
+            status_md = (root / "tasks" / "NOTES" / "status.md").read_text(encoding="utf-8")
+            self.assertIn("running=1", status_md)
+            self.assertIn("failed=1", status_md)
+            self.assertIn("warnings=1 errors=1 findings=1", status_md)
+            self.assertIn("Stale running: unknown: stuck", status_md)
 
 
 if __name__ == "__main__":

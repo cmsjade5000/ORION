@@ -134,7 +134,7 @@ run_cmd openclaw config set --json 'models.providers["nvidia-build"]' "{
   \"api\": \"openai-completions\",
   \"baseUrl\": \"https://integrate.api.nvidia.com/v1\",
   \"apiKey\": {\"source\": \"env\", \"provider\": \"default\", \"id\": \"NVIDIA_API_KEY\"},
-  \"models\": [{\"id\": \"moonshotai/kimi-k2-5\", \"name\": \"Kimi K2.5 (NVIDIA Build)\"}]
+  \"models\": [{\"id\": \"moonshotai/kimi-k2.5\", \"name\": \"Kimi K2.5 (NVIDIA Build)\"}]
 }"
 
 run_cmd openclaw config set --json 'models.providers["lmstudio"]' "{
@@ -145,7 +145,7 @@ run_cmd openclaw config set --json 'models.providers["lmstudio"]' "{
 }"
 
 if [[ "$INCLUDE_KIMI_FALLBACK" -eq 1 ]]; then
-  run_cmd openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2-5
+  run_cmd openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2.5
 fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then

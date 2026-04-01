@@ -1,0 +1,55 @@
+{
+  "apply": true,
+  "changes": [
+    "backup created: /Users/corystoner/.openclaw/cron/jobs.json.bak.stopgate.20260319-102441",
+    "triggered but no matching enabled target jobs to disable"
+  ],
+  "disabled_job_ids": [],
+  "generated_at_et": "2026-03-19 10:24:41 EDT",
+  "generated_at_utc": "2026-03-19T14:24:41.257682+00:00",
+  "kind": "stop_gate_enforcement",
+  "policy": {
+    "consecutive_days": 2,
+    "exclude_name_patterns": [
+      "route-hygiene",
+      "lane-hotspots",
+      "reliability",
+      "scorecard",
+      "skill-discovery"
+    ],
+    "include_name_patterns": [
+      "party-batch",
+      "canary-rollout",
+      "canary-promote",
+      "canary-promotion"
+    ],
+    "max_lane_wait_count": 6,
+    "max_lane_wait_p95_ms": 10000
+  },
+  "recent_days": [
+    {
+      "date_et": "2026-03-17",
+      "day_fail": true,
+      "lane_wait_count": 3,
+      "lane_wait_p95_ms": 182454,
+      "path": "eval/history/reliability-20260317-141427.json",
+      "r1_fail": false,
+      "r2_fail": true,
+      "timestamp_utc": "2026-03-17T14:14:27.021992+00:00"
+    },
+    {
+      "date_et": "2026-03-19",
+      "day_fail": true,
+      "lane_wait_count": 3,
+      "lane_wait_p95_ms": 30175,
+      "path": "eval/history/reliability-20260319-141613.json",
+      "r1_fail": false,
+      "r2_fail": true,
+      "timestamp_utc": "2026-03-19T14:16:13.338254+00:00"
+    }
+  ],
+  "target_jobs": [],
+  "timezone": "America/New_York",
+  "triggered": true,
+  "warnings": []
+}
