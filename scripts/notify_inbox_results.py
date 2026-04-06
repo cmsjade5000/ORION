@@ -40,18 +40,6 @@ except Exception:  # pragma: no cover
     from scripts.orion_policy_gate import evaluate_policy, load_rule_set, render_markdown  # type: ignore
 
 try:
-    # Optional dependency: Mini App dashboard progress visibility.
-    # When executed as `python3 scripts/notify_inbox_results.py`, sys.path[0] is `scripts/`,
-    # so `miniapp_ingest` is importable as a sibling module.
-    from miniapp_ingest import emit as miniapp_emit
-except Exception:  # pragma: no cover
-    try:  # pragma: no cover
-        from scripts.miniapp_ingest import emit as miniapp_emit  # type: ignore
-    except Exception:  # pragma: no cover
-        def miniapp_emit(*args, **kwargs):  # type: ignore[no-redef]
-            return False
-
-try:
     from outbound_text_guard import sanitize_outbound_text
 except Exception:  # pragma: no cover
     from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
@@ -478,41 +466,6 @@ def _infer_result_ok(preview_lines: list[str]) -> bool | None:
     return None
 
 
-def _miniapp_emit_queued(items: list[PacketQueued]) -> None:
-    for it in items:
-        # Feed-only: queued is not a first-class state, but this provides "after the fact" visibility.
-        key = f"{it.inbox_path.resolve().as_posix()}:{it.packet_start_line}"
-        qid = f"pktq_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
-        miniapp_emit(
-            "response.created",
-            agentId=it.owner.upper(),
-            id=qid,
-            text=f"[{it.owner.upper()}] queued: {it.objective}",
-            extra={"source": "inbox_notifier", "kind": "queued"},
-        )
-
-
-def _miniapp_emit_results(items: list[PacketResult]) -> None:
-    for it in items:
-        owner = it.owner.upper()
-        ok = _infer_result_ok(it.result_preview_lines)
-        if ok is True:
-            miniapp_emit("task.completed", agentId=owner, extra={"source": "inbox_notifier"})
-        elif ok is False:
-            miniapp_emit("task.failed", agentId=owner, extra={"source": "inbox_notifier"})
-
-        key = f"{it.inbox_path.resolve().as_posix()}:{it.packet_start_line}"
-        rid = f"pktres_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
-        status_txt = "OK" if ok is True else ("FAILED" if ok is False else "DONE")
-        miniapp_emit(
-            "response.created",
-            agentId=owner,
-            id=rid,
-            text=f"[{owner}] {it.objective} -> {status_txt}",
-            extra={"source": "inbox_notifier", "kind": "result"},
-        )
-
-
 def _policy_history_paths(*, repo_root: Path, output_dir: str, channel: str, msg: str) -> tuple[Path, Path]:
     ts = time.strftime("%Y%m%d-%H%M%S")
     digest = hashlib.sha256(msg.encode("utf-8", errors="replace")).hexdigest()[:10]
@@ -757,13 +710,6 @@ def main() -> int:
             except Exception as e:
                 print(f"ERROR: Discord send failed: {e}", file=sys.stderr)
                 return 2
-
-    # Always emit Mini App events best-effort (even in dry-run mode).
-    # This enables local loop testing without spamming Telegram.
-    all_new_queued = new_queued_tg + [q for q in new_queued_dc if q not in new_queued_tg]
-    all_new_results = new_results_tg + [r for r in new_results_dc if r not in new_results_tg]
-    _miniapp_emit_queued(all_new_queued)
-    _miniapp_emit_results(all_new_results)
 
     now = time.time()
     # In dry-run / suppression mode, we still advance state to avoid spamming during local loop testing.

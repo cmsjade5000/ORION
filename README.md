@@ -59,6 +59,7 @@ Current verification snapshot (2026-03-22):
 Capability intake brief:
 - `docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md`
 - `docs/ORION_TOOLSET_ADOPTION_2026_03_22.md`
+- `docs/ORION_FUNCTIONAL_REVIEW_2026_04_06.md`
 
 ## Recovery
 
@@ -90,12 +91,10 @@ Internal reliability review:
 - `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
 - `docs/ORION_ERROR_REVIEW.md`
 
-## Telegram Mini App (Experimental / Archived)
+## Telegram Surfaces
 
-This repo still contains Mini App experiments, but they are not part of the assistant critical path:
-- App: `apps/telegram-miniapp-dashboard/`
-- ORION commands: `/miniapp` and `/core` (both send a `web_app` button via the Telegram plugin)
-- Paper-trading quick commands in ORION DM:
+Primary Telegram commands in ORION DM:
+- Paper-trading quick commands:
   - `/paper_help` for a quick in-chat command list
   - `/paper_status` for current paper status
   - `/paper_update` (or `/paper_update 24`) for status + digest window
@@ -105,14 +104,11 @@ This repo still contains Mini App experiments, but they are not part of the assi
   - `/flicreset` clears in-memory Flic conversation state for the current DM.
 
 Config:
-- Set `ORION_MINIAPP_URL` to your deployed HTTPS URL (see `openclaw.json.example` / `openclaw.yaml`).
 - Flic deep-link router env vars:
   - `FLIC_ROUTER_ENABLED=1`
   - `FLIC_VAULT_BASE_URL=https://vault966-r2.fly.dev`
   - `FLIC_BOT_USERNAME=Flic_GatewayBot`
   - Optional: `FLIC_APP_SHORT_NAME=<telegram-miniapp-short-name>`
-- Security note: do not enable command routing from the Mini App into ORION unless you explicitly accept the risk (see `SECURITY.md` and the Mini App README).
-- Keep the Mini App code for reference and future experiments, but do not treat it as required for assistant behavior.
 
 ## Discord (Optional)
 

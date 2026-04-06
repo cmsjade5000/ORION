@@ -40,22 +40,11 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.provider_matrix = (cls.repo / "docs" / "LLM_PROVIDER_MATRIX.md").read_text(
             encoding="utf-8"
         )
-        cls.app_readme = (cls.repo / "app" / "README.md").read_text(encoding="utf-8")
         cls.scripts_readme = (cls.repo / "scripts" / "README.md").read_text(encoding="utf-8")
         cls.polaris_inbox = (cls.repo / "tasks" / "INBOX" / "POLARIS.md").read_text(encoding="utf-8")
-        cls.fly_toml = (cls.repo / "fly.orion-core.toml").read_text(encoding="utf-8")
         cls.compat_0114 = (cls.repo / "docs" / "CODEX_0114_COMPATIBILITY_REPORT.md").read_text(
             encoding="utf-8"
         )
-        cls.app_healthz = (cls.repo / "app" / "src" / "app" / "healthz" / "route.ts").read_text(
-            encoding="utf-8"
-        )
-        cls.app_readyz = (cls.repo / "app" / "src" / "app" / "readyz" / "route.ts").read_text(
-            encoding="utf-8"
-        )
-        cls.dashboard_server = (
-            cls.repo / "apps" / "telegram-miniapp-dashboard" / "server" / "index.js"
-        ).read_text(encoding="utf-8")
 
     def test_examples_pin_tools_profile(self):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
@@ -186,8 +175,6 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
             self.upgrade_notes,
             self.single_bot,
             self.follow_through,
-            self.app_readme,
-            self.scripts_readme,
             self.polaris_inbox,
         )
         for text in live_texts:
@@ -197,18 +184,18 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("/Users/corystoner/src/ORION", self.migration)
         self.assertIn("/Users/corystoner/src/ORION", self.single_bot)
         self.assertIn("/Users/corystoner/src/ORION", self.follow_through)
-        self.assertIn("/Users/corystoner/src/ORION", self.app_readme)
-        self.assertIn("/Users/corystoner/src/ORION", self.scripts_readme)
         self.assertIn("/Users/corystoner/src/ORION", self.polaris_inbox)
         self.assertIn("/Users/corystoner/src/ORION", self.error_review)
 
-    def test_codex_0114_health_contract_is_implemented(self):
-        self.assertIn('path = "/readyz"', self.fly_toml)
-        self.assertIn('check: "healthz"', self.app_healthz)
-        self.assertIn('check: "readyz"', self.app_readyz)
-        self.assertIn('app.get("/healthz"', self.dashboard_server)
-        self.assertIn('app.get("/readyz"', self.dashboard_server)
-        self.assertIn('app.get("/api/health"', self.dashboard_server)
+    def test_miniapp_workspace_surfaces_are_removed(self):
+        removed_paths = [
+            self.repo / "app",
+            self.repo / "apps" / "telegram-miniapp-dashboard",
+            self.repo / "src" / "plugins" / "telegram" / "miniapp",
+            self.repo / "fly.orion-core.toml",
+        ]
+        for path in removed_paths:
+            self.assertFalse(path.exists(), f"miniapp surface should stay removed: {path}")
 
     def test_codex_0114_report_locks_permission_plugin_and_health_defaults(self):
         for needle in ("request_permissions", "@plugin", "/readyz", "/healthz", "workspace-write"):

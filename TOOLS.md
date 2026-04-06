@@ -40,7 +40,6 @@ Email tools:
 
 - Destructive commands require explicit user approval.
 - Network exposure, credential changes, or system modifications must be surfaced clearly before execution.
-- Enabling Mini App command routing into ORION (`OPENCLAW_ROUTE_COMMANDS=1` in `apps/telegram-miniapp-dashboard/`) is treated as a system modification and requires explicit approval.
 - Prefer dry-runs, previews, or explanations before acting.
 - Prefer routing operational execution through ATLAS (ORION -> ATLAS -> (NODE|PULSE|STRATUS)) unless the action is a deterministic local script (for example a verified AgentMail send wrapper).
 - For direct device interaction, follow [docs/DEVICE_INTERACTION_POLICY.md](/Users/corystoner/Desktop/ORION/docs/DEVICE_INTERACTION_POLICY.md):

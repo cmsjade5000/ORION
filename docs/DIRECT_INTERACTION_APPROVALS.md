@@ -81,7 +81,6 @@ Policy:
 Examples:
 - enabling remote access
 - changing gateway behavior
-- enabling Mini App command routing
 - installing persistent host automation
 
 Policy:

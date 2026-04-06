@@ -45,7 +45,6 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
   - `channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_PRIMARY_CHANNEL_ID>".autoThread = true`
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
-Mini App surfaces remain optional and experimental; the assistant core should not depend on them.
 
 ## Config Validation (OpenClaw 2026.3.x)
 

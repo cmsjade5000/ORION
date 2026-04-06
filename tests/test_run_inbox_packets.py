@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib.util
 import re
 import sys
@@ -71,10 +73,7 @@ class TestRunInboxPackets(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as td:
                     root = Path(td)
                     inbox = self._write_inbox(root, "PIXEL", self._packet(notify=notify))
-                    with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
-                        self.runner.subprocess,
-                        "run",
-                    ) as run_mock:
+                    with mock.patch.object(self.runner.subprocess, "run") as run_mock:
                         rc = self.runner.run(root, max_packets=10)
                     self.assertEqual(rc, 0)
                     self.assertEqual(run_mock.call_count, 0)
@@ -84,10 +83,7 @@ class TestRunInboxPackets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             inbox = self._write_inbox(root, "PIXEL", self._packet(include_read_only=False))
-            with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
-                self.runner.subprocess,
-                "run",
-            ) as run_mock:
+            with mock.patch.object(self.runner.subprocess, "run") as run_mock:
                 rc = self.runner.run(root, max_packets=10)
 
             self.assertEqual(rc, 0)
@@ -98,10 +94,7 @@ class TestRunInboxPackets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             inbox = self._write_inbox(root, "PIXEL", self._packet(command="scripts/not_allowlisted.sh"))
-            with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
-                self.runner.subprocess,
-                "run",
-            ) as run_mock:
+            with mock.patch.object(self.runner.subprocess, "run") as run_mock:
                 rc = self.runner.run(root, max_packets=10)
 
             self.assertEqual(rc, 0)
@@ -117,7 +110,7 @@ class TestRunInboxPackets(unittest.TestCase):
                 stdout="Gateway target: localhost\n",
                 stderr="",
             )
-            with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
+            with mock.patch.object(
                 self.runner.subprocess,
                 "run",
                 return_value=proc,
@@ -143,11 +136,7 @@ class TestRunInboxPackets(unittest.TestCase):
             packet = self._packet(include_result_placeholder=True)
             inbox = self._write_inbox(root, "PIXEL", packet)
             proc = SimpleNamespace(returncode=0, stdout="Session store: sqlite\n", stderr="")
-            with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
-                self.runner.subprocess,
-                "run",
-                return_value=proc,
-            ):
+            with mock.patch.object(self.runner.subprocess, "run", return_value=proc):
                 rc = self.runner.run(root, max_packets=10)
 
             self.assertEqual(rc, 0)
@@ -165,7 +154,7 @@ class TestRunInboxPackets(unittest.TestCase):
                 output="partial stdout",
                 stderr="partial stderr",
             )
-            with mock.patch.object(self.runner, "miniapp_emit", return_value=False), mock.patch.object(
+            with mock.patch.object(
                 self.runner.subprocess,
                 "run",
                 side_effect=timeout_exc,

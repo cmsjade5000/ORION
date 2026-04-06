@@ -43,13 +43,13 @@ Run deliberate thresholded session-store maintenance, write a markdown report, a
 Preview only:
 
 ```bash
-python3 /Users/corystoner/src/ORION/scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --json
+python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --json
 ```
 
 Apply when thresholds are met:
 
 ```bash
-AUTO_OK=1 python3 /Users/corystoner/src/ORION/scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json
+AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json
 ```
 
 Report artifact:
@@ -162,69 +162,6 @@ Apply a high-autonomy Discord configuration for ORION in a specific guild and pr
 
 ---
 
-## miniapp_upload_artifact.sh
-
-### Purpose
-Uploads a file (PDF/export/etc.) to the Telegram Mini App dashboard API so it appears as a floating artifact bubble that the user can tap to download.
-
-### Usage
-
-```bash
-INGEST_TOKEN=... ./scripts/miniapp_upload_artifact.sh https://<miniapp-host> ./out/xyz.pdf xyz.pdf application/pdf LEDGER
-```
-
----
-
-## miniapp_command_relay.py
-
-### Purpose
-Claims queued Mini App commands from `/api/relay/claim`, executes them with local `openclaw`, and reports completion back to `/api/relay/:id/result`.
-
-Use this when the Mini App server is deployed remotely (for example Fly) and cannot run `openclaw` itself.
-
-### Usage
-
-```bash
-MINIAPP_COMMAND_RELAY_URL=https://<miniapp-host> \
-MINIAPP_COMMAND_RELAY_TOKEN=... \
-python3 scripts/miniapp_command_relay.py
-```
-
-One-shot mode:
-
-```bash
-MINIAPP_COMMAND_RELAY_URL=https://<miniapp-host> \
-MINIAPP_COMMAND_RELAY_TOKEN=... \
-python3 scripts/miniapp_command_relay.py --once
-```
-
-Persistent macOS service (LaunchAgent):
-
-```bash
-./scripts/install_orion_miniapp_command_relay_launchagent.sh /Users/corystoner/src/ORION
-```
-
----
-
-## telegram_open_miniapp.sh
-
-### Purpose
-Sends an inline `web_app` button to the allowlisted Telegram user so you can open the Mini App without hunting for the URL.
-
-### Usage
-
-```bash
-./scripts/telegram_open_miniapp.sh
-```
-
-Optional URL override:
-
-```bash
-./scripts/telegram_open_miniapp.sh https://<miniapp-host>
-```
-
----
-
 ## assistant_status.py
 
 ### Purpose
@@ -249,7 +186,7 @@ Capture a read-only ORION operations bundle with gateway health, gateway status,
 Print JSON to stdout and write a stable latest summary:
 
 ```bash
-python3 scripts/orion_incident_bundle.py --repo-root /Users/corystoner/src/ORION --write-latest --json
+python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json
 ```
 
 Artifacts:
@@ -633,11 +570,22 @@ Docs:
 ## kalshi_autotrade_cycle.py
 
 ### Purpose
-Deterministic Kalshi autotrade cycle runner intended for OpenClaw cron (no manual operation):
+Deterministic Kalshi autotrade cycle runner intended for unattended local execution:
 - runs `kalshi_ref_arb.py balance`
 - runs `kalshi_ref_arb.py trade --allow-write` with conservative caps and a $50 lifetime budget
 - writes artifacts under `tmp/kalshi_ref_arb/runs/`
 - sends Telegram notifications only on live orders or errors (rate-limited)
+
+### Preferred unattended install
+
+```bash
+bash scripts/install_orion_kalshi_autotrade_cycle_launchagent.sh
+```
+
+Notes:
+- This installs a macOS LaunchAgent that runs every 5 minutes via `scripts/kalshi_autotrade_cycle_run.sh`.
+- The installer disables the duplicate OpenClaw cron job (`kalshi-ref-arb-5m`) that would otherwise trigger `system.run` approval prompts in Telegram/Discord.
+- Logs are written to `~/Library/Logs/orion_kalshi_autotrade_cycle.log`.
 
 ### Grouped-Round Gate Tuning (paper mode)
 `kalshi_autotune.py` now supports grouped round-by-round gate adaptation from sweep stats:
@@ -745,6 +693,28 @@ python3 scripts/kalshi_digest_reliability.py --daily-report --send-telegram
 
 State is persisted at:
 - `tmp/kalshi_ref_arb/digest_delivery_monitor_state.json`
+
+## local_job_runner.py
+
+### Purpose
+Run approval-prone local maintenance/reporting jobs directly on the host through one local job bundle LaunchAgent instead of OpenClaw `system.run` cron wrappers.
+
+Covered jobs include:
+- assistant agenda/task maintenance
+- Kalshi digest and digest reliability reports
+- ORION daily/weekly local maintenance jobs such as error review, ops bundle, route hygiene, lane hotspots, stop gate, monthly scorecard, and skill discovery
+
+### Preferred unattended install
+
+```bash
+bash scripts/install_orion_local_job_bundle_launchagent.sh
+```
+
+Notes:
+- This installs a macOS LaunchAgent named `com.openclaw.orion.local_job_bundle` that wakes every 60 seconds and runs due local jobs directly.
+- The installer disables duplicate OpenClaw cron jobs for the covered local jobs so Telegram/Discord stop receiving `system.run` approval prompts for them.
+- This is the preferred fix when live jobs are leaking system.run approval prompts into chat channels.
+- Jobs that are truly agent-driven or Task Packet-based are intentionally left on OpenClaw cron.
 
 ---
 

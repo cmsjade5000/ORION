@@ -9,10 +9,6 @@ It includes:
 - API keys for additional model providers (example: NVIDIA Build `nvapi-...`)
 - OAuth refresh tokens / auth profiles
 - Service credentials (email, Slack if ever re-enabled)
-- Mini App service secrets (if you deploy `apps/telegram-miniapp-dashboard/`):
-  - `INGEST_TOKEN` (ORION -> Mini App ingest auth)
-  - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_TOKEN_FILE` (initData verification)
-  - Any server signing secrets (example `SSE_TOKEN_SECRET` if configured)
 
 It does not include:
 - Normal configuration (model names, routing, allowlists)
