@@ -173,6 +173,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("error-review.md", self.readme)
         self.assertIn("session-maintenance.md", self.readme)
         self.assertIn("OPENCLAW_MEMORY_DREAMING_PILOT.md", self.readme)
+        self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
         self.assertIn("OpenClaw 2026.3.13", self.readme)

@@ -107,6 +107,7 @@ Practical ORION rule:
 - When piloting, use only the documented public keys:
   - `enabled`
   - `frequency`
+- After any OpenClaw config change, run `make operator-health-bundle` so gateway, model, memory, REM, and live-turn health stay aligned.
 
 Observed official surfaces:
 - Slash command: `/dreaming on|off|status|help`

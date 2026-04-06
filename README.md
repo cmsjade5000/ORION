@@ -105,6 +105,13 @@ Memory/dreaming pilot:
   - writes `tmp/openclaw_memory_dreaming_preview_latest.md`
   - reports whether a local short-term recall store exists yet
 
+Standard operator health bundle:
+- Run `make operator-health-bundle` after gateway, model, or memory changes.
+- It checks gateway status, `models status --probe`, memory status, `memory rem-harness`, and one live `main` smoke turn.
+- Artifacts:
+  - `tmp/openclaw_operator_health_bundle_latest.json`
+  - `tmp/openclaw_operator_health_bundle_latest.md`
+
 ## Telegram Surfaces
 
 Primary Telegram commands in ORION DM:

@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview operator-health-bundle party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= config/promptfoo/orion-safety-gate.yaml
 THINKING ?= high
@@ -149,6 +149,16 @@ dreaming-preview:
 		--limit "$${LIMIT:-10}" \
 		--output-json tmp/openclaw_memory_dreaming_preview_latest.json \
 		--output-md tmp/openclaw_memory_dreaming_preview_latest.md
+
+## Standard operator health bundle for gateway, models, memory, REM, and smoke checks
+operator-health-bundle:
+	@python3 scripts/openclaw_operator_health_bundle.py \
+		--probe-max-tokens "$${PROBE_MAX_TOKENS:-16}" \
+		--thinking "$${THINKING:-low}" \
+		--timeout "$${TIMEOUT:-120}" \
+		--output-json tmp/openclaw_operator_health_bundle_latest.json \
+		--output-md tmp/openclaw_operator_health_bundle_latest.md \
+		--json
 
 ## One-shot coding-party batch (eval + reliability + canary health)
 party-batch-once:
