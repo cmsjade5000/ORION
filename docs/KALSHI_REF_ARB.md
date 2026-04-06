@@ -226,7 +226,23 @@ Then restart the gateway:
 openclaw gateway restart
 ```
 
-### Create The Cron Job
+### Preferred unattended runner
+
+Use the direct LaunchAgent install instead of an OpenClaw cron. This avoids repeated `system.run` approval prompts for the live trading cycle and keeps execution on the local host.
+
+```bash
+bash scripts/install_orion_kalshi_autotrade_cycle_launchagent.sh
+```
+
+What it does:
+- installs `~/Library/LaunchAgents/com.openclaw.orion.kalshi_autotrade_cycle.plist`
+- runs `scripts/kalshi_autotrade_cycle_run.sh` every 5 minutes
+- runs the freshness check after each cycle
+- disables the old `kalshi-ref-arb-5m` OpenClaw cron job if it exists
+
+### Legacy OpenClaw cron path
+
+Do not use this for unattended live trading unless you explicitly want approval-gated execution. This path routes through agent `system.run`, which can surface `Approval required` prompts to Telegram/Discord.
 
 ```bash
 openclaw cron add \
@@ -239,6 +255,13 @@ openclaw cron add \
   --no-deliver \
   --wake "next-heartbeat" \
   --message "Run python3 scripts/kalshi_autotrade_cycle.py. Respond NO_REPLY."
+```
+
+If you already created this cron, disable it after installing the LaunchAgent:
+
+```bash
+openclaw cron list --all --json | jq -r '.jobs[] | select(.name == "kalshi-ref-arb-5m") | .id'
+openclaw cron disable <job-id>
 ```
 
 ### Kill Switch

@@ -1,20 +1,20 @@
 # Reliability Snapshot
 
-- Generated at: `2026-03-31T14:10:12.566194+00:00`
+- Generated at: `2026-04-06T14:10:35.375085+00:00`
 - Window: last `24h`
 
 ## Lane Wait
 
-- Count: `4`
-- Max: `20656 ms`
-- P95: `20083 ms`
-- By lane: `{'session:agent:ledger:cron:3adbdf11-8d7e-4eb2-8552-80cbf5384812': 3, 'session:agent:main:cron:6425b337-0c5d-482e-86a6-20e0d347af8f': 1}`
+- Count: `0`
+- Max: `0 ms`
+- P95: `0 ms`
+- By lane: `{}`
 
 ## Cron
 
-- Total / Enabled / Disabled: `42 / 23 / 19`
-- By agent: `{'main': 18, 'ledger': 4, 'quest': 1}`
-- By delivery channel: `{'last': 16, 'telegram': 1, 'none': 6}`
+- Total / Enabled / Disabled: `39 / 2 / 37`
+- By agent: `{'main': 1, 'quest': 1}`
+- By delivery channel: `{'telegram': 1, 'last': 1}`
 
 ## Delivery Queue
 

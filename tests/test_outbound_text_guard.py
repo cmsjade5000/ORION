@@ -24,8 +24,30 @@ class TestOutboundTextGuard(unittest.TestCase):
         text = "Queued for POLARIS.\n\nI’ll report back when it finishes."
         self.assertEqual(sanitize_outbound_text(text), text)
 
+    def test_rewrites_exec_approval_prompt(self):
+        text = (
+            "Approval required.\n\n"
+            "Run:\n\n"
+            "/approve bec1bd41-2775-4fb9-a6ae-299f4a3bdc02 allow-once\n\n"
+            "Pending command:\n\n"
+            "/Users/corystoner/src/ORION/scripts/kalshi_autotrade_cycle.py\n\n"
+            "Other options:\n\n"
+            "/approve bec1bd41-2775-4fb9-a6ae-299f4a3bdc02 allow-always\n"
+            "/approve bec1bd41-2775-4fb9-a6ae-299f4a3bdc02 deny\n\n"
+            "Host: gateway\n"
+            "CWD: /Users/corystoner/.openclaw/workspaces/orion-ledger\n"
+            "Expires in: 30m\n"
+            "Full id: bec1bd41-2775-4fb9-a6ae-299f4a3bdc02"
+        )
+        self.assertEqual(sanitize_outbound_text(text), "Approval is pending for a requested command.")
+
     def test_detects_internal_artifacts(self):
         self.assertTrue(contains_internal_artifacts("<think>hidden</think>"))
+        self.assertTrue(
+            contains_internal_artifacts(
+                "Approval required.\nRun:\n/approve abc allow-once\nPending command:\nfoo\nFull id: abc"
+            )
+        )
         self.assertFalse(contains_internal_artifacts("Normal update only."))
 
 

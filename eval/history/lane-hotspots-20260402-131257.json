@@ -1,0 +1,1091 @@
+{
+  "generatedAt": "2026-04-02T13:12:57.614692+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1775049175508,
+    "analysisStart": "2026-04-01T13:12:55.508000+00:00",
+    "analysisEndMs": 1775135575508,
+    "analysisEnd": "2026-04-02T13:12:55.508000+00:00",
+    "eventsInScope": 19,
+    "runsInScope": 1399,
+    "uniqueLanes": 4,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 10,
+    "uniqueCorrelatedJobs": 4,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1775066940000,
+      "windowEndMs": 1775067000000,
+      "windowStart": "2026-04-01T18:09:00+00:00",
+      "windowEnd": "2026-04-01T18:10:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 62385,
+      "avgWaitMs": 62385.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 62385,
+          "avgWaitMs": 62385.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-01T14:09:37.652-04:00",
+          "timestampMs": 1775066977652,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 62385,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775066850000,
+        "windowEndMs": 1775067090000,
+        "windowStart": "2026-04-01T18:07:30+00:00",
+        "windowEnd": "2026-04-01T18:11:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-01T18:08:00.011000+00:00",
+          "runAtMs": 1775066880011,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 12794,
+          "deltaFromWindowStartMs": -59989,
+          "deltaFromWindowCenterMs": -89989,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T18:08:28.300000+00:00",
+          "runAtMs": 1775066908300,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 70647,
+          "deltaFromWindowStartMs": -31700,
+          "deltaFromWindowCenterMs": -61700,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T18:10:00.009000+00:00",
+          "runAtMs": 1775067000009,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 24312,
+          "deltaFromWindowStartMs": 60009,
+          "deltaFromWindowCenterMs": 30009,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T18:10:24.321000+00:00",
+          "runAtMs": 1775067024321,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 15084,
+          "deltaFromWindowStartMs": 84321,
+          "deltaFromWindowCenterMs": 54321,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 15084,
+          "avgDurationMs": 13939.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 24312,
+          "avgDurationMs": 24312.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 70647,
+          "avgDurationMs": 70647.0
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "windowStartMs": 1775068440000,
+      "windowEndMs": 1775068500000,
+      "windowStart": "2026-04-01T18:34:00+00:00",
+      "windowEnd": "2026-04-01T18:35:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 51788,
+      "avgWaitMs": 51788.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 51788,
+          "avgWaitMs": 51788.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-01T14:34:27.045-04:00",
+          "timestampMs": 1775068467045,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 51788,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775068350000,
+        "windowEndMs": 1775068590000,
+        "windowStart": "2026-04-01T18:32:30+00:00",
+        "windowEnd": "2026-04-01T18:36:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-01T18:33:28.350000+00:00",
+          "runAtMs": 1775068408350,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 59983,
+          "deltaFromWindowStartMs": -31650,
+          "deltaFromWindowCenterMs": -61650,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T18:34:30.585000+00:00",
+          "runAtMs": 1775068470585,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 9036,
+          "deltaFromWindowStartMs": 30585,
+          "deltaFromWindowCenterMs": 585,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T18:35:00.010000+00:00",
+          "runAtMs": 1775068500010,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 19199,
+          "deltaFromWindowStartMs": 60010,
+          "deltaFromWindowCenterMs": 30010,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T18:36:00.013000+00:00",
+          "runAtMs": 1775068560013,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 8128,
+          "deltaFromWindowStartMs": 120013,
+          "deltaFromWindowCenterMs": 90013,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 9036,
+          "avgDurationMs": 8582.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 19199,
+          "avgDurationMs": 19199.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 59983,
+          "avgDurationMs": 59983.0
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "windowStartMs": 1775127840000,
+      "windowEndMs": 1775127900000,
+      "windowStart": "2026-04-02T11:04:00+00:00",
+      "windowEnd": "2026-04-02T11:05:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 51065,
+      "avgWaitMs": 51065.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 51065,
+          "avgWaitMs": 51065.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-02T07:04:28.196-04:00",
+          "timestampMs": 1775127868196,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 51065,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775127750000,
+        "windowEndMs": 1775127990000,
+        "windowStart": "2026-04-02T11:02:30+00:00",
+        "windowEnd": "2026-04-02T11:06:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-02T11:03:30.713000+00:00",
+          "runAtMs": 1775127810713,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 59899,
+          "deltaFromWindowStartMs": -29287,
+          "deltaFromWindowCenterMs": -59287,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T11:04:36.598000+00:00",
+          "runAtMs": 1775127876598,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 11900,
+          "deltaFromWindowStartMs": 36598,
+          "deltaFromWindowCenterMs": 6598,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T11:05:00.007000+00:00",
+          "runAtMs": 1775127900007,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 9885,
+          "deltaFromWindowStartMs": 60007,
+          "deltaFromWindowCenterMs": 30007,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T11:06:00.010000+00:00",
+          "runAtMs": 1775127960010,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 13489,
+          "deltaFromWindowStartMs": 120010,
+          "deltaFromWindowCenterMs": 90010,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 13489,
+          "avgDurationMs": 12694.5
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 9885,
+          "avgDurationMs": 9885.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 59899,
+          "avgDurationMs": 59899.0
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "windowStartMs": 1775059440000,
+      "windowEndMs": 1775059500000,
+      "windowStart": "2026-04-01T16:04:00+00:00",
+      "windowEnd": "2026-04-01T16:05:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 50025,
+      "avgWaitMs": 50025.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 50025,
+          "avgWaitMs": 50025.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-01T12:04:25.083-04:00",
+          "timestampMs": 1775059465083,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 50025,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775059350000,
+        "windowEndMs": 1775059590000,
+        "windowStart": "2026-04-01T16:02:30+00:00",
+        "windowEnd": "2026-04-01T16:06:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-01T16:03:27.998000+00:00",
+          "runAtMs": 1775059407998,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 58518,
+          "deltaFromWindowStartMs": -32002,
+          "deltaFromWindowCenterMs": -62002,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T16:04:28.846000+00:00",
+          "runAtMs": 1775059468846,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 7750,
+          "deltaFromWindowStartMs": 28846,
+          "deltaFromWindowCenterMs": -1154,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T16:05:32.673000+00:00",
+          "runAtMs": 1775059532673,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 19567,
+          "deltaFromWindowStartMs": 92673,
+          "deltaFromWindowCenterMs": 62673,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T16:06:00.718000+00:00",
+          "runAtMs": 1775059560718,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 13338,
+          "deltaFromWindowStartMs": 120718,
+          "deltaFromWindowCenterMs": 90718,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 13338,
+          "avgDurationMs": 10544.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 19567,
+          "avgDurationMs": 19567.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 58518,
+          "avgDurationMs": 58518.0
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "windowStartMs": 1775128140000,
+      "windowEndMs": 1775128200000,
+      "windowStart": "2026-04-02T11:09:00+00:00",
+      "windowEnd": "2026-04-02T11:10:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 44355,
+      "avgWaitMs": 44355.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 44355,
+          "avgWaitMs": 44355.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-02T07:09:20.887-04:00",
+          "timestampMs": 1775128160887,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 44355,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775128050000,
+        "windowEndMs": 1775128290000,
+        "windowStart": "2026-04-02T11:07:30+00:00",
+        "windowEnd": "2026-04-02T11:11:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-02T11:08:00.011000+00:00",
+          "runAtMs": 1775128080011,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 10675,
+          "deltaFromWindowStartMs": -59989,
+          "deltaFromWindowCenterMs": -89989,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T11:08:30.720000+00:00",
+          "runAtMs": 1775128110720,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 51467,
+          "deltaFromWindowStartMs": -29280,
+          "deltaFromWindowCenterMs": -59280,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T11:10:00.011000+00:00",
+          "runAtMs": 1775128200011,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 22567,
+          "deltaFromWindowStartMs": 60011,
+          "deltaFromWindowCenterMs": 30011,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T11:10:22.578000+00:00",
+          "runAtMs": 1775128222578,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 11242,
+          "deltaFromWindowStartMs": 82578,
+          "deltaFromWindowCenterMs": 52578,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 11242,
+          "avgDurationMs": 10958.5
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 22567,
+          "avgDurationMs": 22567.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 51467,
+          "avgDurationMs": 51467.0
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "windowStartMs": 1775125740000,
+      "windowEndMs": 1775125800000,
+      "windowStart": "2026-04-02T10:29:00+00:00",
+      "windowEnd": "2026-04-02T10:30:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 43726,
+      "avgWaitMs": 43726.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 43726,
+          "avgWaitMs": 43726.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-02T06:29:19.167-04:00",
+          "timestampMs": 1775125759167,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 43726,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775125650000,
+        "windowEndMs": 1775125890000,
+        "windowStart": "2026-04-02T10:27:30+00:00",
+        "windowEnd": "2026-04-02T10:31:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-02T10:28:00.012000+00:00",
+          "runAtMs": 1775125680012,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 10073,
+          "deltaFromWindowStartMs": -59988,
+          "deltaFromWindowCenterMs": -89988,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T10:28:30.643000+00:00",
+          "runAtMs": 1775125710643,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 49626,
+          "deltaFromWindowStartMs": -29357,
+          "deltaFromWindowCenterMs": -59357,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T10:30:00.012000+00:00",
+          "runAtMs": 1775125800012,
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "durationMs": 17956,
+          "deltaFromWindowStartMs": 60012,
+          "deltaFromWindowCenterMs": 30012,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/2707d448-d6eb-42b7-919c-faf75b16b38f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T10:30:17.968000+00:00",
+          "runAtMs": 1775125817968,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 23227,
+          "deltaFromWindowStartMs": 77968,
+          "deltaFromWindowCenterMs": 47968,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T10:30:41.195000+00:00",
+          "runAtMs": 1775125841195,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 13812,
+          "deltaFromWindowStartMs": 101195,
+          "deltaFromWindowCenterMs": 71195,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 13812,
+          "avgDurationMs": 11942.5
+        },
+        {
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "runCount": 1,
+          "maxDurationMs": 17956,
+          "avgDurationMs": 17956.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 23227,
+          "avgDurationMs": 23227.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 49626,
+          "avgDurationMs": 49626.0
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "windowStartMs": 1775097840000,
+      "windowEndMs": 1775097900000,
+      "windowStart": "2026-04-02T02:44:00+00:00",
+      "windowEnd": "2026-04-02T02:45:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 43047,
+      "avgWaitMs": 43047.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 43047,
+          "avgWaitMs": 43047.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-01T22:44:20.348-04:00",
+          "timestampMs": 1775097860348,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 43047,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775097750000,
+        "windowEndMs": 1775097990000,
+        "windowStart": "2026-04-02T02:42:30+00:00",
+        "windowEnd": "2026-04-02T02:46:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-02T02:43:29.697000+00:00",
+          "runAtMs": 1775097809697,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 51807,
+          "deltaFromWindowStartMs": -30303,
+          "deltaFromWindowCenterMs": -60303,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T02:44:23.587000+00:00",
+          "runAtMs": 1775097863587,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 11717,
+          "deltaFromWindowStartMs": 23587,
+          "deltaFromWindowCenterMs": -6413,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T02:45:00.010000+00:00",
+          "runAtMs": 1775097900010,
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "durationMs": 7539,
+          "deltaFromWindowStartMs": 60010,
+          "deltaFromWindowCenterMs": 30010,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/2707d448-d6eb-42b7-919c-faf75b16b38f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T02:45:07.549000+00:00",
+          "runAtMs": 1775097907549,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 11332,
+          "deltaFromWindowStartMs": 67549,
+          "deltaFromWindowCenterMs": 37549,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T02:46:00.011000+00:00",
+          "runAtMs": 1775097960011,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 10467,
+          "deltaFromWindowStartMs": 120011,
+          "deltaFromWindowCenterMs": 90011,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 11717,
+          "avgDurationMs": 11092.0
+        },
+        {
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "runCount": 1,
+          "maxDurationMs": 7539,
+          "avgDurationMs": 7539.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 11332,
+          "avgDurationMs": 11332.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 51807,
+          "avgDurationMs": 51807.0
+        }
+      ]
+    },
+    {
+      "rank": 8,
+      "windowStartMs": 1775080740000,
+      "windowEndMs": 1775080800000,
+      "windowStart": "2026-04-01T21:59:00+00:00",
+      "windowEnd": "2026-04-01T22:00:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 41663,
+      "avgWaitMs": 41663.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 41663,
+          "avgWaitMs": 41663.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-01T17:59:19.383-04:00",
+          "timestampMs": 1775080759383,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 41663,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775080650000,
+        "windowEndMs": 1775080890000,
+        "windowStart": "2026-04-01T21:57:30+00:00",
+        "windowEnd": "2026-04-01T22:01:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-01T21:58:00.011000+00:00",
+          "runAtMs": 1775080680011,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 7409,
+          "deltaFromWindowStartMs": -59989,
+          "deltaFromWindowCenterMs": -89989,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T21:58:28.767000+00:00",
+          "runAtMs": 1775080708767,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 51895,
+          "deltaFromWindowStartMs": -31233,
+          "deltaFromWindowCenterMs": -61233,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T22:00:00.010000+00:00",
+          "runAtMs": 1775080800010,
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "durationMs": 9172,
+          "deltaFromWindowStartMs": 60010,
+          "deltaFromWindowCenterMs": 30010,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/2707d448-d6eb-42b7-919c-faf75b16b38f.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T22:00:09.182000+00:00",
+          "runAtMs": 1775080809182,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 8581,
+          "deltaFromWindowStartMs": 69182,
+          "deltaFromWindowCenterMs": 39182,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-01T22:00:17.763000+00:00",
+          "runAtMs": 1775080817763,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 12764,
+          "deltaFromWindowStartMs": 77763,
+          "deltaFromWindowCenterMs": 47763,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 12764,
+          "avgDurationMs": 10086.5
+        },
+        {
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "runCount": 1,
+          "maxDurationMs": 9172,
+          "avgDurationMs": 9172.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 8581,
+          "avgDurationMs": 8581.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 51895,
+          "avgDurationMs": 51895.0
+        }
+      ]
+    },
+    {
+      "rank": 9,
+      "windowStartMs": 1775105040000,
+      "windowEndMs": 1775105100000,
+      "windowStart": "2026-04-02T04:44:00+00:00",
+      "windowEnd": "2026-04-02T04:45:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 41444,
+      "avgWaitMs": 41444.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 41444,
+          "avgWaitMs": 41444.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-02T00:44:16.484-04:00",
+          "timestampMs": 1775105056484,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 41444,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775104950000,
+        "windowEndMs": 1775105190000,
+        "windowStart": "2026-04-02T04:42:30+00:00",
+        "windowEnd": "2026-04-02T04:46:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-02T04:43:29.959000+00:00",
+          "runAtMs": 1775105009959,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 47629,
+          "deltaFromWindowStartMs": -30041,
+          "deltaFromWindowCenterMs": -60041,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T04:44:21.237000+00:00",
+          "runAtMs": 1775105061237,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 10331,
+          "deltaFromWindowStartMs": 21237,
+          "deltaFromWindowCenterMs": -8763,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T04:45:00.011000+00:00",
+          "runAtMs": 1775105100011,
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "durationMs": 21901,
+          "deltaFromWindowStartMs": 60011,
+          "deltaFromWindowCenterMs": 30011,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/2707d448-d6eb-42b7-919c-faf75b16b38f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T04:45:21.912000+00:00",
+          "runAtMs": 1775105121912,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 9546,
+          "deltaFromWindowStartMs": 81912,
+          "deltaFromWindowCenterMs": 51912,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T04:46:00.010000+00:00",
+          "runAtMs": 1775105160010,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 9337,
+          "deltaFromWindowStartMs": 120010,
+          "deltaFromWindowCenterMs": 90010,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 10331,
+          "avgDurationMs": 9834.0
+        },
+        {
+          "jobId": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+          "jobName": "assistant-agenda-refresh",
+          "runCount": 1,
+          "maxDurationMs": 21901,
+          "avgDurationMs": 21901.0
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 9546,
+          "avgDurationMs": 9546.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 47629,
+          "avgDurationMs": 47629.0
+        }
+      ]
+    },
+    {
+      "rank": 10,
+      "windowStartMs": 1775090940000,
+      "windowEndMs": 1775091000000,
+      "windowStart": "2026-04-02T00:49:00+00:00",
+      "windowEnd": "2026-04-02T00:50:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 41387,
+      "avgWaitMs": 41387.0,
+      "lanes": [
+        {
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "count": 1,
+          "maxWaitMs": 41387,
+          "avgWaitMs": 41387.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-01T20:49:19.309-04:00",
+          "timestampMs": 1775090959309,
+          "lane": "session:agent:ledger:cron:92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "waitedMs": 41387,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775090850000,
+        "windowEndMs": 1775091090000,
+        "windowStart": "2026-04-02T00:47:30+00:00",
+        "windowEnd": "2026-04-02T00:51:30+00:00"
+      },
+      "correlatedRuns": [
+        {
+          "runAt": "2026-04-02T00:48:00.007000+00:00",
+          "runAtMs": 1775090880007,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 8375,
+          "deltaFromWindowStartMs": -59993,
+          "deltaFromWindowCenterMs": -89993,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T00:48:29.457000+00:00",
+          "runAtMs": 1775090909457,
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "durationMs": 51089,
+          "deltaFromWindowStartMs": -30543,
+          "deltaFromWindowCenterMs": -60543,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/92acf93d-2903-40be-bb2c-4fc7c3dd53d9.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T00:50:00.010000+00:00",
+          "runAtMs": 1775091000010,
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "durationMs": 11189,
+          "deltaFromWindowStartMs": 60010,
+          "deltaFromWindowCenterMs": 30010,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/3e398876-2b45-4865-8319-0ecec041bb3f.jsonl"
+        },
+        {
+          "runAt": "2026-04-02T00:50:11.199000+00:00",
+          "runAtMs": 1775091011199,
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "durationMs": 9976,
+          "deltaFromWindowStartMs": 71199,
+          "deltaFromWindowCenterMs": 41199,
+          "sourceFile": "/Users/corystoner/.openclaw/cron/runs/ad48c440-1dfb-4ef9-9f51-8c71f60e4b53.jsonl"
+        }
+      ],
+      "correlatedJobs": [
+        {
+          "jobId": "ad48c440-1dfb-4ef9-9f51-8c71f60e4b53",
+          "jobName": "assistant-inbox-notify",
+          "runCount": 2,
+          "maxDurationMs": 9976,
+          "avgDurationMs": 9175.5
+        },
+        {
+          "jobId": "3e398876-2b45-4865-8319-0ecec041bb3f",
+          "jobName": "assistant-task-loop",
+          "runCount": 1,
+          "maxDurationMs": 11189,
+          "avgDurationMs": 11189.0
+        },
+        {
+          "jobId": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+          "jobName": "kalshi-ref-arb-5m",
+          "runCount": 1,
+          "maxDurationMs": 51089,
+          "avgDurationMs": 51089.0
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

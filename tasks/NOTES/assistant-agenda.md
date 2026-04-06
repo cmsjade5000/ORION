@@ -1,9 +1,9 @@
 # Assistant Agenda
 
-Generated: 2026-03-31 22:30 EDT
+Generated: 2026-04-06 10:30 EDT
 
 ## Calendar
-- 12:00 AM: Apple’s 50th Birthday (Work)
+- No upcoming calendar events found.
 
 ## Reminders
 - No reminders found.
