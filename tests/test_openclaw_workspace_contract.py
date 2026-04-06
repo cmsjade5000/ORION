@@ -58,6 +58,14 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertEqual(self.json_example["plugins"]["slots"]["memory"], "memory-lancedb")
         self.assertTrue(self.json_example["plugins"]["entries"]["open-prose"]["enabled"])
         self.assertTrue(self.json_example["plugins"]["entries"]["memory-lancedb"]["enabled"])
+        self.assertFalse(self.json_example["plugins"]["entries"]["memory-core"]["enabled"])
+        dreaming = self.json_example["plugins"]["entries"]["memory-core"]["config"]["dreaming"]
+        self.assertFalse(dreaming["enabled"])
+        self.assertEqual(dreaming["frequency"], "0 3 * * *")
+        self.assertEqual(
+            self.json_example["agents"]["list"][0]["memorySearch"]["sources"],
+            ["memory", "sessions"],
+        )
         embedding = self.json_example["plugins"]["entries"]["memory-lancedb"]["config"]["embedding"]
         self.assertEqual(embedding["apiKey"], "${OPENROUTER_API_KEY}")
         self.assertEqual(embedding["baseUrl"], "https://openrouter.ai/api/v1")
@@ -65,15 +73,20 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("session-memory", self.yaml_example)
         self.assertIn("command-logger", self.yaml_example)
         self.assertIn("memory: memory-lancedb", self.yaml_example)
+        self.assertIn("memory-core:", self.yaml_example)
+        self.assertIn('frequency: "0 3 * * *"', self.yaml_example)
+        self.assertIn("sources:\n          - memory\n          - sessions", self.yaml_example)
         self.assertIn("apiKey: ${OPENROUTER_API_KEY}", self.yaml_example)
         self.assertIn("baseUrl: https://openrouter.ai/api/v1", self.yaml_example)
         self.assertIn("model: text-embedding-3-small", self.yaml_example)
 
-    def test_examples_default_to_openrouter_auto(self):
+    def test_examples_default_to_openai_gpt_54(self):
         model_defaults = self.json_example["agents"]["defaults"]["model"]
-        self.assertEqual(model_defaults["primary"], "openrouter/auto")
-        self.assertIn("openrouter/free", model_defaults["fallbacks"])
-        self.assertIn("primary: openrouter/auto", self.yaml_example)
+        self.assertEqual(model_defaults["primary"], "openai/gpt-5.4")
+        self.assertIn("openrouter/openrouter/free", model_defaults["fallbacks"])
+        self.assertIn("minimax/MiniMax-M2.7-highspeed", model_defaults["fallbacks"])
+        self.assertIn("openai/gpt-5.4", self.readme)
+        self.assertIn("primary: openai/gpt-5.4", self.yaml_example)
 
     def test_examples_include_cooldowns_codex_search_and_exec_approvals(self):
         cooldowns = self.json_example["auth"]["cooldowns"]
@@ -159,6 +172,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("session_maintenance.py", self.error_review)
         self.assertIn("error-review.md", self.readme)
         self.assertIn("session-maintenance.md", self.readme)
+        self.assertIn("OPENCLAW_MEMORY_DREAMING_PILOT.md", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
         self.assertIn("OpenClaw 2026.3.13", self.readme)

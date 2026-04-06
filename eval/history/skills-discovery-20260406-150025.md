@@ -1,46 +1,13 @@
-# Weekly Skill Shortlist (March 2026)
+# Skill Discovery Scan
 
-Last updated: 2026-04-06
-Cadence: Weekly refresh (keep this file rolling through March 2026).
-Policy: Any candidate that survives intake must follow staged canary in `docs/skills/canary-protocol.md`.
-
-## How to Use
-
-1. Add or update candidate rows during weekly review.
-2. Link hard evidence before changing status from `researching` to `intake-ready`.
-3. Do not promote to production directly from this sheet.
-4. Keep decision notes short and link deeper artifacts.
-
-## Candidate Table
-
-| Week Of | Candidate Skill | Source | Capability Hypothesis | Evidence Links | Expected ROI | Test Plan | Intake Score | Status | Owner |
-| --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- |
-| 2026-03-02 | OpenProse workflow canary | Official OpenClaw docs | Structured research-and-drafting workflows for higher-quality, repeatable outputs | `https://docs.openclaw.ai/prose` | Reduce rerun/edit loops for long-form packets | Compare task completion quality and turnaround with/without prose flow | `[pending]` | researching | ORION |
-| 2026-03-02 | Gmail PubSub usage pattern | Official OpenClaw docs | Lower-latency email-trigger workflows with fewer polling cycles | `https://docs.openclaw.ai/channels/gmail` | Lower cron polling load and faster event ingestion | Stage one mailbox flow and compare latency/error profile | `[pending]` | researching | ORION |
-
-## Weekly Review Checklist
-
-- Intake rubric scored in `docs/skills/skill-intake-rubric.md`.
-- Source validation complete for online-discovered skills.
-- Risks and rollback constraints documented before canary start.
-- Pre/post evaluation plan attached for each `intake-ready` candidate.
-
-## Status Definitions
-
-- `researching`: Candidate identified; evidence incomplete.
-- `intake-ready`: Intake score complete and eligible for staging.
-- `canary-running`: Installed in staging and under gated observation.
-- `hold`: Blocked by risk, observability, or unresolved evidence gap.
-- `rejected`: Removed from consideration.
-- `promoted`: Passed 7-day canary gate and approved for wider rollout.
-
-## Automated Discovery (Generated)
-
-- Generated at (ET): `2026-04-06 11:00`
-- Sources: `https://docs.openclaw.ai/sitemap.xml, https://github.com/openclaw/openclaw/releases.atom`
+- Generated at ET: `2026-04-06 11:00`
+- Generated at UTC: `2026-04-06T15:00:25.063432+00:00`
 - Limit: `8`
-- JSON artifact: `eval/history/skills-discovery-20260406-150025.json`
-- Markdown artifact: `eval/history/skills-discovery-20260406-150025.md`
+- Source count: `401`
+- Selected count: `8`
+- Sources: `https://docs.openclaw.ai/sitemap.xml, https://github.com/openclaw/openclaw/releases.atom`
+
+## Ranked Candidates
 
 | Source | Capability | Risk | Expected ROI | Test Plan | Trust Score | Fit Score | Intake Score | Status |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |

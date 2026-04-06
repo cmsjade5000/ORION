@@ -76,6 +76,8 @@ exit 2
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "tasks" / "NOTES").mkdir(parents=True, exist_ok=True)
+            (root / "memory").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / "2026-04-06-gateway-update.md").write_text("# Session\n\nhello\n", encoding="utf-8")
             self._write_fake_openclaw(root, missing=120, before=200, after=50)
             env = dict(os.environ)
             env["PATH"] = f"{root}:{env.get('PATH', '')}"
@@ -108,6 +110,9 @@ exit 2
             self.assertTrue(payload["apply_allowed"])
             self.assertTrue(payload["applied"])
             self.assertEqual(payload["doctor_exit_code"], 0)
+            self.assertEqual(payload["consolidation_preview"]["planned"], 1)
+            self.assertEqual(payload["consolidation_apply"]["result"]["merged"], 1)
+            self.assertTrue((root / "memory" / "2026-04-06.md").exists())
 
 
 if __name__ == "__main__":

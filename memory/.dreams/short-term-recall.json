@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-06T15:11:41.150Z",
+  "entries": {
+    "memory:memory/2026-04-06.md:1:27": {
+      "key": "memory:memory/2026-04-06.md:1:27",
+      "path": "memory/2026-04-06.md",
+      "startLine": 1,
+      "endLine": 27,
+      "source": "memory",
+      "snippet": "# Memory for 2026-04-06 <!-- openclaw-session-memory-import: 2026-04-06-gateway-update.md sha256=dbe3eda64f1830f7 --> ## Imported Session Summary: 2026-04-06-gateway-update.md # Session: 2026-04-06 14:54:10 UTC - **Session Key**: agent:main:main - **Session ID**: bc14a20c-c1fd-41a7-99fa-46fdd996c4c9 - **Source**: gateway:agent ## Conversation Summary user: Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK. When reading HEARTBEAT.md, use workspace file /Users/corystoner/src/ORION/HEARTBEAT.md (exact case). Do not read docs/heartbeat.md. Current time: Monday, April 6th,",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "totalScore": 1.0642922042616938,
+      "maxScore": 0.5323215790649429,
+      "firstRecalledAt": "2026-04-06T15:09:22.228Z",
+      "lastRecalledAt": "2026-04-06T15:11:41.150Z",
+      "queryHashes": [
+        "4af79580c104"
+      ],
+      "recallDays": [
+        "2026-04-06"
+      ],
+      "conceptTags": [
+        "gateway",
+        "openclaw-session-memory-import",
+        "2026-04-06-gateway-update.md",
+        "heartbeat.md",
+        "heartbeat-ok",
+        "docs/heartbeat.md",
+        "openclaw",
+        "import"
+      ]
+    },
+    "memory:memory/2026-03-12.md:1:45": {
+      "key": "memory:memory/2026-03-12.md:1:45",
+      "path": "memory/2026-03-12.md",
+      "startLine": 1,
+      "endLine": 45,
+      "source": "memory",
+      "snippet": "# Memory for 2026-03-12 <!-- openclaw-session-memory-import: 2026-03-12-build-project.md sha256=1b7a75f98942239b --> ## Imported Session Summary: 2026-03-12-build-project.md # Session: 2026-03-12 22:02:46 UTC - **Session Key**: agent:main:main - **Session ID**: 2b7fa56c-31de-4867-9cd7-69f792bd5bbb - **Source**: telegram ## Conversation Summary assistant: <final>Hi there! How can I help you today?</final> user: Conversation info (untrusted metadata): ```json { \"message_id\": \"1118\", \"sender_id\": \"8471523294\", \"sender\": \"Cory Stoner\", \"timestamp\": \"Thu 2026-03-12 16:51 EDT\" } ``` Sender (untrusted metadata): ```json { \"label\": \"Cory Stoner (8471523294)\", \"id\": \"8471523294\",",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "totalScore": 0.9980760534542583,
+      "maxScore": 0.4991934056127722,
+      "firstRecalledAt": "2026-04-06T15:09:22.228Z",
+      "lastRecalledAt": "2026-04-06T15:11:41.150Z",
+      "queryHashes": [
+        "4af79580c104"
+      ],
+      "recallDays": [
+        "2026-04-06"
+      ],
+      "conceptTags": [
+        "openclaw-session-memory-import",
+        "2026-03-12-build-project.md",
+        "message-id",
+        "sender-id",
+        "openclaw",
+        "import",
+        "project.md",
+        "sha256"
+      ]
+    },
+    "memory:memory/2026-03-12.md:37:93": {
+      "key": "memory:memory/2026-03-12.md:37:93",
+      "path": "memory/2026-03-12.md",
+      "startLine": 37,
+      "endLine": 93,
+      "source": "memory",
+      "snippet": "Could you please clarify what you mean by \"Update OpenClaw\"? Are you trying to update the gateway service, or something else? If you're looking to update the gateway service, I can try to follow the instructions in the BOOTSTRAP.md file, which suggests commands like `openclaw gateway install` or `openclaw gateway start`. Let me know how you'd like to proceed.</final> user: Conversation info (untrusted metadata): ```json { \"message_id\": \"1120\", \"sender_id\": \"8471523294\", \"sender\": \"Cory Stoner\", \"timestamp\": \"Thu 2026-03-12 17:55 EDT\" } ``` Sender (untrusted metadata): ```json { \"label\": \"Cory Stoner (8471523294)\", \"id\": \"8471523294\", \"name\": \"Cory Stoner\" } ``` Hey what’s up?",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "totalScore": 0.45535234574217104,
+      "maxScore": 0.45535234574217104,
+      "firstRecalledAt": "2026-04-06T15:11:41.150Z",
+      "lastRecalledAt": "2026-04-06T15:11:41.150Z",
+      "queryHashes": [
+        "4af79580c104"
+      ],
+      "recallDays": [
+        "2026-04-06"
+      ],
+      "conceptTags": [
+        "gateway",
+        "bootstrap.md",
+        "message-id",
+        "sender-id",
+        "you",
+        "please",
+        "clarify",
+        "what"
+      ]
+    }
+  }
+}

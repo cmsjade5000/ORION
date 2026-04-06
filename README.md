@@ -17,6 +17,7 @@ Design goals:
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
 - ORION local installs should pin `tools.profile` to `coding`; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset.
+- Checked-in runtime templates now default ORION to `openai/gpt-5.4` with OpenRouter + MiniMax fallbacks.
 
 ## Go Live (macOS)
 
@@ -54,12 +55,14 @@ Current verification snapshot (2026-03-22):
   - `openrouter/auto` probe returned a billing error (insufficient OpenRouter credits).
   - `nvidia-build/moonshotai/kimi-k2-5` probe returned `HTTP 404`.
   - `openclaw models status --probe` warns that `tools.profile=coding` includes shipped core tools (`apply_patch`, `memory_search`, `memory_get`, `cron`) that are currently unavailable under the active runtime/provider/model/config.
-  - The current investigation points to provider-state gating rather than a missing OpenClaw binary: `openrouter/auto` is failing billing, and `memory-lancedb` recall is also failing against OpenRouter credits.
+- The current investigation points to provider-state gating rather than a missing OpenClaw binary: `openrouter/auto` is failing billing, and `memory-lancedb` recall is also failing against OpenRouter credits.
+- The checked-in template default has moved to `openai/gpt-5.4`; keep the live runtime aligned with that hierarchy after the next gateway refresh.
 
 Capability intake brief:
 - `docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md`
 - `docs/ORION_TOOLSET_ADOPTION_2026_03_22.md`
 - `docs/ORION_FUNCTIONAL_REVIEW_2026_04_06.md`
+- `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md`
 
 ## Recovery
 
@@ -90,6 +93,17 @@ Internal reliability review:
 - `AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json`
 - `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
 - `docs/ORION_ERROR_REVIEW.md`
+
+Memory/dreaming pilot:
+- ORION keeps `MEMORY.md` as curated truth and `memory-lancedb` as the active template default for now.
+- OpenClaw `2026.4.5` dreaming is documented as a pilot path under `memory-core`, not a default-on feature in this repo.
+- See `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md` before switching the memory slot or enabling `/dreaming`.
+- For dreaming to populate short-term recall, ORION memory search must include `memory` in `agents.list[].memorySearch.sources`; `sessions` alone will not write the dreaming recall store.
+- Non-destructive preview:
+  - `make dreaming-preview`
+  - writes `tmp/openclaw_memory_dreaming_preview_latest.json`
+  - writes `tmp/openclaw_memory_dreaming_preview_latest.md`
+  - reports whether a local short-term recall store exists yet
 
 ## Telegram Surfaces
 

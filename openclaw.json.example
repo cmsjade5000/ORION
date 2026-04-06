@@ -33,13 +33,14 @@
     "defaults": {
       "workspace": "/Users/corystoner/src/ORION",
       "model": {
-        "_comment_model": "Default posture: use OpenRouter auto-routing for production orchestration. OpenAI remains a direct API control/eval lane outside the default OpenClaw model path.",
-        "_comment_fallbacks": "Keep Kimi out of the default production fallback chain. Use Gemini/OpenRouter for general orchestration and reserve Kimi for an intentional specialist lane.",
-        "primary": "openrouter/auto",
+        "_comment_model": "Default posture: use OpenAI GPT-5.4 for production orchestration. Keep the fallback chain explicit so provider drift does not silently change ORION behavior.",
+        "_comment_fallbacks": "Keep Kimi out of the default production fallback chain. Use OpenRouter + MiniMax for general orchestration and reserve Kimi for an intentional specialist lane.",
+        "primary": "openai/gpt-5.4",
         "fallbacks": [
-          "openrouter/free",
+          "openrouter/openrouter/free",
           "openai/gpt-oss-20b:free",
-          "google/gemini-2.5-flash-lite"
+          "minimax/MiniMax-M2.7-highspeed",
+          "minimax/MiniMax-M2.7"
         ]
       },
       "compaction": {
@@ -61,6 +62,10 @@
       {
         "id": "main",
         "memorySearch": {
+          "sources": [
+            "memory",
+            "sessions"
+          ],
           "qmd": {
             "extraCollections": [
               {
@@ -239,6 +244,16 @@
       },
       "open-prose": {
         "enabled": true
+      },
+      "memory-core": {
+        "_comment": "Dreaming pilot path for OpenClaw 2026.4.5+. Keep disabled until ORION is ready to migrate the active memory slot from memory-lancedb.",
+        "enabled": false,
+        "config": {
+          "dreaming": {
+            "enabled": false,
+            "frequency": "0 3 * * *"
+          }
+        }
       },
       "memory-lancedb": {
         "enabled": true,

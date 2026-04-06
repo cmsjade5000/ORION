@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,39 @@ def maybe_doctor(enabled: bool) -> subprocess.CompletedProcess[str] | None:
     return run_cmd(["openclaw", "doctor", "--non-interactive"])
 
 
+def consolidate_preview(root: Path) -> tuple[dict[str, Any], subprocess.CompletedProcess[str]]:
+    script_path = Path(__file__).resolve().parent / "consolidate_session_memory.py"
+    proc = run_cmd(
+        [
+            sys.executable,
+            str(script_path),
+            "--repo-root",
+            str(root),
+            "--json",
+        ]
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr or proc.stdout or "session memory consolidation preview failed")
+    return json.loads(proc.stdout), proc
+
+
+def consolidate_apply(root: Path) -> tuple[dict[str, Any], subprocess.CompletedProcess[str]]:
+    script_path = Path(__file__).resolve().parent / "consolidate_session_memory.py"
+    proc = run_cmd(
+        [
+            sys.executable,
+            str(script_path),
+            "--repo-root",
+            str(root),
+            "--apply",
+            "--json",
+        ]
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr or proc.stdout or "session memory consolidation apply failed")
+    return json.loads(proc.stdout), proc
+
+
 def should_apply(preview: dict[str, Any], *, min_missing: int, min_reclaim: int) -> tuple[bool, str]:
     missing = int(preview.get("missing") or 0)
     before = int(preview.get("beforeCount") or 0)
@@ -87,6 +121,8 @@ def write_report(
     path: Path,
     *,
     agent: str,
+    consolidation_preview: dict[str, Any],
+    consolidation_result: dict[str, Any] | None,
     preview: dict[str, Any],
     apply_requested: bool,
     apply_reason: str,
@@ -108,13 +144,30 @@ def write_report(
         f"- Applied: `{str(applied).lower()}`",
         f"- Reason: {apply_reason}",
         "",
+        "## Session Memory Consolidation",
+        f"- planned: `{int(consolidation_preview.get('planned') or 0)}`",
+        f"- applied: `{str(bool(consolidation_result)).lower()}`",
+    ]
+    if consolidation_result:
+        result = consolidation_result.get("result") or {}
+        lines.extend(
+            [
+                f"- merged: `{int(result.get('merged') or 0)}`",
+                f"- archived: `{int(result.get('archived') or 0)}`",
+                f"- skipped: `{int(result.get('skipped') or 0)}`",
+            ]
+        )
+    lines.extend(
+        [
+            "",
         "## Preview",
         f"- beforeCount: `{before}`",
         f"- afterCount: `{after}`",
         f"- missing: `{missing}`",
         f"- reclaimable: `{reclaim}`",
         f"- wouldMutate: `{str(bool(preview.get('wouldMutate'))).lower()}`",
-    ]
+        ]
+    )
     if apply_result:
         lines.extend(
             [
@@ -179,6 +232,7 @@ def main() -> int:
     root = repo_root(args.repo_root)
     report_path = Path(args.report).expanduser().resolve() if args.report else root / "tasks" / "NOTES" / "session-maintenance.md"
 
+    consolidation_preview_payload, consolidation_preview_proc = consolidate_preview(root)
     preview, preview_proc = cleanup_preview(args.agent, args.fix_missing)
     apply_allowed, apply_reason = should_apply(
         preview,
@@ -190,8 +244,10 @@ def main() -> int:
     apply_result: dict[str, Any] | None = None
     post_preview: dict[str, Any] | None = None
     doctor_result: subprocess.CompletedProcess[str] | None = None
+    consolidation_result: dict[str, Any] | None = None
 
     if args.apply and apply_allowed:
+        consolidation_result, _ = consolidate_apply(root)
         apply_result, _ = cleanup_apply(args.agent, args.fix_missing)
         applied = True
         if args.doctor:
@@ -203,6 +259,8 @@ def main() -> int:
     write_report(
         report_path,
         agent=args.agent,
+        consolidation_preview=consolidation_preview_payload,
+        consolidation_result=consolidation_result,
         preview=preview,
         apply_requested=args.apply,
         apply_reason=apply_reason,
@@ -214,6 +272,8 @@ def main() -> int:
 
     payload = {
         "agent": args.agent,
+        "consolidation_preview": consolidation_preview_payload,
+        "consolidation_apply": consolidation_result,
         "preview": preview,
         "apply_requested": args.apply,
         "apply_allowed": apply_allowed,
@@ -223,6 +283,7 @@ def main() -> int:
         "post_preview": post_preview,
         "doctor_exit_code": doctor_result.returncode if doctor_result is not None else None,
         "report_path": str(report_path.relative_to(root)),
+        "consolidation_preview_stdout": consolidation_preview_proc.stdout.strip(),
         "preview_stdout": preview_proc.stdout.strip(),
     }
 
