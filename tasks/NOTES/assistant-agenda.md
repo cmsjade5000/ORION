@@ -1,6 +1,6 @@
 # Assistant Agenda
 
-Generated: 2026-04-06 11:45 EDT
+Generated: 2026-04-07 11:37 EDT
 
 ## Calendar
 - No upcoming calendar events found.
@@ -12,6 +12,9 @@ Generated: 2026-04-06 11:45 EDT
 - 0001-scaffold-tickets-workflow [backlog]
 
 ## Delegated Work
-- ATLAS: Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory.
-- SCRIBE: Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up).
 - AEGIS_PLAN_WATCH_DELEGATION: Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat.
+
+## Completed Today
+- ATLAS: Deployed the updated AEGIS `aegis-sentinel` script so routine Tailscale online/active churn no longer messages Cory.
+- SCRIBE: Delivered the Telegram wrap-up draft for recent ORION platform changes.
+- ORION: Verified `/today`, `/capture`, `/followups`, and `/review` from Telegram DM.
