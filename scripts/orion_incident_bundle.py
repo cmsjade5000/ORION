@@ -11,6 +11,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,11 @@ def _artifact_name(command_name: str) -> str:
         "tasks_audit": "tasks.audit.json",
         "codex_version": "codex.version.txt",
     }.get(command_name, f"{command_name}.txt")
+
+
+def _progress(enabled: bool, message: str) -> None:
+    if enabled:
+        print(f"[bundle] {message}", file=sys.stderr, flush=True)
 
 
 def _run(name: str, argv: list[str], *, cwd: Path, timeout: int = 45) -> CommandResult:
@@ -475,6 +481,7 @@ def main() -> int:
     parser.add_argument("--tail-lines", type=int, default=120, help="How many log lines to capture.")
     parser.add_argument("--write-latest", action="store_true", help="Write latest summary artifacts in stable paths.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable summary.")
+    parser.add_argument("--verbose", action="store_true", help="Print collector progress to stderr.")
     args = parser.parse_args()
 
     root = repo_root(args.repo_root)
@@ -488,15 +495,19 @@ def main() -> int:
     gateway_log = log_dir / "gateway.log"
     gateway_err_log = log_dir / "gateway.err.log"
 
-    commands = [
-        _run("gateway_health", ["openclaw", "gateway", "health"], cwd=root),
-        _run("gateway_status", ["openclaw", "gateway", "status", "--json"], cwd=root),
-        _run("channels_status", ["openclaw", "channels", "status", "--probe", "--json"], cwd=root),
-        _run("doctor", ["openclaw", "doctor", "--non-interactive"], cwd=root, timeout=90),
-        _run("tasks_list", ["openclaw", "tasks", "list", "--json", "--limit", "200"], cwd=root),
-        _run("tasks_audit", ["openclaw", "tasks", "audit", "--json", "--limit", "200"], cwd=root),
-        _run("codex_version", ["codex", "--version"], cwd=root),
+    command_specs = [
+        ("gateway_health", ["openclaw", "gateway", "health"], 45),
+        ("gateway_status", ["openclaw", "gateway", "status", "--json"], 45),
+        ("channels_status", ["openclaw", "channels", "status", "--probe", "--json"], 45),
+        ("doctor", ["openclaw", "doctor", "--non-interactive"], 90),
+        ("tasks_list", ["openclaw", "tasks", "list", "--json"], 45),
+        ("tasks_audit", ["openclaw", "tasks", "audit", "--json", "--limit", "200"], 45),
+        ("codex_version", ["codex", "--version"], 45),
     ]
+    commands = []
+    for name, argv, timeout in command_specs:
+        _progress(args.verbose, f"running {name}")
+        commands.append(_run(name, argv, cwd=root, timeout=timeout))
     command_map = {result.name: result for result in commands}
 
     gateway_log_tail = _tail_lines(gateway_log, args.tail_lines)

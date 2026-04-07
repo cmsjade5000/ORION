@@ -23,19 +23,32 @@ def repo_root(path: str | None) -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def load_bundle(root: Path, bundle_path: str | None) -> dict[str, Any]:
+def _progress(enabled: bool, message: str) -> None:
+    if enabled:
+        print(f"[progress] {message}", file=sys.stderr, flush=True)
+
+
+def load_bundle(root: Path, bundle_path: str | None, *, verbose: bool = False) -> dict[str, Any]:
     if bundle_path:
+        _progress(verbose, f"loading existing bundle: {bundle_path}")
         return json.loads(Path(bundle_path).read_text(encoding="utf-8"))
+    _progress(verbose, "running orion_incident_bundle.py")
+    latest_bundle = root / "tmp" / "orion_incident_bundle_latest.json"
     proc = subprocess.run(
-        [sys.executable, str(root / "scripts" / "orion_incident_bundle.py"), "--json", "--write-latest"],
+        [sys.executable, str(root / "scripts" / "orion_incident_bundle.py"), "--json", "--write-latest", "--verbose"],
         cwd=str(root),
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         check=False,
+        timeout=180,
     )
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or "incident bundle failed")
+    if latest_bundle.exists():
+        _progress(verbose, f"loading latest bundle artifact: {latest_bundle}")
+        return json.loads(latest_bundle.read_text(encoding="utf-8"))
     return json.loads(proc.stdout)
 
 
@@ -95,16 +108,19 @@ def main() -> int:
     ap.add_argument("--bundle", help="Existing incident bundle JSON path. If omitted, generate one.")
     ap.add_argument("--write-latest", action="store_true", help="Write latest JSON and markdown artifacts.")
     ap.add_argument("--json", action="store_true", help="Print JSON instead of markdown.")
+    ap.add_argument("--verbose", action="store_true", help="Print progress to stderr.")
     args = ap.parse_args()
 
     root = repo_root(args.repo_root)
     try:
-        bundle = load_bundle(root, args.bundle)
+        bundle = load_bundle(root, args.bundle, verbose=args.verbose)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
+    _progress(args.verbose, "normalizing signals")
     normalized = normalize_signals(bundle)
+    _progress(args.verbose, "scoring signals")
     score = score_signals(normalized)
     overall_status = "ok"
     if score.severity == "S1":
@@ -122,6 +138,7 @@ def main() -> int:
     }
 
     if args.write_latest:
+        _progress(args.verbose, "writing latest judgment artifacts")
         latest_json = root / "tmp" / "orion_judgment_latest.json"
         latest_md = root / "tasks" / "NOTES" / "orion-judgment.md"
         latest_json.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +146,7 @@ def main() -> int:
         latest_json.write_text(json.dumps(verdict, indent=2), encoding="utf-8")
         latest_md.write_text(render_summary(verdict), encoding="utf-8")
 
+    _progress(args.verbose, "rendering output")
     if args.json:
         print(json.dumps(verdict, indent=2))
     else:
