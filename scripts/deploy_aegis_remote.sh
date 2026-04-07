@@ -14,6 +14,12 @@ host="${AEGIS_HOST:-100.75.104.54}"
 user="${AEGIS_SSH_USER:-root}"
 dest="/usr/local/bin"
 do_restart=1
+ssh_opts=(
+  -o BatchMode=yes
+  -o ConnectTimeout=20
+  -o ServerAliveInterval=5
+  -o ServerAliveCountMax=4
+)
 
 usage() {
   cat <<'TXT' >&2
@@ -57,15 +63,21 @@ for f in "${files[@]}"; do
   fi
 done
 
+echo "Preflight: checking SSH connectivity to ${user}@${host} ..."
+if ! ssh "${ssh_opts[@]}" "${user}@${host}" 'echo AEGIS_SSH_OK'; then
+  echo "ERROR: SSH preflight failed for ${user}@${host}. If Tailscale SSH approval is required, approve it first or retry with interactive ssh." >&2
+  exit 1
+fi
+
 echo "Deploying AEGIS scripts to ${user}@${host}:${dest}/"
-scp "${files[@]}" "${user}@${host}:${dest}/"
+scp "${ssh_opts[@]}" "${files[@]}" "${user}@${host}:${dest}/"
 
 echo "Setting permissions..."
-ssh "${user}@${host}" "chmod 0755 ${dest}/aegis-monitor-orion ${dest}/aegis-maintenance-orion ${dest}/aegis-sentinel ${dest}/aegis-defend; chmod 0644 ${dest}/lib_alert_format.sh"
+ssh "${ssh_opts[@]}" "${user}@${host}" "chmod 0755 ${dest}/aegis-monitor-orion ${dest}/aegis-maintenance-orion ${dest}/aegis-sentinel ${dest}/aegis-defend; chmod 0644 ${dest}/lib_alert_format.sh"
 
 if [[ "$do_restart" -eq 1 ]]; then
   echo "Restarting services..."
-  ssh "${user}@${host}" "set -euo pipefail
+  ssh "${ssh_opts[@]}" "${user}@${host}" "set -euo pipefail
 systemctl restart aegis-monitor-orion.service aegis-sentinel.service
 
 # Maintenance unit is optional; restart only if installed.
