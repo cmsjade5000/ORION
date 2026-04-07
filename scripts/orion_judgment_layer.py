@@ -17,6 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aegis_incident_score import score_signals
 
 
+DEFAULT_POLICY_PATH = Path("ops/judgment-policy.v1.json")
+
+
 def repo_root(path: str | None) -> Path:
     if path:
         return Path(path).expanduser().resolve()
@@ -52,6 +55,11 @@ def load_bundle(root: Path, bundle_path: str | None, *, verbose: bool = False) -
     return json.loads(proc.stdout)
 
 
+def load_policy(root: Path, policy_path: str | None) -> dict[str, Any]:
+    path = Path(policy_path).expanduser().resolve() if policy_path else (root / DEFAULT_POLICY_PATH)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def normalize_signals(bundle: dict[str, Any]) -> dict[str, Any]:
     gateway = bundle.get("gateway") if isinstance(bundle.get("gateway"), dict) else {}
     channels = bundle.get("channels") if isinstance(bundle.get("channels"), dict) else {}
@@ -79,6 +87,25 @@ def normalize_signals(bundle: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def apply_policy(score: dict[str, Any], policy: dict[str, Any], previous: dict[str, Any] | None) -> dict[str, Any]:
+    mapping = policy.get("severity_to_recommendation") or {}
+    recommendation = str(mapping.get(score["severity"], score.get("recommendation") or "log-only"))
+    should_notify = recommendation == "alert"
+    if previous:
+        prev_score = previous.get("score") if isinstance(previous.get("score"), dict) else {}
+        same_reco = prev_score.get("recommendation") == recommendation
+        same_severity = prev_score.get("severity") == score["severity"]
+        prev_value = int(prev_score.get("score_value") or 0)
+        curr_value = int(score.get("score_value") or 0)
+        if same_reco and same_severity and curr_value <= prev_value:
+            should_notify = False
+    return {
+        "recommendation": recommendation,
+        "should_notify": should_notify,
+        "should_digest": recommendation == "digest" and bool((policy.get("digest_policy") or {}).get("enabled", True)),
+    }
+
+
 def render_summary(verdict: dict[str, Any]) -> str:
     score = verdict["score"]
     lines = [
@@ -88,6 +115,8 @@ def render_summary(verdict: dict[str, Any]) -> str:
         f"- Severity: `{score['severity']}`",
         f"- Score: `{score['score_value']}`",
         f"- Recommendation: `{score['recommendation']}`",
+        f"- Should notify now: `{verdict['delivery']['should_notify']}`",
+        f"- Should include in digest: `{verdict['delivery']['should_digest']}`",
         "",
         "## Reasons",
     ]
@@ -109,6 +138,7 @@ def main() -> int:
     ap.add_argument("--write-latest", action="store_true", help="Write latest JSON and markdown artifacts.")
     ap.add_argument("--json", action="store_true", help="Print JSON instead of markdown.")
     ap.add_argument("--verbose", action="store_true", help="Print progress to stderr.")
+    ap.add_argument("--policy", help="Override policy JSON path.")
     args = ap.parse_args()
 
     root = repo_root(args.repo_root)
@@ -118,6 +148,8 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
+    _progress(args.verbose, "loading policy")
+    policy = load_policy(root, args.policy)
     _progress(args.verbose, "normalizing signals")
     normalized = normalize_signals(bundle)
     _progress(args.verbose, "scoring signals")
@@ -128,11 +160,24 @@ def main() -> int:
     elif score.severity in {"S2", "S3"}:
         overall_status = "degraded"
 
+    previous = None
+    latest_json = root / "tmp" / "orion_judgment_latest.json"
+    if latest_json.exists():
+        try:
+            previous = json.loads(latest_json.read_text(encoding="utf-8"))
+        except Exception:
+            previous = None
+    score_dict = asdict(score)
+    delivery = apply_policy(score_dict, policy, previous)
+    score_dict["recommendation"] = delivery["recommendation"]
+
     verdict = {
         "schema_version": "orion.judgment.v1",
         "generated_at_utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "overall_status": overall_status,
-        "score": asdict(score),
+        "score": score_dict,
+        "delivery": delivery,
+        "policy_path": str((Path(args.policy).expanduser().resolve() if args.policy else (root / DEFAULT_POLICY_PATH))),
         "normalized_signals": normalized,
         "source_bundle": bundle.get("artifacts", {}).get("summary_json") or bundle.get("bundle_dir"),
     }

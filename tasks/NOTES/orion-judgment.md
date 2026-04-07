@@ -4,6 +4,8 @@
 - Severity: `S4`
 - Score: `13`
 - Recommendation: `log-only`
+- Should notify now: `False`
+- Should include in digest: `False`
 
 ## Reasons
 - (none)
