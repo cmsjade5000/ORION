@@ -56,6 +56,7 @@ def _run(name: str, argv: list[str], *, cwd: Path, timeout: int = 45) -> Command
             cwd=str(cwd),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             text=True,
             check=False,
             timeout=timeout,
@@ -65,8 +66,8 @@ def _run(name: str, argv: list[str], *, cwd: Path, timeout: int = 45) -> Command
             argv=argv,
             ok=proc.returncode == 0,
             exit_code=proc.returncode,
-            stdout=(proc.stdout or "").strip(),
-            stderr=(proc.stderr or "").strip(),
+            stdout=_trim_output((proc.stdout or "").strip()),
+            stderr=_trim_output((proc.stderr or "").strip()),
         )
     except FileNotFoundError:
         return CommandResult(
@@ -119,6 +120,14 @@ def _safe_json(text: str) -> Any | None:
 
 def _json_payload(result: CommandResult) -> Any | None:
     return _safe_json(result.stdout) or _safe_json(result.stderr)
+
+
+def _trim_output(text: str, limit: int = 20000) -> str:
+    if len(text) <= limit:
+        return text
+    head = text[: limit // 2]
+    tail = text[-(limit // 2) :]
+    return head + "\n...[truncated]...\n" + tail
 
 
 def _first_line(text: str) -> str:
@@ -484,8 +493,8 @@ def main() -> int:
         _run("gateway_status", ["openclaw", "gateway", "status", "--json"], cwd=root),
         _run("channels_status", ["openclaw", "channels", "status", "--probe", "--json"], cwd=root),
         _run("doctor", ["openclaw", "doctor", "--non-interactive"], cwd=root, timeout=90),
-        _run("tasks_list", ["openclaw", "tasks", "list", "--json"], cwd=root),
-        _run("tasks_audit", ["openclaw", "tasks", "audit", "--json"], cwd=root),
+        _run("tasks_list", ["openclaw", "tasks", "list", "--json", "--limit", "200"], cwd=root),
+        _run("tasks_audit", ["openclaw", "tasks", "audit", "--json", "--limit", "200"], cwd=root),
         _run("codex_version", ["codex", "--version"], cwd=root),
     ]
     command_map = {result.name: result for result in commands}
