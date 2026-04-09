@@ -9,6 +9,7 @@ describe("requireOperatorAccess", () => {
     delete process.env.ORION_TELEGRAM_ALLOWED_USER_IDS;
     delete process.env.ORION_TELEGRAM_ADMIN_IDS;
     delete process.env.ORION_TELEGRAM_CHAT_ID;
+    delete process.env.ORION_TELEGRAM_TARGET;
     delete process.env.ORION_CORE_TELEGRAM_TARGET;
     delete process.env.ORION_TELEGRAM_ALLOW_UNRESTRICTED_PRIVATE;
   });
@@ -45,6 +46,17 @@ describe("requireOperatorAccess", () => {
     const ok = await requireOperatorAccess(
       { from: { id: 7 }, chat: { id: 7, type: "private" }, reply },
       "Pogo command"
+    );
+    expect(ok).toBe(true);
+    expect(reply).not.toHaveBeenCalled();
+  });
+
+  it("accepts the debranded telegram target env", async () => {
+    process.env.ORION_TELEGRAM_TARGET = "42";
+    const reply = vi.fn();
+    const ok = await requireOperatorAccess(
+      { from: { id: 42 }, chat: { id: 7, type: "private" }, reply },
+      "Kalshi command"
     );
     expect(ok).toBe(true);
     expect(reply).not.toHaveBeenCalled();

@@ -18,10 +18,10 @@ import type {
   PatchId
 } from "./types";
 
-const defaultPath = path.resolve(process.cwd(), "..", "db", "orion-core.sqlite");
-const dbPath = process.env.ORION_CORE_DB_PATH ?? defaultPath;
+const defaultPath = path.resolve(process.cwd(), "..", "db", "orion-ops.sqlite");
+const dbPath = process.env.ORION_DB_PATH ?? process.env.ORION_CORE_DB_PATH ?? defaultPath;
 if (!dbPath || typeof dbPath !== "string") {
-  throw new Error(`Invalid ORION Core DB path: ${String(dbPath)}`);
+  throw new Error(`Invalid ORION DB path: ${String(dbPath)}`);
 }
 
 const require = createRequire(import.meta.url);
@@ -181,6 +181,7 @@ function resolveDeliverTarget(raw: string | null | undefined): string | null {
   }
 
   return (
+    normalizeDeliverTarget(process.env.ORION_TELEGRAM_TARGET) ??
     normalizeDeliverTarget(process.env.ORION_CORE_TELEGRAM_TARGET) ??
     normalizeDeliverTarget(process.env.ORION_TELEGRAM_CHAT_ID) ??
     null

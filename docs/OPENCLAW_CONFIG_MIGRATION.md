@@ -27,7 +27,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `channels.telegram.groupPolicy = "allowlist"`
 - `channels.telegram.groupAllowFrom = ["<CORY_TELEGRAM_USER_ID>"]`
 - `channels.telegram.groups = { "<TELEGRAM_GROUP_ID>": {} }`
-- `channels.telegram.streamMode = "partial"`
+- `channels.telegram.streaming = "partial"`
 - `channels.telegram.reactionLevel = "ack"`
 - `plugins.slots.memory = "memory-lancedb"`
 - `plugins.entries."memory-lancedb".enabled = true`

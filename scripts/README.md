@@ -221,7 +221,7 @@ python3 scripts/assistant_capture.py --text "Follow up with the contractor next 
 ## orion_toolset_audit.py
 
 ### Purpose
-Run a non-destructive local audit of ORION's OpenClaw/Codex posture and write JSON/markdown artifacts for the current toolset adoption plan.
+Run a non-destructive local audit of ORION's OpenClaw/Codex posture and write JSON/markdown artifacts for the current runtime baseline refresh.
 
 ### Usage
 
@@ -243,6 +243,118 @@ Make target:
 
 ```bash
 make toolset-audit
+```
+
+April 2026 docs that consume this audit:
+
+```text
+docs/ORION_RUNTIME_BASELINE_2026_04_07.md
+docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md
+```
+
+---
+
+## clawhub_skill_refresh.py
+
+### Purpose
+Build a durable ClawHub review artifact using the current `openclaw skills ...` CLI surface.
+
+### Usage
+
+```bash
+python3 scripts/clawhub_skill_refresh.py \
+  --output-json tmp/clawhub_skill_refresh_latest.json \
+  --output-md tmp/clawhub_skill_refresh_latest.md
+```
+
+Make target:
+
+```bash
+make assistant-skill-refresh
+```
+
+---
+
+## firecrawl_wire_pilot.py
+
+### Purpose
+Build a read-only WIRE Firecrawl pilot readiness report.
+
+### Usage
+
+```bash
+python3 scripts/firecrawl_wire_pilot.py \
+  --output-json tmp/firecrawl_wire_pilot_latest.json \
+  --output-md tmp/firecrawl_wire_pilot_latest.md
+```
+
+Make target:
+
+```bash
+make firecrawl-wire-pilot
+```
+
+---
+
+## acpx_pilot_check.py
+
+### Purpose
+Build a read-only ACPX pilot readiness report for ATLAS-owned specialist work.
+
+### Usage
+
+```bash
+python3 scripts/acpx_pilot_check.py \
+  --output-json tmp/acpx_pilot_latest.json \
+  --output-md tmp/acpx_pilot_latest.md
+```
+
+Make target:
+
+```bash
+make acpx-pilot
+```
+
+---
+
+## acpx_runtime_smoke.py
+
+### Purpose
+Verify the live ACPX bounded runtime path without mutating config or widening permissions.
+
+### Usage
+
+```bash
+python3 scripts/acpx_runtime_smoke.py \
+  --output-json tmp/acpx_runtime_smoke_latest.json \
+  --output-md tmp/acpx_runtime_smoke_latest.md
+```
+
+Make target:
+
+```bash
+make acpx-smoke
+```
+
+---
+
+## github_structured_workflow_pilot.py
+
+### Purpose
+Build a read-only GitHub structured workflow pilot readiness report.
+
+### Usage
+
+```bash
+python3 scripts/github_structured_workflow_pilot.py \
+  --output-json tmp/github_structured_workflow_pilot_latest.json \
+  --output-md tmp/github_structured_workflow_pilot_latest.md
+```
+
+Make target:
+
+```bash
+make github-workflow-pilot
 ```
 
 ---

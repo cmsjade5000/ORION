@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 from dataclasses import asdict
@@ -18,6 +19,9 @@ from aegis_incident_score import score_signals
 
 
 DEFAULT_POLICY_PATH = Path("ops/judgment-policy.v1.json")
+DEFAULT_LATEST_JSON = Path("tmp/orion_judgment_latest.json")
+DEFAULT_LATEST_MD = Path("tasks/NOTES/orion-judgment.md")
+DEFAULT_HISTORY_DIR = Path("eval/history")
 
 
 def repo_root(path: str | None) -> Path:
@@ -106,6 +110,81 @@ def apply_policy(score: dict[str, Any], policy: dict[str, Any], previous: dict[s
     }
 
 
+def _safe_stem(text: str) -> str:
+    cleaned = "".join(ch.lower() if ch.isalnum() else "-" for ch in text.strip())
+    cleaned = "-".join(part for part in cleaned.split("-") if part)
+    return cleaned or "unknown"
+
+
+def _history_paths(root: Path, verdict: dict[str, Any]) -> tuple[Path, Path]:
+    generated = str(verdict.get("generated_at_utc") or "")
+    stamp = generated.replace("-", "").replace(":", "").replace("T", "-").replace("Z", "")[:15]
+    score = verdict.get("score") if isinstance(verdict.get("score"), dict) else {}
+    severity = _safe_stem(str(score.get("severity") or "unknown"))
+    recommendation = _safe_stem(str((verdict.get("delivery") or {}).get("recommendation") or score.get("recommendation") or "unknown"))
+    stem = f"orion-judgment-{stamp}-{severity}-{recommendation}"
+    history_dir = root / DEFAULT_HISTORY_DIR
+    history_dir.mkdir(parents=True, exist_ok=True)
+    return history_dir / f"{stem}.json", history_dir / f"{stem}.md"
+
+
+def _should_send_notification(*, verdict: dict[str, Any]) -> bool:
+    delivery = verdict.get("delivery") if isinstance(verdict.get("delivery"), dict) else {}
+    if not bool(delivery.get("should_notify")):
+        return False
+    recommendation = str(delivery.get("recommendation") or "")
+    return recommendation == "alert"
+
+
+def maybe_emit_notification(root: Path, verdict: dict[str, Any], *, verbose: bool = False) -> dict[str, Any]:
+    dry_run = str(os.environ.get("ORION_JUDGMENT_NOTIFY_DRY_RUN", "")).strip().lower() in {"1", "true", "yes", "on"}
+    suppress = str(os.environ.get("ORION_SUPPRESS_TELEGRAM", "")).strip().lower() in {"1", "true", "yes", "on"}
+    notification = {
+        "attempted": False,
+        "sent": False,
+        "channel": "telegram",
+        "suppressed": False,
+        "dry_run": dry_run,
+        "reason": "not-requested",
+        "command": None,
+    }
+    if not _should_send_notification(verdict=verdict):
+        notification["reason"] = "recommendation-not-alert"
+        return notification
+
+    notification["attempted"] = True
+    msg = render_summary(verdict)
+    command = [
+        sys.executable,
+        str(root / "scripts" / "telegram_send_message.sh"),
+        msg,
+    ]
+    notification["command"] = " ".join(command)
+
+    if dry_run or suppress:
+        notification["suppressed"] = True
+        notification["reason"] = "dry-run" if dry_run else "suppressed"
+        return notification
+
+    _progress(verbose, "sending alert notification")
+    proc = subprocess.run(
+        command,
+        cwd=str(root),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    if proc.returncode != 0:
+        notification["reason"] = proc.stderr.strip() or proc.stdout.strip() or "send-failed"
+        raise RuntimeError(f"judgment notification failed: {notification['reason']}")
+    notification["sent"] = True
+    notification["reason"] = "sent"
+    return notification
+
+
 def render_summary(verdict: dict[str, Any]) -> str:
     score = verdict["score"]
     lines = [
@@ -161,7 +240,7 @@ def main() -> int:
         overall_status = "degraded"
 
     previous = None
-    latest_json = root / "tmp" / "orion_judgment_latest.json"
+    latest_json = root / DEFAULT_LATEST_JSON
     if latest_json.exists():
         try:
             previous = json.loads(latest_json.read_text(encoding="utf-8"))
@@ -181,15 +260,20 @@ def main() -> int:
         "normalized_signals": normalized,
         "source_bundle": bundle.get("artifacts", {}).get("summary_json") or bundle.get("bundle_dir"),
     }
+    notification = maybe_emit_notification(root, verdict, verbose=args.verbose)
+    verdict["notification"] = notification
 
     if args.write_latest:
         _progress(args.verbose, "writing latest judgment artifacts")
-        latest_json = root / "tmp" / "orion_judgment_latest.json"
-        latest_md = root / "tasks" / "NOTES" / "orion-judgment.md"
+        latest_json = root / DEFAULT_LATEST_JSON
+        latest_md = root / DEFAULT_LATEST_MD
+        history_json, history_md = _history_paths(root, verdict)
         latest_json.parent.mkdir(parents=True, exist_ok=True)
         latest_md.parent.mkdir(parents=True, exist_ok=True)
         latest_json.write_text(json.dumps(verdict, indent=2), encoding="utf-8")
         latest_md.write_text(render_summary(verdict), encoding="utf-8")
+        history_json.write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+        history_md.write_text(render_summary(verdict), encoding="utf-8")
 
     _progress(args.verbose, "rendering output")
     if args.json:

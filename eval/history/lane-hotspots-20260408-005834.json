@@ -1,0 +1,105 @@
+{
+  "generatedAt": "2026-04-08T00:58:34.469451+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1775523510666,
+    "analysisStart": "2026-04-07T00:58:30.666000+00:00",
+    "analysisEndMs": 1775609910666,
+    "analysisEnd": "2026-04-08T00:58:30.666000+00:00",
+    "eventsInScope": 2,
+    "runsInScope": 50,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 2,
+    "uniqueCorrelatedJobs": 0,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1775609820000,
+      "windowEndMs": 1775609880000,
+      "windowStart": "2026-04-08T00:57:00+00:00",
+      "windowEnd": "2026-04-08T00:58:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 99607,
+      "avgWaitMs": 99607.0,
+      "lanes": [
+        {
+          "lane": "session:agent:main:main",
+          "count": 1,
+          "maxWaitMs": 99607,
+          "avgWaitMs": 99607.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-07T20:57:47.188-04:00",
+          "timestampMs": 1775609867188,
+          "lane": "session:agent:main:main",
+          "waitedMs": 99607,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775609730000,
+        "windowEndMs": 1775609970000,
+        "windowStart": "2026-04-08T00:55:30+00:00",
+        "windowEnd": "2026-04-08T00:59:30+00:00"
+      },
+      "correlatedRuns": [],
+      "correlatedJobs": []
+    },
+    {
+      "rank": 2,
+      "windowStartMs": 1775609880000,
+      "windowEndMs": 1775609940000,
+      "windowStart": "2026-04-08T00:58:00+00:00",
+      "windowEnd": "2026-04-08T00:59:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 22784,
+      "avgWaitMs": 22784.0,
+      "lanes": [
+        {
+          "lane": "session:agent:main:main",
+          "count": 1,
+          "maxWaitMs": 22784,
+          "avgWaitMs": 22784.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-07T20:58:10.436-04:00",
+          "timestampMs": 1775609890436,
+          "lane": "session:agent:main:main",
+          "waitedMs": 22784,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775609790000,
+        "windowEndMs": 1775610030000,
+        "windowStart": "2026-04-08T00:56:30+00:00",
+        "windowEnd": "2026-04-08T01:00:30+00:00"
+      },
+      "correlatedRuns": [],
+      "correlatedJobs": []
+    }
+  ],
+  "warnings": []
+}

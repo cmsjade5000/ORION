@@ -2,28 +2,28 @@
 
 - Status: `degraded`
 - Repo root: `/Users/corystoner/src/ORION`
-- Bundle dir: `/Users/corystoner/src/ORION/tmp/incidents/20260406T033032-0400`
+- Bundle dir: `/Users/corystoner/src/ORION/tmp/incidents/20260408T034005-0400`
 - Health OK: `False`
-- Codex ready: `False`
+- Codex ready: `True`
 
 ## Gateway
-- Health message: `n/a`
-- Runtime status: `unknown`
-- RPC OK: `None`
-- Config audit OK: `None`
+- Health message: `Gateway Health`
+- Runtime status: `running`
+- RPC OK: `True`
+- Config audit OK: `True`
 
 ## Channels
 - Channel status OK: `False`
-- States: `n/a`
+- States: `telegram=ok | discord=degraded | slack=disabled | mochat=off`
 
 ## Tasks
-- Task list OK: `False`
+- Task list OK: `True`
 - Task list count: `None`
-- Task audit OK: `False`
+- Task audit OK: `True`
 - Task audit count: `None`
 
 ## Signals
-- Discord restart indicators: `17`
+- Discord restart indicators: `21`
 - Telegram IPv4 fallback indicators: `0`
 - Approval timeout indicators: `0`
 - Kimi rate-limit indicators: `0`
@@ -31,13 +31,13 @@
 - Exec elevation failure indicators: `0`
 
 ## Commands
-- `gateway_health`: `fail` (missing-command)
-- `gateway_status`: `fail` (missing-command)
-- `channels_status`: `fail` (missing-command)
-- `doctor`: `fail` (missing-command)
-- `tasks_list`: `fail` (missing-command)
-- `tasks_audit`: `fail` (missing-command)
-- `codex_version`: `fail` (missing-command)
+- `gateway_health`: `ok`
+- `gateway_status`: `ok`
+- `channels_status`: `ok`
+- `doctor`: `ok`
+- `tasks_list`: `ok`
+- `tasks_audit`: `ok`
+- `codex_version`: `ok`
 
 ## Artifacts
 - `commands/*.txt|json`

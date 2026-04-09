@@ -77,9 +77,11 @@ Discovery and inspiration.
 
 Delegate when:
 - You want exploration, ideas, tools, or “what’s interesting”
+- You want early scouting on new skills, toolsets, or workflow options before adoption work begins
 
 Constraints:
 - PIXEL is not the sources-of-record retrieval agent. For factual headlines/news, use WIRE.
+- PIXEL scouts; WIRE validates current external facts; ATLAS owns implementation/execution.
 
 ### QUEST
 
@@ -101,9 +103,11 @@ Sources-first web retrieval (internal-only).
 Delegate when:
 - You need up-to-date external info with links (news/headlines/“what changed?”).
 - You want evidence-backed bullet items that ORION/SCRIBE can format and send.
+- You need source-of-record validation for a tool, release, plugin, or external capability claim before adoption or execution
 
 Constraints:
 - WIRE never messages Cory directly. Output is returned to ORION only.
+- WIRE validates evidence; it does not own implementation.
 
 ### EMBER
 

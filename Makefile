@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview operator-health-bundle party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview operator-health-bundle party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= config/promptfoo/orion-safety-gate.yaml
 THINKING ?= high
@@ -123,9 +123,33 @@ skill-discovery:
 		--limit "$${LIMIT:-8}" \
 		--update-shortlist
 
-## Print monthly assistant skill refresh commands
+## Build the monthly ClawHub skill review artifact and print the update command
 assistant-skill-refresh:
 	@bash scripts/assistant_skill_refresh.sh
+
+## Build the read-only Firecrawl pilot artifact for WIRE
+firecrawl-wire-pilot:
+	@python3 scripts/firecrawl_wire_pilot.py \
+		--output-json tmp/firecrawl_wire_pilot_latest.json \
+		--output-md tmp/firecrawl_wire_pilot_latest.md
+
+## Build the read-only ACPX pilot artifact for ATLAS
+acpx-pilot:
+	@python3 scripts/acpx_pilot_check.py \
+		--output-json tmp/acpx_pilot_latest.json \
+		--output-md tmp/acpx_pilot_latest.md
+
+## Verify the bounded ACPX live path without mutating runtime state
+acpx-smoke:
+	@python3 scripts/acpx_runtime_smoke.py \
+		--output-json tmp/acpx_runtime_smoke_latest.json \
+		--output-md tmp/acpx_runtime_smoke_latest.md
+
+## Build the read-only GitHub structured workflow pilot artifact
+github-workflow-pilot:
+	@python3 scripts/github_structured_workflow_pilot.py \
+		--output-json tmp/github_structured_workflow_pilot_latest.json \
+		--output-md tmp/github_structured_workflow_pilot_latest.md
 
 ## Refresh the generated assistant agenda artifact
 assistant-agenda-refresh:

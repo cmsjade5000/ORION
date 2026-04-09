@@ -1,5 +1,11 @@
 # OpenClaw Capability Intake
 
+Historical note:
+- This document is a March 2026 intake snapshot.
+- Current baseline and pilot posture now live in:
+  - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
+  - `docs/ORION_TOOL_PILOTS_2026_04.md`
+
 Date: 2026-03-18
 Status: decision-ready intake brief
 Scope: research and evaluation only; no installs, config changes, or channel changes

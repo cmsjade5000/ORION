@@ -56,6 +56,11 @@ If a claim is time-sensitive:
 - include links and timestamps
 - prefer evidence validation first
 
+Tooling adoption split:
+- PIXEL scouts candidates and framing
+- WIRE validates current external facts and release/tool claims
+- ATLAS owns implementation and enablement steps
+
 ## Crisis/Distress To Support/Ops (ORION -> EMBER -> ORION/ATLAS)
 
 If user language indicates danger:

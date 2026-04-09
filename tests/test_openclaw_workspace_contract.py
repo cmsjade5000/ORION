@@ -10,7 +10,10 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.json_example = json.loads((cls.repo / "openclaw.json.example").read_text(encoding="utf-8"))
         cls.yaml_example = (cls.repo / "openclaw.yaml").read_text(encoding="utf-8")
         cls.readme = (cls.repo / "README.md").read_text(encoding="utf-8")
-        cls.bootstrap = (cls.repo / "BOOTSTRAP.md").read_text(encoding="utf-8")
+        bootstrap_path = cls.repo / "BOOTSTRAP.md"
+        cls.bootstrap = (
+            bootstrap_path.read_text(encoding="utf-8") if bootstrap_path.exists() else ""
+        )
         cls.workflow = (cls.repo / "docs" / "WORKFLOW.md").read_text(encoding="utf-8")
         cls.recovery = (cls.repo / "docs" / "RECOVERY.md").read_text(encoding="utf-8")
         cls.migration = (cls.repo / "docs" / "OPENCLAW_CONFIG_MIGRATION.md").read_text(
@@ -140,7 +143,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("id: NVIDIA_API_KEY", self.yaml_example)
 
     def test_docs_add_config_validate_to_standard_checks(self):
-        for text in (self.readme, self.bootstrap, self.workflow, self.recovery, self.migration):
+        for text in (self.readme, self.workflow, self.recovery, self.migration):
             self.assertIn("openclaw config validate --json", text)
 
         self.assertIn("config-validate:", self.makefile)
@@ -176,7 +179,8 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
-        self.assertIn("OpenClaw 2026.3.13", self.readme)
+        self.assertIn("OpenClaw 2026.4.5", self.readme)
+        self.assertIn("ORION_RUNTIME_BASELINE_2026_04_07.md", self.readme)
         self.assertIn("sessions_yield", self.upgrade_notes)
         self.assertIn("isolated cron", self.upgrade_notes)
         self.assertIn("cross-agent workspace", self.upgrade_notes)

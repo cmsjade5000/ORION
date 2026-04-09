@@ -152,7 +152,7 @@ channels:
           "7":
             agentId: ember
     reactionLevel: ack
-    streamMode: partial
+    streaming: partial
 
   # Discord channel (OpenClaw bundled plugin: `discord`, disabled by default).
   # Notes:

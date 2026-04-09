@@ -10,6 +10,8 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/Users/corystoner/.npm-global/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
 freshness_check_single() {
   local pattern="$1"
   local max_age="$2"
@@ -66,7 +68,10 @@ case "${job}" in
     exec /usr/bin/env AUTO_OK=1 /usr/bin/python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json
     ;;
   orion-ops-bundle)
-    exec /usr/bin/python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json
+    exec /usr/bin/python3 scripts/openclaw_operator_health_bundle.py --repo-root . --agent main --output-md tasks/NOTES/operator-health-bundle.md --output-json tmp/operator-health-bundle.json
+    ;;
+  orion-judgment-layer)
+    exec /usr/bin/python3 scripts/orion_judgment_layer.py --repo-root . --write-latest --json
     ;;
   kalshi-ref-arb-digest)
     exec /usr/bin/python3 -m scripts.kalshi_digest --window-hours 8 --send-email --email-html
@@ -110,6 +115,9 @@ PY
   orion-skill-discovery-weekly)
     make skill-discovery LIMIT=8
     freshness_check_single 'eval/history/skills-discovery-*.json' 1800
+    ;;
+  orion-judgment-layer-freshness)
+    freshness_check_pair 'eval/history/orion-judgment-*.json' 'eval/history/orion-judgment-*.md' 1800
     ;;
   *)
     echo "unknown job: ${job}" >&2

@@ -148,7 +148,7 @@
         "target": "dm"
       },
       "reactionLevel": "ack",
-      "streamMode": "partial"
+      "streaming": "partial"
     },
     "discord": {
       "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env and reference it via SecretRef (see KEEP.md).",

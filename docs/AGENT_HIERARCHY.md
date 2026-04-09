@@ -7,7 +7,14 @@ This workspace runs multiple isolated OpenClaw agents on the same Mac mini.
 - ORION (`agentId: main`): the only user-facing ingress agent.
 - ATLAS: operational director and executor.
 - NODE / PULSE / STRATUS: internal-only ops sub-agents directed by ATLAS.
-- PIXEL / QUEST / EMBER / LEDGER / POLARIS: internal specialists directly invoked by ORION as needed.
+- WIRE: evidence-first retrieval specialist directly invoked by ORION as needed.
+- PIXEL / QUEST / EMBER / LEDGER / POLARIS / SCRIBE: internal specialists directly invoked by ORION as needed.
+
+Role split that matters:
+- PIXEL scouts tools, ideas, and options.
+- WIRE validates current external facts and returns sources.
+- ATLAS owns implementation and ops execution.
+- POLARIS owns admin orchestration.
 
 ## Chain Of Command
 
@@ -27,6 +34,7 @@ Exceptions:
 
 - All non-trivial delegation must include a Task Packet (`docs/TASK_PACKET.md`).
 - Sub-agent Task Packets must set `Requester: ATLAS`.
+- ORION may directly packet WIRE, PIXEL, POLARIS, LEDGER, EMBER, QUEST, and SCRIBE for their scoped specialist work.
 
 ## ATLAS Unavailable Threshold
 

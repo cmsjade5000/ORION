@@ -27,6 +27,7 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
             "orion-error-review",
             "orion-session-maintenance",
             "orion-ops-bundle",
+            "orion-judgment-layer",
             "orion-skill-discovery-weekly",
         ):
             self.assertIn(needle, self.runner)
@@ -47,6 +48,7 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
             'disable_cron_by_name "orion-error-review"',
             'disable_cron_by_name "orion-session-maintenance"',
             'disable_cron_by_name "orion-ops-bundle"',
+            'disable_cron_by_name "orion-judgment-layer"',
             'disable_cron_by_name "orion-skill-discovery-weekly"',
         ):
             self.assertIn(needle, self.installer)

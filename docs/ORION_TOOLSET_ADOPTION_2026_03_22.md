@@ -1,5 +1,12 @@
 # ORION Toolset Adoption 2026-03-22
 
+Historical note:
+- This document is a March 2026 recommendation snapshot.
+- For the current baseline and current pilot posture, use:
+  - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
+  - `docs/ORION_TOOL_PILOTS_2026_04.md`
+  - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
+
 Status: implementation-ready adoption memo  
 Scope: additive toolset expansion without changing ORION's single-ingress policy
 

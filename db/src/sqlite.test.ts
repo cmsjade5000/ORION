@@ -9,9 +9,9 @@ describe("directive action leasing", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    dbFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "orion-core-db-")), "orion-core.sqlite");
-    process.env.ORION_CORE_DB_PATH = dbFile;
-    process.env.ORION_CORE_TELEGRAM_TARGET = "123456";
+    dbFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "orion-db-")), "orion-ops.sqlite");
+    process.env.ORION_DB_PATH = dbFile;
+    process.env.ORION_TELEGRAM_TARGET = "123456";
   });
 
   afterEach(() => {
