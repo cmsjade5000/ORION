@@ -66,6 +66,13 @@ Canary results source: `/Users/corystoner/src/ORION/docs/skills/canary-results-2
 
 | Date (ET) | Lane Wait Count | Lane Wait P95 (ms) | Cron Enabled | Delivery Queue | Eval Gate | Snapshot |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
+| 2026-04-08 | 4 | 22784 | 1 | 0 | pass | `eval/history/reliability-20260409-004712.json` |
+| 2026-04-07 | 2 | 22784 | 1 | 0 | pass | `eval/history/reliability-20260408-005810.json` |
+| 2026-04-06 | 0 | 0 | 2 | 0 | pass | `eval/history/reliability-20260406-141035.json` |
+| 2026-04-05 | 0 | 0 | 2 | 0 | pass | `eval/history/reliability-20260405-141007.json` |
+| 2026-04-04 | 0 | 0 | 2 | 0 | pass | `eval/history/reliability-20260405-011401.json` |
+| 2026-04-03 | 0 | 0 | 2 | 0 | pass | `eval/history/reliability-20260403-141010.json` |
+| 2026-04-02 | 19 | 51788 | 2 | 0 | pass | `eval/history/reliability-20260402-141046.json` |
 | 2026-03-02 | 21 | 34034 | 21 | 0 | pass | `/Users/corystoner/src/ORION/eval/history/reliability-20260303-032031.json` |
 | 2026-03-03 | 21 | 34034 | 21 | 0 | fail | `/Users/corystoner/src/ORION/eval/history/reliability-20260303-082621.json` |
 | 2026-03-04 | 0 | 0 | 20 | 0 | fail | `/Users/corystoner/src/ORION/eval/history/reliability-20260304-151118.json` |

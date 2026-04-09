@@ -7,7 +7,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to ATLAS"
+          "phrase": "delegate to ATLAS"
         },
         {
           "path": "src/agents/ORION.md",
@@ -23,7 +23,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to POLARIS"
+          "phrase": "delegate to POLARIS"
         },
         {
           "path": "src/agents/ORION.md",
@@ -39,7 +39,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to ATLAS"
+          "phrase": "delegate to ATLAS"
         }
       ],
       "notes": "Infra and gateway work route through ATLAS, then STRATUS/NODE/PULSE as needed."
@@ -51,7 +51,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to EMBER"
+          "phrase": "delegate to EMBER"
         },
         {
           "path": "src/agents/ORION.md",
@@ -67,7 +67,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to LEDGER"
+          "phrase": "delegate to LEDGER"
         },
         {
           "path": "src/agents/ORION.md",
@@ -83,7 +83,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to PIXEL"
+          "phrase": "delegate to PIXEL first"
         },
         {
           "path": "src/agents/ORION.md",
@@ -91,6 +91,22 @@
         }
       ],
       "notes": "Tool exploration routes to PIXEL; factual retrieval may pair with WIRE."
+    },
+    {
+      "id": "evidence_retrieval",
+      "owner": "WIRE",
+      "trigger_phrase": "Evidence-backed external retrieval / \"latest\" / source-of-record claims",
+      "file_expectations": [
+        {
+          "path": "src/core/shared/ROUTING.md",
+          "phrase": "delegate to WIRE first"
+        },
+        {
+          "path": "src/agents/ORION.md",
+          "phrase": "delegate to WIRE"
+        }
+      ],
+      "notes": "Source-backed external validation and current release/tool claims route to WIRE."
     },
     {
       "id": "mixed_intent_gate",
@@ -115,7 +131,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "Delegate to QUEST"
+          "phrase": "delegate to QUEST"
         },
         {
           "path": "src/agents/ORION.md",
@@ -131,7 +147,7 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "then NODE as needed"
+          "phrase": "then NODE if needed"
         },
         {
           "path": "src/agents/ORION.md",

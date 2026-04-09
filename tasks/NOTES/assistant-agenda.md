@@ -1,12 +1,13 @@
 # Assistant Agenda
 
-Generated: 2026-03-31 22:30 EDT
+Generated: 2026-04-08 21:17 EDT
 
 ## Calendar
-- 12:00 AM: Apple’s 50th Birthday (Work)
+- No upcoming calendar events found.
 
 ## Reminders
-- No reminders found.
+- 2026-04-08T14:00:00Z: Cell Phone (Bills)
+- 2026-04-08T04:00:00Z: Clean dish washer (Family)
 
 ## Open Tickets
 - 0001-scaffold-tickets-workflow [backlog]

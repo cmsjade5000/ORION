@@ -28,6 +28,8 @@ SEVERITIES = ("S1", "S2", "S3", "S4")
 @dataclass(frozen=True)
 class Score:
     severity: str
+    score_value: int
+    recommendation: str
     reasons: list[str]
     evidence: list[str]
     recommended_actions: list[str]
@@ -77,6 +79,13 @@ def score_signals(sig: dict[str, Any]) -> Score:
     - config_integrity_ok (bool)
     - config_changed_files (list[str])
     - user_reports (bool)
+    - channels_degraded_count (int)
+    - approval_timeouts (int)
+    - stale_task_runs (int)
+    - discord_restart_indicators (int)
+    - telegram_fallback_indicators (int)
+    - exec_elevation_failures (int)
+    - codex_ready (bool)
     """
     gateway_ok = _bool(sig, "gateway_health_ok", True)
     restarts = _int(sig, "restarts_15m", 0)
@@ -86,6 +95,13 @@ def score_signals(sig: dict[str, Any]) -> Score:
     cfg_ok = _bool(sig, "config_integrity_ok", True)
     cfg_files = _list_str(sig, "config_changed_files")
     user_reports = _bool(sig, "user_reports", False)
+    channels_degraded = _int(sig, "channels_degraded_count", 0)
+    approval_timeouts = _int(sig, "approval_timeouts", 0)
+    stale_task_runs = _int(sig, "stale_task_runs", 0)
+    discord_restarts = _int(sig, "discord_restart_indicators", 0)
+    telegram_fallbacks = _int(sig, "telegram_fallback_indicators", 0)
+    exec_elevation_failures = _int(sig, "exec_elevation_failures", 0)
+    codex_ready = _bool(sig, "codex_ready", True)
     note = str(sig.get("gateway_health_note", "")).strip()
 
     reasons: list[str] = []
@@ -127,18 +143,82 @@ def score_signals(sig: dict[str, Any]) -> Score:
         reasons.append("user-reported impact")
         evidence.append("user_reports=true")
 
+    if channels_degraded > 0:
+        reasons.append("one or more channels are degraded")
+        evidence.append(f"channels_degraded_count={channels_degraded}")
+    if approval_timeouts > 0:
+        reasons.append("approval flow timeouts detected")
+        evidence.append(f"approval_timeouts={approval_timeouts}")
+    if stale_task_runs > 0:
+        reasons.append("stale task runs detected")
+        evidence.append(f"stale_task_runs={stale_task_runs}")
+    if discord_restarts > 0:
+        evidence.append(f"discord_restart_indicators={discord_restarts}")
+    if telegram_fallbacks > 0:
+        evidence.append(f"telegram_fallback_indicators={telegram_fallbacks}")
+    if exec_elevation_failures > 0:
+        reasons.append("exec elevation failures detected")
+        evidence.append(f"exec_elevation_failures={exec_elevation_failures}")
+    if not codex_ready:
+        reasons.append("codex CLI unavailable")
+        evidence.append("codex_ready=false")
+
     # Severity rubric (highest wins):
     # S1: probable compromise/drift or outage
     # S2: urgent reliability/security anomaly (needs prompt attention)
     # S3: notable but not urgent (monitor + batch)
     # S4: informational
     severity = "S4"
-    if (not gateway_ok) or (not cfg_ok) or ssh_fail >= 100:
+    score_value = 0
+    if not gateway_ok:
+        score_value += 100
+    if not cfg_ok:
+        score_value += 70
+    if ssh_fail >= 100:
+        score_value += 80
+    elif ssh_fail >= 30:
+        score_value += 45
+    elif ssh_fail > 0:
+        score_value += 10
+    if bans >= 10:
+        score_value += 45
+    elif bans > 0:
+        score_value += 10
+    if restarts >= 3:
+        score_value += 45
+    elif restarts > 0:
+        score_value += 10
+    if user_reports:
+        score_value += 40
+    if channels_degraded > 0:
+        score_value += min(20 + (channels_degraded * 10), 40)
+    if approval_timeouts > 0:
+        score_value += min(10 + (approval_timeouts * 5), 30)
+    if stale_task_runs > 0:
+        score_value += min(10 + (stale_task_runs * 5), 25)
+    if exec_elevation_failures > 0:
+        score_value += min(10 + (exec_elevation_failures * 5), 25)
+    if not codex_ready:
+        score_value += 15
+    if peers_changed:
+        score_value += 10
+    if telegram_fallbacks > 0:
+        score_value += min(telegram_fallbacks * 2, 10)
+    if discord_restarts > 0:
+        score_value += min(discord_restarts * 3, 15)
+
+    if (not gateway_ok) or (not cfg_ok) or ssh_fail >= 100 or score_value >= 100:
         severity = "S1"
-    elif restarts >= 3 or ssh_fail >= 30 or bans >= 10 or user_reports:
+    elif restarts >= 3 or ssh_fail >= 30 or bans >= 10 or user_reports or score_value >= 60:
         severity = "S2"
-    elif restarts > 0 or ssh_fail > 0 or bans > 0 or peers_changed:
+    elif restarts > 0 or ssh_fail > 0 or bans > 0 or peers_changed or score_value >= 20:
         severity = "S3"
+
+    recommendation = "log-only"
+    if severity in {"S1", "S2"}:
+        recommendation = "alert"
+    elif severity == "S3":
+        recommendation = "digest"
 
     recommended_actions: list[str] = []
     rollback: list[str] = []
@@ -165,6 +245,8 @@ def score_signals(sig: dict[str, Any]) -> Score:
 
     return Score(
         severity=severity,
+        score_value=score_value,
+        recommendation=recommendation,
         reasons=reasons[:8],
         evidence=evidence[:12] if evidence else ["(no notable evidence signals provided)"],
         recommended_actions=recommended_actions,
@@ -182,6 +264,8 @@ def render_plan(sig: dict[str, Any], sc: Score) -> str:
     lines.append(f"Incident: {incident_id}")
     lines.append(f"Detected: {detected}")
     lines.append(f"Severity: {sc.severity}")
+    lines.append(f"Score: {sc.score_value}")
+    lines.append(f"Recommendation: {sc.recommendation}")
     lines.append("Reasons:")
     lines.extend([f"- {r}" for r in (sc.reasons or ["(none)"])])
     lines.append("Evidence:")

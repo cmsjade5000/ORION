@@ -33,13 +33,14 @@
     "defaults": {
       "workspace": "/Users/corystoner/src/ORION",
       "model": {
-        "_comment_model": "Default posture: use OpenRouter auto-routing for production orchestration. OpenAI remains a direct API control/eval lane outside the default OpenClaw model path.",
-        "_comment_fallbacks": "Keep Kimi out of the default production fallback chain. Use Gemini/OpenRouter for general orchestration and reserve Kimi for an intentional specialist lane.",
-        "primary": "openrouter/auto",
+        "_comment_model": "Default posture: use OpenAI GPT-5.4 for production orchestration. Keep the fallback chain explicit so provider drift does not silently change ORION behavior.",
+        "_comment_fallbacks": "Keep Kimi out of the default production fallback chain. Use OpenRouter + MiniMax for general orchestration and reserve Kimi for an intentional specialist lane.",
+        "primary": "openai/gpt-5.4",
         "fallbacks": [
-          "openrouter/free",
+          "openrouter/openrouter/free",
           "openai/gpt-oss-20b:free",
-          "google/gemini-2.5-flash-lite"
+          "minimax/MiniMax-M2.7-highspeed",
+          "minimax/MiniMax-M2.7"
         ]
       },
       "compaction": {
@@ -61,6 +62,10 @@
       {
         "id": "main",
         "memorySearch": {
+          "sources": [
+            "memory",
+            "sessions"
+          ],
           "qmd": {
             "extraCollections": [
               {
@@ -143,7 +148,7 @@
         "target": "dm"
       },
       "reactionLevel": "ack",
-      "streamMode": "partial"
+      "streaming": "partial"
     },
     "discord": {
       "_comment": "Discord channel (requires enabling the bundled OpenClaw `discord` plugin). Store DISCORD_BOT_TOKEN in ~/.openclaw/.env and reference it via SecretRef (see KEEP.md).",
@@ -190,7 +195,6 @@
   "env": {
     "vars": {
       "TELEGRAM_STREAM_DRAFT": "1",
-      "ORION_MINIAPP_URL": "https://<your-miniapp-host>",
       "FLIC_ROUTER_ENABLED": "1",
       "FLIC_VAULT_BASE_URL": "https://vault966-r2.fly.dev",
       "FLIC_BOT_USERNAME": "Flic_GatewayBot",
@@ -240,6 +244,16 @@
       },
       "open-prose": {
         "enabled": true
+      },
+      "memory-core": {
+        "_comment": "Dreaming pilot path for OpenClaw 2026.4.5+. Keep disabled until ORION is ready to migrate the active memory slot from memory-lancedb.",
+        "enabled": false,
+        "config": {
+          "dreaming": {
+            "enabled": false,
+            "frequency": "0 3 * * *"
+          }
+        }
       },
       "memory-lancedb": {
         "enabled": true,

@@ -10,8 +10,7 @@ For repo-native file-first execution tickets, use:
 - Lanes: `tasks/WORK/{backlog,in-progress,testing,done}/`
 
 ## Ready (ORION triage)
-- [ ] Send Telegram wrap-up summary of recent platform work (draft ready: `tasks/INBOX/SCRIBE.md` under Result; ORION sends)
-- [ ] Verify `/today`, `/capture`, `/followups`, and `/review` from Telegram DM once inbound is confirmed
+- [ ] Tighten rough edges from today’s work, especially calendar phrasing and the flaky AEGIS deploy wrapper
 
 ## Specialist Assignments (ORION-only)
 
@@ -26,6 +25,8 @@ See `docs/TASK_PACKET.md`.
 ## Blocked
 
 ## Done Today
+- [x] Sent Telegram wrap-up summary of recent platform work
+- [x] Verified `/today`, `/capture`, `/followups`, and `/review` from Telegram DM
 
 ### Rules
 - ORION chooses the next item and either executes it or assigns it via a Task Packet.

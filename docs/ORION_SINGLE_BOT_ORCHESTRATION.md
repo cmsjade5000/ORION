@@ -16,7 +16,7 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 2. ORION decides direct answer vs specialist delegation.
 3. If delegation is needed:
    - Preferred: delegate via `sessions_spawn` using a Task Packet.
-   - For long specialist work where ORION should end the current turn immediately after handoff, prefer `sessions_yield` when the runtime path supports it.
+   - Do not treat `sessions_yield` as the default durable async path; use packet-backed reconciliation for work that must survive beyond the current session.
    - Optional: swarm planning (`swarm-planner`) and parallel execution (`parallel-task`) when you explicitly want it.
    - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run the specialist turn manually with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
 4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
@@ -57,6 +57,8 @@ Administrative load routing:
 - Recurring triage (cron/heartbeat/queue scanning): ATLAS → PULSE.
 - Task/incident organization (“paperwork”): ATLAS → NODE.
 - Day-to-day assistant work (today agenda, quick capture, follow-through, email prep): ORION -> POLARIS first.
+- External fact validation and current release/tool verification: ORION -> WIRE.
+- Discovery, option scouting, and “what should we look at?” work: ORION -> PIXEL.
 
 ## POLARIS Admin Co-Pilot Model
 
@@ -71,7 +73,7 @@ Boundary rules:
 - POLARIS is internal-only and never messages Cory directly.
 - ORION remains the only external messenger.
 - Side effects stay confirmation-gated by default.
-- Use `sessions_yield` for long admin workflows only when ORION has already delivered the user-facing handoff/progress state and the remaining work is safe to continue asynchronously.
+- Long admin work should still preserve durable state via Task Packets or queue artifacts rather than assuming session-native yield is the durable system of record.
 
 Kalshi boundary:
 - Routine operations/diagnostics: ORION -> ATLAS -> STRATUS/PULSE.

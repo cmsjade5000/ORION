@@ -8,8 +8,8 @@
 - NODE: coordination + system glue.
 - PULSE: workflow scheduling + task flow.
 - STRATUS: gateway/devops implementation.
-- WIRE: sources-first web retrieval.
-- PIXEL: discovery.
+- WIRE: sources-first evidence retrieval.
+- PIXEL: discovery and tool scouting.
 - QUEST: gaming copilot.
 - LEDGER: cost/value tradeoffs.
 - EMBER: emotional support.
@@ -33,7 +33,9 @@
 - Emotional overwhelm / panic / distress: delegate to EMBER (primary). For crisis language, do safety-first guidance first.
 - Money / buying decisions / budgets: delegate to LEDGER; ask a small set of intake questions up front.
 - Kalshi policy/risk/parameter changes: require LEDGER gating output first, then route execution through ATLAS.
-- Exploration / "what's interesting" / tool research: delegate to PIXEL or WIRE; use SCRIBE for outward drafting.
+- Exploration / "what's interesting" / tool research / new capability scouting: delegate to PIXEL first.
+- Evidence-backed external retrieval / "latest" / source-of-record claims: delegate to WIRE first.
+- Mixed discovery + evidence work: PIXEL scouts options, WIRE validates current external facts, SCRIBE drafts, ORION sends.
 - Mixed intent (exploration + urgent delivery): ask one gating question first: `Do you want to explore or execute right now?`
 - Gaming / in-game strategy / builds / progression: delegate to QUEST; if current patch notes/news/dates matter, pair with WIRE retrieval first.
 

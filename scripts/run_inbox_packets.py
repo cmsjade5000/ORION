@@ -30,21 +30,6 @@ try:
 except Exception:  # pragma: no cover
     from scripts.inbox_state import load_kv_state, save_kv_state, sha256_lines  # type: ignore
 
-try:
-    # Optional dependency: Mini App dashboard progress visibility.
-    # When executed as `python3 scripts/run_inbox_packets.py`, sys.path[0] is `scripts/`,
-    # so `miniapp_ingest` is importable as a sibling module.
-    from miniapp_ingest import emit as miniapp_emit, upload_artifact as miniapp_upload_artifact
-except Exception:  # pragma: no cover
-    try:  # pragma: no cover
-        # When executed in other ways (e.g. `python3 -c ...` from repo root).
-        from scripts.miniapp_ingest import emit as miniapp_emit, upload_artifact as miniapp_upload_artifact  # type: ignore
-    except Exception:  # pragma: no cover
-        def miniapp_emit(*args, **kwargs):  # type: ignore[no-redef]
-            return False
-        def miniapp_upload_artifact(*args, **kwargs):  # type: ignore[no-redef]
-            return None
-
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
@@ -335,21 +320,12 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     if next_allowed and now < next_allowed:
         return False
 
-    # Mini App progress visibility: mark the specialist as starting work.
-    # Best-effort only; failures should not affect execution.
-    miniapp_emit("task.started", agentId=owner, extra={"source": "inbox_runner"})
-
     combined_out: list[str] = []
     combined_err: list[str] = []
     ok = True
     command_timeout_s = _command_timeout_seconds(fields)
 
     for argv in argv_list:
-        miniapp_emit(
-            "tool.started",
-            agentId=owner,
-            extra={"source": "inbox_runner", "tool": " ".join(argv[:4])},
-        )
         try:
             proc = subprocess.run(
                 argv,
@@ -363,13 +339,6 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
             combined_err.append(proc.stderr or "")
             if proc.returncode != 0:
                 ok = False
-                miniapp_emit(
-                    "tool.failed",
-                    agentId=owner,
-                    extra={"source": "inbox_runner", "code": int(proc.returncode)},
-                )
-            else:
-                miniapp_emit("tool.finished", agentId=owner, extra={"source": "inbox_runner", "code": 0})
         except subprocess.TimeoutExpired as exc:
             ok = False
             timeout_out = exc.stdout if isinstance(exc.stdout, str) else ""
@@ -377,11 +346,6 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
             combined_out.append(timeout_out)
             msg = f"command timed out after {command_timeout_s:.1f}s: {' '.join(argv)}"
             combined_err.append((timeout_err + "\n" if timeout_err else "") + msg + "\n")
-            miniapp_emit(
-                "tool.failed",
-                agentId=owner,
-                extra={"source": "inbox_runner", "code": 124, "timeout": True, "timeoutSeconds": command_timeout_s},
-            )
             break
 
     # Persist retry state on failure. If we still have retries left, do NOT write a Result block yet.
@@ -396,7 +360,6 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
             if len(state) > 8000:
                 state = dict(sorted(state.items(), key=lambda kv: kv[1], reverse=True)[:6000])
             save_kv_state(state_path, state)
-            miniapp_emit("task.failed", agentId=owner, extra={"source": "inbox_runner", "retry": True})
             return True
         # Exhausted retries: fall through and write a Result block.
         state[next_key] = 0.0
@@ -410,21 +373,6 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     artifact = _write_artifact(repo_root, owner, pref.packet_start_line, stdout, stderr)
     findings = _extract_findings(stdout, stderr)
     artifact_rel = str(artifact.relative_to(repo_root))
-
-    # Best-effort: publish a real artifact bubble in the Mini App when ingest/upload
-    # credentials are configured in this runtime.
-    uploaded = miniapp_upload_artifact(
-        artifact,
-        name=artifact.name,
-        mime="text/plain",
-        agent_id=owner,
-    )
-    if isinstance(uploaded, dict):
-        miniapp_emit(
-            "artifact.created",
-            agentId=owner,
-            extra={"artifact": uploaded, "source": "inbox_runner"},
-        )
 
     result_block = _format_result_block(ok=ok, findings=findings, artifact_rel=artifact_rel)
 
@@ -450,20 +398,6 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     if len(state) > 8000:
         state = dict(sorted(state.items(), key=lambda kv: kv[1], reverse=True)[:6000])
     save_kv_state(state_path, state)
-
-    # Final Mini App state + a short feed item so opening the Mini App after completion
-    # still shows something meaningful even if the agent node has gone idle.
-    miniapp_emit("task.completed" if ok else "task.failed", agentId=owner, extra={"source": "inbox_runner"})
-    # Stable id to avoid duplicates if multiple components emit the same completion.
-    key = f"{pref.inbox_path.resolve().as_posix()}:{pref.packet_start_line}"
-    rid = f"pktres_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]}"
-    miniapp_emit(
-        "response.created",
-        agentId=owner,
-        id=rid,
-        text=f"[{owner}] {fields.get('Objective','(no objective)') or '(no objective)'} -> {'OK' if ok else 'FAILED'}",
-        extra={"source": "inbox_runner"},
-    )
     return True
 
 

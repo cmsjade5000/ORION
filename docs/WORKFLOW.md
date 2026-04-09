@@ -33,9 +33,6 @@ This document outlines the recommended workflow for developing and maintaining t
    - For admin-copilot routing and POLARIS packet shapes, follow `docs/POLARIS_ADMIN_WORKFLOWS.md`.
    - For delegation structure, follow `docs/TASK_PACKET.md` and `tasks/INBOX/`.
    - For Discord setup and ongoing practice/evaluation, follow `docs/DISCORD_SETUP.md` and `docs/DISCORD_TRAINING_LOOP.md`.
-   - Optional Mini App dashboard (experimental only):
-     - Set `ORION_MINIAPP_URL` (deployed HTTPS URL). ORION exposes `/miniapp`.
-     - See `apps/telegram-miniapp-dashboard/README.md` for deployment + security notes.
    - Assistant commands:
      - `/today`
      - `/capture`

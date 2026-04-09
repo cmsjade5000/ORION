@@ -15,12 +15,7 @@ Preferences:
 - If asked for ORION email/contact/link, provide `orion_gatewaybot@agentmail.to` and do not say ORION has no email.
 - For Apple Notes requests, do not describe workspace/repo file lookup as Notes lookup.
 - Calendar policy: general calendars (Work, Events, Birthdays) are available in normal calendar replies.
-- Only include Pokemon GO calendar updates when Cory explicitly asks for Pokemon GO updates.
-- For Pokemon GO updates, query only these calendars:
-  - Pokémon GO - Community Days
-  - Pokémon GO - Events
-  - Pokémon GO - Spotlight Hours
-  - Pokémon GO - Raid Days
+- Only include Pokemon GO calendar updates when Cory explicitly asks for them.
 
 Timezone:
 - America/New_York

@@ -1,5 +1,11 @@
 # OpenClaw Capability Intake
 
+Historical note:
+- This document is a March 2026 intake snapshot.
+- Current baseline and pilot posture now live in:
+  - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
+  - `docs/ORION_TOOL_PILOTS_2026_04.md`
+
 Date: 2026-03-18
 Status: decision-ready intake brief
 Scope: research and evaluation only; no installs, config changes, or channel changes
@@ -32,6 +38,8 @@ ORION already has strong local coverage for Task Packets, cron, messaging, hooks
 
 ## T1: Official Source Index
 
+depends_on: []
+
 | Name | URL | Capability | ORION relevance | Local overlap |
 |---|---|---|---|---|
 | OpenClaw core repo | https://github.com/openclaw/openclaw | Upstream source of truth for runtime behavior, agents, tools, and release lineage | Baseline for any future compatibility or extension work | Covered |
@@ -51,6 +59,8 @@ ORION already has strong local coverage for Task Packets, cron, messaging, hooks
 | nix-openclaw | https://github.com/openclaw/nix-openclaw | Reproducible packaging and plugin distribution patterns | Useful if ORION later needs standardized multi-machine or reproducible installs | Partial |
 
 ## T3: Local ORION Capability Map
+
+depends_on: [T1]
 
 | Capability area | Status | Local evidence | Intake implication |
 |---|---|---|---|
@@ -72,6 +82,8 @@ ORION already has strong local coverage for Task Packets, cron, messaging, hooks
 
 ## T7: Policy and Security Gate
 
+depends_on: []
+
 | Gate question | Result | Notes |
 |---|---|---|
 | Preserve ORION as sole user-facing ingress? | Required | Reject tools that message Cory directly outside ORION or bypass specialist routing |
@@ -88,6 +100,8 @@ Gate outcomes:
 - `reject for now`: `local-skills-mcp`, `awesome-openclaw-skills` as an adoption target, extra messaging channels without user need, full local model-serving stacks, pixel-only desktop RPA stacks
 
 ## T2 + T4 + T5: Screened Candidate Shortlist
+
+depends_on: [T3, T7]
 
 ### Adopt Soon
 
@@ -121,6 +135,8 @@ Gate outcomes:
 | Pixel-only desktop RPA stacks | N/A | Capability category | Duplicative when ORION already has browser tools and safer structured automation options |
 
 ## T6: Pilot Specs
+
+depends_on: [T5]
 
 ### Pilot 1: Official Capability Audit
 

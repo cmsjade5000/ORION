@@ -4,7 +4,6 @@ set -euo pipefail
 # Install bounded-proactive assistant crons after Telegram inbound has been verified.
 # Safe default: print commands unless --apply is passed.
 
-ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 APPLY=0
 if [[ "${2:-}" == "--apply" || "${1:-}" == "--apply" ]]; then
   APPLY=1

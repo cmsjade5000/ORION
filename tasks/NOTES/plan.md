@@ -1,6 +1,6 @@
 # Plan
 
-- Refreshed: 2026-03-31 22:55:06 EDT
+- Refreshed: 2026-04-08 21:20:53 EDT
 
 ## Active
 - none
@@ -9,6 +9,6 @@
 - Next 0001-scaffold-tickets-workflow.md (0001-scaffold-tickets-workflow)
 
 ## Attention
-- Resolve stale packet [SCRIBE] Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up). (tasks/INBOX/SCRIBE.md:9, age=483.7h)
-- Resolve stale packet [AEGIS_PLAN_WATCH_DELEGATION] Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat. (tasks/INBOX/aegis_plan_watch_delegation.md:3, age=483.7h)
-- Resolve stale packet [ATLAS] Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory. (tasks/INBOX/ATLAS.md:9, age=385.3h)
+- Resolve stale packet [SCRIBE] Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up). (tasks/INBOX/SCRIBE.md:9, age=674.2h)
+- Resolve stale packet [AEGIS_PLAN_WATCH_DELEGATION] Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat. (tasks/INBOX/aegis_plan_watch_delegation.md:3, age=674.2h)
+- Resolve stale packet [ATLAS] Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory. (tasks/INBOX/ATLAS.md:9, age=575.7h)

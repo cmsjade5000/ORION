@@ -3,13 +3,14 @@
 agents:
   defaults:
     model:
-      # Default posture: use OpenRouter auto-routing for production orchestration.
-      # OpenAI remains a direct API control/eval lane outside the default OpenClaw routing path.
-      primary: openrouter/auto
+      # Default posture: use OpenAI GPT-5.4 for production orchestration.
+      # Keep the fallback chain explicit so provider drift does not silently change ORION behavior.
+      primary: openai/gpt-5.4
       fallbacks:
-        - openrouter/free
+        - openrouter/openrouter/free
         - openai/gpt-oss-20b:free
-        - google/gemini-2.5-flash-lite
+        - minimax/MiniMax-M2.7-highspeed
+        - minimax/MiniMax-M2.7
         # Keep Kimi out of the default production fallback chain.
         # Route it intentionally via a specialist lane instead.
     # RECOMMENDED when running this repo locally:
@@ -25,6 +26,9 @@ agents:
   list:
     - id: main
       memorySearch:
+        sources:
+          - memory
+          - sessions
         qmd:
           extraCollections:
             - name: ledger
@@ -94,15 +98,16 @@ hooks:
 #         - id: qwen3.5-4b-mlx
 #           name: Local bounded runtime
 #
-# Example routing (OpenRouter primary with Gemini, plus an intentional Kimi lane):
+# Example routing (OpenAI GPT-5.4 primary with OpenRouter + MiniMax fallbacks, plus an intentional Kimi lane):
 # agents:
 #   defaults:
 #     model:
-#       primary: openrouter/auto
+#       primary: openai/gpt-5.4
 #       fallbacks:
-#         - openrouter/free
+#         - openrouter/openrouter/free
 #         - openai/gpt-oss-20b:free
-#         - google/gemini-2.5-flash-lite
+#         - minimax/MiniMax-M2.7-highspeed
+#         - minimax/MiniMax-M2.7
 #   list:
 #     - id: ember
 #       model:
@@ -114,7 +119,6 @@ channels:
   telegram:
     enabled: true
     capabilities:
-      # Needed for /miniapp (web_app inline keyboard button).
       inlineButtons: allowlist
     commands:
       # Enable Telegram native slash-command registration.
@@ -148,7 +152,7 @@ channels:
           "7":
             agentId: ember
     reactionLevel: ack
-    streamMode: partial
+    streaming: partial
 
   # Discord channel (OpenClaw bundled plugin: `discord`, disabled by default).
   # Notes:
@@ -204,7 +208,6 @@ channels:
 # env:
 #   vars:
 #     TELEGRAM_STREAM_DRAFT: "1"
-#     ORION_MINIAPP_URL: "https://<your-miniapp-host>"
 #     FLIC_ROUTER_ENABLED: "1"
 #     FLIC_VAULT_BASE_URL: "https://vault966-r2.fly.dev"
 #     FLIC_BOT_USERNAME: "Flic_GatewayBot"
@@ -221,6 +224,15 @@ plugins:
       enabled: true
     open-prose:
       enabled: true
+    memory-core:
+      # Dreaming pilot path for OpenClaw 2026.4.5+.
+      # Keep disabled until ORION is ready to migrate the active memory slot
+      # from memory-lancedb to memory-core.
+      enabled: false
+      config:
+        dreaming:
+          enabled: false
+          frequency: "0 3 * * *"
     memory-lancedb:
       enabled: true
       config:

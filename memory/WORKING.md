@@ -8,7 +8,6 @@ Refocus ORION into a bounded-proactive admin copilot:
 
 - Telegram remains the primary user-facing channel.
 - POLARIS is the default route for reminders, calendar prep, notes capture, follow-through, and daily review.
-- Mini App surfaces are experimental and out of the assistant critical path.
 
 ## Current Status
 

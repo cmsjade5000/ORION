@@ -1,0 +1,22 @@
+{
+  "schema_version": "orion.judgment-policy.v1",
+  "severity_to_recommendation": {
+    "S1": "alert",
+    "S2": "alert",
+    "S3": "digest",
+    "S4": "log-only"
+  },
+  "notification_policy": {
+    "cooldown_seconds": {
+      "alert": 21600,
+      "digest": 43200,
+      "log-only": 0
+    },
+    "renotify_on_score_increase": true,
+    "renotify_on_severity_change": true
+  },
+  "digest_policy": {
+    "enabled": true,
+    "min_severity": "S3"
+  }
+}

@@ -13,8 +13,8 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 ## Migrated To Runtime
 
 - `tools.profile = "coding"` (pin ORION to a local workspace posture; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset)
-- `agents.defaults.model.primary = "openrouter/auto"` (pinned)
-- `agents.defaults.model.fallbacks = ["openrouter/free","openai/gpt-oss-20b:free","google/gemini-2.5-flash-lite"]` (provider-restricted)
+- `agents.defaults.model.primary = "openai/gpt-5.4"` (pinned)
+- `agents.defaults.model.fallbacks = ["openrouter/openrouter/free","openai/gpt-oss-20b:free","minimax/MiniMax-M2.7-highspeed","minimax/MiniMax-M2.7"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/src/ORION"`
 - `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","quest","ember","ledger","polaris","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
 - `hooks.internal.enabled = ["session-memory","command-logger"]`
@@ -27,13 +27,16 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `channels.telegram.groupPolicy = "allowlist"`
 - `channels.telegram.groupAllowFrom = ["<CORY_TELEGRAM_USER_ID>"]`
 - `channels.telegram.groups = { "<TELEGRAM_GROUP_ID>": {} }`
-- `channels.telegram.streamMode = "partial"`
+- `channels.telegram.streaming = "partial"`
 - `channels.telegram.reactionLevel = "ack"`
 - `plugins.slots.memory = "memory-lancedb"`
 - `plugins.entries."memory-lancedb".enabled = true`
 - `plugins.entries."memory-lancedb".config.embedding.apiKey = "${OPENROUTER_API_KEY}"`
 - `plugins.entries."memory-lancedb".config.embedding.baseUrl = "https://openrouter.ai/api/v1"`
 - `plugins.entries."memory-lancedb".config.embedding.model = "text-embedding-3-small"`
+- `plugins.entries."memory-core".enabled = false` (reserved for a dreaming pilot; not the active slot)
+- `plugins.entries."memory-core".config.dreaming.enabled = false`
+- `plugins.entries."memory-core".config.dreaming.frequency = "0 3 * * *"`
 - `plugins.entries."open-prose".enabled = true`
 - Optional (Discord):
   - `channels.discord.enabled = true`
@@ -45,7 +48,6 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
   - `channels.discord.guilds."<DISCORD_GUILD_ID>".channels."<DISCORD_PRIMARY_CHANNEL_ID>".autoThread = true`
 
 Non-required channels were removed from runtime config to keep the local gateway minimal.
-Mini App surfaces remain optional and experimental; the assistant core should not depend on them.
 
 ## Config Validation (OpenClaw 2026.3.x)
 
@@ -94,6 +96,33 @@ Practical rule:
 - This plugin schema currently expects a plain string API key, so `${ENV}`
   interpolation is the portable runtime pattern here rather than a `SecretRef`
   object.
+
+## Dreaming Pilot Note (OpenClaw 2026.4.5)
+
+OpenClaw `2026.4.5` exposes dreaming under `plugins.entries.memory-core.config.dreaming`.
+
+Practical ORION rule:
+- Do not flip `plugins.slots.memory` from `memory-lancedb` to `memory-core` casually.
+- Keep dreaming disabled in the template until the active memory backend is stable enough for background promotion.
+- When piloting, use only the documented public keys:
+  - `enabled`
+  - `frequency`
+- After any OpenClaw config change, run `make operator-health-bundle` so gateway, model, memory, REM, and live-turn health stay aligned.
+
+Observed official surfaces:
+- Slash command: `/dreaming on|off|status|help`
+- CLI review path:
+  - `openclaw memory status --deep`
+  - `openclaw memory promote`
+  - `openclaw memory promote-explain`
+  - `openclaw memory rem-harness`
+
+Operational caution:
+- `MEMORY.md` remains the durable truth file.
+- `DREAMS.md` is a review diary and should not be treated as a truth source by default.
+
+See:
+- `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md`
 
 ## Codex 0.114.x Compatibility Notes
 
@@ -180,7 +209,8 @@ For supported credential fields, prefer SecretRef objects over raw `${ENV}` stri
 
 Current runtime model routing requires auth for:
 - `openrouter` (for `openrouter/auto`)
-- `google` (for `google/gemini-2.5-flash-lite` compatibility fallback)
+- `openai` (for `openai/gpt-5.4` API-key usage)
+- `openai-codex` (for `openai-codex/gpt-5.4` OAuth usage)
 
 Set auth with either:
 - `openclaw models auth login --provider <provider>`

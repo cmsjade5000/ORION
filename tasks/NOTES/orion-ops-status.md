@@ -2,7 +2,7 @@
 
 - Status: `degraded`
 - Repo root: `/Users/corystoner/src/ORION`
-- Bundle dir: `/Users/corystoner/src/ORION/tmp/incidents/20260331T222355-0400`
+- Bundle dir: `/Users/corystoner/src/ORION/tmp/incidents/20260408T034005-0400`
 - Health OK: `False`
 - Codex ready: `True`
 
@@ -10,7 +10,7 @@
 - Health message: `Gateway Health`
 - Runtime status: `running`
 - RPC OK: `True`
-- Config audit OK: `False`
+- Config audit OK: `True`
 
 ## Channels
 - Channel status OK: `False`
@@ -18,17 +18,17 @@
 
 ## Tasks
 - Task list OK: `True`
-- Task list count: `114`
+- Task list count: `None`
 - Task audit OK: `True`
-- Task audit count: `30`
+- Task audit count: `None`
 
 ## Signals
-- Discord restart indicators: `8`
-- Telegram IPv4 fallback indicators: `7`
+- Discord restart indicators: `21`
+- Telegram IPv4 fallback indicators: `0`
 - Approval timeout indicators: `0`
-- Kimi rate-limit indicators: `43`
-- Stale task-ledger indicators: `1`
-- Exec elevation failure indicators: `2`
+- Kimi rate-limit indicators: `0`
+- Stale task-ledger indicators: `0`
+- Exec elevation failure indicators: `0`
 
 ## Commands
 - `gateway_health`: `ok`

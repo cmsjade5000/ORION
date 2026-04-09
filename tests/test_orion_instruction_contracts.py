@@ -50,6 +50,7 @@ class TestOrionInstructionContracts(unittest.TestCase):
             encoding="utf-8"
         )
         cls.orion_role_text = (repo / "src" / "agents" / "ORION.md").read_text(encoding="utf-8")
+        cls.heartbeat_text = (repo / "HEARTBEAT.md").read_text(encoding="utf-8")
         cls.atlas_role_text = (repo / "src" / "agents" / "ATLAS.md").read_text(encoding="utf-8")
         cls.task_packet_text = (repo / "docs" / "TASK_PACKET.md").read_text(encoding="utf-8")
         cls.survival_rules = {
@@ -178,6 +179,22 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("orion_gatewaybot@agentmail.to", self.orion_role_text)
         self.assertIn("AgentMail inbox identity, not a personal mailbox", self.orion_role_text)
         self.assertIn("Never answer that ORION has no email address.", self.orion_role_text)
+
+    def test_ping_probe_contract(self):
+        self.assertIn(
+            "reply with exactly `ORION_OK` and nothing else.",
+            self.orion_role_text,
+        )
+        self.assertIn(
+            "timestamp-wrapped inbound line whose final token is exactly `Ping` or `ping`",
+            self.orion_role_text,
+        )
+
+    def test_heartbeat_file_disambiguates_user_ping(self):
+        self.assertIn("INTERNAL_HEARTBEAT_POLL_V1", self.heartbeat_text)
+        self.assertIn("Never treat normal user-authored messages such as `Ping`, `ping`, `Everything ok?`", self.heartbeat_text)
+        self.assertIn("For non-heartbeat user messages, ignore this file", self.heartbeat_text)
+        self.assertIn("reply exactly `HEARTBEAT_OK`", self.heartbeat_text)
 
     def test_verifiable_capability_claims_contract(self):
         self.assertIn("Only claim capabilities you can verify in-turn.", self.orion_role_text)

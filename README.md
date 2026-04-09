@@ -17,6 +17,7 @@ Design goals:
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
 - ORION local installs should pin `tools.profile` to `coding`; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset.
+- Checked-in runtime templates now default ORION to `openai/gpt-5.4` with OpenRouter + MiniMax fallbacks.
 
 ## Go Live (macOS)
 
@@ -38,27 +39,36 @@ openclaw agents list --bindings
 openclaw models status
 ```
 
-Latest local runtime verification:
-- Upgraded on 2026-03-15 to `OpenClaw 2026.3.13`
-- Gateway LaunchAgent refresh + post-restart probes verified on 2026-03-22
-- Notes: `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
+Latest local/runtime baseline:
+- Runtime verified on 2026-04-07 against `OpenClaw 2026.4.5`.
+- Historical upgrade note remains in `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`.
+- Current sweep baseline and follow-on decisions live in:
+  - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
+  - `docs/ORION_TOOL_PILOTS_2026_04.md`
+  - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
 
-Current verification snapshot (2026-03-22):
-- `openclaw gateway start` restarted the LaunchAgent cleanly.
-- `openclaw gateway status` returned `RPC probe: ok`.
-- `openclaw channels status --probe` reported Telegram and Discord as working.
+Current verification snapshot (2026-04-07):
+- `openclaw --version` returned `OpenClaw 2026.4.5`.
 - `openclaw config validate --json` returned `{"valid":true,...}`.
-- `codex --version` returned `codex-cli 0.115.0`.
+- Live runtime plugin allowlist includes `telegram`, `discord`, `slack`, `open-prose`, `minimax`, `google`, `openrouter`, and `openai`.
+- Live runtime memory slot is `memory-core`, and dreaming is enabled in runtime.
+- ACPX is enabled in the live runtime for bounded specialist execution.
+- ACPX live usage is pinned to ATLAS-owned bounded work with `permissionMode=approve-reads`, `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`.
+- Firecrawl remains disabled in the live runtime because `FIRECRAWL_API_KEY` is not configured.
+- Checked-in templates still keep `memory-lancedb` as the conservative default and keep `memory-core`/dreaming in pilot posture.
+- `openclaw skills list` confirms ClawHub-backed skill discovery is available in the local runtime.
+- `browser` and `firecrawl` remain bundled plugin surfaces that are not allowlisted in the current live config.
 - `make incident-bundle` writes a read-only ORION ops bundle under `tmp/incidents/` plus a stable summary at `tasks/NOTES/orion-ops-status.md`.
-- Remaining follow-ups in the live runtime:
-  - `openrouter/auto` probe returned a billing error (insufficient OpenRouter credits).
-  - `nvidia-build/moonshotai/kimi-k2-5` probe returned `HTTP 404`.
-  - `openclaw models status --probe` warns that `tools.profile=coding` includes shipped core tools (`apply_patch`, `memory_search`, `memory_get`, `cron`) that are currently unavailable under the active runtime/provider/model/config.
-  - The current investigation points to provider-state gating rather than a missing OpenClaw binary: `openrouter/auto` is failing billing, and `memory-lancedb` recall is also failing against OpenRouter credits.
 
 Capability intake brief:
-- `docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md`
-- `docs/ORION_TOOLSET_ADOPTION_2026_03_22.md`
+- `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
+- `docs/ORION_TOOL_PILOTS_2026_04.md`
+- `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
+- Historical context:
+  - `docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md`
+  - `docs/ORION_TOOLSET_ADOPTION_2026_03_22.md`
+- `docs/ORION_FUNCTIONAL_REVIEW_2026_04_06.md`
+- `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md`
 
 ## Recovery
 
@@ -90,12 +100,29 @@ Internal reliability review:
 - `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
 - `docs/ORION_ERROR_REVIEW.md`
 
-## Telegram Mini App (Experimental / Archived)
+Memory/dreaming pilot:
+- ORION keeps `MEMORY.md` as curated truth and `memory-lancedb` as the active checked-in template default for now.
+- Live runtime has moved to `memory-core` with dreaming enabled; treat that as runtime state, not a blanket repo default.
+- OpenClaw `2026.4.5` dreaming remains documented here as a pilot path under `memory-core`, not an auto-trusted memory source.
+- See `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md` before switching the memory slot or enabling `/dreaming`.
+- For dreaming to populate short-term recall, ORION memory search must include `memory` in `agents.list[].memorySearch.sources`; `sessions` alone will not write the dreaming recall store.
+- Non-destructive preview:
+  - `make dreaming-preview`
+  - writes `tmp/openclaw_memory_dreaming_preview_latest.json`
+  - writes `tmp/openclaw_memory_dreaming_preview_latest.md`
+  - reports whether a local short-term recall store exists yet
 
-This repo still contains Mini App experiments, but they are not part of the assistant critical path:
-- App: `apps/telegram-miniapp-dashboard/`
-- ORION commands: `/miniapp` and `/core` (both send a `web_app` button via the Telegram plugin)
-- Paper-trading quick commands in ORION DM:
+Standard operator health bundle:
+- Run `make operator-health-bundle` after gateway, model, or memory changes.
+- It checks gateway status, `models status --probe`, memory status, `memory rem-harness`, and one live `main` smoke turn.
+- Artifacts:
+  - `tmp/openclaw_operator_health_bundle_latest.json`
+  - `tmp/openclaw_operator_health_bundle_latest.md`
+
+## Telegram Surfaces
+
+Primary Telegram commands in ORION DM:
+- Paper-trading quick commands:
   - `/paper_help` for a quick in-chat command list
   - `/paper_status` for current paper status
   - `/paper_update` (or `/paper_update 24`) for status + digest window
@@ -105,14 +132,11 @@ This repo still contains Mini App experiments, but they are not part of the assi
   - `/flicreset` clears in-memory Flic conversation state for the current DM.
 
 Config:
-- Set `ORION_MINIAPP_URL` to your deployed HTTPS URL (see `openclaw.json.example` / `openclaw.yaml`).
 - Flic deep-link router env vars:
   - `FLIC_ROUTER_ENABLED=1`
   - `FLIC_VAULT_BASE_URL=https://vault966-r2.fly.dev`
   - `FLIC_BOT_USERNAME=Flic_GatewayBot`
   - Optional: `FLIC_APP_SHORT_NAME=<telegram-miniapp-short-name>`
-- Security note: do not enable command routing from the Mini App into ORION unless you explicitly accept the risk (see `SECURITY.md` and the Mini App README).
-- Keep the Mini App code for reference and future experiments, but do not treat it as required for assistant behavior.
 
 ## Discord (Optional)
 
@@ -158,6 +182,12 @@ OpenClaw injects these workspace files on the first turn of new sessions:
   - Current working state (keep it lean).
 - `skills/`
   - Workspace skills (manual installs/updates).
+
+## Skill Ownership
+
+- The current per-agent skill and tool ownership matrix lives in `docs/ASSISTANT_SKILLS.md`.
+- Use ClawHub as the standard discovery/update channel for skill review, but keep repo curation and policy review in the loop.
+- Treat setup-gated skills as `pending setup`, not live capability.
 
 ## Regenerating SOULs
 

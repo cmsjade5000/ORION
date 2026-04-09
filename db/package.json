@@ -1,5 +1,5 @@
 {
-  "name": "@orion-core/db",
+  "name": "@orion-gateway/db",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -36,7 +36,7 @@ Out of scope:
 
 - Current Gateway routing remains intact in [SOUL.md](/Users/corystoner/Desktop/ORION/SOUL.md), [agents/INDEX.md](/Users/corystoner/Desktop/ORION/agents/INDEX.md), and [TOOLS.md](/Users/corystoner/Desktop/ORION/TOOLS.md)
 - Security constraints remain binding from [SECURITY.md](/Users/corystoner/Desktop/ORION/SECURITY.md)
-- Existing browser, cron, and Mini App references remain the starting point:
+- Existing browser and cron references remain the starting point:
   - [README.md](/Users/corystoner/Desktop/ORION/README.md)
   - [openclaw.yaml](/Users/corystoner/Desktop/ORION/openclaw.yaml)
   - [docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md](/Users/corystoner/Desktop/ORION/docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md)
@@ -186,17 +186,15 @@ T2 ------------> T5 -/
 **Demo/Validation**:
 - Scheduled prep flows are clearly separated from direct execution
 - Approval queue and proof review concepts are defined
-- Mini App remains optional and non-critical-path
 
 ### T8: Define supervised automation and Mission Control
 - **depends_on**: `[T6, T7]`
-- **Location**: [app/](/Users/corystoner/Desktop/ORION/app), [src/plugins/telegram/miniapp/](/Users/corystoner/Desktop/ORION/src/plugins/telegram/miniapp), [docs/TELEGRAM_AGENT_CHAT_RULES.md](/Users/corystoner/Desktop/ORION/docs/TELEGRAM_AGENT_CHAT_RULES.md), [docs/PERSONAL_OPS_AUTOMATIONS.md](/Users/corystoner/Desktop/ORION/docs/PERSONAL_OPS_AUTOMATIONS.md)
+- **Location**: [docs/TELEGRAM_AGENT_CHAT_RULES.md](/Users/corystoner/Desktop/ORION/docs/TELEGRAM_AGENT_CHAT_RULES.md), [docs/PERSONAL_OPS_AUTOMATIONS.md](/Users/corystoner/Desktop/ORION/docs/PERSONAL_OPS_AUTOMATIONS.md)
 - **Description**: Define how cron/hooks prepare work, queue approvals, and surface proof bundles through an optional operator view.
 - **Complexity**: 8
 - **Acceptance Criteria**:
   - Cron/hooks only prepare or queue work unless explicit approval exists
   - Approval queue design does not require exposing new public control paths
-  - Mini App integration is optional and respects `OPENCLAW_ROUTE_COMMANDS=1` security rules
 - **Validation**:
   - Architecture review against `SECURITY.md`
   - Sample end-to-end flow from scheduled prep to approved execution to proof review
@@ -228,7 +226,6 @@ T2 ------------> T5 -/
 - Accidentally creating a second operator plane that bypasses ORION or ATLAS
 - Letting personal browser/session control become the default instead of the exception
 - Using arbitrary shell or broad AppleScript where typed actions would suffice
-- Treating the Mini App as a trusted control surface without explicit risk acceptance
 
 ## Rollback Plan
 

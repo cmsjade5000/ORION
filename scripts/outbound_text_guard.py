@@ -26,11 +26,17 @@ _TAGGED_LINE_RE = re.compile(r"^\s*(assistant|user|system)\s*:\s*", flags=re.IGN
 
 _JSON_ARTIFACT_KEYS = {"toolCall", "toolResult", "thinking"}
 
+_APPROVAL_PROMPT_RE = re.compile(
+    r"(?is)^\s*Approval required\.\s*(?:Run:\s*/approve\s+[0-9a-f-]+\s+(?:allow-once|allow-always|deny).*)"
+)
+
 
 def contains_internal_artifacts(text: str) -> bool:
     s = str(text or "")
     if not s.strip():
         return False
+    if _looks_like_approval_prompt(s):
+        return True
     if any(marker in s for marker in _LINE_MARKERS):
         return True
     if "<think>" in s.lower() or "<final>" in s.lower():
@@ -42,6 +48,8 @@ def sanitize_outbound_text(text: str, *, placeholder: str = "Internal runtime ou
     raw = str(text or "")
     if not raw.strip():
         return ""
+    if _looks_like_approval_prompt(raw):
+        return "Approval is pending for a requested command."
 
     cleaned = _FINAL_BLOCK_RE.sub(lambda m: m.group(1).strip(), raw)
     for pattern in _INLINE_PATTERNS:
@@ -72,6 +80,21 @@ def sanitize_outbound_text(text: str, *, placeholder: str = "Internal runtime ou
         return placeholder
 
     return collapsed
+
+
+def _looks_like_approval_prompt(text: str) -> bool:
+    s = str(text or "")
+    if not s.strip():
+        return False
+    if _APPROVAL_PROMPT_RE.search(s):
+        return True
+    lowered = s.lower()
+    return (
+        "approval required." in lowered
+        and "/approve " in lowered
+        and "pending command:" in lowered
+        and "full id:" in lowered
+    )
 
 
 def _json_has_internal_artifacts(text: str) -> bool:

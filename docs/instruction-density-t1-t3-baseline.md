@@ -1,4 +1,4 @@
-# Instruction Density Baseline (T1-T3)
+# Instruction Density Baseline for Early Tasks
 
 This document captures the safe baseline before any instruction-pruning edits.
 Scope is limited to inventory + survival-rule mapping + contract tests.
@@ -21,6 +21,24 @@ graph LR
 
 ## Rule Inventory
 
+## T1 Baseline Inventory
+
+depends_on: []
+
+Inventory duplicated safety-critical rules across `AGENTS.md`, shared routing, `src/agents/ORION.md`, and the generated ORION SOUL artifact before any pruning edits.
+
+## T2 Survival Duplicate Allowlist
+
+depends_on: [T1]
+
+Define the small set of intentionally duplicated rules that must survive compaction because they are truncation-sensitive or safety-critical.
+
+## T3 Contract Test Guardrails
+
+depends_on: [T1]
+
+Keep contract tests in place so pruning work cannot silently remove the surviving rules from canonical files or the generated ORION SOUL header.
+
 | rule_id | rule statement | evidence | recommended source of truth | keep duplicated? |
 | --- | --- | --- | --- | --- |
 | R1 | Cron/scheduling reminders delegate to ATLAS using Task Packet; never claim already configured. | `AGENTS.md:13`, `AGENTS.md:15`, `src/core/shared/ROUTING.md:27`, `src/agents/ORION.md:77`, `agents/ORION/SOUL.md:278` | `src/core/shared/ROUTING.md` | yes |
@@ -30,11 +48,11 @@ graph LR
 | R5 | Force explicit mode gate: ask `explore` vs `execute` and require one-word choice. | `AGENTS.md:80`, `src/agents/ORION.md:73`, `agents/ORION/SOUL.md:274` | `src/agents/ORION.md` | yes |
 | R6 | `sessions_spawn` announce prompt must return exactly `ANNOUNCE_SKIP`. | `AGENTS.md:156`, `AGENTS.md:168`, `src/agents/ORION.md:97`, `agents/ORION/SOUL.md:298` | `AGENTS.md` | yes |
 
-## Survival Duplicate Allowlist (T2 Output)
+## Survival Duplicate Allowlist
 
 Keep R1-R6 intentionally duplicated across top-level + role/routing layers because they are safety-critical and truncation-sensitive.
 
-## First Collapse Candidates (after T3)
+## First Collapse Candidates After Baseline Contracts
 
 1. Telegram exclusivity repeats in AGENTS, role, and generated SOUL.
 2. Discord exclusivity/safety repeats in role and generated SOUL.
@@ -43,6 +61,8 @@ Keep R1-R6 intentionally duplicated across top-level + role/routing layers becau
 5. Internal-monologue ban repeats in role and generated SOUL.
 
 ## T4 Execution Log
+
+depends_on: [T2, T3]
 
 - Applied in `src/agents/ORION.md`:
   - Removed Telegram-only and Discord-only exclusivity repeats.
@@ -58,6 +78,8 @@ Keep R1-R6 intentionally duplicated across top-level + role/routing layers becau
 
 ## T5 Execution Log
 
+depends_on: [T4]
+
 - Added duplicate-rule allowlist policy:
   - `src/core/shared/instruction_duplicate_allowlist.json`
 - Added CI guardrail test:
@@ -66,6 +88,8 @@ Keep R1-R6 intentionally duplicated across top-level + role/routing layers becau
   - `python3 -m unittest tests.test_instruction_duplicate_allowlist tests.test_orion_instruction_contracts tests.test_soul_size_budget` -> `OK`
 
 ## T6 Execution Log
+
+depends_on: [T5]
 
 - Applied an additional low-risk compaction cluster in `src/agents/ORION.md`:
   - Removed duplicated hierarchy terminology text.

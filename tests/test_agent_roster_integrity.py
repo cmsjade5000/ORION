@@ -1,5 +1,4 @@
 import json
-import re
 import unittest
 from pathlib import Path
 
@@ -37,7 +36,7 @@ class TestAgentRosterIntegrity(unittest.TestCase):
         orion = self._read("src/agents/ORION.md")
 
         self.assertIn("### QUEST", roster)
-        self.assertIn("QUEST: in-game gaming copilot", routing)
+        self.assertIn("QUEST: gaming copilot.", routing)
         self.assertIn("delegate to QUEST", orion)
 
     def test_inbox_and_contacts_scaffold_exist(self):
@@ -72,25 +71,15 @@ class TestAgentRosterIntegrity(unittest.TestCase):
 
     def test_dashboards_include_polaris(self):
         tg = self._read("src/plugins/telegram/dashboard/index.ts")
-        mini = self._read("apps/telegram-miniapp-dashboard/server/index.js")
 
         self.assertIn('.text("POLARIS", "agent_POLARIS")', tg)
         self.assertIn('case "POLARIS":', tg)
 
-        m = re.search(r"const PRIMARY_AGENTS = \[(.*?)\];", mini)
-        self.assertIsNotNone(m)
-        self.assertIn('"POLARIS"', m.group(1))
-
     def test_dashboards_include_quest(self):
         tg = self._read("src/plugins/telegram/dashboard/index.ts")
-        mini = self._read("apps/telegram-miniapp-dashboard/server/index.js")
 
         self.assertIn('.text("QUEST", "agent_QUEST")', tg)
         self.assertIn('case "QUEST":', tg)
-
-        m = re.search(r"const PRIMARY_AGENTS = \[(.*?)\];", mini)
-        self.assertIsNotNone(m)
-        self.assertIn('"QUEST"', m.group(1))
 
     def test_ownership_matrix_and_queue_policy_links_exist(self):
         matrix = self._read("docs/AGENT_OWNERSHIP_MATRIX.md")

@@ -2,7 +2,7 @@
 
 This document defines the group chat conventions, agent roles, reaction mappings, and onboarding steps for inviting Gateway specialist agents into a shared Telegram group.
 
-**Current mode:** Single bot only (ORION). Multi-bot group chat is deferred. Keep the multi-bot sections below as a future plan. The Mini App is experimental and not part of the assistant critical path.
+**Current mode:** Single bot only (ORION). Multi-bot group chat is deferred. Keep the multi-bot sections below as a future plan.
 
 ---
 ## 1. Bot Identities (Telegram Handles)
@@ -21,8 +21,6 @@ Current Telegram commands (implemented by the Telegram plugin, not by specialist
 - `/followups` summarizes waiting-on items and POLARIS queue state.
 - `/review` returns a bounded daily review.
 - `/agents` shows the Agent Dashboard inline keyboard.
-- `/miniapp` sends an inline `web_app` button for the ORION Mini App (requires `ORION_MINIAPP_URL`).
-- `/core` is an alias for `/miniapp`.
 - `/flic` starts a guided 4-question movie-picks flow and returns a locked Vault picks deep link.
 - `/reroll` reuses the last Flic filters and advances offset for a fresh stack.
 - `/flicreset` clears in-memory Flic chat state for the current DM.
@@ -71,8 +69,7 @@ For warnings or completions, agents should reply inline with plain text status i
 5. **Create Telegram group** and invite ORION and the user (if using a group).
 6. **Verify** ORION responds:
    - `ping` (basic liveness), and
-   - `/agents` (dashboard), and
-   - `/miniapp` or `/core` (optional; requires Mini App URL).
+   - `/agents` (dashboard).
 
 ---
 ## 5. Questions & Concerns

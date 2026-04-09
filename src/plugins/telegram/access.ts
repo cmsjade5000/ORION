@@ -25,6 +25,7 @@ function configuredAllowedIds(): Set<string> {
     process.env.ORION_TELEGRAM_ALLOWED_USER_IDS,
     process.env.ORION_TELEGRAM_ADMIN_IDS,
     process.env.ORION_TELEGRAM_CHAT_ID,
+    process.env.ORION_TELEGRAM_TARGET,
     process.env.ORION_CORE_TELEGRAM_TARGET,
   ];
   for (const raw of envs) {

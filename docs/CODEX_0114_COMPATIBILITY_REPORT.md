@@ -53,7 +53,7 @@ Local runtime checks:
 | Resume | Reopened threads no longer stay stuck in-progress | Orion already required `queued` / `in progress` / `pending verification`, but lacked resume-specific guidance | Updated docs/contracts |
 | Permissions | `request_permissions` persists across turns and supports reject-style configs; legacy `workspace-write` preserved | Orion policy docs were silent on runtime approval persistence | Updated docs/contracts |
 | Plugin mentions | `$` picker clarifies Skills/Apps/Plugins and surfaces plugins first | Orion docs did not define one canonical operator-facing mention form | Standardized on `@plugin` in docs |
-| App-server health | Websocket app-server exposes `/readyz` and `/healthz` | Fly and miniapp routes still centered on `/api/health`; STRATUS only validated gateway health/status | Added routes, probe support, and config alignment |
+| App-server health | Websocket app-server exposes `/readyz` and `/healthz` | STRATUS only validated gateway health/status | Added routes, probe support, and config alignment |
 
 ## Files Updated
 
@@ -62,10 +62,6 @@ Local runtime checks:
 - `docs/OPENCLAW_CONFIG_MIGRATION.md`
 - `docs/CODEX_0114_COMPATIBILITY_REPORT.md`
 - `scripts/stratus_healthcheck.sh`
-- `app/src/app/healthz/route.ts`
-- `app/src/app/readyz/route.ts`
-- `apps/telegram-miniapp-dashboard/server/index.js`
-- `fly.orion-core.toml`
 - `tests/test_openclaw_workspace_contract.py`
 - `tests/test_orion_instruction_contracts.py`
 - `tests/test_stratus_healthcheck.py`
@@ -99,7 +95,4 @@ These still require one live operator smoke test outside this repo-only pass:
 
 ## Rollback
 
-- Fly health probe: revert `fly.orion-core.toml` from `/readyz` back to `/api/health`
-- App routes: remove `app/src/app/readyz/route.ts` and `app/src/app/healthz/route.ts`
-- Express routes: remove `/readyz` and `/healthz` handlers from `apps/telegram-miniapp-dashboard/server/index.js`
 - App-server probing is opt-in. Removing the `--app-server` flag or clearing `STRATUS_APP_SERVER_BASE_URL` / `CODEX_APP_SERVER_BASE_URL` restores previous STRATUS behavior.

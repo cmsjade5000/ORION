@@ -150,10 +150,6 @@ Digesting lower-priority alerts (optional, recommended):
 - `AEGIS_DIGEST_WINDOW_SEC=43200` digest send window in seconds (default 12 hours, approximately twice daily).
 - `AEGIS_DIGEST_MAX_ITEMS=25` max events included per digest message before summarizing overflow.
 
-Mini App dashboard (optional but recommended):
-- `MINIAPP_INGEST_URL=https://orion-miniapp-cory-95ce0d.fly.dev`
-- `MINIAPP_INGEST_TOKEN=...` (must match the Fly `INGEST_TOKEN` secret)
-
 Telegram helper (run on the Hetzner host after you message the bot in the target chat):
 - `/usr/local/bin/aegis-telegram-discover-chat`
 

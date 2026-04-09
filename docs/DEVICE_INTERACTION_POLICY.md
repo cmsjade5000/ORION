@@ -89,7 +89,7 @@ These require explicit Cory approval:
 - deleting data
 - moving or overwriting important files
 - changing persistent gateway or host behavior
-- enabling remote access, public exposure, or Mini App command routing
+- enabling remote access or public exposure
 - installing persistent services or broad host automation
 
 ### Never default to execute
@@ -136,7 +136,6 @@ Cron/hooks may not imply that an approval-gated action was already executed unle
 
 - Keep gateway binds loopback-only unless Cory explicitly opts in.
 - Treat personal browser sessions as identity-bearing surfaces.
-- Treat Mini App command routing as a deliberate privilege escalation.
 - Prefer typed verbs over generic execution.
 - Keep direct interaction auditable through Task Packets, artifacts, and proof bundles.
 
