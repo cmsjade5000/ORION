@@ -16,6 +16,8 @@ the repo actually relies on today.
 
 ## T1. Re-Baseline
 
+depends_on: []
+
 Current baseline on 2026-04-06:
 
 - `openclaw status --all` reports OpenClaw `2026.4.5`, gateway reachable, Telegram `OK`, Discord `OK`.
@@ -32,6 +34,8 @@ Current live workflow shape:
 - POLARIS is still the intended admin orchestrator and ATLAS is still the intended ops director.
 
 ## T2. Workflow Review
+
+depends_on: [T1]
 
 ### Request Intake And Routing
 
@@ -63,6 +67,8 @@ Current live workflow shape:
 - The result is functional coverage, but not one coherent delegated-job model.
 
 ## T3. High-Value Functional Replacements
+
+depends_on: [T1]
 
 ### Replace Documented `sessions_yield` Preference With The Actual Async Primitive
 
@@ -111,6 +117,8 @@ Preferred functional model:
 
 ## T4. Prioritized Functional Improvement Shortlist
 
+depends_on: [T2, T3]
+
 ### Ready Next
 
 1. Unify outbound result delivery around one normalized result object and one Telegram-first adapter.
@@ -129,6 +137,8 @@ Preferred functional model:
 2. Keep separate result fan-out logic per channel.
 
 ## T5. Next Implementation Tranche
+
+depends_on: [T4]
 
 Title: Delegated Job Model And Unified Delivery
 

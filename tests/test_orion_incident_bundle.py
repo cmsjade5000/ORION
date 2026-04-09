@@ -34,7 +34,7 @@ class TestOrionIncidentBundle(unittest.TestCase):
             (log_dir / "gateway.err.log").write_text("no errors\n", encoding="utf-8")
 
     def _fake_run_factory(self, responses: dict[tuple[str, ...], object]):
-        def fake_run(argv, cwd=None, stdout=None, stderr=None, text=None, check=None, timeout=None):
+        def fake_run(argv, cwd=None, stdout=None, stderr=None, stdin=None, text=None, check=None, timeout=None, **_kwargs):
             key = tuple(argv)
             value = responses.get(key)
             if value is None:
@@ -119,7 +119,7 @@ class TestOrionIncidentBundle(unittest.TestCase):
                     "stdout": json.dumps([{"id": "task-1"}, {"id": "task-2"}]),
                     "stderr": "",
                 },
-                ("openclaw", "tasks", "audit", "--json"): {
+                ("openclaw", "tasks", "audit", "--json", "--limit", "200"): {
                     "returncode": 0,
                     "stdout": json.dumps({"warnings": [{"id": "warn-1"}]}),
                     "stderr": "",
@@ -213,7 +213,7 @@ class TestOrionIncidentBundle(unittest.TestCase):
                     "stdout": json.dumps([{"id": "task-1"}]),
                     "stderr": "",
                 },
-                ("openclaw", "tasks", "audit", "--json"): {
+                ("openclaw", "tasks", "audit", "--json", "--limit", "200"): {
                     "returncode": 2,
                     "stdout": json.dumps({"findings": [{"id": "audit-1", "code": "stale_running"}]}),
                     "stderr": "audit failed\n",
@@ -292,7 +292,7 @@ class TestOrionIncidentBundle(unittest.TestCase):
                     "stdout": "",
                     "stderr": task_list,
                 },
-                ("openclaw", "tasks", "audit", "--json"): {
+                ("openclaw", "tasks", "audit", "--json", "--limit", "200"): {
                     "returncode": 0,
                     "stdout": "",
                     "stderr": task_audit,
