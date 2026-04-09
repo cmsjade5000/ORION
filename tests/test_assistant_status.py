@@ -4,6 +4,10 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import importlib.util
+import sys
 
 
 class TestAssistantStatus(unittest.TestCase):
@@ -12,6 +16,17 @@ class TestAssistantStatus(unittest.TestCase):
 
     def _memory_script(self) -> Path:
         return Path(__file__).resolve().parents[1] / "scripts" / "assistant_memory.py"
+
+    @classmethod
+    def setUpClass(cls):
+        script_path = Path(__file__).resolve().parents[1] / "scripts" / "assistant_status.py"
+        sys.path.insert(0, str(script_path.parent))
+        spec = importlib.util.spec_from_file_location("assistant_status_module", script_path)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+        cls.mod = mod
 
     def _init_repo(self, root: Path) -> None:
         for lane in ("backlog", "in-progress", "testing", "done"):
@@ -131,3 +146,61 @@ class TestAssistantStatus(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             payload = json.loads(proc.stdout)
             self.assertIn("bounded proactive", payload["message"].lower())
+
+    def test_dreaming_status_summarizes_runtime_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            with mock.patch.object(
+                self.mod,
+                "_run_text_command",
+                side_effect=[
+                    (True, "memory-core"),
+                    (True, "true"),
+                ],
+            ), mock.patch.object(
+                self.mod,
+                "run_json_command",
+                return_value=[
+                    {
+                        "status": {"sources": ["memory", "sessions"]},
+                        "audit": {
+                            "exists": True,
+                            "entryCount": 3,
+                            "updatedAt": "2026-04-06T15:31:57.432Z",
+                            "storePath": "/tmp/short-term-recall.json",
+                        },
+                    }
+                ],
+            ):
+                message = self.mod._render_dreaming_status(root)
+
+            self.assertIn("Memory slot: memory-core", message)
+            self.assertIn("Dreaming config: enabled", message)
+            self.assertIn("ORION memory sources: memory, sessions", message)
+            self.assertIn("Recall entries: 3", message)
+
+    def test_dreaming_toggle_reports_restart_requirement(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            with mock.patch.object(
+                self.mod,
+                "_dreaming_status_payload",
+                return_value={"slot": "memory-core", "enabled": False},
+            ), mock.patch.object(
+                self.mod,
+                "_run_text_command",
+                side_effect=[
+                    (True, "updated"),
+                    (True, "true"),
+                ],
+            ), mock.patch.object(
+                self.mod,
+                "run_json_command",
+                return_value={"valid": True},
+            ):
+                message = self.mod._set_dreaming_enabled(root, True)
+
+            self.assertIn("Dreaming config is now enabled.", message)
+            self.assertIn("Restart the gateway to apply.", message)

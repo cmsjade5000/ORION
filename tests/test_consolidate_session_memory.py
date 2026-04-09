@@ -124,6 +124,134 @@ class TestConsolidateSessionMemory(unittest.TestCase):
             target = memory / "2026-04-06.md"
             self.assertEqual(target.read_text(encoding="utf-8").count("Imported Session Summary"), 1)
 
+    def test_apply_drops_heartbeat_only_slugged_note_but_archives_source(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory = root / "memory"
+            memory.mkdir(parents=True, exist_ok=True)
+            source = memory / "2026-04-08-heartbeat.md"
+            source.write_text(
+                "\n".join(
+                    [
+                        "## Conversation Summary",
+                        "",
+                        "user: [Tue 2026-04-07 21:11 EDT] Ping",
+                        "assistant: HEARTBEAT_OK",
+                        "",
+                        "user: Ping",
+                        "assistant: ORION_OK",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--apply", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["result"]["archived"], 1)
+            self.assertEqual(payload["result"]["merged"], 0)
+            target = memory / "2026-04-08.md"
+            self.assertFalse(target.exists())
+            archived = root / "tasks" / "WORK" / "artifacts" / "session-memory-archive" / "2026-04-08" / source.name
+            self.assertTrue(archived.exists())
+            self.assertFalse(source.exists())
+
+    def test_apply_strips_transport_and_control_noise_but_keeps_signal(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory = root / "memory"
+            memory.mkdir(parents=True, exist_ok=True)
+            source = memory / "2026-04-08-memory-ops.md"
+            source.write_text(
+                "\n".join(
+                    [
+                        "# Session: 2026-04-08 00:00:00 UTC",
+                        "",
+                        "## Conversation Summary",
+                        "",
+                        "{",
+                        '  "label": "openclaw-control-ui",',
+                        '  "id": "openclaw-control-ui"',
+                        "}",
+                        "",
+                        "user: [Tue 2026-04-07 21:01 EDT] Ping",
+                        "assistant: HEARTBEAT_OK",
+                        "",
+                        "assistant: Okay, let me break down what's happening here.",
+                        "First, I need to check the transport lane before answering.",
+                        "",
+                        "assistant: ORION maintenance recap",
+                        "",
+                        "Judgment layer verification completed and the gateway lane is healthy.",
+                        "",
+                        "Sender (untrusted metadata):",
+                        "```json",
+                        '{"label":"Cory Stoner"}',
+                        "```",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--apply", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            text = (memory / "2026-04-08.md").read_text(encoding="utf-8")
+            self.assertIn("assistant: ORION maintenance recap", text)
+            self.assertIn("Judgment layer verification completed and the gateway lane is healthy.", text)
+            self.assertNotIn("openclaw-control-ui", text)
+            self.assertNotIn("Ping", text)
+            self.assertNotIn("HEARTBEAT_OK", text)
+            self.assertNotIn("let me break down", text.lower())
+            self.assertNotIn("Sender (untrusted metadata)", text)
+
+    def test_apply_deduplicates_repeated_import_fragments_within_single_source(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory = root / "memory"
+            memory.mkdir(parents=True, exist_ok=True)
+            source = memory / "2026-04-08-gateway.md"
+            source.write_text(
+                "\n".join(
+                    [
+                        "## Conversation Summary",
+                        "",
+                        "assistant: ORION maintenance recap",
+                        "Gateway healthy again.",
+                        "",
+                        "assistant: ORION maintenance recap",
+                        "Gateway healthy again.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--apply", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            text = (memory / "2026-04-08.md").read_text(encoding="utf-8")
+            self.assertEqual(text.count("assistant: ORION maintenance recap"), 1)
+            self.assertEqual(text.count("Gateway healthy again."), 1)
+
     def test_rewrite_existing_sanitizes_canonical_daily_file(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -148,9 +276,19 @@ class TestConsolidateSessionMemory(unittest.TestCase):
                         "assistant: <tool_code",
                         'print(default_api.read(path = "/tmp/HEARTBEAT.md"))',
                         "",
+                        "Sender (untrusted metadata):",
+                        "```json",
+                        '{"label":"Cory Stoner"}',
+                        "```",
+                        "",
+                        "assistant: Okay, let me break down what's happening here.",
+                        "The user is just checking if transport is fine.",
+                        "",
                         "assistant: ORION update report",
                         "",
                         "Gateway healthy.",
+                        "",
+                        "Everything ok Orion?",
                         "",
                     ]
                 )
@@ -174,6 +312,44 @@ class TestConsolidateSessionMemory(unittest.TestCase):
             self.assertNotIn("Session ID", rewritten)
             self.assertNotIn("Read HEARTBEAT.md", rewritten)
             self.assertNotIn('print(default_api.read', rewritten)
+            self.assertNotIn("Sender (untrusted metadata)", rewritten)
+            self.assertNotIn("let me break down", rewritten.lower())
+            self.assertNotIn("Everything ok Orion?", rewritten)
+
+    def test_rewrite_existing_drops_empty_import_block_safely(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            memory = root / "memory"
+            memory.mkdir(parents=True, exist_ok=True)
+            target = memory / "2026-04-08.md"
+            target.write_text(
+                "\n".join(
+                    [
+                        "# Memory for 2026-04-08",
+                        "",
+                        "<!-- openclaw-session-memory-import: 2026-04-08-heartbeat.md sha256=aaaaaaaaaaaaaaaa -->",
+                        "## Imported Session Summary: 2026-04-08-heartbeat.md",
+                        "",
+                        "user: Ping",
+                        "assistant: HEARTBEAT_OK",
+                        "",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--rewrite-existing", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            rewritten = target.read_text(encoding="utf-8")
+            self.assertEqual(rewritten.strip(), "# Memory for 2026-04-08")
+            self.assertNotIn("Imported Session Summary", rewritten)
 
 
 if __name__ == "__main__":

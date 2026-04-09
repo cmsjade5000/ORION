@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview operator-health-bundle party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview dreaming-status dreaming-help dreaming-on dreaming-off operator-health-bundle party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= config/promptfoo/orion-safety-gate.yaml
 THINKING ?= high
@@ -173,6 +173,46 @@ dreaming-preview:
 		--limit "$${LIMIT:-10}" \
 		--output-json tmp/openclaw_memory_dreaming_preview_latest.json \
 		--output-md tmp/openclaw_memory_dreaming_preview_latest.md
+
+## Deterministic direct-turn dreaming status via guarded wrapper
+dreaming-status:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming status" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
+## Deterministic direct-turn dreaming help via guarded wrapper
+dreaming-help:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming help" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
+## Deterministic direct-turn dreaming enable via guarded wrapper
+dreaming-on:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming on" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
+## Deterministic direct-turn dreaming disable via guarded wrapper
+dreaming-off:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming off" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
 
 ## Standard operator health bundle for gateway, models, memory, REM, and smoke checks
 operator-health-bundle:

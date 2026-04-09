@@ -36,7 +36,7 @@ AUTO_OK=1 ./scripts/sessions_hygiene.sh --agent main --fix-missing --doctor --ap
 ## session_maintenance.py
 
 ### Purpose
-Run deliberate thresholded session-store maintenance, write a markdown report, and only apply cleanup when drift is large enough to justify mutation.
+Run deliberate thresholded session-store maintenance, consolidate slugged memory into canonical daily notes, refresh the main memory index when canonical memory changes, and write a markdown report.
 
 ### Usage
 
@@ -57,6 +57,10 @@ Report artifact:
 ```text
 tasks/NOTES/session-maintenance.md
 ```
+
+When apply mode consolidates canonical daily memory, the report now includes a
+`Memory Reindex` section proving whether `openclaw memory index --agent main
+--force` ran successfully before the nightly dreaming sweep.
 
 ---
 

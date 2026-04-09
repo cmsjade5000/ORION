@@ -11,6 +11,7 @@ describe("Assistant Telegram commands", () => {
     expect(bot.command).toHaveBeenCalledWith("capture", expect.any(Function));
     expect(bot.command).toHaveBeenCalledWith("followups", expect.any(Function));
     expect(bot.command).toHaveBeenCalledWith("review", expect.any(Function));
+    expect(bot.command).toHaveBeenCalledWith("dreaming", expect.any(Function));
     expect(bot.on).toHaveBeenCalledWith("message:text", expect.any(Function));
   });
 
@@ -19,6 +20,12 @@ describe("Assistant Telegram commands", () => {
     expect(parseAssistantSlashCommand("/capture@Orion_GatewayBot buy milk")).toBe("capture");
     expect(parseAssistantSlashCommand("/followups")).toBe("followups");
     expect(parseAssistantSlashCommand("/review")).toBe("review");
+    expect(parseAssistantSlashCommand("/dreaming")).toBe("dreaming-status");
+    expect(parseAssistantSlashCommand("/dreaming status")).toBe("dreaming-status");
+    expect(parseAssistantSlashCommand("/dreaming on")).toBe("dreaming-on");
+    expect(parseAssistantSlashCommand("/dreaming off")).toBe("dreaming-off");
+    expect(parseAssistantSlashCommand("/dreaming help")).toBe("dreaming-help");
+    expect(parseAssistantSlashCommand("/dreaming nonsense")).toBe("dreaming-status");
     expect(parseAssistantSlashCommand("today")).toBeNull();
   });
 });

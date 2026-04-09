@@ -190,6 +190,12 @@ class TestOrionInstructionContracts(unittest.TestCase):
             self.orion_role_text,
         )
 
+    def test_dreaming_command_contract(self):
+        self.assertIn("If a user message begins with `/dreaming`", self.orion_role_text)
+        self.assertIn("/dreaming` or `/dreaming status` -> run `python3 scripts/assistant_status.py --cmd dreaming-status --json`", self.orion_role_text)
+        self.assertIn("/dreaming on` -> run `python3 scripts/assistant_status.py --cmd dreaming-on --json`", self.orion_role_text)
+        self.assertIn("/dreaming off` -> run `python3 scripts/assistant_status.py --cmd dreaming-off --json`", self.orion_role_text)
+
     def test_heartbeat_file_disambiguates_user_ping(self):
         self.assertIn("INTERNAL_HEARTBEAT_POLL_V1", self.heartbeat_text)
         self.assertIn("Never treat normal user-authored messages such as `Ping`, `ping`, `Everything ok?`", self.heartbeat_text)

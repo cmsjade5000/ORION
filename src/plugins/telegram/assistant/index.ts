@@ -4,8 +4,16 @@ import { requireOperatorAccess } from "../access";
 import { runCommand } from "../process";
 import { BoundedExecutor, ChatTaskQueue } from "../queue";
 
-type AssistantCmd = "today" | "capture" | "followups" | "review";
-type SlashAssistant = "today" | "capture" | "followups" | "review";
+type AssistantCmd =
+  | "today"
+  | "capture"
+  | "followups"
+  | "review"
+  | "dreaming-status"
+  | "dreaming-help"
+  | "dreaming-on"
+  | "dreaming-off";
+type SlashAssistant = AssistantCmd;
 
 const assistantExecutor = new BoundedExecutor(
   Number.parseInt(String(process.env.ORION_ASSISTANT_MAX_CONCURRENCY || "2"), 10) || 2
@@ -71,12 +79,20 @@ export function parseAssistantSlashCommand(text: string): SlashAssistant | null 
   const trimmed = String(text || "").trim();
   if (!trimmed.startsWith("/")) return null;
 
-  const token = trimmed.split(/\s+/)[0] || "";
+  const tokens = trimmed.split(/\s+/);
+  const token = tokens[0] || "";
   const base = token.toLowerCase().split("@")[0] || "";
   if (base === "/today") return "today";
   if (base === "/capture") return "capture";
   if (base === "/followups") return "followups";
   if (base === "/review") return "review";
+  if (base === "/dreaming") {
+    const action = String(tokens[1] || "status").toLowerCase();
+    if (action === "on") return "dreaming-on";
+    if (action === "off") return "dreaming-off";
+    if (action === "help") return "dreaming-help";
+    return "dreaming-status";
+  }
   return null;
 }
 
@@ -124,6 +140,11 @@ export function registerAssistantCommands(bot: Bot): void {
 
   bot.command("review", async (ctx) => {
     await handleSlash(ctx, "review");
+  });
+
+  bot.command("dreaming", async (ctx) => {
+    const parsed = parseAssistantSlashCommand(String(ctx.message?.text || ""));
+    await handleSlash(ctx, parsed && parsed.startsWith("dreaming-") ? parsed : "dreaming-status");
   });
 
   bot.on("message:text", async (ctx, next) => {

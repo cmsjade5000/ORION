@@ -67,6 +67,55 @@ def _run_openclaw_agent(*, cmd: list[str], agent: str, channel: str, message: st
     return 0, text, ""
 
 
+def _dreaming_cmd_from_message(message: str) -> str | None:
+    trimmed = str(message or "").strip()
+    if not trimmed.lower().startswith("/dreaming"):
+        return None
+
+    parts = trimmed.split()
+    action = str(parts[1] if len(parts) > 1 else "status").strip().lower()
+    if action == "on":
+        return "dreaming-on"
+    if action == "off":
+        return "dreaming-off"
+    if action == "help":
+        return "dreaming-help"
+    return "dreaming-status"
+
+
+def _run_deterministic_operator_command(*, repo_root: Path, message: str, timeout_s: int) -> tuple[bool, tuple[int, str, str]]:
+    dreaming_cmd = _dreaming_cmd_from_message(message)
+    if not dreaming_cmd:
+        return False, (0, "", "")
+
+    script_path = (repo_root / "scripts" / "assistant_status.py").resolve()
+    if not script_path.exists():
+        script_path = (Path(__file__).resolve().parent / "assistant_status.py").resolve()
+
+    argv = [
+        sys.executable,
+        str(script_path),
+        "--repo-root",
+        str(repo_root),
+        "--cmd",
+        dreaming_cmd,
+        "--json",
+    ]
+    proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=max(1, timeout_s))
+    if proc.returncode != 0:
+        return True, (proc.returncode, "", (proc.stderr or proc.stdout or "deterministic operator command failed").strip())
+
+    try:
+        obj = json.loads(proc.stdout)
+    except Exception as e:
+        return True, (1, "", f"could not parse deterministic command output: {e}")
+
+    text = str(obj.get("message") or "").strip()
+    if not text:
+        return True, (1, "", "deterministic operator command returned no message")
+    return True, (0, text, "")
+
+
 def _write_policy_artifacts(*, repo_root: Path, output_dir: str, report: dict[str, Any], response_text: str) -> tuple[Path, Path]:
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
     digest = hashlib.sha256(response_text.encode("utf-8", errors="replace")).hexdigest()[:10]
@@ -139,15 +188,23 @@ def main() -> int:
         return 2
 
     openclaw_cmd = _default_openclaw_cmd(repo_root)
-    rc, response_text, err = _run_openclaw_agent(
-        cmd=openclaw_cmd,
-        agent=args.agent,
-        channel=args.runtime_channel,
+    intercepted, result = _run_deterministic_operator_command(
+        repo_root=repo_root,
         message=args.message,
-        thinking=args.thinking,
         timeout_s=max(1, int(args.timeout)),
-        session_id=(args.session_id.strip() or None),
     )
+    if intercepted:
+        rc, response_text, err = result
+    else:
+        rc, response_text, err = _run_openclaw_agent(
+            cmd=openclaw_cmd,
+            agent=args.agent,
+            channel=args.runtime_channel,
+            message=args.message,
+            thinking=args.thinking,
+            timeout_s=max(1, int(args.timeout)),
+            session_id=(args.session_id.strip() or None),
+        )
     if rc != 0:
         print(f"ERROR: {err}", file=sys.stderr)
         return rc

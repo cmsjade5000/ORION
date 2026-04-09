@@ -67,6 +67,10 @@ def maybe_doctor(enabled: bool) -> subprocess.CompletedProcess[str] | None:
     return run_cmd(["openclaw", "doctor", "--non-interactive"])
 
 
+def reindex_memory(agent: str) -> subprocess.CompletedProcess[str]:
+    return run_cmd(["openclaw", "memory", "index", "--agent", agent, "--force"])
+
+
 def consolidate_preview(root: Path) -> tuple[dict[str, Any], subprocess.CompletedProcess[str]]:
     script_path = Path(__file__).resolve().parent / "consolidate_session_memory.py"
     proc = run_cmd(
@@ -127,8 +131,10 @@ def write_report(
     apply_requested: bool,
     apply_reason: str,
     applied: bool,
+    reindex_required: bool,
     apply_result: dict[str, Any] | None,
     post_preview: dict[str, Any] | None,
+    reindex_result: subprocess.CompletedProcess[str] | None,
     doctor_result: subprocess.CompletedProcess[str] | None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +163,27 @@ def write_report(
                 f"- skipped: `{int(result.get('skipped') or 0)}`",
             ]
         )
+    lines.extend(
+        [
+            "",
+            "## Memory Reindex",
+            f"- required: `{str(reindex_required).lower()}`",
+            f"- ran: `{str(reindex_result is not None).lower()}`",
+        ]
+    )
+    if reindex_result is not None:
+        lines.extend(
+            [
+                f"- exit_code: `{reindex_result.returncode}`",
+                f"- ok: `{str(reindex_result.returncode == 0).lower()}`",
+            ]
+        )
+        stdout = (reindex_result.stdout or "").strip()
+        stderr = (reindex_result.stderr or "").strip()
+        if stdout:
+            lines.append(f"- stdout: `{stdout}`")
+        if stderr:
+            lines.append(f"- stderr: `{stderr}`")
     lines.extend(
         [
             "",
@@ -245,13 +272,24 @@ def main() -> int:
     post_preview: dict[str, Any] | None = None
     doctor_result: subprocess.CompletedProcess[str] | None = None
     consolidation_result: dict[str, Any] | None = None
+    reindex_result: subprocess.CompletedProcess[str] | None = None
+    reindex_required = False
+    maintenance_ok = True
 
     if args.apply and apply_allowed:
         consolidation_result, _ = consolidate_apply(root)
+        consolidation_apply_result = consolidation_result.get("result") or {}
+        reindex_required = int(consolidation_apply_result.get("merged") or 0) > 0
+        if reindex_required:
+            reindex_result = reindex_memory(args.agent)
+            if reindex_result.returncode != 0:
+                maintenance_ok = False
         apply_result, _ = cleanup_apply(args.agent, args.fix_missing)
         applied = True
         if args.doctor:
             doctor_result = maybe_doctor(True)
+            if doctor_result is not None and doctor_result.returncode != 0:
+                maintenance_ok = False
         post_preview, _ = cleanup_preview(args.agent, args.fix_missing)
     else:
         post_preview = preview
@@ -265,8 +303,10 @@ def main() -> int:
         apply_requested=args.apply,
         apply_reason=apply_reason,
         applied=applied,
+        reindex_required=reindex_required,
         apply_result=apply_result,
         post_preview=post_preview,
+        reindex_result=reindex_result,
         doctor_result=doctor_result,
     )
 
@@ -279,8 +319,26 @@ def main() -> int:
         "apply_allowed": apply_allowed,
         "apply_reason": apply_reason,
         "applied": applied,
+        "maintenance_ok": maintenance_ok,
         "apply_result": apply_result,
         "post_preview": post_preview,
+        "memory_reindex": (
+            {
+                "required": reindex_required,
+                "ok": reindex_result.returncode == 0,
+                "exit_code": reindex_result.returncode,
+                "stdout": (reindex_result.stdout or "").strip(),
+                "stderr": (reindex_result.stderr or "").strip(),
+            }
+            if reindex_result is not None
+            else {
+                "required": reindex_required,
+                "ok": None,
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "",
+            }
+        ),
         "doctor_exit_code": doctor_result.returncode if doctor_result is not None else None,
         "report_path": str(report_path.relative_to(root)),
         "consolidation_preview_stdout": consolidation_preview_proc.stdout.strip(),
@@ -290,7 +348,10 @@ def main() -> int:
     if args.json:
         print(json.dumps(payload, indent=2))
     else:
-        print(f"SESSION_MAINTENANCE agent={args.agent} applied={int(applied)} reason={apply_reason}")
+        print(
+            f"SESSION_MAINTENANCE agent={args.agent} applied={int(applied)} "
+            f"reason={apply_reason} maintenance_ok={str(maintenance_ok).lower()}"
+        )
         print(f"report={report_path}")
     return 0
 

@@ -40,7 +40,7 @@ openclaw models status
 ```
 
 Latest local/runtime baseline:
-- Runtime verified on 2026-04-07 against `OpenClaw 2026.4.5`.
+- Runtime verified on 2026-04-09 against `OpenClaw 2026.4.9`.
 - Historical upgrade note remains in `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`.
 - Current sweep baseline and follow-on decisions live in:
   - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
@@ -48,7 +48,7 @@ Latest local/runtime baseline:
   - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
 
 Current verification snapshot (2026-04-07):
-- `openclaw --version` returned `OpenClaw 2026.4.5`.
+- `openclaw --version` returned `OpenClaw 2026.4.9`.
 - `openclaw config validate --json` returned `{"valid":true,...}`.
 - Live runtime plugin allowlist includes `telegram`, `discord`, `slack`, `open-prose`, `minimax`, `google`, `openrouter`, and `openai`.
 - Live runtime memory slot is `memory-core`, and dreaming is enabled in runtime.
@@ -103,9 +103,14 @@ Internal reliability review:
 Memory/dreaming pilot:
 - ORION keeps `MEMORY.md` as curated truth and `memory-lancedb` as the active checked-in template default for now.
 - Live runtime has moved to `memory-core` with dreaming enabled; treat that as runtime state, not a blanket repo default.
-- OpenClaw `2026.4.5` dreaming remains documented here as a pilot path under `memory-core`, not an auto-trusted memory source.
+- OpenClaw `2026.4.9` dreaming remains documented here as a pilot path under `memory-core`, not an auto-trusted memory source.
 - See `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md` before switching the memory slot or enabling `/dreaming`.
 - For dreaming to populate short-term recall, ORION memory search must include `memory` in `agents.list[].memorySearch.sources`; `sessions` alone will not write the dreaming recall store.
+- For deterministic direct ORION turns, prefer the guarded wrapper path over raw `openclaw agent`:
+  - `make dreaming-status`
+  - `make dreaming-help`
+  - `make dreaming-on`
+  - `make dreaming-off`
 - Non-destructive preview:
   - `make dreaming-preview`
   - writes `tmp/openclaw_memory_dreaming_preview_latest.json`

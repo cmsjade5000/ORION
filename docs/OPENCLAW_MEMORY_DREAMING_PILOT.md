@@ -1,6 +1,6 @@
 # OpenClaw Memory Dreaming Pilot
 
-This repo tracks the OpenClaw `2026.4.5` dreaming surface as a conservative pilot for ORION.
+This repo tracks the OpenClaw `2026.4.9` dreaming surface as a conservative pilot for ORION.
 
 ## Goal
 
@@ -15,7 +15,7 @@ Adopt memory consolidation without turning background promotion into a silent so
 
 ## Official OpenClaw Surface
 
-Verified against the `2026.4.5` release notes and CLI/docs:
+Verified against the `2026.4.9` CLI/docs:
 - Config path: `plugins.entries.memory-core.config.dreaming`
 - Public config keys:
   - `enabled`
@@ -64,9 +64,35 @@ Artifacts:
 
 Use this before changing the active memory slot or enabling `/dreaming`.
 
+The preview now also surfaces:
+- recall-store timestamp and entry count
+- deep candidate count
+- threshold blocker keys (`score`, `recallCount`, `uniqueQueries`) for top candidates
+- whether canonical daily memory is newer than the current recall store
+
+For deterministic direct ORION turns in this workspace, prefer the guarded wrapper path over raw `openclaw agent`:
+
+```bash
+make dreaming-status
+make dreaming-help
+make dreaming-on
+make dreaming-off
+```
+
+Those targets route through `scripts/openclaw_guarded_turn.py`, which intercepts `/dreaming ...` and runs `scripts/assistant_status.py` directly instead of relying on model-side slash-command interpretation.
+
 Dreaming also depends on ORION memory recall seeing canonical daily notes. If
 `agents.list[].memorySearch.sources` is left on `["sessions"]`, OpenClaw will
 not record the `source: "memory"` hits that feed short-term recall.
+
+Nightly ORION maintenance is expected to run in this order:
+1. session maintenance
+2. slugged-memory consolidation into canonical daily files
+3. `openclaw memory index --agent main --force`
+4. the managed dreaming promotion sweep
+
+If the `Memory Reindex` section in `tasks/NOTES/session-maintenance.md` is
+missing or failed, treat dreaming freshness as pending verification.
 
 ## Template Shape
 

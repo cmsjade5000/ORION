@@ -20,6 +20,7 @@ Current Telegram commands (implemented by the Telegram plugin, not by specialist
 - `/capture <text>` queues a quick admin capture to POLARIS.
 - `/followups` summarizes waiting-on items and POLARIS queue state.
 - `/review` returns a bounded daily review.
+- `/dreaming status|on|off|help` inspects or updates ORION's dreaming config via the local assistant command path.
 - `/agents` shows the Agent Dashboard inline keyboard.
 - `/flic` starts a guided 4-question movie-picks flow and returns a locked Vault picks deep link.
 - `/reroll` reuses the last Flic filters and advances offset for a fresh stack.
