@@ -84,6 +84,8 @@ openclaw cron add \
   --message "Run python3 scripts/email_triage_router.py --limit 20 --apply. Respond NO_REPLY."
 ```
 
+This is also wired into the local maintenance bundle as `assistant-email-triage`.
+
 ## Safety
 
 - Do not click links from inbound email in this workflow.

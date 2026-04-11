@@ -36,11 +36,11 @@ agents:
             - name: polaris
               path: ~/.openclaw/agents/polaris/sessions
     - id: ember
-      # Optional Kimi lane for intentional writing/style-sensitive work.
+      # Keep specialist routing OpenAI-first; Kimi stays available only as an explicit fallback.
       model:
-        primary: nvidia-build/moonshotai/kimi-k2.5
+        primary: openai/gpt-5.4
         fallbacks:
-          - google/gemini-2.5-flash-lite
+          - nvidia-build/moonshotai/kimi-k2.5
           - openrouter/free
 
 auth:
@@ -98,7 +98,7 @@ hooks:
 #         - id: qwen3.5-4b-mlx
 #           name: Local bounded runtime
 #
-# Example routing (OpenAI GPT-5.4 primary with OpenRouter + MiniMax fallbacks, plus an intentional Kimi lane):
+# Example routing (OpenAI GPT-5.4 primary with OpenRouter + MiniMax fallbacks, plus an optional Kimi fallback):
 # agents:
 #   defaults:
 #     model:
@@ -111,9 +111,9 @@ hooks:
 #   list:
 #     - id: ember
 #       model:
-#         primary: nvidia-build/moonshotai/kimi-k2.5
+#         primary: openai/gpt-5.4
 #         fallbacks:
-#           - google/gemini-2.5-flash-lite
+#           - nvidia-build/moonshotai/kimi-k2.5
 
 channels:
   telegram:
@@ -205,16 +205,14 @@ channels:
             autoThread: false
 
 # Optional non-secret vars (applied only when missing from the process env).
+# Keep ORION core free of product-specific extension env by default.
 # env:
 #   vars:
 #     TELEGRAM_STREAM_DRAFT: "1"
-#     FLIC_ROUTER_ENABLED: "1"
-#     FLIC_VAULT_BASE_URL: "https://vault966-r2.fly.dev"
-#     FLIC_BOT_USERNAME: "Flic_GatewayBot"
 
 # Delegation note:
-# ORION should delegate to specialists using OpenClaw isolated agents (preferred: sessions_spawn),
-# not by granting specialists any external channel permissions.
+# ORION core should delegate to the reduced specialist surface using OpenClaw isolated agents
+# (preferred: sessions_spawn), not by granting specialists any external channel permissions.
 
 plugins:
   slots:

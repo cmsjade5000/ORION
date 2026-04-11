@@ -2872,3 +2872,675 @@ Follow-up Owner: ATLAS
 Follow-up Tasks:
 - Review recurring runtime error and harden the prevention path.
 Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=7
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: gateway
+Evidence:
+- fingerprint=4e165eeb63e1064f occurrences=6
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: discord
+Evidence:
+- fingerprint=87e4e8d9dfae6494 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: discord
+Evidence:
+- fingerprint=7f6075bef459ba97 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: gateway
+Evidence:
+- fingerprint=8484e5f3d4cf671f occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: session
+Evidence:
+- fingerprint=95bd0ca5fb8daea2 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=cff8764d8b7d8298 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-06t11:52:03.228-04:00 [model-pricing] pricing bootstrap failed: error: openrouter /models failed: http 408
+Evidence:
+- fingerprint=922f33a9aa609c04 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:05:37.025-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=8deb3c90605efba1 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:10:41.792-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=bdde1c05e11c3bd2 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:15:12.252-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=97705256e05d1220 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:20:33.545-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=e4a12ace9c487b2e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:25:33.944-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=6307238cfa115d7d occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:30:54.628-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=baa6636c808d76f1 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: config
+Evidence:
+- fingerprint=ffdfe7eef1b30c7c occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: plugin
+Evidence:
+- fingerprint=72df664347580620 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0615-orion-recurring-erro
+Opened: 2026-04-09T06:15:34Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: {"0":"[openclaw] unhandled promise rejection: error: agent listener invoked outside active run\n at agent.processevents
+Evidence:
+- fingerprint=96d4ba9217749d5f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: gateway
+Evidence:
+- fingerprint=4e165eeb63e1064f occurrences=8
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=8
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: discord
+Evidence:
+- fingerprint=87e4e8d9dfae6494 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: discord
+Evidence:
+- fingerprint=7f6075bef459ba97 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: gateway
+Evidence:
+- fingerprint=8484e5f3d4cf671f occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: session
+Evidence:
+- fingerprint=95bd0ca5fb8daea2 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=cff8764d8b7d8298 occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-06t11:52:03.228-04:00 [model-pricing] pricing bootstrap failed: error: openrouter /models failed: http 408
+Evidence:
+- fingerprint=922f33a9aa609c04 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:05:37.025-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=8deb3c90605efba1 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:10:41.792-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=bdde1c05e11c3bd2 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:15:12.252-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=97705256e05d1220 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:20:33.545-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=e4a12ace9c487b2e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:25:33.944-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=6307238cfa115d7d occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-04-07t20:30:54.628-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+Evidence:
+- fingerprint=baa6636c808d76f1 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: config
+Evidence:
+- fingerprint=ffdfe7eef1b30c7c occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: plugin
+Evidence:
+- fingerprint=72df664347580620 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260409-0616-orion-recurring-erro
+Opened: 2026-04-09T06:16:01Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: {"0":"[openclaw] unhandled promise rejection: error: agent listener invoked outside active run\n at agent.processevents
+Evidence:
+- fingerprint=96d4ba9217749d5f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260410-0615-orion-recurring-erro
+Opened: 2026-04-10T06:15:52Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: gateway
+Evidence:
+- fingerprint=4e165eeb63e1064f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260410-0615-orion-recurring-erro
+Opened: 2026-04-10T06:15:52Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260410-0618-orion-recurring-erro
+Opened: 2026-04-10T06:18:08Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260410-0618-orion-recurring-erro
+Opened: 2026-04-10T06:18:09Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: gateway
+Evidence:
+- fingerprint=4e165eeb63e1064f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260411-0615-orion-recurring-erro
+Opened: 2026-04-11T06:15:23Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=5
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260411-0615-orion-recurring-erro
+Opened: 2026-04-11T06:15:23Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: discord
+Evidence:
+- fingerprint=87e4e8d9dfae6494 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260411-0615-orion-recurring-erro
+Opened: 2026-04-11T06:15:23Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: session
+Evidence:
+- fingerprint=43e262afee0f1b4e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260411-0619-orion-recurring-erro
+Opened: 2026-04-11T06:19:39Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open

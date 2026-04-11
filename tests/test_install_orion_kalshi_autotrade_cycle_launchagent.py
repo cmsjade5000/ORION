@@ -11,7 +11,9 @@ class TestInstallOrionKalshiAutotradeCycleLaunchAgent(unittest.TestCase):
         ).read_text(encoding="utf-8")
         cls.runner = (repo / "scripts" / "kalshi_autotrade_cycle_run.sh").read_text(encoding="utf-8")
         cls.readme = (repo / "scripts" / "README.md").read_text(encoding="utf-8")
-        cls.doc = (repo / "docs" / "KALSHI_REF_ARB.md").read_text(encoding="utf-8")
+        cls.doc = (
+            repo / "apps" / "extensions" / "kalshi" / "docs" / "KALSHI_REF_ARB.md"
+        ).read_text(encoding="utf-8")
 
     def test_installer_prefers_current_repo_and_disables_duplicate_cron(self):
         git_idx = self.script.index('repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"')

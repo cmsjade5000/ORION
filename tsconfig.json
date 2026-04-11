@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/core/**/*.ts", "src/plugins/**/*.ts"]
+  "include": ["src/core/**/*.ts", "src/plugins/**/*.ts", "apps/extensions/**/*.ts"]
 }

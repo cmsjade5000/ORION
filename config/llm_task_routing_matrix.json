@@ -1,15 +1,14 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12",
+  "updated_at": "2026-04-09",
   "tasks": [
     {
       "task_id": "routing_and_handoffs",
       "description": "ORION chooses owner, asks gates, and routes to specialists.",
-      "primary_provider": "openrouter-auto-primary",
+      "primary_provider": "openai-control-plane",
       "fallback_providers": [
-        "gemini-openclaw",
         "kimi-k2-5-nvidia-build",
-        "openai-control-plane"
+        "openrouter-auto-primary"
       ],
       "local_allowed": false,
       "requires_schema": true,
@@ -21,7 +20,6 @@
       "primary_provider": "openai-control-plane",
       "fallback_providers": [
         "openrouter-auto-primary",
-        "gemini-openclaw",
         "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
@@ -31,12 +29,11 @@
     {
       "task_id": "research_and_second_opinions",
       "description": "Deep synthesis, alternative plans, and second-pass reasoning.",
-      "primary_provider": "openrouter-hunter-alpha",
+      "primary_provider": "openai-control-plane",
       "fallback_providers": [
+        "openrouter-hunter-alpha",
         "openrouter-auto-primary",
-        "kimi-k2-5-nvidia-build",
-        "openai-control-plane",
-        "gemini-openclaw"
+        "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
       "requires_schema": true,
@@ -48,7 +45,6 @@
       "primary_provider": "openai-control-plane",
       "fallback_providers": [
         "openrouter-auto-primary",
-        "gemini-openclaw",
         "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
@@ -58,11 +54,11 @@
     {
       "task_id": "bounded_local_utility",
       "description": "Summarization, extraction, tagging, and cheap preprocessing.",
-      "primary_provider": "openrouter-free-bounded",
+      "primary_provider": "openai-control-plane",
       "fallback_providers": [
         "local-bounded-runtime",
-        "openrouter-auto-primary",
-        "gemini-openclaw"
+        "openrouter-free-bounded",
+        "openrouter-auto-primary"
       ],
       "local_allowed": true,
       "requires_schema": true,

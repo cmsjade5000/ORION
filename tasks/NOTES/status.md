@@ -1,26 +1,31 @@
 # Status
 
-- Updated: 2026-04-08 21:20:53 EDT
+- Updated: 2026-04-11 09:32:31 EDT
 - Ticket lanes: backlog=1 | in-progress=0 | testing=0 | done=0
-- Inbox packets: pending=3 terminal=0
-- Stale pending (>24.0h): 3
+- Inbox packets: pending=2 terminal=3
+- Stale pending (>24.0h): 1
 
 ## OpenClaw Runtime
-- Gateway: unavailable | rpc_ok=False | healthy=False | runtime=unknown | config_audit_ok=None
-- Channels: telegram=off | discord=off | slack=off | mochat=off
-- Alert: none
+- Gateway: Gateway Health | rpc_ok=True | healthy=True | runtime=running | config_audit_ok=True
+- Channels: telegram=ok | discord=degraded | slack=off | mochat=off
+- Alert: discord: Unknown system error -11: Unknown system error -11, read
 
 ## OpenClaw Tasks
-- Ledger: total=0 running=0 queued=0 succeeded=0 failed=0 timed_out=0 lost=0
-- Audit: warnings=0 errors=0 findings=0
-- Canonical cron issues: 0 | stale_running=0 | approval_followups=0
-- Recent failure: none
+- Ledger: total=568 running=0 queued=0 succeeded=559 failed=7 timed_out=1 lost=1
+- Audit: warnings=47 errors=1 findings=48
+- Canonical cron issues: 0 | stale_running=0 | approval_followups=1
+- Recent failure: assistant-email-triage: lost
+- Recent failure: assistant-email-triage: failed
+- Recent failure: assistant-email-triage: failed
+- Recent failure: assistant-email-triage: failed
+- Recent failure: assistant-email-triage: failed
+- Recent failure: [Tue 2026-04-07 21:20 EDT] Ping: timed_out
+- Recent failure: atlas-cron-cleanup-and-judgment-schedule: failed
+- Recent failure: assistant-task-loop: failed
 - Stale running: none
 
 ## Stale Pending Packets
-- [SCRIBE] Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up). (tasks/INBOX/SCRIBE.md:9, age=674.2h)
-- [AEGIS_PLAN_WATCH_DELEGATION] Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat. (tasks/INBOX/aegis_plan_watch_delegation.md:3, age=674.2h)
-- [ATLAS] Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory. (tasks/INBOX/ATLAS.md:9, age=575.7h)
+- [ATLAS] Translate inbound ops request into a safe execution plan with explicit stop gates. (tasks/INBOX/ATLAS.md:50, age=37.5h)
 
 ## Reconcile Actions
-- none
+- stale-escalation-skip: ORION (existing recovery packet for tasks/INBOX/ATLAS.md:50)

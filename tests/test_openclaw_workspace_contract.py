@@ -114,7 +114,8 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         collections = main_agent["memorySearch"]["qmd"]["extraCollections"]
         self.assertEqual([item["name"] for item in collections], ["ledger", "polaris"])
         ember_agent = next(agent for agent in self.json_example["agents"]["list"] if agent["id"] == "ember")
-        self.assertEqual(ember_agent["model"]["primary"], "nvidia-build/moonshotai/kimi-k2.5")
+        self.assertEqual(ember_agent["model"]["primary"], "openai/gpt-5.4")
+        self.assertIn("nvidia-build/moonshotai/kimi-k2.5", ember_agent["model"]["fallbacks"])
         self.assertIn("extraCollections:", self.yaml_example)
         self.assertIn("name: ledger", self.yaml_example)
         self.assertIn("name: polaris", self.yaml_example)
@@ -122,7 +123,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
 
     def test_provider_matrix_keeps_kimi_specialized(self):
         self.assertIn("kimi-specialist", self.provider_matrix)
-        self.assertIn("explicit specialist lane", self.provider_matrix)
+        self.assertIn("intentional specialist lane", self.provider_matrix)
         self.assertIn("Keep it out of hot-path production fallback chains", self.provider_matrix)
 
     def test_examples_use_secretref_for_optional_credentials(self):
@@ -175,15 +176,26 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("session_maintenance.py", self.error_review)
         self.assertIn("error-review.md", self.readme)
         self.assertIn("session-maintenance.md", self.readme)
-        self.assertIn("OPENCLAW_MEMORY_DREAMING_PILOT.md", self.readme)
+        self.assertIn("OPENCLAW_MEMORY_DREAMING.md", self.readme)
         self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
-        self.assertIn("OpenClaw 2026.4.5", self.readme)
+        self.assertIn("OpenClaw 2026.4.10", self.readme)
         self.assertIn("ORION_RUNTIME_BASELINE_2026_04_07.md", self.readme)
+        self.assertIn("ORION_EXTENSION_SURFACES.md", self.readme)
         self.assertIn("sessions_yield", self.upgrade_notes)
         self.assertIn("isolated cron", self.upgrade_notes)
         self.assertIn("cross-agent workspace", self.upgrade_notes)
+
+    def test_core_allowlist_matches_reduced_orion_surface(self):
+        allow_agents = self.json_example["agents"]["list"][0]["subagents"]["allowAgents"]
+        self.assertEqual(
+            allow_agents,
+            ["atlas", "ember", "ledger", "polaris", "scribe", "wire"],
+        )
+        self.assertIn('"allowAgents": [', (self.repo / "openclaw.json.example").read_text(encoding="utf-8"))
+        for needle in ("node", "pulse", "stratus", "pixel", "quest"):
+            self.assertNotIn(needle, allow_agents)
 
     def test_live_docs_use_src_workspace_path(self):
         live_texts = (

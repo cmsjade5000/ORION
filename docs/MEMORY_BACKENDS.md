@@ -10,17 +10,17 @@ Current stance:
 Notes:
 - OpenClaw treats the workspace as the agent's home. Keep it private and free of secrets (see `KEEP.md`).
 
-## ORION Pilot Path: Dreaming
+## ORION Dreaming Path
 
-OpenClaw `2026.4.5` adds an experimental dreaming system in `memory-core`.
+OpenClaw `2026.4.10` exposes dreaming in `memory-core`.
 
 ORION stance:
 - Keep `memory-lancedb` as the active template default until memory reliability is boring.
-- Treat dreaming as a pilot path, not part of the assistant critical path.
-- Keep `MEMORY.md` as curated truth even when dreaming is enabled.
-- Treat `DREAMS.md` as a review surface, not an auto-trusted fact store.
+- Treat dreaming as an active background memory process under `memory-core`.
+- Keep `MEMORY.md` as the compact durable memory file for intentionally maintained notes.
+- Treat `DREAMS.md` as a review surface generated from dreaming output.
 
-Official pilot surface:
+Official surface:
 - Config key: `plugins.entries.memory-core.config.dreaming`
 - Minimal enablement: `enabled: true`
 - Optional schedule override: `frequency`
@@ -33,4 +33,4 @@ Official pilot surface:
   - `openclaw memory rem-harness --json`
 
 See:
-- [OPENCLAW_MEMORY_DREAMING_PILOT.md](/Users/corystoner/Desktop/ORION/docs/OPENCLAW_MEMORY_DREAMING_PILOT.md)
+- [OPENCLAW_MEMORY_DREAMING.md](/Users/corystoner/src/ORION/docs/OPENCLAW_MEMORY_DREAMING.md)

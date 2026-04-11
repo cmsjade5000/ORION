@@ -288,3 +288,52 @@ class TestNotifyInboxResults(unittest.TestCase):
 
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertNotIn("OLCALL>", r.stdout)
+
+    def test_dry_run_includes_blocked_workflow_alerts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            jobs_dir = root / "tasks" / "JOBS"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            (jobs_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "workflows": [
+                            {
+                                "workflow_id": "wf-123",
+                                "state": "blocked",
+                                "owners": ["ATLAS", "NODE"],
+                                "job_count": 2,
+                            }
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("Workflow alerts:", r.stdout)
+            self.assertIn("state=blocked owners=ATLAS, NODE jobs=2", r.stdout)
+            self.assertIn("workflow: wf-123", r.stdout)

@@ -42,8 +42,8 @@ class TestOrionAgentToolingRefresh(unittest.TestCase):
             self.assertIn(needle, self.skills_doc)
 
     def test_routing_split_is_explicit(self):
-        self.assertIn("delegate to PIXEL first", self.routing)
         self.assertIn("delegate to WIRE first", self.routing)
+        self.assertIn("Discovery or gaming requests are off-core extension work", self.routing)
         self.assertIn("PIXEL scouts; WIRE validates current external facts; ATLAS owns implementation/execution.", self.roster)
 
     def test_disabled_surfaces_remain_pilots(self):

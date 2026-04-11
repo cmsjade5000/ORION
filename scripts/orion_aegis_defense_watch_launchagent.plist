@@ -7,17 +7,15 @@
     <key>ProgramArguments</key>
     <array>
       <string>/bin/bash</string>
-      <string>-lc</string>
-      <string>"/bin/bash -lc '__REPO_ROOT__/scripts/aegis_defense_watch.sh'"</string>
+      <string>__REPO_ROOT__/scripts/aegis_defense_watch.sh</string>
     </array>
     <key>StartInterval</key>
     <integer>120</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>${HOME}/Library/Logs/orion_aegis_defense_watch.log</string>
+    <string>__HOME__/Library/Logs/orion_aegis_defense_watch.log</string>
     <key>StandardErrorPath</key>
-    <string>${HOME}/Library/Logs/orion_aegis_defense_watch.log</string>
+    <string>__HOME__/Library/Logs/orion_aegis_defense_watch.log</string>
   </dict>
 </plist>
-

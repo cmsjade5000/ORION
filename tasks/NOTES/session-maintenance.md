@@ -6,18 +6,22 @@
 - Reason: preview reports no mutation needed
 
 ## Session Memory Consolidation
-- planned: `4`
+- planned: `0`
 - applied: `false`
 
+## Memory Reindex
+- required: `false`
+- ran: `false`
+
 ## Preview
-- beforeCount: `23`
-- afterCount: `23`
+- beforeCount: `24`
+- afterCount: `24`
 - missing: `0`
 - reclaimable: `0`
 - wouldMutate: `false`
 
 ## Post-Run Preview
-- beforeCount: `23`
-- afterCount: `23`
+- beforeCount: `24`
+- afterCount: `24`
 - missing: `0`
 - wouldMutate: `false`

@@ -75,9 +75,9 @@ Use the top-level Makefile aliases to streamline common tasks:
 | `make route-hygiene` | Enforce daily route hygiene guard (safe autofix + report artifact). |
 | `make lane-hotspots` | Detect lane-wait hot windows and correlate cron jobs. |
 | `make stop-gate-enforce` | Enforce canary stop gate and auto-disable promotion jobs after consecutive R1/R2 failures. |
-| `make task-loop` | Reconcile Task Packet lifecycle with ticket lanes and refresh `tasks/NOTES/*`. |
-| `make task-loop-heartbeat` | Heartbeat-grade run; exits non-zero if stale pending packets exist. |
-| `make task-loop-weekly` | Weekly hygiene reconcile with a longer stale threshold (default 72h). |
+| `make inbox-cycle` | Canonical ORION core follow-through loop; reconciles delegated-job state and refreshes `tasks/NOTES/*`. |
+| `make task-loop` | Diagnostic reconcile path for packet/ticket lanes; scheduled core automation should use `make inbox-cycle`. |
+| `make task-loop-weekly` | Manual longer-window hygiene reconcile (default 72h), not the default scheduled core path. |
 | `make assistant-agenda-refresh` | Refresh the generated assistant agenda artifact. |
 | `make assistant-skill-refresh` | Print the monthly assistant skill-refresh commands. |
 | `python3 scripts/orion_error_db.py review --window-hours 24 --json` | Review recurring ORION errors and refresh the nightly report. |

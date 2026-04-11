@@ -71,5 +71,4 @@ graph TD
 - description: Add unit tests for probability math + signal logic. Document configuration and stop gates.
 - success_criteria:
   - `npm test` passes.
-  - `docs/KALSHI_REF_ARB.md` exists.
-
+  - `apps/extensions/kalshi/docs/KALSHI_REF_ARB.md` exists.

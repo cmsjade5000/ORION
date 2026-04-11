@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview operator-health-bundle party-batch-once task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview dreaming-status dreaming-help dreaming-on dreaming-off operator-health-bundle party-batch-once inbox-cycle task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= config/promptfoo/orion-safety-gate.yaml
 THINKING ?= high
@@ -174,6 +174,46 @@ dreaming-preview:
 		--output-json tmp/openclaw_memory_dreaming_preview_latest.json \
 		--output-md tmp/openclaw_memory_dreaming_preview_latest.md
 
+## Deterministic direct-turn dreaming status via guarded wrapper
+dreaming-status:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming status" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
+## Deterministic direct-turn dreaming help via guarded wrapper
+dreaming-help:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming help" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
+## Deterministic direct-turn dreaming enable via guarded wrapper
+dreaming-on:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming on" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
+## Deterministic direct-turn dreaming disable via guarded wrapper
+dreaming-off:
+	@python3 scripts/openclaw_guarded_turn.py \
+		--repo-root . \
+		--agent "$${AGENT_ID:-main}" \
+		--runtime-channel "$${RUNTIME_CHANNEL:-local}" \
+		--message "/dreaming off" \
+		--policy-mode "$${POLICY_MODE:-audit}" \
+		--rules "$${POLICY_RULES:-config/orion_policy_rules.json}"
+
 ## Standard operator health bundle for gateway, models, memory, REM, and smoke checks
 operator-health-bundle:
 	@python3 scripts/openclaw_operator_health_bundle.py \
@@ -188,7 +228,11 @@ operator-health-bundle:
 party-batch-once:
 	@python3 scripts/party_batch_once.py --repo-root .
 
-## Reconcile inbox packet lifecycle with ticket lanes and refresh tasks/NOTES/*
+## Canonical inbox execution/reconcile/notify loop
+inbox-cycle:
+	@python3 scripts/inbox_cycle.py --repo-root . --runner-max-packets "$${RUNNER_MAX_PACKETS:-4}" --stale-hours "$${STALE_HOURS:-24}" --notify-max-per-run "$${NOTIFY_MAX_PER_RUN:-8}"
+
+## Diagnostic reconcile for packet/ticket lanes; scheduled core automation should use inbox-cycle
 task-loop:
 	@python3 scripts/task_execution_loop.py --repo-root . --apply --stale-hours "$${STALE_HOURS:-24}"
 
@@ -312,7 +356,7 @@ llm-vuln-probe-check:
 langfuse-bootstrap-check:
 	@bash skills/langfuse-trace-eval-bootstrap/scripts/bootstrap_langfuse_trace_eval.sh --dry-run
 
-## Dry-run OpenClaw provider wiring for Gemini/Kimi/local lanes
+## Dry-run OpenClaw provider wiring for OpenAI-first Kimi/local fallback lanes
 llm-provider-configure-dry:
 	@bash scripts/openclaw_configure_llm_providers.sh --dry-run
 
@@ -332,9 +376,9 @@ llm-provider-readiness:
 llm-provider-openai-ready:
 	@python3 scripts/run_llm_provider_benchmarks.py --check-readiness --require-ready --providers openai-control-plane
 
-## Run hosted live benchmark suite (Gemini + OpenAI + Kimi)
+## Run hosted live benchmark suite (OpenAI + OpenRouter + Kimi)
 llm-provider-bench-full-live:
-	@python3 scripts/run_llm_provider_benchmarks.py --providers gemini-openclaw,openai-control-plane,kimi-k2-5-nvidia-build --trace
+	@python3 scripts/run_llm_provider_benchmarks.py --providers openai-control-plane,openrouter-auto-primary,kimi-k2-5-nvidia-build --trace
 
 ## Run targeted OpenAI control-lane benchmarks
 llm-provider-bench-openai:

@@ -1,0 +1,23 @@
+{
+  "age_hours": null,
+  "inbox": {
+    "line": 9,
+    "path": "tasks/INBOX/SCRIBE.md"
+  },
+  "job_id": "pkt-36a66680bf9aa360",
+  "notify": "telegram",
+  "objective": "Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up).",
+  "owner": "SCRIBE",
+  "packet_id": "pkt-36a66680bf9aa360",
+  "parent_packet_id": "",
+  "pending_since_ts": null,
+  "requester": "ORION",
+  "result_status": "OK",
+  "root_packet_id": "pkt-36a66680bf9aa360",
+  "stale_threshold_hours": 24.0,
+  "state": "pending_verification",
+  "ticket_refs": [],
+  "updated_ts": 1775914351.143861,
+  "version": 1,
+  "workflow_id": "pkt-36a66680bf9aa360"
+}

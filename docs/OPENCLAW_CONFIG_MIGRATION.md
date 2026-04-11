@@ -16,7 +16,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 - `agents.defaults.model.primary = "openai/gpt-5.4"` (pinned)
 - `agents.defaults.model.fallbacks = ["openrouter/openrouter/free","openai/gpt-oss-20b:free","minimax/MiniMax-M2.7-highspeed","minimax/MiniMax-M2.7"]` (provider-restricted)
 - `agents.defaults.workspace = "/Users/corystoner/src/ORION"`
-- `agents.list[0].subagents.allowAgents = ["atlas","node","pulse","stratus","pixel","quest","ember","ledger","polaris","scribe","wire"]` (explicit ORION delegation allowlist for `sessions_spawn`)
+- `agents.list[0].subagents.allowAgents = ["atlas","ember","ledger","polaris","scribe","wire"]` (explicit ORION core delegation allowlist for `sessions_spawn`)
 - `hooks.internal.enabled = ["session-memory","command-logger"]`
 - `channels.telegram.enabled = true`
 - `channels.telegram.commands.native = true`
@@ -67,9 +67,9 @@ openclaw plugins list --json
 openclaw agents bindings --json
 ```
 
-## Operational Notes (OpenClaw 2026.3.13)
+## Operational Notes (OpenClaw 2026.4.10)
 
-Latest local upgrade verification: 2026-03-15 on ORION's Mac runtime.
+Latest local upgrade verification: 2026-04-11 on ORION's Mac runtime.
 
 Important upstream behavior changes for this workspace:
 
@@ -78,6 +78,7 @@ Important upstream behavior changes for this workspace:
 - Agent memory injection was hardened on case-insensitive filesystems, which matters on macOS.
 - Gateway health/reporting is stricter around degraded reachability and unanswered client requests.
 - Channel/binding collisions now fail fast, so `openclaw agents bindings --json` is part of the recommended post-change check path.
+- OpenClaw `2026.4.10` adds bundled Codex provider support, Active Memory as an optional plugin, and `commands.list` RPC. ORION core keeps those as upstream capabilities rather than widening the default repo-owned control plane.
 
 See:
 - `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
@@ -99,7 +100,7 @@ Practical rule:
 
 ## Dreaming Pilot Note (OpenClaw 2026.4.5)
 
-OpenClaw `2026.4.5` exposes dreaming under `plugins.entries.memory-core.config.dreaming`.
+OpenClaw `2026.4.10` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
 
 Practical ORION rule:
 - Do not flip `plugins.slots.memory` from `memory-lancedb` to `memory-core` casually.
@@ -122,7 +123,7 @@ Operational caution:
 - `DREAMS.md` is a review diary and should not be treated as a truth source by default.
 
 See:
-- `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md`
+- `docs/OPENCLAW_MEMORY_DREAMING.md`
 
 ## Codex 0.114.x Compatibility Notes
 
@@ -215,7 +216,7 @@ Current runtime model routing requires auth for:
 Set auth with either:
 - `openclaw models auth login --provider <provider>`
 - `openclaw models auth paste-token --provider <provider>`
-Or via environment variables (`GEMINI_API_KEY`) if your gateway service is configured to inherit them.
+For script-driven eval lanes, you may also use environment variables such as `OPENAI_API_KEY` or `OPENROUTER_API_KEY` when your gateway service is configured to inherit them.
 
 ## Verification Commands
 

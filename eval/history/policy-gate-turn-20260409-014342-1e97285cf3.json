@@ -1,0 +1,34 @@
+{
+  "input": {
+    "metadata": {
+      "executed_in_turn": false,
+      "has_specialist_result": false,
+      "runtime_channel": "local",
+      "source": "openclaw_guarded_turn"
+    },
+    "request_text": "/dreaming status",
+    "response_text": "ORION dreaming status\n\n- Memory slot: memory-core\n- Dreaming config: enabled\n- ORION memory sources: memory, sessions\n- Short-term recall store: present\n- Recall entries: 3\n- Recall updated: 2026-04-06T15:31:57.432Z\n- Recall path: /Users/corystoner/src/ORION/memory/.dreams/short-term-recall.json\n- Note: dreaming is still a pilot path; MEMORY.md remains curated truth.",
+    "scope": "orion_reply",
+    "tags": [
+      "guarded_turn"
+    ]
+  },
+  "kind": "orion_policy_gate",
+  "mode": "audit",
+  "rules": {
+    "default_mode": "audit",
+    "name": "orion_runtime_policy",
+    "path": "/Users/corystoner/src/ORION/config/orion_policy_rules.json",
+    "version": 1
+  },
+  "summary": {
+    "blocked": false,
+    "blocking_violations": 0,
+    "evaluated_rules": 1,
+    "passed": true,
+    "total_rules": 9,
+    "violations": 0
+  },
+  "timestamp": "2026-04-09T01:43:42.111311+00:00",
+  "violations": []
+}

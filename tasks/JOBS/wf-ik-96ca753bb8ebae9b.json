@@ -1,0 +1,25 @@
+{
+  "job_count": 1,
+  "jobs": [
+    {
+      "inbox": {
+        "line": 9,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "pkt-36a66680bf9aa360",
+      "objective": "Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up).",
+      "owner": "SCRIBE",
+      "packet_id": "pkt-36a66680bf9aa360",
+      "parent_packet_id": "",
+      "state": "pending_verification"
+    }
+  ],
+  "owners": [
+    "SCRIBE"
+  ],
+  "root_packet_id": "pkt-36a66680bf9aa360",
+  "state": "in_progress",
+  "updated_ts": 1775914351.143861,
+  "version": 1,
+  "workflow_id": "pkt-36a66680bf9aa360"
+}

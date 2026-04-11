@@ -1,11 +1,52 @@
 {
   "version": 1,
-  "updated_at": "2026-03-12",
+  "updated_at": "2026-04-09",
   "providers": [
+    {
+      "provider_id": "openai-control-plane",
+      "display_name": "OpenAI Responses API",
+      "lane": "production-orchestrator",
+      "api_path": "https://api.openai.com/v1/responses",
+      "api_surface": "OpenAI Responses API",
+      "models": [
+        "gpt-5",
+        "gpt-5-mini"
+      ],
+      "allowed_tasks": [
+        "normal_chat",
+        "routing",
+        "specialist_handoffs",
+        "tool_selection",
+        "light_retrieval_synthesis",
+        "structured_outputs",
+        "tool_contract_testing",
+        "eval_generation",
+        "trace_grading",
+        "redteam_judging",
+        "research_synthesis",
+        "second_opinion_reasoning",
+        "alternative_plan_generation",
+        "long_context_comparison"
+      ],
+      "forbidden_tasks": [
+        "destructive_execution_without_approval",
+        "unguarded_external_delivery",
+        "silent_primary_promotion"
+      ],
+      "fallback_order": 1,
+      "requires_schema": true,
+      "requires_hitl": true,
+      "role_summary": "Default live ORION orchestration lane for routing, schemas, and high-control execution.",
+      "docs": [
+        "https://platform.openai.com/docs/api-reference/responses",
+        "https://developers.openai.com/api/docs/guides/structured-outputs",
+        "https://developers.openai.com/api/docs/guides/function-calling"
+      ]
+    },
     {
       "provider_id": "openrouter-auto-primary",
       "display_name": "OpenRouter Auto",
-      "lane": "production-orchestrator",
+      "lane": "production-fallback",
       "api_path": "https://openrouter.ai/api/v1/chat/completions",
       "api_surface": "OpenRouter OpenAI-compatible Chat Completions",
       "models": [
@@ -23,102 +64,13 @@
         "unguarded_external_delivery",
         "provider_promotion_without_benchmark_win"
       ],
-      "fallback_order": 1,
-      "requires_schema": true,
-      "requires_hitl": true,
-      "role_summary": "Default live ORION orchestration lane via OpenRouter auto-routing.",
-      "docs": [
-        "https://openrouter.ai/docs/quickstart",
-        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
-      ]
-    },
-    {
-      "provider_id": "gemini-openclaw",
-      "display_name": "Google Gemini via OpenClaw",
-      "lane": "production-fallback",
-      "api_path": "openclaw://google/gemini-2.5-flash-lite",
-      "api_surface": "OpenClaw model routing",
-      "models": [
-        "google/gemini-2.5-flash-lite"
-      ],
-      "allowed_tasks": [
-        "normal_chat",
-        "routing",
-        "specialist_handoffs",
-        "tool_selection",
-        "light_retrieval_synthesis"
-      ],
-      "forbidden_tasks": [
-        "destructive_execution_without_approval",
-        "unguarded_external_delivery",
-        "provider_promotion_without_benchmark_win"
-      ],
       "fallback_order": 2,
       "requires_schema": true,
       "requires_hitl": true,
-      "role_summary": "Compatibility fallback lane for production orchestration.",
+      "role_summary": "Compatibility fallback lane when the primary OpenAI route is degraded or unavailable.",
       "docs": [
-        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md",
-        "/Users/corystoner/src/ORION/docs/OPENCLAW_CONFIG_MIGRATION.md"
-      ]
-    },
-    {
-      "provider_id": "kimi-k2-5-nvidia-build",
-      "display_name": "Kimi K2.5 via NVIDIA Build",
-      "lane": "reasoning-tertiary",
-      "api_path": "openclaw://nvidia-build/moonshotai/kimi-k2.5",
-      "api_surface": "OpenAI-compatible provider via OpenClaw",
-      "models": [
-        "moonshotai/kimi-k2.5"
-      ],
-      "allowed_tasks": [
-        "research_synthesis",
-        "second_opinion_reasoning",
-        "alternative_plan_generation",
-        "long_context_comparison"
-      ],
-      "forbidden_tasks": [
-        "silent_primary_promotion",
-        "destructive_execution_without_approval"
-      ],
-      "fallback_order": 3,
-      "requires_schema": true,
-      "requires_hitl": true,
-      "role_summary": "Hosted tertiary fallback lane that must pass ORION-specific evals before promotion.",
-      "docs": [
-        "/Users/corystoner/src/ORION/docs/NVIDIA_BUILD_KIMI.md",
-        "/Users/corystoner/src/ORION/scripts/openclaw_enable_nvidia_kimi.sh"
-      ]
-    },
-    {
-      "provider_id": "openai-control-plane",
-      "display_name": "OpenAI Responses / ChatGPT API",
-      "lane": "control-eval",
-      "api_path": "https://api.openai.com/v1/responses",
-      "api_surface": "OpenAI Responses API",
-      "models": [
-        "gpt-5",
-        "gpt-5-mini"
-      ],
-      "allowed_tasks": [
-        "structured_outputs",
-        "tool_contract_testing",
-        "eval_generation",
-        "trace_grading",
-        "redteam_judging"
-      ],
-      "forbidden_tasks": [
-        "silent_primary_promotion",
-        "destructive_execution_without_approval"
-      ],
-      "fallback_order": 4,
-      "requires_schema": true,
-      "requires_hitl": true,
-      "role_summary": "High-control lane for schema validation, evals, and trace grading.",
-      "docs": [
-        "https://platform.openai.com/docs/api-reference/responses",
-        "https://developers.openai.com/api/docs/guides/structured-outputs",
-        "https://developers.openai.com/api/docs/guides/function-calling"
+        "https://openrouter.ai/docs/quickstart",
+        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
       ]
     },
     {
@@ -140,10 +92,10 @@
         "sensitive_data_processing",
         "approval_gate_judgments",
         "external_messaging_decisions",
-        "destructive_execution_without_approval",
-        "silent_primary_promotion"
+        "silent_primary_promotion",
+        "destructive_execution_without_approval"
       ],
-      "fallback_order": 5,
+      "fallback_order": 3,
       "requires_schema": true,
       "requires_hitl": true,
       "role_summary": "Non-sensitive research lane only; provider may log prompts and completions.",
@@ -178,7 +130,7 @@
         "approval_gate_judgments",
         "destructive_tool_decisions"
       ],
-      "fallback_order": 6,
+      "fallback_order": 4,
       "requires_schema": true,
       "requires_hitl": false,
       "role_summary": "Low-cost bounded utility lane using OpenRouter free router plus curated free models.",
@@ -212,12 +164,40 @@
         "approval_gate_judgments",
         "destructive_tool_decisions"
       ],
-      "fallback_order": 7,
+      "fallback_order": 6,
       "requires_schema": true,
       "requires_hitl": false,
       "role_summary": "Offline/local bounded utility backup lane.",
       "docs": [
         "/Users/corystoner/src/ORION/docs/LLM_PROVIDER_MATRIX.md"
+      ]
+    },
+    {
+      "provider_id": "kimi-k2-5-nvidia-build",
+      "display_name": "Kimi K2.5 via NVIDIA Build",
+      "lane": "reasoning-tertiary",
+      "api_path": "openclaw://nvidia-build/moonshotai/kimi-k2.5",
+      "api_surface": "OpenAI-compatible provider via OpenClaw",
+      "models": [
+        "moonshotai/kimi-k2.5"
+      ],
+      "allowed_tasks": [
+        "research_synthesis",
+        "second_opinion_reasoning",
+        "alternative_plan_generation",
+        "long_context_comparison"
+      ],
+      "forbidden_tasks": [
+        "silent_primary_promotion",
+        "destructive_execution_without_approval"
+      ],
+      "fallback_order": 5,
+      "requires_schema": true,
+      "requires_hitl": true,
+      "role_summary": "Hosted tertiary fallback lane that must pass ORION-specific evals before promotion.",
+      "docs": [
+        "/Users/corystoner/src/ORION/docs/NVIDIA_BUILD_KIMI.md",
+        "/Users/corystoner/src/ORION/scripts/openclaw_enable_nvidia_kimi.sh"
       ]
     }
   ]

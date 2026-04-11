@@ -371,6 +371,25 @@ def _build_summary(
         ),
         "exec_elevation_failures": _count_matches(gateway_err_tail, r"elevated is not available right now"),
     }
+    channels_payload = _json_payload(command_map["channels_status"])
+    discord_accounts = channels_payload.get("channelAccounts", {}).get("discord", []) if isinstance(channels_payload, dict) else []
+    discord_account = discord_accounts[0] if isinstance(discord_accounts, list) and discord_accounts else {}
+    discord_channel = channels_payload.get("channels", {}).get("discord", {}) if isinstance(channels_payload, dict) else {}
+    discord_last_error = ""
+    discord_reconnect_attempts = 0
+    discord_running = False
+    if isinstance(discord_account, dict) and discord_account:
+        discord_last_error = str(discord_account.get("lastError") or "").strip()
+        discord_reconnect_attempts = int(discord_account.get("reconnectAttempts") or 0)
+        discord_running = bool(discord_account.get("running"))
+    elif isinstance(discord_channel, dict):
+        discord_last_error = str(discord_channel.get("lastError") or "").strip()
+        discord_running = bool(discord_channel.get("running"))
+    discord_restart_recommended = (not discord_running) and (
+        "unknown system error -11" in discord_last_error.lower()
+        or "stale socket" in discord_last_error.lower()
+        or discord_reconnect_attempts >= 5
+    )
 
     core_ok = all(
         command_map[name].ok
@@ -403,6 +422,11 @@ def _build_summary(
         },
         "codex_ready": command_map["codex_version"].ok,
         "signals": signals,
+        "discord_watchdog": {
+            "last_error": discord_last_error,
+            "reconnect_attempts": discord_reconnect_attempts,
+            "restart_recommended": discord_restart_recommended,
+        },
         "artifacts": {
             "bundle_dir": str(bundle_dir),
             "summary_json": str(bundle_dir / "summary.json"),
@@ -420,6 +444,7 @@ def _render_markdown(summary: dict[str, Any], commands: list[CommandResult], roo
     channels = summary["channels"]
     tasks = summary["tasks"]
     signals = summary["signals"]
+    discord_watchdog = summary.get("discord_watchdog") or {}
     lines = [
         "# ORION Incident Bundle",
         "",
@@ -438,6 +463,9 @@ def _render_markdown(summary: dict[str, Any], commands: list[CommandResult], roo
         "## Channels",
         f"- Channel status OK: `{channels['status_ok']}`",
         f"- States: `{' | '.join(f'{key}={value}' for key, value in channels['states'].items()) if channels['states'] else 'n/a'}`",
+        f"- Discord reconnect attempts: `{discord_watchdog.get('reconnect_attempts')}`",
+        f"- Discord restart recommended: `{discord_watchdog.get('restart_recommended')}`",
+        f"- Discord last error: `{discord_watchdog.get('last_error') or '-'}`",
         "",
         "## Tasks",
         f"- Task list OK: `{tasks['list_ok']}`",

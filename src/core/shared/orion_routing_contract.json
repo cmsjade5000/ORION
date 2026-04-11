@@ -79,18 +79,18 @@
     {
       "id": "tool_research",
       "owner": "PIXEL",
-      "trigger_phrase": "Exploration / \"what's interesting\" / tool research",
+      "trigger_phrase": "Discovery or gaming requests are off-core extension work",
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "delegate to PIXEL first"
+          "phrase": "PIXEL: discovery and tool scouting for extension work"
         },
         {
           "path": "src/agents/ORION.md",
-          "phrase": "delegate to PIXEL"
+          "phrase": "do not route default daily work through PIXEL or QUEST"
         }
       ],
-      "notes": "Tool exploration routes to PIXEL; factual retrieval may pair with WIRE."
+      "notes": "Tool exploration is an explicit extension workflow in ORION core; PIXEL remains available when that extension lane is intentionally invoked."
     },
     {
       "id": "evidence_retrieval",
@@ -127,22 +127,22 @@
     {
       "id": "gaming_support",
       "owner": "QUEST",
-      "trigger_phrase": "Gaming / in-game strategy / builds / progression",
+      "trigger_phrase": "Discovery or gaming requests are off-core extension work",
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "delegate to QUEST"
+          "phrase": "QUEST: gaming copilot for extension work"
         },
         {
           "path": "src/agents/ORION.md",
-          "phrase": "delegate to QUEST"
+          "phrase": "do not route default daily work through PIXEL or QUEST"
         }
       ],
-      "notes": "Gaming support routes to QUEST, paired with WIRE for current patch/news claims."
+      "notes": "Gaming support is no longer part of default ORION core routing; QUEST remains an explicit extension lane."
     },
     {
       "id": "config_drift",
-      "owner": "NODE",
+      "owner": "ATLAS",
       "trigger_phrase": "System glue / repo organization / drift / \"where should this live\"",
       "file_expectations": [
         {
@@ -151,10 +151,10 @@
         },
         {
           "path": "src/agents/ORION.md",
-          "phrase": "delegate to NODE"
+          "phrase": "Treat NODE, PULSE, and STRATUS as implementation detail behind ATLAS"
         }
       ],
-      "notes": "System glue, memory discipline, and config-location drift route to NODE via ATLAS or directly when framed that way in ORION policy."
+      "notes": "System glue and repo-organization drift route through ATLAS, which may use NODE as an internal implementation lane."
     }
   ]
 }

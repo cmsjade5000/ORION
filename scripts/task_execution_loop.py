@@ -28,6 +28,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from inbox_state import load_kv_state, save_kv_state, sha256_lines
+from delegated_job_state import write_job_artifacts
+from delegated_job_state import packet_content_id
+from inbox_file_ops import atomic_write_text, ensure_packets_header, locked_file
 
 
 LANES = ("backlog", "in-progress", "testing", "done")
@@ -42,6 +45,7 @@ CANONICAL_CRON_LABELS = {
     "assistant-inbox-notify",
     "assistant-task-loop",
     "orion-error-review",
+    "orion-ops-bundle",
     "orion-session-maintenance",
 }
 
@@ -49,6 +53,7 @@ RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
 RE_RESULT_STATUS = re.compile(r"^\s*-?\s*Status:\s*(OK|FAILED|BLOCKED)\b", re.IGNORECASE)
 RE_TICKET_PATH = re.compile(r"(tasks/WORK/(?:backlog|in-progress|testing|done)/\d{4}-[a-z0-9][a-z0-9-]*\.md)")
+NEXT_PACKET_PREFIX = "Next Packet "
 
 
 @dataclasses.dataclass
@@ -71,6 +76,12 @@ class Packet:
     pending_key: str
     result_status: str | None
     ticket_refs: list[str]
+    next_packet_fields: dict[str, str]
+    next_packet_sections: dict[str, list[str]]
+    packet_id: str
+    parent_packet_id: str
+    root_packet_id: str
+    workflow_id: str
 
 
 @dataclasses.dataclass
@@ -166,6 +177,49 @@ def _packet_fields(packet_lines: list[str]) -> dict[str, str]:
             continue
         fields[m.group("key").strip()] = m.group("value").strip()
     return fields
+
+
+def _packet_next_spec(packet_lines: list[str]) -> tuple[dict[str, str], dict[str, list[str]]]:
+    fields: dict[str, str] = {}
+    sections: dict[str, list[str]] = {
+        "Success Criteria": [],
+        "Constraints": [],
+        "Inputs": [],
+        "Risks": [],
+        "Stop Gates": [],
+        "Output Format": [],
+    }
+    current_section: str | None = None
+
+    for line in packet_lines[1:]:
+        m = RE_KV.match(line)
+        if m:
+            key = m.group("key").strip()
+            value = m.group("value").strip()
+            if not key.startswith(NEXT_PACKET_PREFIX):
+                current_section = None
+                continue
+            next_key = key[len(NEXT_PACKET_PREFIX) :].strip()
+            if next_key in sections:
+                current_section = next_key
+                if value:
+                    sections[next_key].append(value)
+            else:
+                current_section = None
+                fields[next_key] = value
+            continue
+
+        if not current_section:
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("- "):
+            sections[current_section].append(stripped[2:].strip())
+        else:
+            sections[current_section].append(stripped)
+
+    return fields, sections
 
 
 def _packet_before_result(packet_lines: list[str]) -> list[str]:
@@ -276,6 +330,7 @@ def _load_packets(repo_root: Path) -> list[Packet]:
             before = _packet_before_result(pkt_lines)
             fp = sha256_lines(before)
             result_status = _packet_result_status(pkt_lines)
+            next_fields, next_sections = _packet_next_spec(pkt_lines)
             out.append(
                 Packet(
                     inbox_path=inbox,
@@ -286,6 +341,12 @@ def _load_packets(repo_root: Path) -> list[Packet]:
                     pending_key=f"pending:{fp}",
                     result_status=result_status,
                     ticket_refs=_extract_ticket_refs(pkt_lines),
+                    next_packet_fields=next_fields,
+                    next_packet_sections=next_sections,
+                    packet_id=_packet_id(_packet_fields(pkt_lines), before),
+                    parent_packet_id=_packet_fields(pkt_lines).get("Parent Packet ID", "").strip(),
+                    root_packet_id=_packet_fields(pkt_lines).get("Root Packet ID", "").strip() or _packet_id(_packet_fields(pkt_lines), before),
+                    workflow_id=_packet_fields(pkt_lines).get("Workflow ID", "").strip() or _packet_fields(pkt_lines).get("Root Packet ID", "").strip() or _packet_id(_packet_fields(pkt_lines), before),
                 )
             )
 
@@ -317,6 +378,17 @@ def _append_note(md: str, note: str) -> str:
         tail = tail.lstrip("\n")
         return f"{head}## Notes\n- {note}\n{tail}"
     return md.rstrip() + f"\n\n## Notes\n- {note}\n"
+
+
+def _sanitize_status_fragment(value: str) -> str:
+    return " ".join((value or "").split())
+
+
+def _packet_id(fields: dict[str, str], packet_before_result: list[str]) -> str:
+    raw = (fields.get("Packet ID", "") or "").strip()
+    if raw:
+        return raw
+    return packet_content_id(fields, packet_before_result)
 
 
 def _run_capture(argv: list[str]) -> CommandSnapshot:
@@ -367,25 +439,38 @@ def _task_summary(snapshot: OpenClawSnapshot) -> dict[str, object]:
     }
     recent_failures: list[str] = []
     stale_running: list[str] = []
+    latest_canonical: dict[str, tuple[int, dict[str, object], str]] = {}
     for task in tasks:
         if not isinstance(task, dict):
             continue
         status = str(task.get("status") or "")
         if status in counts:
             counts[status] += 1
-        label = str(task.get("label") or task.get("task") or "")
-        error = str(task.get("error") or "")
-        terminal_summary = str(task.get("terminalSummary") or "")
+        label = _sanitize_status_fragment(str(task.get("label") or task.get("task") or ""))
+        error = _sanitize_status_fragment(str(task.get("error") or ""))
+        terminal_summary = _sanitize_status_fragment(str(task.get("terminalSummary") or ""))
         task_text = "\n".join(part for part in (error, terminal_summary) if part)
+        event_at = max(
+            int(task.get("lastEventAt") or 0),
+            int(task.get("endedAt") or 0),
+            int(task.get("startedAt") or 0),
+            int(task.get("createdAt") or 0),
+        )
         if "approval-timeout" in task_text or "approval" in task_text.lower():
             counts["approval_followups"] += 1
-        if label in CANONICAL_CRON_LABELS and (
-            status in {"failed", "timed_out", "lost"} or "no approval client" in task_text.lower()
-        ):
-            counts["canonical_issues"] += 1
+        if label in CANONICAL_CRON_LABELS:
+            current = latest_canonical.get(label)
+            if current is None or event_at >= current[0]:
+                latest_canonical[label] = (event_at, task, task_text)
+        if label in CANONICAL_CRON_LABELS and status in {"failed", "timed_out", "lost"}:
             recent_failures.append(f"{label}: {status or 'unknown'}")
         elif status in {"failed", "timed_out", "lost"} and label:
             recent_failures.append(f"{label}: {status}")
+
+    for label, (_event_at, task, task_text) in latest_canonical.items():
+        status = str(task.get("status") or "")
+        if status in {"failed", "timed_out", "lost"} or "no approval client" in task_text.lower():
+            counts["canonical_issues"] += 1
 
     warnings = int(summary.get("warnings") or 0) if isinstance(summary, dict) else 0
     errors = int(summary.get("errors") or 0) if isinstance(summary, dict) else 0
@@ -482,6 +567,187 @@ def _move_ticket_lane(
 
     new_ticket = _parse_ticket(dest, repo_root, to_lane)
     return new_ticket
+
+
+def _next_packet_lines(packet: Packet) -> list[str] | None:
+    fields = packet.next_packet_fields
+    if not fields:
+        return None
+    owner = fields.get("Owner", "").strip()
+    requester = fields.get("Requester", "").strip()
+    objective = fields.get("Objective", "").strip()
+    if not owner or not requester or not objective:
+        return None
+
+    required_section_order = [
+        "Success Criteria",
+        "Constraints",
+        "Inputs",
+        "Risks",
+        "Stop Gates",
+        "Output Format",
+    ]
+    for section in required_section_order:
+        items = [item for item in packet.next_packet_sections.get(section, []) if item.strip()]
+        if not items:
+            return None
+
+    normalized_fields = dict(fields)
+    if not normalized_fields.get("Idempotency Key", "").strip():
+        normalized_fields["Idempotency Key"] = _generated_next_packet_idempotency_key(packet)
+    normalized_fields.setdefault("Parent Packet ID", packet.packet_id)
+    normalized_fields.setdefault("Root Packet ID", packet.root_packet_id or packet.packet_id)
+    normalized_fields.setdefault("Workflow ID", packet.workflow_id or packet.root_packet_id or packet.packet_id)
+    normalized_fields.setdefault(
+        "Packet ID",
+        packet_content_id({"Idempotency Key": normalized_fields["Idempotency Key"]}, []),
+    )
+
+    lines = ["TASK_PACKET v1"]
+    base_field_order = ["Owner", "Requester", "Objective"]
+    optional_fields = [key for key in normalized_fields.keys() if key not in base_field_order]
+    for key in base_field_order + sorted(optional_fields):
+        value = normalized_fields.get(key, "").strip()
+        if value:
+            lines.append(f"{key}: {value}")
+    lines.append(f"Handoff Source: {packet.display_path}:{packet.start_line}")
+    for section in required_section_order:
+        lines.append(f"{section}:")
+        for item in packet.next_packet_sections.get(section, []):
+            if item.strip():
+                lines.append(f"- {item.strip()}")
+    return lines
+
+
+def _next_packet_should_fire(packet: Packet) -> bool:
+    if not packet.next_packet_fields:
+        return False
+    result_status = (packet.result_status or "").strip().upper()
+    if not result_status:
+        return False
+    trigger = (packet.next_packet_fields.get("On Result", "OK") or "OK").strip().upper()
+    if trigger == "ANY":
+        return True
+    return result_status == trigger
+
+
+def _generated_next_packet_idempotency_key(packet: Packet) -> str:
+    lines = _packet_before_result(packet.lines)
+    next_lines: list[str] = []
+    for key in sorted(packet.next_packet_fields.keys()):
+        next_lines.append(f"{key}: {packet.next_packet_fields[key]}")
+    for key in sorted(packet.next_packet_sections.keys()):
+        next_lines.append(f"{key}:")
+        next_lines.extend(packet.next_packet_sections[key])
+    return "handoff:" + packet_content_id({}, lines + next_lines)
+
+
+def _append_next_packet_if_needed(repo_root: Path, packet: Packet) -> Action | None:
+    if not _next_packet_should_fire(packet):
+        return None
+    lines = _next_packet_lines(packet)
+    if not lines:
+        return None
+
+    owner = packet.next_packet_fields.get("Owner", "").strip().upper()
+    if not owner:
+        return None
+    target = repo_root / "tasks" / "INBOX" / f"{owner}.md"
+    handoff_source = f"Handoff Source: {packet.display_path}:{packet.start_line}"
+    generated_key = next((line.split(":", 1)[1].strip() for line in lines if line.startswith("Idempotency Key:")), "")
+    dedupe_marker = f"Idempotency Key: {generated_key}" if generated_key else ""
+    lock_path = target.with_suffix(target.suffix + ".lock")
+
+    with locked_file(lock_path):
+        if target.exists():
+            existing_lines = target.read_text(encoding="utf-8").splitlines()
+        else:
+            existing_lines = ensure_packets_header([], owner=owner)
+        existing_lines = ensure_packets_header(existing_lines, owner=owner)
+        existing = "\n".join(existing_lines).rstrip() + "\n"
+        if handoff_source in existing:
+            return None
+        if dedupe_marker and dedupe_marker in existing:
+            return None
+
+        content = existing.rstrip() + "\n\n" + "\n".join(lines).rstrip() + "\n"
+        atomic_write_text(target, content)
+    return Action(
+        kind="next-packet",
+        ticket=owner,
+        detail=f"appended handoff from {packet.display_path}:{packet.start_line} to tasks/INBOX/{owner}.md",
+    )
+
+
+def _stale_recovery_target(packet: Packet) -> tuple[str, str]:
+    owner = (packet.fields.get("Owner", "") or packet.inbox_path.stem).strip().upper()
+    if owner in {"ATLAS", "ORION"}:
+        return "ORION", "ORION"
+    return "ATLAS", "ORION"
+
+
+def _stale_recovery_packet_lines(packet: Packet, *, age_h: float) -> list[str]:
+    target_owner, requester = _stale_recovery_target(packet)
+    recovery_key = f"recovery:stale:{packet.packet_id}"
+    objective = (
+        f"Recover stale delegated workflow for [{packet.fields.get('Owner', packet.inbox_path.stem.upper())}] "
+        f"{packet.fields.get('Objective', '(no objective)')}"
+    )
+    return [
+        "TASK_PACKET v1",
+        f"Owner: {target_owner}",
+        f"Requester: {requester}",
+        "Notify: telegram",
+        f"Idempotency Key: {recovery_key}",
+        f"Packet ID: {packet_content_id({'Idempotency Key': recovery_key}, [])}",
+        f"Parent Packet ID: {packet.packet_id}",
+        f"Root Packet ID: {packet.root_packet_id or packet.packet_id}",
+        f"Workflow ID: {packet.workflow_id or packet.root_packet_id or packet.packet_id}",
+        f"Objective: {objective}",
+        "Success Criteria:",
+        "- Determine why the delegated workflow stalled.",
+        "- Either resume the workflow or leave a terminal recovery result with a concrete blocker.",
+        "Constraints:",
+        "- Prefer reversible recovery steps first.",
+        "- Preserve packet and ticket history.",
+        "Inputs:",
+        f"- Source packet: {packet.display_path}:{packet.start_line}",
+        f"- Current age: {age_h:.1f}h stale",
+        "Risks:",
+        "- Duplicate recovery work if this packet is appended more than once.",
+        "Stop Gates:",
+        "- Any destructive or irreversible change without fresh evidence.",
+        "Output Format:",
+        "- Short checklist with resume path or blocker.",
+    ]
+
+
+def _append_stale_recovery_packet_if_needed(repo_root: Path, packet: Packet, *, age_h: float) -> Action | None:
+    owner, _requester = _stale_recovery_target(packet)
+    target = repo_root / "tasks" / "INBOX" / f"{owner}.md"
+    lines = _stale_recovery_packet_lines(packet, age_h=age_h)
+    source_marker = f"Recovery Source: {packet.display_path}:{packet.start_line}"
+    idem_line = next((line for line in lines if line.startswith("Idempotency Key: ")), "")
+    lock_path = target.with_suffix(target.suffix + ".lock")
+
+    with locked_file(lock_path):
+        if target.exists():
+            existing_lines = target.read_text(encoding="utf-8").splitlines()
+        else:
+            existing_lines = ensure_packets_header([], owner=owner)
+        existing_lines = ensure_packets_header(existing_lines, owner=owner)
+        existing = "\n".join(existing_lines).rstrip() + "\n"
+        if source_marker in existing:
+            return None
+        if idem_line and idem_line in existing:
+            return None
+        content = existing.rstrip() + "\n\n" + "\n".join(lines + [source_marker]).rstrip() + "\n"
+        atomic_write_text(target, content)
+    return Action(
+        kind="stale-escalation",
+        ticket=owner,
+        detail=f"appended recovery packet for {packet.display_path}:{packet.start_line}",
+    )
 
 
 def _write_status_md(
@@ -715,6 +981,68 @@ def run(
             moved = _move_ticket_lane(repo_root=repo_root, ticket=t, to_lane=target_lane, reason=reason)
             tickets[filename] = moved
 
+    for pkt in terminal_packets:
+        if not pkt.next_packet_fields:
+            continue
+        if not _next_packet_should_fire(pkt):
+            continue
+        next_owner = pkt.next_packet_fields.get("Owner", "").strip().upper() or "(unknown)"
+        action = Action(
+            kind="next-packet",
+            ticket=next_owner,
+            detail=f"handoff from {pkt.display_path}:{pkt.start_line}",
+        )
+        if apply_changes:
+            appended = _append_next_packet_if_needed(repo_root, pkt)
+            if appended is not None:
+                action = appended
+            else:
+                action = Action(
+                    kind="next-packet-skip",
+                    ticket=next_owner,
+                    detail=f"existing handoff or invalid spec from {pkt.display_path}:{pkt.start_line}",
+                )
+        actions.append(action)
+
+    for pkt, age_h in sorted(stale_pending, key=lambda item: item[1], reverse=True):
+        if (pkt.fields.get("Idempotency Key", "") or "").strip().startswith("recovery:"):
+            continue
+        target_owner, _ = _stale_recovery_target(pkt)
+        action = Action(
+            kind="stale-escalation",
+            ticket=target_owner,
+            detail=f"recovery packet for {pkt.display_path}:{pkt.start_line} age={age_h:.1f}h",
+        )
+        if apply_changes:
+            appended = _append_stale_recovery_packet_if_needed(repo_root, pkt, age_h=age_h)
+            if appended is not None:
+                action = appended
+            else:
+                action = Action(
+                    kind="stale-escalation-skip",
+                    ticket=target_owner,
+                    detail=f"existing recovery packet for {pkt.display_path}:{pkt.start_line}",
+                )
+        actions.append(action)
+
+    if apply_changes:
+        packets = _load_packets(repo_root)
+        pending_packets = [p for p in packets if p.result_status is None]
+        terminal_packets = [p for p in packets if p.result_status is not None]
+        pending_keys = {p.pending_key for p in pending_packets}
+        for pkt in pending_packets:
+            if pkt.pending_key not in state:
+                state[pkt.pending_key] = now_ts
+        for key in list(state.keys()):
+            if key.startswith("pending:") and key not in pending_keys:
+                del state[key]
+        stale_pending = []
+        for pkt in pending_packets:
+            started = state.get(pkt.pending_key, now_ts)
+            age_h = max(0.0, (now_ts - started) / 3600.0)
+            if age_h > stale_hours:
+                stale_pending.append((pkt, age_h))
+
     # Write notes after reconcile pass.
     lane_counts = {lane: 0 for lane in LANES}
     for t in tickets.values():
@@ -736,6 +1064,14 @@ def run(
         now_local=now_local,
         tickets=tickets,
         stale_pending=sorted(stale_pending, key=lambda x: x[1], reverse=True),
+    )
+    write_job_artifacts(
+        repo_root=repo_root,
+        packets=packets,
+        ticket_map=tickets,
+        pending_since_by_key={key: value for key, value in state.items() if key.startswith("pending:")},
+        stale_threshold_hours=stale_hours,
+        now_ts=now_ts,
     )
 
     # Bound state size.

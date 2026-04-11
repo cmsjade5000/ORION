@@ -144,6 +144,34 @@ class TestRunInboxPackets(unittest.TestCase):
             self.assertEqual(text.count("Result:"), 1)
             self.assertIn("Status: OK", text)
 
+    def test_updates_packet_by_identity_after_inbox_shifts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            inbox = self._write_inbox(root, "PIXEL", self._packet(include_result_placeholder=True))
+            lines = inbox.read_text(encoding="utf-8").splitlines()
+            packets_header_idx = next(i for i, line in enumerate(lines) if line.strip() == "## Packets")
+            start_idx, end_idx, pkt_lines = self.runner._split_packets(lines[packets_header_idx + 1 :])[0]
+            pref = self.runner.PacketRef(
+                inbox_path=inbox,
+                packet_start_line=(packets_header_idx + 1) + start_idx + 1,
+                packet_end_line=(packets_header_idx + 1) + end_idx,
+                fields=self.runner._parse_fields(pkt_lines),
+                raw_lines=pkt_lines,
+            )
+
+            inbox.write_text(
+                "# PIXEL Inbox\n\nNote: manual edit before packet.\n\n## Packets\n" + self._packet(include_result_placeholder=True),
+                encoding="utf-8",
+            )
+            proc = SimpleNamespace(returncode=0, stdout="Gateway target: localhost\n", stderr="")
+            with mock.patch.object(self.runner.subprocess, "run", return_value=proc):
+                updated = self.runner._process_one_packet(root, pref, state_path=(root / "tmp" / "runner-state.json"))
+
+            self.assertTrue(updated)
+            text = inbox.read_text(encoding="utf-8")
+            self.assertEqual(text.count("Result:"), 1)
+            self.assertIn("Status: OK", text)
+
     def test_marks_packet_failed_when_allowlisted_command_times_out(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

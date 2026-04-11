@@ -165,6 +165,38 @@ class TestOpenClawGuardedTurn(unittest.TestCase):
             self.assertNotIn("OLCALL>", proc.stdout)
             self.assertIn("Internal runtime output was suppressed.", proc.stdout)
 
+    def test_intercepts_dreaming_status_without_model_turn(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "tmp").mkdir(parents=True, exist_ok=True)
+            self._write_fake_openclaw(root, response_text="model path should not run")
+            self._write_rules(root, block_mode="block")
+
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--runtime-channel",
+                    "local",
+                    "--message",
+                    "/dreaming status",
+                    "--policy-mode",
+                    "block",
+                    "--rules",
+                    "config/orion_policy_rules.json",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("ORION dreaming status", proc.stdout)
+            self.assertIn("Memory slot:", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@
 
 - Status: `degraded`
 - Repo root: `/Users/corystoner/src/ORION`
-- Bundle dir: `/Users/corystoner/src/ORION/tmp/incidents/20260408T034005-0400`
+- Bundle dir: `/Users/corystoner/src/ORION/tmp/incidents/20260411T034005-0400`
 - Health OK: `False`
 - Codex ready: `True`
 
@@ -10,11 +10,14 @@
 - Health message: `Gateway Health`
 - Runtime status: `running`
 - RPC OK: `True`
-- Config audit OK: `True`
+- Config audit OK: `False`
 
 ## Channels
-- Channel status OK: `False`
-- States: `telegram=ok | discord=degraded | slack=disabled | mochat=off`
+- Channel status OK: `True`
+- States: `telegram=ok | discord=ok | slack=off | mochat=off`
+- Discord reconnect attempts: `0`
+- Discord restart recommended: `False`
+- Discord last error: `-`
 
 ## Tasks
 - Task list OK: `True`
@@ -23,7 +26,7 @@
 - Task audit count: `None`
 
 ## Signals
-- Discord restart indicators: `21`
+- Discord restart indicators: `4`
 - Telegram IPv4 fallback indicators: `0`
 - Approval timeout indicators: `0`
 - Kimi rate-limit indicators: `0`

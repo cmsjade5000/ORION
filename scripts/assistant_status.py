@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from pathlib import Path
 
 from assistant_common import (
@@ -19,6 +20,7 @@ from assistant_common import (
     load_tickets,
     now_et,
     repo_root,
+    run_json_command,
     short_calendar_lines,
     short_reminder_lines,
     today_et,
@@ -27,6 +29,129 @@ from assistant_common import (
 
 
 AGENDA_PATH = Path("tasks/NOTES/assistant-agenda.md")
+DREAMING_COMMANDS = ["dreaming-status", "dreaming-help", "dreaming-on", "dreaming-off"]
+
+
+def _run_text_command(argv: list[str], *, cwd: Path, timeout: int = 20) -> tuple[bool, str]:
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+    if proc.returncode != 0:
+        return False, (proc.stderr or proc.stdout or "").strip()
+    return True, (proc.stdout or "").strip()
+
+
+def _dreaming_status_payload(root: Path) -> dict:
+    slot_ok, slot = _run_text_command(["openclaw", "config", "get", "plugins.slots.memory"], cwd=root)
+    enabled_ok, enabled_raw = _run_text_command(
+        ["openclaw", "config", "get", "plugins.entries.memory-core.config.dreaming.enabled"],
+        cwd=root,
+    )
+    memory_payload = run_json_command(["openclaw", "memory", "status", "--agent", "main", "--json"], cwd=root, timeout=45)
+
+    entry = memory_payload[0] if isinstance(memory_payload, list) and memory_payload else {}
+    status = entry.get("status") or {}
+    audit = entry.get("audit") or {}
+
+    enabled = enabled_raw.lower() == "true" if enabled_ok else None
+    sources = status.get("sources") or []
+
+    return {
+        "slot": slot if slot_ok else None,
+        "enabled": enabled,
+        "status_ok": bool(entry),
+        "sources": sources if isinstance(sources, list) else [],
+        "recall_exists": bool(audit.get("exists")),
+        "recall_entries": int(audit.get("entryCount") or 0),
+        "recall_updated_at": audit.get("updatedAt"),
+        "store_path": audit.get("storePath"),
+    }
+
+
+def _render_dreaming_status(root: Path) -> str:
+    payload = _dreaming_status_payload(root)
+    slot = payload["slot"] or "unknown"
+    enabled = payload["enabled"]
+    enabled_text = "enabled" if enabled is True else "disabled" if enabled is False else "unknown"
+    sources = ", ".join(payload["sources"]) if payload["sources"] else "unknown"
+    recall_text = "present" if payload["recall_exists"] else "missing"
+
+    lines = [
+        "ORION dreaming status",
+        "",
+        f"- Memory slot: {slot}",
+        f"- Dreaming config: {enabled_text}",
+        f"- ORION memory sources: {sources}",
+        f"- Short-term recall store: {recall_text}",
+        f"- Recall entries: {payload['recall_entries']}",
+    ]
+    if payload["recall_updated_at"]:
+        lines.append(f"- Recall updated: {payload['recall_updated_at']}")
+    if payload["store_path"]:
+        lines.append(f"- Recall path: {payload['store_path']}")
+
+    if slot != "memory-core":
+        lines.append("- Fix needed: dreaming requires the memory slot to be memory-core.")
+    elif enabled is False:
+        lines.append("- Fix needed: dreaming is disabled in runtime config.")
+    else:
+        lines.append("- Dreaming is active in runtime config and writing to the short-term recall store.")
+
+    return "\n".join(lines)
+
+
+def _render_dreaming_help() -> str:
+    return "\n".join(
+        [
+            "ORION dreaming commands",
+            "",
+            "- /dreaming status",
+            "- /dreaming on",
+            "- /dreaming off",
+            "- /dreaming help",
+            "",
+            "Changing dreaming updates runtime config and may require a gateway restart to apply.",
+        ]
+    )
+
+
+def _set_dreaming_enabled(root: Path, enabled: bool) -> str:
+    payload = _dreaming_status_payload(root)
+    if payload["slot"] != "memory-core":
+        return "Dreaming control is blocked because the active memory slot is not memory-core."
+
+    current = payload["enabled"]
+    target = "true" if enabled else "false"
+    if current is enabled:
+        return f"Dreaming is already {'enabled' if enabled else 'disabled'}."
+
+    ok, output = _run_text_command(
+        ["openclaw", "config", "set", "plugins.entries.memory-core.config.dreaming.enabled", target],
+        cwd=root,
+        timeout=45,
+    )
+    if not ok:
+        return output or "Failed to update dreaming config."
+
+    validate_payload = run_json_command(["openclaw", "config", "validate", "--json"], cwd=root, timeout=45)
+    validated = bool(validate_payload and validate_payload.get("valid") is True)
+    _, enabled_raw = _run_text_command(
+        ["openclaw", "config", "get", "plugins.entries.memory-core.config.dreaming.enabled"],
+        cwd=root,
+    )
+    state = "enabled" if enabled_raw.lower() == "true" else "disabled"
+    suffix = " Config validated." if validated else " Config validation is pending."
+    return f"Dreaming config is now {state}. Restart the gateway to apply.{suffix}"
 
 
 def _render_today(root: Path) -> tuple[str, str]:
@@ -171,6 +296,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     elif args.cmd == "refresh":
         path = _write_agenda(root)
         message = f"Assistant agenda refreshed: {path}"
+    elif args.cmd == "dreaming-status":
+        message = _render_dreaming_status(root)
+    elif args.cmd == "dreaming-help":
+        message = _render_dreaming_help()
+    elif args.cmd == "dreaming-on":
+        message = _set_dreaming_enabled(root, True)
+    elif args.cmd == "dreaming-off":
+        message = _set_dreaming_enabled(root, False)
     else:
         raise SystemExit(f"unsupported command: {args.cmd}")
 
@@ -184,7 +317,11 @@ def cmd_status(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate ORION assistant status views.")
     parser.add_argument("--repo-root", help="Override repo root.")
-    parser.add_argument("--cmd", required=True, choices=["today", "followups", "review", "refresh"])
+    parser.add_argument(
+        "--cmd",
+        required=True,
+        choices=["today", "followups", "review", "refresh", *DREAMING_COMMANDS],
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     parser.set_defaults(func=cmd_status)
     return parser

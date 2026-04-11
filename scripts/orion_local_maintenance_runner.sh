@@ -53,10 +53,14 @@ PY
 
 case "${job}" in
   assistant-inbox-notify)
-    exec /usr/bin/python3 scripts/notify_inbox_results.py --repo-root "${repo_root}" --require-notify-telegram --notify-queued --max-per-run 8
+    exec /usr/bin/python3 scripts/inbox_cycle.py --repo-root "${repo_root}" --runner-max-packets 4 --stale-hours 24 --notify-max-per-run 8
+    ;;
+  assistant-email-triage)
+    exec /usr/bin/python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20 --apply
     ;;
   assistant-task-loop)
-    exec /usr/bin/python3 scripts/task_execution_loop.py --apply --stale-hours 24
+    # Compatibility alias: ORION core now treats inbox_cycle as the canonical scheduled loop.
+    exec /usr/bin/python3 scripts/inbox_cycle.py --repo-root "${repo_root}" --runner-max-packets 4 --stale-hours 24 --notify-max-per-run 8
     ;;
   assistant-agenda-refresh)
     exec /usr/bin/python3 scripts/assistant_status.py --cmd refresh --json
@@ -72,52 +76,6 @@ case "${job}" in
     ;;
   orion-judgment-layer)
     exec /usr/bin/python3 scripts/orion_judgment_layer.py --repo-root . --write-latest --json
-    ;;
-  kalshi-ref-arb-digest)
-    exec /usr/bin/python3 -m scripts.kalshi_digest --window-hours 8 --send-email --email-html
-    ;;
-  kalshi-digest-delivery-guard)
-    exec /usr/bin/python3 scripts/kalshi_digest_reliability.py --guard --send-telegram --grace-minutes 10
-    ;;
-  kalshi-digest-reliability-daily)
-    exec /usr/bin/python3 scripts/kalshi_digest_reliability.py --daily-report --send-telegram
-    ;;
-  orion-reliability-daily)
-    make eval-reliability-daily
-    ;;
-  orion-route-hygiene-daily)
-    make route-hygiene
-    freshness_check_single 'eval/history/route-hygiene-*.json' 900
-    ;;
-  orion-lane-hotspots-daily)
-    make lane-hotspots HOURS=24 TOP=10
-    freshness_check_single 'eval/history/lane-hotspots-*.json' 900
-    ;;
-  orion-stop-gate-daily)
-    make stop-gate-enforce MIN_FAIL_DAYS=2
-    freshness_check_pair 'eval/history/stop-gate-*.json' 'eval/history/stop-gate-*.md' 900
-    ;;
-  orion-monthly-scorecard-daily)
-    export MONTH
-    MONTH="$(date +%Y-%m)"
-    make monthly-scorecard MONTH="${MONTH}"
-    python3 - "$MONTH" <<'PY'
-import os, sys, time
-month = sys.argv[1]
-path = f"eval/monthly-scorecard-{month}.md"
-if not os.path.exists(path):
-    raise SystemExit(2)
-age = time.time() - os.path.getmtime(path)
-print(int(age))
-raise SystemExit(0 if age <= 1800 else 3)
-PY
-    ;;
-  orion-skill-discovery-weekly)
-    make skill-discovery LIMIT=8
-    freshness_check_single 'eval/history/skills-discovery-*.json' 1800
-    ;;
-  orion-judgment-layer-freshness)
-    freshness_check_pair 'eval/history/orion-judgment-*.json' 'eval/history/orion-judgment-*.md' 1800
     ;;
   *)
     echo "unknown job: ${job}" >&2

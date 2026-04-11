@@ -1,0 +1,69 @@
+{
+  "generatedAt": "2026-04-09T14:14:44.952511+00:00",
+  "parameters": {
+    "hours": 24,
+    "bucketMinutes": 1,
+    "top": 10,
+    "correlationWindowSeconds": 90
+  },
+  "sources": {
+    "laneLog": "/Users/corystoner/.openclaw/logs/gateway.err.log",
+    "cronRunsDir": "/Users/corystoner/.openclaw/cron/runs",
+    "jobsMap": "/Users/corystoner/.openclaw/cron/jobs.json"
+  },
+  "summary": {
+    "hoursAnalyzed": 24,
+    "bucketMinutes": 1,
+    "correlationWindowSeconds": 90,
+    "analysisStartMs": 1775657682635,
+    "analysisStart": "2026-04-08T14:14:42.635000+00:00",
+    "analysisEndMs": 1775744082635,
+    "analysisEnd": "2026-04-09T14:14:42.635000+00:00",
+    "eventsInScope": 1,
+    "runsInScope": 1,
+    "uniqueLanes": 1,
+    "topWindowsRequested": 10,
+    "topWindowsReturned": 1,
+    "uniqueCorrelatedJobs": 0,
+    "warningCount": 0
+  },
+  "windows": [
+    {
+      "rank": 1,
+      "windowStartMs": 1775698560000,
+      "windowEndMs": 1775698620000,
+      "windowStart": "2026-04-09T01:36:00+00:00",
+      "windowEnd": "2026-04-09T01:37:00+00:00",
+      "eventCount": 1,
+      "maxWaitMs": 15509,
+      "avgWaitMs": 15509.0,
+      "lanes": [
+        {
+          "lane": "session:agent:main:main",
+          "count": 1,
+          "maxWaitMs": 15509,
+          "avgWaitMs": 15509.0
+        }
+      ],
+      "events": [
+        {
+          "timestamp": "2026-04-08T21:36:35.893-04:00",
+          "timestampMs": 1775698595893,
+          "lane": "session:agent:main:main",
+          "waitedMs": 15509,
+          "queueAhead": 0
+        }
+      ],
+      "correlation": {
+        "windowSeconds": 90,
+        "windowStartMs": 1775698470000,
+        "windowEndMs": 1775698710000,
+        "windowStart": "2026-04-09T01:34:30+00:00",
+        "windowEnd": "2026-04-09T01:38:30+00:00"
+      },
+      "correlatedRuns": [],
+      "correlatedJobs": []
+    }
+  ],
+  "warnings": []
+}

@@ -1,0 +1,25 @@
+{
+  "job_count": 1,
+  "jobs": [
+    {
+      "inbox": {
+        "line": 3,
+        "path": "tasks/INBOX/aegis_plan_watch_delegation.md"
+      },
+      "job_id": "pkt-146e466b8a5b010a",
+      "objective": "Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat.",
+      "owner": "AEGIS_PLAN_WATCH_DELEGATION",
+      "packet_id": "pkt-146e466b8a5b010a",
+      "parent_packet_id": "",
+      "state": "pending_verification"
+    }
+  ],
+  "owners": [
+    "AEGIS_PLAN_WATCH_DELEGATION"
+  ],
+  "root_packet_id": "pkt-146e466b8a5b010a",
+  "state": "in_progress",
+  "updated_ts": 1775914351.143861,
+  "version": 1,
+  "workflow_id": "pkt-146e466b8a5b010a"
+}
