@@ -197,6 +197,8 @@ OpenClaw injects these workspace files on the first turn of new sessions:
   - Per-agent inboxes for specialist assignments.
 - `docs/ORION_EXTENSION_SURFACES.md`
   - Boundary and handoff model for non-core product surfaces.
+- `docs/REPO_HYGIENE.md`
+  - What stays versioned versus what should remain local runtime state.
 - `apps/extensions/`
   - Moved extension-owned Telegram/product surfaces that are not part of the default ORION core runtime path.
 - `memory/WORKING.md`
