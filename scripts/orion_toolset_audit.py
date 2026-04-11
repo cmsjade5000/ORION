@@ -146,7 +146,7 @@ def _runtime_rows(plugins_config: Any, plugins_inventory: Any, skills_list: str)
             "area": "Dreaming",
             "documented": "repo templates keep dreaming disabled",
             "runtime_actual": "enabled" if dreaming_enabled else "disabled",
-            "recommended": "keep pilot framing; do not imply dreaming is trusted durable memory",
+            "recommended": "document dreaming as an active runtime path while keeping template-vs-runtime differences explicit",
         },
         {
             "area": "ClawHub skill workflow",

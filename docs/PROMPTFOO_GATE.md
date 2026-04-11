@@ -15,7 +15,7 @@ The config is intentionally focused on the highest-risk ORION behaviors:
 
 ## Why This Uses OpenAI
 
-ORION's live runtime is OpenRouter-first, but the eval lane in this repo already treats OpenAI as a control/eval provider.
+ORION's live runtime is now OpenAI-first, with OpenRouter retained only as an explicit compatibility fallback lane.
 
 Relevant references:
 

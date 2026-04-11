@@ -1,0 +1,39 @@
+{
+  "input": {
+    "metadata": {
+      "channel": "telegram",
+      "has_specialist_result": false,
+      "queued_count": 1,
+      "result_count": 0,
+      "source": "notify_inbox_results",
+      "workflow_alert_count": 0
+    },
+    "request_text": "Automated delegated-result summary notification.",
+    "response_text": "Inbox update:\n\nQueued:\n1. [ATLAS] Translate inbound ops request into a safe execution plan with explicit stop gates.\nfile: tasks/INBOX/ATLAS.md:50",
+    "scope": "automated_summary",
+    "tags": [
+      "automated_outbound",
+      "delegated_result_summary",
+      "notify_telegram",
+      "progress_state"
+    ]
+  },
+  "kind": "orion_policy_gate",
+  "mode": "audit",
+  "rules": {
+    "default_mode": "audit",
+    "name": "orion_runtime_policy",
+    "path": "/Users/corystoner/src/ORION/config/orion_policy_rules.json",
+    "version": 1
+  },
+  "summary": {
+    "blocked": false,
+    "blocking_violations": 0,
+    "evaluated_rules": 1,
+    "passed": true,
+    "total_rules": 9,
+    "violations": 0
+  },
+  "timestamp": "2026-04-10T00:02:33.367266+00:00",
+  "violations": []
+}

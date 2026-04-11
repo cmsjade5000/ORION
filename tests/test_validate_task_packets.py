@@ -402,3 +402,108 @@ class TestValidateTaskPackets(unittest.TestCase):
         errs = self.v.validate_inbox_file(path)
         td.cleanup()
         self.assertEqual(errs, [])
+
+    def test_next_packet_contract_accepts_complete_follow_on_packet(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+            "Next Packet Owner: NODE\n"
+            "Next Packet Requester: ATLAS\n"
+            "Next Packet Objective: Continue execution.\n"
+            "Next Packet Success Criteria:\n"
+            "- Continue.\n"
+            "Next Packet Constraints:\n"
+            "- Read-only.\n"
+            "Next Packet Inputs:\n"
+            "- tasks/WORK/in-progress/0001-test.md\n"
+            "Next Packet Risks:\n"
+            "- low\n"
+            "Next Packet Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Next Packet Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertEqual(errs, [])
+
+    def test_next_packet_contract_rejects_partial_follow_on_packet(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+            "Next Packet Owner: NODE\n"
+            "Next Packet Requester: ATLAS\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("next packet" in e.lower() for e in errs), errs)
+
+    def test_next_packet_contract_rejects_unknown_trigger(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Objective: Do a thing.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Read-only.\n"
+            "Inputs:\n"
+            "- (none)\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+            "Next Packet On Result: MAYBE\n"
+            "Next Packet Owner: NODE\n"
+            "Next Packet Requester: ATLAS\n"
+            "Next Packet Objective: Continue execution.\n"
+            "Next Packet Success Criteria:\n"
+            "- Continue.\n"
+            "Next Packet Constraints:\n"
+            "- Read-only.\n"
+            "Next Packet Inputs:\n"
+            "- tasks/WORK/in-progress/0001-test.md\n"
+            "Next Packet Risks:\n"
+            "- low\n"
+            "Next Packet Stop Gates:\n"
+            "- Any destructive command.\n"
+            "Next Packet Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("On Result must be one of" in e for e in errs), errs)

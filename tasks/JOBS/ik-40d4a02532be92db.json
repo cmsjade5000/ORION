@@ -1,0 +1,23 @@
+{
+  "age_hours": 13.54,
+  "inbox": {
+    "line": 5,
+    "path": "tasks/INBOX/ORION.md"
+  },
+  "job_id": "ik-40d4a02532be92db",
+  "notify": "telegram",
+  "objective": "Recover stale delegated workflow for [ATLAS] Translate inbound ops request into a safe execution plan with explicit stop gates.",
+  "owner": "ORION",
+  "packet_id": "ik-40d4a02532be92db",
+  "parent_packet_id": "ik-65ed39ff98adf9c3",
+  "pending_since_ts": 1775865595.1913779,
+  "requester": "ORION",
+  "result_status": null,
+  "root_packet_id": "ik-65ed39ff98adf9c3",
+  "stale_threshold_hours": 24.0,
+  "state": "queued",
+  "ticket_refs": [],
+  "updated_ts": 1775914351.143861,
+  "version": 1,
+  "workflow_id": "ik-65ed39ff98adf9c3"
+}

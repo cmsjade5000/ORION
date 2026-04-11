@@ -98,10 +98,24 @@ if [[ -n "${OPENCLAW_CMD}" ]]; then
   if have jq; then
     probe="$("${OPENCLAW_CMD}" channels status --probe --json 2>/dev/null || true)"
     if [[ -n "${probe}" ]]; then
-      configured="$(printf '%s' "${probe}" | jq -r '.channels.discord.configured // empty' 2>/dev/null || true)"
-      running="$(printf '%s' "${probe}" | jq -r '.channels.discord.running // empty' 2>/dev/null || true)"
-      [[ -n "${configured}" ]] && ok "discord configured=${configured}" || say "WARN: discord configured unknown"
-      [[ -n "${running}" ]] && ok "discord running=${running}" || say "WARN: discord running unknown"
+      configured="$(printf '%s' "${probe}" | jq -r '.channelAccounts.discord[0].configured // .channels.discord.configured // "__missing__"' 2>/dev/null || true)"
+      running="$(printf '%s' "${probe}" | jq -r '.channelAccounts.discord[0].running // .channels.discord.running // "__missing__"' 2>/dev/null || true)"
+      last_error="$(printf '%s' "${probe}" | jq -r '.channelAccounts.discord[0].lastError // .channels.discord.lastError // empty' 2>/dev/null || true)"
+      reconnect_attempts="$(printf '%s' "${probe}" | jq -r '.channelAccounts.discord[0].reconnectAttempts // 0' 2>/dev/null || echo 0)"
+      last_start_at="$(printf '%s' "${probe}" | jq -r '.channelAccounts.discord[0].lastStartAt // .channels.discord.lastStartAt // empty' 2>/dev/null || true)"
+      last_stop_at="$(printf '%s' "${probe}" | jq -r '.channelAccounts.discord[0].lastStopAt // .channels.discord.lastStopAt // empty' 2>/dev/null || true)"
+      if [[ "${configured}" != "__missing__" && -n "${configured}" ]]; then
+        ok "discord configured=${configured}"
+      else
+        bad "discord configured unknown"
+      fi
+      if [[ "${running}" == "true" ]]; then
+        ok "discord running=true"
+      elif [[ "${running}" != "__missing__" && -n "${running}" ]]; then
+        bad "discord running=${running} lastError=${last_error:-none} reconnectAttempts=${reconnect_attempts} lastStartAt=${last_start_at:-unknown} lastStopAt=${last_stop_at:-unknown}"
+      else
+        bad "discord running unknown lastError=${last_error:-none} reconnectAttempts=${reconnect_attempts} lastStartAt=${last_start_at:-unknown} lastStopAt=${last_stop_at:-unknown}"
+      fi
     else
       say "WARN: could not probe channels (gateway stopped or discord not enabled)"
     fi

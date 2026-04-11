@@ -27,8 +27,10 @@ from pathlib import Path
 
 try:
     from inbox_state import load_kv_state, save_kv_state, sha256_lines
+    from inbox_file_ops import atomic_write_text, ensure_packets_header, locked_file, packet_identity
 except Exception:  # pragma: no cover
     from scripts.inbox_state import load_kv_state, save_kv_state, sha256_lines  # type: ignore
+    from scripts.inbox_file_ops import atomic_write_text, ensure_packets_header, locked_file, packet_identity  # type: ignore
 
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
@@ -375,22 +377,45 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     artifact_rel = str(artifact.relative_to(repo_root))
 
     result_block = _format_result_block(ok=ok, findings=findings, artifact_rel=artifact_rel)
+    identity = packet_identity(fields=pref.fields, packet_before_result=before)
+    lock_path = pref.inbox_path.with_suffix(pref.inbox_path.suffix + ".lock")
 
-    # Insert/replace the Result block.
-    file_lines = _read_lines(pref.inbox_path)
-    # If the packet already contains a `Result:` placeholder, replace it to avoid duplicate Result sections.
-    result_idx = None
-    for i in range(pref.packet_start_line - 1, pref.packet_end_line):
-        if file_lines[i].strip() == "Result:":
-            result_idx = i
+    with locked_file(lock_path):
+        file_lines = ensure_packets_header(_read_lines(pref.inbox_path), owner=pref.inbox_path.stem.upper())
+        packets_header_idx = None
+        for i, line in enumerate(file_lines):
+            if line.strip() == "## Packets":
+                packets_header_idx = i
+                break
+        if packets_header_idx is None:
+            return False
+        packet_blocks = _split_packets(file_lines[packets_header_idx + 1 :])
+        matched_bounds = None
+        for start_idx, end_idx, pkt_lines in packet_blocks:
+            candidate_fields = _parse_fields(pkt_lines)
+            candidate_before = _packet_before_result(pkt_lines)
+            candidate_identity = packet_identity(fields=candidate_fields, packet_before_result=candidate_before)
+            if identity.idempotency_key:
+                if candidate_identity.idempotency_key != identity.idempotency_key:
+                    continue
+            elif candidate_identity.content_hash != identity.content_hash:
+                continue
+            matched_bounds = ((packets_header_idx + 1) + start_idx, (packets_header_idx + 1) + end_idx, pkt_lines)
             break
+        if matched_bounds is None:
+            return False
 
-    if result_idx is None:
-        insert_at = pref.packet_end_line
-        new_lines = file_lines[:insert_at] + result_block + file_lines[insert_at:]
-    else:
-        new_lines = file_lines[:result_idx] + result_block + file_lines[pref.packet_end_line :]
-    pref.inbox_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+        packet_start, packet_end, packet_lines = matched_bounds
+        result_idx = None
+        for idx, line in enumerate(packet_lines):
+            if line.strip() == "Result:":
+                result_idx = packet_start + idx
+                break
+        if result_idx is None:
+            new_lines = file_lines[:packet_end] + result_block + file_lines[packet_end:]
+        else:
+            new_lines = file_lines[:result_idx] + result_block + file_lines[packet_end:]
+        atomic_write_text(pref.inbox_path, "\n".join(new_lines).rstrip() + "\n")
 
     # Mark as done in runner state so re-filed packets with the same Idempotency Key do not repeat work.
     state = load_kv_state(state_path)

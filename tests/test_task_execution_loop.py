@@ -3,6 +3,7 @@ import inspect
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -304,6 +305,432 @@ class TestTaskExecutionLoop(unittest.TestCase):
             self.assertTrue(testing_ticket.exists())
             self.assertIn("Status: testing", testing_ticket.read_text(encoding="utf-8"))
 
+    def test_writes_durable_delegated_job_artifacts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_ticket(root, lane="backlog", num=1, slug="pending-job", status="queued")
+            self._write_ticket(root, lane="testing", num=2, slug="result-job", status="testing")
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Start delegated job.",
+                        "Notify: telegram",
+                        "Inputs: tasks/WORK/backlog/0001-pending-job.md",
+                    ]
+                ),
+            )
+            self._write_inbox(
+                root,
+                "WIRE",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: WIRE",
+                        "Requester: ORION",
+                        "Objective: Finish delegated job.",
+                        "Notify: telegram",
+                        "Inputs: tasks/WORK/testing/0002-result-job.md",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: completed",
+                    ]
+                ),
+            )
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            jobs_dir = root / "tasks" / "JOBS"
+            records = list(jobs_dir.glob("*.json"))
+            self.assertGreaterEqual(len(records), 3)  # two jobs + summary
+
+            payloads = []
+            for path in records:
+                if path.name == "summary.json" or path.name.startswith("wf-"):
+                    continue
+                payloads.append(json.loads(path.read_text(encoding="utf-8")))
+
+            by_objective = {item["objective"]: item for item in payloads}
+            self.assertEqual(by_objective["Start delegated job."]["state"], "in_progress")
+            self.assertEqual(by_objective["Finish delegated job."]["state"], "pending_verification")
+
+            summary = json.loads((jobs_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["job_count"], 2)
+            self.assertEqual(summary["counts"]["in_progress"], 1)
+            self.assertEqual(summary["counts"]["pending_verification"], 1)
+            self.assertEqual(summary["workflow_count"], 2)
+
+    def test_terminal_packet_appends_next_packet_exactly_once(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_ticket(root, lane="in-progress", num=4, slug="handoff", status="in-progress")
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Finish first stage.",
+                        "Inputs: tasks/WORK/in-progress/0004-handoff.md",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: finished",
+                        "Next Packet Owner: NODE",
+                        "Next Packet Requester: ATLAS",
+                        "Next Packet Objective: Continue second stage.",
+                        "Next Packet Success Criteria:",
+                        "- Continue work.",
+                        "Next Packet Constraints:",
+                        "- Read-only.",
+                        "Next Packet Inputs:",
+                        "- tasks/WORK/testing/0004-handoff.md",
+                        "Next Packet Risks:",
+                        "- low",
+                        "Next Packet Stop Gates:",
+                        "- Any destructive command.",
+                        "Next Packet Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            node_inbox = root / "tasks" / "INBOX" / "NODE.md"
+            self.assertTrue(node_inbox.exists())
+            node_text = node_inbox.read_text(encoding="utf-8")
+            self.assertIn("Owner: NODE", node_text)
+            self.assertIn("Requester: ATLAS", node_text)
+            self.assertIn("Objective: Continue second stage.", node_text)
+            self.assertIn("Handoff Source: tasks/INBOX/ATLAS.md:4", node_text)
+            self.assertIn("Idempotency Key: handoff:", node_text)
+            self.assertIn("Parent Packet ID:", node_text)
+            self.assertIn("Root Packet ID:", node_text)
+            self.assertIn("Workflow ID:", node_text)
+            self.assertEqual(node_text.count("TASK_PACKET v1"), 1)
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            node_text_2 = node_inbox.read_text(encoding="utf-8")
+            self.assertEqual(node_text_2.count("TASK_PACKET v1"), 1)
+
+    def test_next_packet_trigger_matrix(self):
+        cases = [
+            ("OK", None, True),
+            ("FAILED", "FAILED", True),
+            ("BLOCKED", "BLOCKED", True),
+            ("FAILED", "ANY", True),
+            ("FAILED", None, False),
+            ("OK", "FAILED", False),
+        ]
+        for result_status, trigger, should_fire in cases:
+            with self.subTest(result_status=result_status, trigger=trigger, should_fire=should_fire):
+                with tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    self._init_repo(root)
+                    self._write_ticket(root, lane="in-progress", num=5, slug="trigger", status="in-progress")
+                    lines = [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Trigger handoff.",
+                        "Inputs: tasks/WORK/in-progress/0005-trigger.md",
+                        "Result:",
+                        f"Status: {result_status}",
+                        "Summary: terminal",
+                    ]
+                    if trigger:
+                        lines.append(f"Next Packet On Result: {trigger}")
+                    lines.extend(
+                        [
+                            "Next Packet Owner: NODE",
+                            "Next Packet Requester: ATLAS",
+                            "Next Packet Objective: Follow-on work.",
+                            "Next Packet Success Criteria:",
+                            "- Continue work.",
+                            "Next Packet Constraints:",
+                            "- Read-only.",
+                            "Next Packet Inputs:",
+                            "- tasks/WORK/testing/0005-trigger.md",
+                            "Next Packet Risks:",
+                            "- low",
+                            "Next Packet Stop Gates:",
+                            "- Any destructive command.",
+                            "Next Packet Output Format:",
+                            "- Short checklist.",
+                        ]
+                    )
+                    self._write_inbox(root, "ATLAS", "\n".join(lines))
+
+                    rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+                    self.assertEqual(rc, 0)
+
+                    node_inbox = root / "tasks" / "INBOX" / "NODE.md"
+                    self.assertEqual(node_inbox.exists(), should_fire)
+
+    def test_next_packet_polaris_follow_on_preserves_required_fields(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_ticket(root, lane="in-progress", num=6, slug="polaris", status="in-progress")
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Prepare POLARIS handoff.",
+                        "Inputs: tasks/WORK/in-progress/0006-polaris.md",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: ready",
+                        "Next Packet Owner: POLARIS",
+                        "Next Packet Requester: ORION",
+                        "Next Packet Notify: telegram",
+                        "Next Packet Opened: 2026-04-09",
+                        "Next Packet Due: 2026-04-10",
+                        "Next Packet Execution Mode: delegate",
+                        "Next Packet Tool Scope: write",
+                        "Next Packet Objective: Follow up with admin workflow.",
+                        "Next Packet Success Criteria:",
+                        "- Continue work.",
+                        "Next Packet Constraints:",
+                        "- Keep it bounded.",
+                        "Next Packet Inputs:",
+                        "- tasks/WORK/testing/0006-polaris.md",
+                        "Next Packet Risks:",
+                        "- low",
+                        "Next Packet Stop Gates:",
+                        "- Any destructive command.",
+                        "Next Packet Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            polaris_inbox = root / "tasks" / "INBOX" / "POLARIS.md"
+            text = polaris_inbox.read_text(encoding="utf-8")
+            self.assertIn("Owner: POLARIS", text)
+            self.assertIn("Requester: ORION", text)
+            self.assertIn("Notify: telegram", text)
+            self.assertIn("Opened: 2026-04-09", text)
+            self.assertIn("Due: 2026-04-10", text)
+            self.assertIn("Execution Mode: delegate", text)
+            self.assertIn("Tool Scope: write", text)
+
+    def test_next_packet_dedupes_on_generated_idempotency_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_ticket(root, lane="in-progress", num=7, slug="dedupe", status="in-progress")
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Generate handoff once.",
+                        "Inputs: tasks/WORK/in-progress/0007-dedupe.md",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: done",
+                        "Next Packet Owner: NODE",
+                        "Next Packet Requester: ATLAS",
+                        "Next Packet Objective: Deduped follow-on.",
+                        "Next Packet Success Criteria:",
+                        "- Continue work.",
+                        "Next Packet Constraints:",
+                        "- Read-only.",
+                        "Next Packet Inputs:",
+                        "- tasks/WORK/testing/0007-dedupe.md",
+                        "Next Packet Risks:",
+                        "- low",
+                        "Next Packet Stop Gates:",
+                        "- Any destructive command.",
+                        "Next Packet Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+
+            # First pass generates the handoff.
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+            node_inbox = root / "tasks" / "INBOX" / "NODE.md"
+            generated = node_inbox.read_text(encoding="utf-8")
+            idem_line = next(line for line in generated.splitlines() if line.startswith("Idempotency Key: "))
+
+            # Simulate a target inbox where the dedupe marker exists but the source line does not.
+            node_inbox.write_text("# NODE Inbox\n\n## Packets\nTASK_PACKET v1\nOwner: NODE\nRequester: ATLAS\nObjective: Deduped follow-on.\n" + idem_line + "\n", encoding="utf-8")
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+            self.assertEqual(node_inbox.read_text(encoding="utf-8").count("TASK_PACKET v1"), 1)
+
+    def test_next_packet_append_is_lock_safe_under_contention(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Contended handoff.",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: done",
+                        "Next Packet Owner: NODE",
+                        "Next Packet Requester: ATLAS",
+                        "Next Packet Objective: Only append once.",
+                        "Next Packet Success Criteria:",
+                        "- Continue work.",
+                        "Next Packet Constraints:",
+                        "- Read-only.",
+                        "Next Packet Inputs:",
+                        "- tasks/WORK/testing/0008-lock.md",
+                        "Next Packet Risks:",
+                        "- low",
+                        "Next Packet Stop Gates:",
+                        "- Any destructive command.",
+                        "Next Packet Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+            packet = self.loop._load_packets(root)[0]
+            barrier = threading.Barrier(2)
+            results = []
+
+            def _worker():
+                barrier.wait()
+                results.append(self.loop._append_next_packet_if_needed(root, packet))
+
+            t1 = threading.Thread(target=_worker)
+            t2 = threading.Thread(target=_worker)
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+
+            node_inbox = root / "tasks" / "INBOX" / "NODE.md"
+            self.assertTrue(node_inbox.exists())
+            self.assertEqual(node_inbox.read_text(encoding="utf-8").count("TASK_PACKET v1"), 1)
+            self.assertEqual(sum(1 for item in results if item is not None), 1)
+
+    def test_workflow_summary_groups_multi_hop_chain(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_ticket(root, lane="testing", num=9, slug="workflow", status="testing")
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Objective: Root workflow stage.",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: finished",
+                        "Next Packet Owner: NODE",
+                        "Next Packet Requester: ATLAS",
+                        "Next Packet Objective: Continue workflow stage.",
+                        "Next Packet Success Criteria:",
+                        "- Continue work.",
+                        "Next Packet Constraints:",
+                        "- Read-only.",
+                        "Next Packet Inputs:",
+                        "- tasks/WORK/testing/0009-workflow.md",
+                        "Next Packet Risks:",
+                        "- low",
+                        "Next Packet Stop Gates:",
+                        "- Any destructive command.",
+                        "Next Packet Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            node_text = (root / "tasks" / "INBOX" / "NODE.md").read_text(encoding="utf-8")
+            workflow_id = next(line.split(":", 1)[1].strip() for line in node_text.splitlines() if line.startswith("Workflow ID:"))
+            jobs_summary = json.loads((root / "tasks" / "JOBS" / "summary.json").read_text(encoding="utf-8"))
+            workflow_entry = next(item for item in jobs_summary["workflows"] if item["workflow_id"] == workflow_id)
+            self.assertEqual(workflow_entry["job_count"], 2)
+            self.assertEqual(workflow_entry["state"], "in_progress")
+
+    def test_stale_pending_packet_appends_recovery_packet_once(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_inbox(
+                root,
+                "NODE",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: NODE",
+                        "Requester: ATLAS",
+                        "Objective: Stale specialist task.",
+                        "Constraints:",
+                        "- Read-only.",
+                        "Inputs:",
+                        "- tasks/WORK/in-progress/0010-stale.md",
+                        "Risks:",
+                        "- low",
+                        "Stop Gates:",
+                        "- Any destructive command.",
+                        "Success Criteria:",
+                        "- Continue work.",
+                        "Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+            state_path = root / "tmp" / "task_execution_loop_state.json"
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            pkt = self.loop._load_packets(root)[0]
+            state_path.write_text(json.dumps({pkt.pending_key: 1700000000.0 - 90000.0}) + "\n", encoding="utf-8")
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=24 * 3600, now=1700000000.0)
+            self.assertEqual(rc, 0)
+
+            atlas_inbox = root / "tasks" / "INBOX" / "ATLAS.md"
+            self.assertTrue(atlas_inbox.exists())
+            atlas_text = atlas_inbox.read_text(encoding="utf-8")
+            self.assertIn("Idempotency Key: recovery:stale:", atlas_text)
+            self.assertIn("Recovery Source: tasks/INBOX/NODE.md:4", atlas_text)
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=24 * 3600, now=1700000000.0)
+            self.assertEqual(rc, 0)
+            self.assertEqual(atlas_inbox.read_text(encoding="utf-8").count("Idempotency Key: recovery:stale:"), 1)
+
     def test_notes_status_and_plan_are_regenerated_with_non_empty_summaries(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -374,6 +801,80 @@ class TestTaskExecutionLoop(unittest.TestCase):
         self.assertEqual(summary["counts"]["total"], 2)
         self.assertEqual(summary["counts"]["running"], 1)
         self.assertEqual(summary["counts"]["failed"], 1)
+
+    def test_task_summary_counts_orion_ops_bundle_as_canonical(self):
+        snapshot = self.loop.OpenClawSnapshot(
+            gateway_health=self.loop.CommandSnapshot(["openclaw"], 0, "", "", None),
+            gateway_status=self.loop.CommandSnapshot(["openclaw"], 0, json.dumps({"rpc": {"ok": True}, "health": {"healthy": True}, "service": {"runtime": {"status": "running"}}}), "", {"rpc": {"ok": True}, "health": {"healthy": True}, "service": {"runtime": {"status": "running"}}}),
+            channels_status=self.loop.CommandSnapshot(["openclaw"], 0, json.dumps({"channels": {}}), "", {"channels": {}}),
+            tasks_list=self.loop.CommandSnapshot(
+                ["openclaw", "tasks", "list", "--json"],
+                0,
+                json.dumps(
+                    {
+                        "tasks": [
+                            {"label": "orion-ops-bundle", "status": "lost", "error": "backing session missing"},
+                        ]
+                    }
+                ),
+                "",
+                {
+                    "tasks": [
+                        {"label": "orion-ops-bundle", "status": "lost", "error": "backing session missing"},
+                    ]
+                },
+            ),
+            tasks_audit=self.loop.CommandSnapshot(
+                ["openclaw", "tasks", "audit", "--json"],
+                0,
+                json.dumps({"summary": {"warnings": 0, "errors": 1, "byCode": {"lost": 1}}, "findings": [{"code": "lost"}]}),
+                "",
+                {"summary": {"warnings": 0, "errors": 1, "byCode": {"lost": 1}}, "findings": [{"code": "lost"}]},
+            ),
+        )
+
+        summary = self.loop._task_summary(snapshot)
+
+        self.assertEqual(summary["counts"]["canonical_issues"], 1)
+        self.assertIn("orion-ops-bundle: lost", summary["recent_failures"])
+
+    def test_task_summary_uses_latest_canonical_run_for_issue_count(self):
+        snapshot = self.loop.OpenClawSnapshot(
+            gateway_health=self.loop.CommandSnapshot(["openclaw"], 0, "", "", None),
+            gateway_status=self.loop.CommandSnapshot(["openclaw"], 0, json.dumps({"rpc": {"ok": True}, "health": {"healthy": True}, "service": {"runtime": {"status": "running"}}}), "", {"rpc": {"ok": True}, "health": {"healthy": True}, "service": {"runtime": {"status": "running"}}}),
+            channels_status=self.loop.CommandSnapshot(["openclaw"], 0, json.dumps({"channels": {}}), "", {"channels": {}}),
+            tasks_list=self.loop.CommandSnapshot(
+                ["openclaw", "tasks", "list", "--json"],
+                0,
+                json.dumps(
+                    {
+                        "tasks": [
+                            {"label": "assistant-task-loop", "status": "failed", "createdAt": 10, "lastEventAt": 20},
+                            {"label": "assistant-task-loop", "status": "succeeded", "createdAt": 30, "lastEventAt": 40},
+                        ]
+                    }
+                ),
+                "",
+                {
+                    "tasks": [
+                        {"label": "assistant-task-loop", "status": "failed", "createdAt": 10, "lastEventAt": 20},
+                        {"label": "assistant-task-loop", "status": "succeeded", "createdAt": 30, "lastEventAt": 40},
+                    ]
+                },
+            ),
+            tasks_audit=self.loop.CommandSnapshot(
+                ["openclaw", "tasks", "audit", "--json"],
+                0,
+                json.dumps({"summary": {"warnings": 0, "errors": 0, "byCode": {}}, "findings": []}),
+                "",
+                {"summary": {"warnings": 0, "errors": 0, "byCode": {}}, "findings": []},
+            ),
+        )
+
+        summary = self.loop._task_summary(snapshot)
+
+        self.assertEqual(summary["counts"]["canonical_issues"], 0)
+        self.assertIn("assistant-task-loop: failed", summary["recent_failures"])
 
     def test_notes_status_parses_json_with_leading_warning_noise(self):
         with tempfile.TemporaryDirectory() as td:

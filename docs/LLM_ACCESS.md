@@ -1,10 +1,9 @@
 # LLM Access: Near-Term Needs + Key Setup
 
-This repo uses a **hybrid provider model**:
-- OpenRouter-first routing for live ORION runtime lanes
-- Direct provider APIs for control/eval and benchmark lanes
+This repo uses an **OpenAI-first provider model**:
+- OpenAI for live ORION runtime routing, structured outputs, and benchmark control
+- OpenRouter only as an explicit compatibility fallback lane
 - Provider auth stored in the Keep (not in Git)
-- A few skills that call provider APIs directly (example: Gemini image generation)
 
 This doc is a practical checklist for the next ~3-6 months.
 
@@ -14,22 +13,21 @@ This doc is a practical checklist for the next ~3-6 months.
 - **Fallbacks:** provider/model outages happen; you want at least one backup.
 - **Cost control:** inexpensive default model for routine tasks; optional bigger model for hard problems.
 - **Retrieval summaries:** fast, cheap summarization for RSS/news/email workflows.
-- **Multimodal (images):** ORION image generation uses the `nano-banana-pro` skill (Gemini API).
 
-## Recommended Provider Setup (OpenRouter-First, Backward-Compatible)
+## Recommended Provider Setup (OpenAI-First, Backward-Compatible)
 
-1. **OpenRouter auto** lane (`openrouter-auto-primary`) is the default runtime route.
-2. **OpenRouter Hunter Alpha** lane (`openrouter-hunter-alpha`) is for non-sensitive research only.
-3. **OpenRouter free bounded** lane (`openrouter-free-bounded`) is for bounded utility work.
-4. Compatibility lanes stay available: Gemini, OpenAI control/eval, NVIDIA Build Kimi (tertiary fallback), and local runtime.
+1. **OpenAI** lane (`openai-control-plane`) is the default runtime route.
+2. **OpenRouter auto** lane (`openrouter-auto-primary`) is the main compatibility fallback.
+3. **OpenRouter Hunter Alpha** lane (`openrouter-hunter-alpha`) is for non-sensitive research only.
+4. **OpenRouter free bounded** lane (`openrouter-free-bounded`) is for bounded utility work.
+5. Optional compatibility lanes stay available: NVIDIA Build Kimi (intentional tertiary fallback) and local runtime.
 
 ## Where To Get Keys (You Do This Part)
 
-- OpenRouter API key: https://openrouter.ai/keys
+- OpenAI API key for the primary runtime lane
+- OpenRouter API key for compatibility fallbacks
 
 Optional compatibility keys:
-- Google Gemini API key: https://aistudio.google.com/app/apikey
-- OpenAI API key for control/eval lane
 - NVIDIA Build API key (nvapi-...) for Kimi compatibility fallback
 - Local runtime URL/key if your local server requires one
 
@@ -40,11 +38,11 @@ Optional compatibility keys:
 Prefer `openclaw models auth paste-token` so the LaunchAgent gateway service can use it reliably.
 
 ```bash
-# OpenRouter (default runtime lane)
-openclaw models auth paste-token --provider openrouter
+# OpenAI (default runtime lane)
+openclaw models auth paste-token --provider openai
 
 # Compatibility lane auth (optional)
-openclaw models auth paste-token --provider google
+openclaw models auth paste-token --provider openrouter
 ```
 
 Verify:
@@ -53,79 +51,73 @@ Verify:
 openclaw models status --probe
 ```
 
-### 2) OPENROUTER_API_KEY for scripts and benchmarks
+### 2) OPENAI_API_KEY for the primary lane
 
-Set `OPENROUTER_API_KEY` via Keep-backed secrets:
+Set `OPENAI_API_KEY` via Keep-backed secrets:
 
 ```bash
 mkdir -p ~/.openclaw/secrets
 chmod 700 ~/.openclaw/secrets
-printf '%s\n' '<your-openrouter-api-key>' > ~/.openclaw/secrets/openrouter.api_key
-chmod 600 ~/.openclaw/secrets/openrouter.api_key
+printf '%s\n' '<your-openai-api-key>' > ~/.openclaw/secrets/openai.api_key
+chmod 600 ~/.openclaw/secrets/openai.api_key
 ```
 
 For one shell session:
 
 ```bash
-export OPENROUTER_API_KEY="$(cat ~/.openclaw/secrets/openrouter.api_key)"
+export OPENAI_API_KEY="$(cat ~/.openclaw/secrets/openai.api_key)"
 ```
 
-### 3) Gemini key for the `nano-banana-pro` image skill (compatibility)
+### 3) OPENROUTER_API_KEY for compatibility fallbacks
 
-The workspace fallback skill reads from either:
-- `GEMINI_API_KEY`, or
-- `~/.openclaw/secrets/gemini.api_key` (recommended)
-
-```bash
-printf '%s\n' '<your-gemini-api-key>' > ~/.openclaw/secrets/gemini.api_key
-chmod 600 ~/.openclaw/secrets/gemini.api_key
-```
+Store the fallback key separately so it is easy to revoke without touching the OpenAI primary lane.
 
 ### 4) Provider wiring helper
 
-Use the repo helper to wire compatibility providers and fallback chains:
+Use the repo helper to wire the OpenAI primary model plus compatibility fallbacks:
 
 ```bash
 scripts/openclaw_configure_llm_providers.sh --dry-run
+scripts/openclaw_configure_llm_providers.sh --openai-primary-model openai/gpt-5.4
 scripts/openclaw_configure_llm_providers.sh --include-kimi-fallback
 ```
 
-### 5) OpenRouter readiness checks and benchmark commands
+### 5) OpenAI-first readiness checks and benchmark commands
 
-Readiness checks for OpenRouter-first lanes:
+Readiness checks for the OpenAI primary lane:
 
 ```bash
 python3 scripts/run_llm_provider_benchmarks.py \
   --check-readiness \
-  --providers openrouter-auto-primary
+  --providers openai-control-plane
 
 python3 scripts/run_llm_provider_benchmarks.py \
   --check-readiness \
-  --providers openrouter-auto-primary,openrouter-hunter-alpha,openrouter-free-bounded
+  --providers openai-control-plane,openrouter-auto-primary,openrouter-hunter-alpha,openrouter-free-bounded
 
 python3 scripts/run_llm_provider_benchmarks.py \
   --check-readiness \
   --require-ready \
-  --providers openrouter-auto-primary
+  --providers openai-control-plane
 ```
 
-Targeted OpenRouter auto primary benchmark:
+Targeted OpenAI primary benchmark:
 
 ```bash
 python3 scripts/run_llm_provider_benchmarks.py \
-  --providers openrouter-auto-primary \
+  --providers openai-control-plane \
   --trace
 ```
 
-OpenRouter + compatibility live matrix:
+OpenAI-first live matrix:
 
 ```bash
 python3 scripts/run_llm_provider_benchmarks.py \
-  --providers openrouter-auto-primary,openrouter-hunter-alpha,openrouter-free-bounded,gemini-openclaw,openai-control-plane,kimi-k2-5-nvidia-build \
+  --providers openai-control-plane,openrouter-auto-primary,openrouter-hunter-alpha,openrouter-free-bounded,kimi-k2-5-nvidia-build \
   --trace
 ```
 
-### 6) OpenAI control lane (compatibility)
+### 6) Targeted OpenAI control/eval runs
 
 Store `OPENAI_API_KEY` in `~/.openclaw/.env` or your shell when running eval/benchmark scripts.
 
@@ -138,9 +130,9 @@ python3 scripts/run_llm_provider_benchmarks.py \
 ```
 
 Relevant env vars:
-- `OPENROUTER_API_KEY`
 - `OPENAI_API_KEY`
 - `OPENAI_BENCHMARK_MODEL`
+- `OPENROUTER_API_KEY`
 - `LLM_BENCHMARK_TIMEOUT_S`
 - `LANGFUSE_PUBLIC_KEY`
 - `LANGFUSE_SECRET_KEY`

@@ -26,7 +26,7 @@ if [[ ! -x "${watch_script}" ]]; then
   exit 1
 fi
 
-sed "s|__REPO_ROOT__|${repo_root}|g" \
+sed -e "s|__REPO_ROOT__|${repo_root}|g" -e "s|__HOME__|${HOME}|g" \
   "${repo_root}/scripts/orion_aegis_defense_watch_launchagent.plist" > "${plist_target}"
 
 launchctl unload "${plist_target}" >/dev/null 2>&1 || true

@@ -146,6 +146,8 @@ class TestOrionIncidentBundle(unittest.TestCase):
             self.assertEqual(payload["signals"]["telegram_ipv4_fallbacks"], 0)
             self.assertEqual(payload["signals"]["stale_task_runs"], 0)
             self.assertEqual(payload["signals"]["exec_elevation_failures"], 0)
+            self.assertEqual(payload["discord_watchdog"]["reconnect_attempts"], 0)
+            self.assertFalse(payload["discord_watchdog"]["restart_recommended"])
             self.assertTrue((bundle_dir / "summary.json").exists())
             self.assertTrue((bundle_dir / "summary.md").exists())
             self.assertTrue((root / "tmp" / "orion_incident_bundle_latest.json").exists())
@@ -234,6 +236,8 @@ class TestOrionIncidentBundle(unittest.TestCase):
             self.assertEqual(payload["signals"]["approval_timeouts"], 1)
             self.assertEqual(payload["signals"]["stale_task_runs"], 1)
             self.assertEqual(payload["codex_ready"], False)
+            self.assertEqual(payload["discord_watchdog"]["reconnect_attempts"], 0)
+            self.assertTrue(payload["discord_watchdog"]["restart_recommended"])
 
             summary = json.loads((bundle_dir / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["status"], "degraded")

@@ -1,20 +1,20 @@
 # Reliability Snapshot
 
-- Generated at: `2026-04-09T00:47:12.221714+00:00`
+- Generated at: `2026-04-10T14:10:46.170367+00:00`
 - Window: last `24h`
 
 ## Lane Wait
 
-- Count: `4`
-- Max: `99607 ms`
-- P95: `22784 ms`
-- By lane: `{'session:agent:main:main': 4}`
+- Count: `0`
+- Max: `0 ms`
+- P95: `0 ms`
+- By lane: `{}`
 
 ## Cron
 
-- Total / Enabled / Disabled: `33 / 1 / 32`
-- By agent: `{'unknown': 1}`
-- By delivery channel: `{'none': 1}`
+- Total / Enabled / Disabled: `35 / 3 / 32`
+- By agent: `{'unknown': 1, 'main': 2}`
+- By delivery channel: `{'none': 2, 'last': 1}`
 
 ## Delivery Queue
 

@@ -105,7 +105,7 @@ def _render_dreaming_status(root: Path) -> str:
     elif enabled is False:
         lines.append("- Fix needed: dreaming is disabled in runtime config.")
     else:
-        lines.append("- Note: dreaming is still a pilot path; MEMORY.md remains curated truth.")
+        lines.append("- Dreaming is active in runtime config and writing to the short-term recall store.")
 
     return "\n".join(lines)
 

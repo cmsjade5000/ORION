@@ -13,11 +13,10 @@ MATRIX = ROOT / "config" / "llm_task_routing_matrix.json"
 BENCHMARK = ROOT / "config" / "llm_provider_benchmark_report.template.json"
 
 EXPECTED_PROVIDER_IDS = {
+    "openai-control-plane",
     "openrouter-auto-primary",
     "openrouter-hunter-alpha",
     "openrouter-free-bounded",
-    "gemini-openclaw",
-    "openai-control-plane",
     "kimi-k2-5-nvidia-build",
     "local-bounded-runtime",
 }

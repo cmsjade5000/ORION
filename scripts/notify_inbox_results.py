@@ -72,6 +72,15 @@ class PacketQueued:
     queued_hash: str
 
 
+@dataclasses.dataclass(frozen=True)
+class WorkflowAlert:
+    workflow_id: str
+    state: str
+    owners: tuple[str, ...]
+    job_count: int
+    alert_hash: str
+
+
 def _read_text(p: Path) -> str:
     return p.read_text(encoding="utf-8")
 
@@ -406,7 +415,47 @@ def _find_packets(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResul
     return queued, results
 
 
-def _format_message(*, queued: list[PacketQueued], results: list[PacketResult], max_len: int | None = None) -> str:
+def _find_workflow_alerts(repo_root: Path) -> list[WorkflowAlert]:
+    summary_path = repo_root / "tasks" / "JOBS" / "summary.json"
+    if not summary_path.exists():
+        return []
+    try:
+        payload = json.loads(_read_text(summary_path))
+    except Exception:
+        return []
+    workflows = payload.get("workflows", []) if isinstance(payload, dict) else []
+    alerts: list[WorkflowAlert] = []
+    for workflow in workflows:
+        if not isinstance(workflow, dict):
+            continue
+        state = str(workflow.get("state") or "").strip().lower()
+        if state not in {"blocked", "manual_required", "unsupported"}:
+            continue
+        workflow_id = str(workflow.get("workflow_id") or "").strip()
+        owners = tuple(sorted(str(owner).strip() for owner in workflow.get("owners", []) if str(owner).strip()))
+        job_count = int(workflow.get("job_count") or 0)
+        digest = hashlib.sha256(
+            f"{workflow_id}|{state}|{'|'.join(owners)}|{job_count}".encode("utf-8", errors="replace")
+        ).hexdigest()
+        alerts.append(
+            WorkflowAlert(
+                workflow_id=workflow_id,
+                state=state,
+                owners=owners,
+                job_count=job_count,
+                alert_hash=digest,
+            )
+        )
+    return alerts
+
+
+def _format_message(
+    *,
+    queued: list[PacketQueued],
+    results: list[PacketResult],
+    workflow_alerts: list[WorkflowAlert],
+    max_len: int | None = None,
+) -> str:
     lines: list[str] = []
     lines.append("Inbox update:")
     lines.append("")
@@ -428,6 +477,14 @@ def _format_message(*, queued: list[PacketQueued], results: list[PacketResult], 
                 lines.append(pl)
             lines.append(f"file: {it.display_path}:{it.packet_start_line}")
             lines.append("")
+
+    if workflow_alerts:
+        lines.append("Workflow alerts:")
+        for i, item in enumerate(workflow_alerts, start=1):
+            owners = ", ".join(item.owners) if item.owners else "unknown"
+            lines.append(f"{i}. state={item.state} owners={owners} jobs={item.job_count}")
+            lines.append(f"workflow: {item.workflow_id}")
+        lines.append("")
 
     msg = "\n".join(lines).rstrip() + "\n"
     if max_len is None or len(msg) <= max_len:
@@ -539,6 +596,7 @@ def main() -> int:
     state = _load_state(state_path)
 
     queued, results = _find_packets(repo_root)
+    workflow_alerts = _find_workflow_alerts(repo_root)
 
     # Only allow user-facing notifications when explicitly opted in, unless overridden.
     if args.require_notify_telegram:
@@ -582,24 +640,31 @@ def main() -> int:
     new_results_tg: list[PacketResult] = [r for r in results_tg if not _state_has_result("telegram", r.result_hash)]
     new_results_dc: list[PacketResult] = [r for r in results_dc if not _state_has_result("discord", r.result_hash)]
 
-    if not new_queued_tg and not new_results_tg and not new_queued_dc and not new_results_dc:
+    new_alerts_tg = [item for item in workflow_alerts if f"workflow:telegram:{item.alert_hash}" not in state]
+    new_alerts_dc = [item for item in workflow_alerts if f"workflow:discord:{item.alert_hash}" not in state]
+
+    if not new_queued_tg and not new_results_tg and not new_queued_dc and not new_results_dc and not new_alerts_tg and not new_alerts_dc:
         print("NOTIFY_IDLE")
         return 0
 
     # Cap items per channel per run.
     cap = max(1, int(args.max_per_run))
-    def _cap_lists(qs: list[PacketQueued], rs: list[PacketResult]) -> tuple[list[PacketQueued], list[PacketResult]]:
-        if len(qs) + len(rs) <= cap:
-            return qs, rs
+    def _cap_lists(
+        qs: list[PacketQueued],
+        rs: list[PacketResult],
+        alerts: list[WorkflowAlert],
+    ) -> tuple[list[PacketQueued], list[PacketResult], list[WorkflowAlert]]:
+        if len(qs) + len(rs) + len(alerts) <= cap:
+            return qs, rs, alerts
         rs2 = rs[:cap]
-        if len(rs2) < cap:
-            qs2 = qs[: (cap - len(rs2))]
-        else:
-            qs2 = []
-        return qs2, rs2
+        remaining = max(0, cap - len(rs2))
+        qs2 = qs[:remaining]
+        remaining = max(0, remaining - len(qs2))
+        alerts2 = alerts[:remaining]
+        return qs2, rs2, alerts2
 
-    new_queued_tg, new_results_tg = _cap_lists(new_queued_tg, new_results_tg)
-    new_queued_dc, new_results_dc = _cap_lists(new_queued_dc, new_results_dc)
+    new_queued_tg, new_results_tg, new_alerts_tg = _cap_lists(new_queued_tg, new_results_tg, new_alerts_tg)
+    new_queued_dc, new_results_dc, new_alerts_dc = _cap_lists(new_queued_dc, new_results_dc, new_alerts_dc)
 
     dry_all = os.environ.get("NOTIFY_DRY_RUN", "").strip() == "1"
     suppress_tg = dry_all or _env_truthy("ORION_SUPPRESS_TELEGRAM") or _env_truthy("TELEGRAM_SUPPRESS")
@@ -614,10 +679,14 @@ def main() -> int:
 
     tg_msg = ""
     dc_msg = ""
-    if new_queued_tg or new_results_tg:
-        tg_msg = _sanitize_outbound(_format_message(queued=new_queued_tg, results=new_results_tg, max_len=3800))
-    if new_queued_dc or new_results_dc:
-        dc_msg = _sanitize_outbound(_format_message(queued=new_queued_dc, results=new_results_dc, max_len=1900))
+    if new_queued_tg or new_results_tg or new_alerts_tg:
+        tg_msg = _sanitize_outbound(
+            _format_message(queued=new_queued_tg, results=new_results_tg, workflow_alerts=new_alerts_tg, max_len=3800)
+        )
+    if new_queued_dc or new_results_dc or new_alerts_dc:
+        dc_msg = _sanitize_outbound(
+            _format_message(queued=new_queued_dc, results=new_results_dc, workflow_alerts=new_alerts_dc, max_len=1900)
+        )
 
     def _gate_message(*, channel: str, message: str, queued_count: int, result_count: int) -> tuple[bool, dict[str, object]]:
         payload = {
@@ -634,6 +703,7 @@ def main() -> int:
                 "channel": channel,
                 "queued_count": queued_count,
                 "result_count": result_count,
+                "workflow_alert_count": len(new_alerts_tg if channel == "telegram" else new_alerts_dc),
                 "has_specialist_result": result_count > 0,
             },
         }
@@ -677,14 +747,14 @@ def main() -> int:
             return 2
 
     if dry_all:
-        if new_queued_tg or new_results_tg:
+        if new_queued_tg or new_results_tg or new_alerts_tg:
             print("TELEGRAM:")
             print(tg_msg)
-        if new_queued_dc or new_results_dc:
+        if new_queued_dc or new_results_dc or new_alerts_dc:
             print("DISCORD:")
             print(dc_msg)
     else:
-        if (new_queued_tg or new_results_tg) and not suppress_tg:
+        if (new_queued_tg or new_results_tg or new_alerts_tg) and not suppress_tg:
             chat_id = _get_telegram_chat_id()
             token = _get_telegram_bot_token()
             if not token:
@@ -703,7 +773,7 @@ def main() -> int:
                 print(f"ERROR: Telegram send failed: {e}", file=sys.stderr)
                 return 2
 
-        if (new_queued_dc or new_results_dc) and not suppress_dc:
+        if (new_queued_dc or new_results_dc or new_alerts_dc) and not suppress_dc:
             try:
                 target = _get_discord_default_target(repo_root)
                 _discord_send_message(repo_root=repo_root, target=target, text=dc_msg)
@@ -713,7 +783,7 @@ def main() -> int:
 
     now = time.time()
     # In dry-run / suppression mode, we still advance state to avoid spamming during local loop testing.
-    if new_results_tg or new_queued_tg:
+    if new_results_tg or new_queued_tg or new_alerts_tg:
         for it in new_results_tg:
             state[f"telegram:{it.result_hash}"] = now
             # Back-compat: keep the legacy Telegram key so older runs remain quiet.
@@ -721,12 +791,16 @@ def main() -> int:
         for it in new_queued_tg:
             state[f"queued:telegram:{it.queued_hash}"] = now
             state[f"queued:{it.queued_hash}"] = now
+        for it in new_alerts_tg:
+            state[f"workflow:telegram:{it.alert_hash}"] = now
 
-    if new_results_dc or new_queued_dc:
+    if new_results_dc or new_queued_dc or new_alerts_dc:
         for it in new_results_dc:
             state[f"discord:{it.result_hash}"] = now
         for it in new_queued_dc:
             state[f"queued:discord:{it.queued_hash}"] = now
+        for it in new_alerts_dc:
+            state[f"workflow:discord:{it.alert_hash}"] = now
 
     # Bound state size to avoid unbounded growth.
     if len(state) > 5000:

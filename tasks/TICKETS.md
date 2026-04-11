@@ -16,6 +16,7 @@ Raw incoming requests live in:
 
 Specialist assignment queues live in:
 - `tasks/INBOX/*.md` (Task Packets)
+- `tasks/JOBS/*.json` (derived delegated-job state)
 
 ## Ticket Naming
 
@@ -60,6 +61,7 @@ When work should be executed by a specialist:
 Rule of thumb:
 - Tickets are the durable “what/why/done”.
 - Task Packets are the “who/execute/return results”.
+- `tasks/JOBS/*.json` is the derived “current delegated state”.
 
 ## Helper CLI (Optional)
 

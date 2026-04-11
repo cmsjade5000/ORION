@@ -4,14 +4,15 @@
 - Agent: `main`
 - Probe max tokens: `16`
 - Overall OK: `false`
-- Failed checks: `gateway`
+- Failed checks: `models`
 
 ## Checks
-- `gateway`: `fail`
-- `models`: `ok`
+- `gateway`: `ok`
+- `gateway` warnings: `Gateway service embeds OPENCLAW_GATEWAY_TOKEN and should be reinstalled.`
+- `models`: `fail`
 - `memory`: `ok`
 - `rem-harness`: `ok`
 - `smoke-turn`: `ok`
 
 ## Next Step
-- `investigate-gateway`
+- `investigate-models`

@@ -1,6 +1,6 @@
 # NVIDIA Build API (nvapi-...) + Kimi K2.5 (OpenClaw wiring)
 
-Goal: keep ORION production lanes on **Google Gemini/OpenRouter**, while exposing **NVIDIA Build Kimi K2.5** as an intentional specialist lane instead of a noisy generic fallback.
+Goal: keep ORION production lanes on **OpenAI/OpenRouter**, while exposing **NVIDIA Build Kimi K2.5** as an intentional specialist lane instead of a noisy generic fallback.
 
 This repo does **not** store secrets. Do not paste API keys into Git.
 
@@ -47,13 +47,13 @@ Notes:
 - The NVIDIA docs currently spell this model id as `moonshotai/kimi-k2.5`.
 - This config references `NVIDIA_API_KEY` via SecretRef; it does not store the key itself.
 
-## 3) Set routing: keep production on Gemini, reserve Kimi for a dedicated lane
+## 3) Set routing: keep production on OpenAI, reserve Kimi for a dedicated lane
 
 Recommended posture:
 
 ```bash
-openclaw models set google/gemini-2.5-flash-lite
-openclaw models fallbacks add google/gemini-2.5-flash-lite
+openclaw models set openai/gpt-5.4
+openclaw models fallbacks add openrouter/openrouter/free
 ```
 
 Then pin Kimi only on an intentional specialist agent, for example `ember`, by setting:
@@ -62,9 +62,9 @@ Then pin Kimi only on an intentional specialist agent, for example `ember`, by s
 {
   "id": "ember",
   "model": {
-    "primary": "nvidia-build/moonshotai/kimi-k2.5",
+    "primary": "openai/gpt-5.4",
     "fallbacks": [
-      "google/gemini-2.5-flash-lite",
+      "nvidia-build/moonshotai/kimi-k2.5",
       "openrouter/free"
     ]
   }

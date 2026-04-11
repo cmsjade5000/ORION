@@ -1,25 +1,21 @@
 # ORION Error Review
 
-Generated: 2026-04-09T00:52:42Z
+Generated: 2026-04-11T06:19:39Z
 Window: last 24h
 
 ## Summary
-- Events scanned: 150
-- Recurring groups: 38
-- Fixes attempted: 7
-- Fixes applied: 7
+- Events scanned: 39
+- Recurring groups: 6
+- Fixes attempted: 11
+- Fixes applied: 10
 
 ## Recurring Errors
-- `4e165eeb63e1064f` [error] x8 :: gateway
-- `06d03c2a3d62411c` [error] x8 :: timeout
-- `87e4e8d9dfae6494` [error] x4 :: discord
-- `43e262afee0f1b4e` [error] x4 :: session
-- `922f33a9aa609c04` [error] x3 :: 2026-04-06t11:52:03.228-04:00 [model-pricing] pricing bootstrap failed: error: openrouter /models failed: http 408
-- `a832172ee42a60f8` [error] x3 :: 2026-04-07t20:05:37.025-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
-- `7a9ce8f026008d9b` [error] x3 :: 2026-04-07t20:10:41.792-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
-- `9aba6c7496b18c83` [error] x3 :: 2026-04-07t20:15:12.252-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
-- `9d773f08ffb81389` [error] x3 :: 2026-04-07t20:20:33.545-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
-- `63cdb82a85455795` [error] x3 :: 2026-04-07t20:25:33.944-04:00 [openclaw] unhandled promise rejection: error: agent listener invoked outside active run
+- `06d03c2a3d62411c` [error] x3 :: timeout
+- `87e4e8d9dfae6494` [error] x2 :: discord
+- `8484e5f3d4cf671f` [error] x2 :: gateway
+- `43e262afee0f1b4e` [error] x2 :: session
+- `cff8764d8b7d8298` [error] x2 :: timeout
+- `4e165eeb63e1064f` [warn] x2 :: gateway
 
 ## Safe Fix Attempts
 - `openclaw config validate --json` -> exit 0
@@ -27,5 +23,9 @@ Window: last 24h
 - `openclaw plugins list --json` -> exit 0
 - `openclaw hooks list` -> exit 0
 - `openclaw gateway status --json` -> exit 0
-- `openclaw sessions cleanup --agent main --dry-run --fix-missing --json` -> exit 0
 - `python3 scripts/task_execution_loop.py --repo-root /Users/corystoner/src/ORION --apply --stale-hours 24` -> exit 0
+- `python3 scripts/runtime_reconcile.py --repo-root /Users/corystoner/src/ORION --apply --json` -> exit 99
+- `python3 scripts/task_registry_repair.py --repo-root /Users/corystoner/src/ORION --apply --json` -> exit 0
+- `python3 scripts/session_maintenance.py --repo-root /Users/corystoner/src/ORION --agent main --fix-missing --apply --doctor --min-missing 1 --min-reclaim 1 --json` -> exit 0
+- `openclaw channels status --probe --json` -> exit 0
+- `openclaw channels logs --channel discord --json --lines 200` -> exit 0

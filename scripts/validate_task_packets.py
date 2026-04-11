@@ -28,10 +28,12 @@ REQUIRED_SECTIONS = (
     "Stop Gates",
     "Output Format",
 )
+NEXT_PACKET_PREFIX = "Next Packet "
 
 ATLAS_DIRECTED_SUBAGENTS = {"NODE", "PULSE", "STRATUS"}
 ALLOWED_NOTIFY_CHANNELS = {"telegram", "discord", "none"}
 ALLOWED_APPROVAL_GATES = {"LEDGER_RESULT_REQUIRED"}
+ALLOWED_NEXT_PACKET_RESULTS = {"OK", "FAILED", "BLOCKED", "ANY"}
 RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -83,11 +85,14 @@ def _split_packets(lines: list[str], start_line_offset: int) -> list[Packet]:
     return packets
 
 
-def _parse_packet(packet: Packet) -> tuple[dict[str, str], dict[str, list[str]]]:
+def _parse_packet(packet: Packet) -> tuple[dict[str, str], dict[str, list[str]], dict[str, str], dict[str, list[str]]]:
     # "fields" includes required and optional top-level fields (Owner/Requester/Objective/Emergency/etc).
     fields: dict[str, str] = {}
     sections: dict[str, list[str]] = {s: [] for s in REQUIRED_SECTIONS}
+    next_fields: dict[str, str] = {}
+    next_sections: dict[str, list[str]] = {s: [] for s in REQUIRED_SECTIONS}
     current_section: str | None = None
+    current_next_section: str | None = None
 
     # Skip header line
     for line in packet.lines[1:]:
@@ -96,22 +101,46 @@ def _parse_packet(packet: Packet) -> tuple[dict[str, str], dict[str, list[str]]]
             key = m.group("key").strip()
             value = m.group("value").strip()
 
+            if key.startswith(NEXT_PACKET_PREFIX):
+                next_key = key[len(NEXT_PACKET_PREFIX) :].strip()
+                current_section = None
+                if next_key in REQUIRED_SECTIONS:
+                    current_next_section = next_key
+                    if value:
+                        next_sections[next_key].append(value)
+                else:
+                    current_next_section = None
+                    next_fields[next_key] = value
+                continue
+
             # Store all top-level KV pairs so we can validate policy fields like Emergency/Incident.
             # Section headers (Success Criteria, etc.) are handled below.
             if key not in REQUIRED_SECTIONS:
                 fields[key] = value
-                if key in REQUIRED_FIELDS:
-                    current_section = None
+                current_section = None
+                current_next_section = None
                 continue
 
             if key in REQUIRED_SECTIONS:
                 current_section = key
+                current_next_section = None
                 if value:
                     sections[key].append(value)
                 continue
 
             # Unknown header: reset section and continue
             current_section = None
+            current_next_section = None
+            continue
+
+        if current_next_section:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("- "):
+                next_sections[current_next_section].append(stripped[2:].strip())
+            else:
+                next_sections[current_next_section].append(stripped)
             continue
 
         if current_section:
@@ -124,7 +153,113 @@ def _parse_packet(packet: Packet) -> tuple[dict[str, str], dict[str, list[str]]]
                 # Allow non-bullet lines, but they're still counted as content.
                 sections[current_section].append(stripped)
 
-    return fields, sections
+    return fields, sections, next_fields, next_sections
+
+
+def _validate_packet_fields(
+    *,
+    errors: list[str],
+    path: str,
+    packet_num: int,
+    start_line: int,
+    fields: dict[str, str],
+    sections: dict[str, list[str]],
+    expected_owner: str | None,
+    packet_label: str = "packet",
+) -> None:
+    for k in REQUIRED_FIELDS:
+        if not fields.get(k, "").strip():
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: missing required field '{k}:'")
+
+    for s in REQUIRED_SECTIONS:
+        if len([x for x in sections.get(s, []) if x.strip()]) == 0:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: section '{s}:' has no items")
+
+    owner = fields.get("Owner", "").strip()
+    if expected_owner and owner:
+        if "<" in owner or ">" in owner:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: Owner looks like a placeholder: {owner!r}")
+        elif owner.upper() != expected_owner:
+            errors.append(
+                f"{path}:{start_line}: {packet_label} {packet_num}: Owner {owner!r} does not match inbox {expected_owner!r}"
+            )
+
+    requester = fields.get("Requester", "").strip()
+    emergency = fields.get("Emergency", "").strip().upper()
+    incident = fields.get("Incident", "").strip()
+    notify = fields.get("Notify", "").strip().lower()
+    approval_gate = fields.get("Approval Gate", "").strip()
+    gate_evidence = fields.get("Gate Evidence", "").strip()
+
+    if notify:
+        tokens = [t.strip() for t in re.split(r"[,+\s]+", notify) if t.strip()]
+        bad = sorted({t for t in tokens if t not in ALLOWED_NOTIFY_CHANNELS})
+        if bad:
+            errors.append(
+                f"{path}:{start_line}: {packet_label} {packet_num}: Notify contains unknown channel(s): {bad!r} "
+                f"(allowed: {sorted(ALLOWED_NOTIFY_CHANNELS)!r})"
+            )
+
+    if expected_owner:
+        allowed_requesters = {"ORION"}
+        if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
+            allowed_requesters = {"ATLAS"}
+            if emergency == "ATLAS_UNAVAILABLE":
+                allowed_requesters = {"ATLAS", "ORION"}
+
+        if requester and requester.upper() not in allowed_requesters:
+            extra = ""
+            if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
+                extra = " (use 'Requester: ATLAS' unless Emergency: ATLAS_UNAVAILABLE)"
+            errors.append(
+                f"{path}:{start_line}: {packet_label} {packet_num}: Requester must be one of {sorted(allowed_requesters)!r} "
+                f"(got {requester!r}){extra}"
+            )
+
+    if approval_gate:
+        if approval_gate not in ALLOWED_APPROVAL_GATES:
+            errors.append(
+                f"{path}:{start_line}: {packet_label} {packet_num}: Approval Gate must be one of "
+                f"{sorted(ALLOWED_APPROVAL_GATES)!r} (got {approval_gate!r})"
+            )
+        if not gate_evidence:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: Approval Gate requires non-empty 'Gate Evidence:'")
+        if approval_gate == "LEDGER_RESULT_REQUIRED":
+            if owner.upper() not in {"ATLAS", "ORION"}:
+                errors.append(
+                    f"{path}:{start_line}: {packet_label} {packet_num}: Approval Gate LEDGER_RESULT_REQUIRED requires "
+                    f"Owner to be 'ATLAS' or 'ORION' (got {owner!r})"
+                )
+            if gate_evidence and not re.search(r"\bledger\b", gate_evidence, flags=re.IGNORECASE):
+                errors.append(
+                    f"{path}:{start_line}: {packet_label} {packet_num}: Gate Evidence must reference LEDGER when "
+                    f"Approval Gate is LEDGER_RESULT_REQUIRED"
+                )
+
+    if expected_owner == "POLARIS":
+        opened = fields.get("Opened", "").strip()
+        due = fields.get("Due", "").strip()
+        execution_mode = fields.get("Execution Mode", "").strip()
+        tool_scope = fields.get("Tool Scope", "").strip()
+        if not opened:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: missing required field 'Opened:'")
+        elif not _is_yyyy_mm_dd(opened):
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: 'Opened:' must be YYYY-MM-DD (got {opened!r})")
+        if not due:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: missing required field 'Due:'")
+        elif not _is_yyyy_mm_dd(due):
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: 'Due:' must be YYYY-MM-DD (got {due!r})")
+        if not execution_mode:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: missing required field 'Execution Mode:'")
+        if not tool_scope:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: missing required field 'Tool Scope:'")
+        if not notify:
+            errors.append(f"{path}:{start_line}: {packet_label} {packet_num}: missing required field 'Notify:'")
+
+    if emergency == "ATLAS_UNAVAILABLE" and not incident:
+        errors.append(
+            f"{path}:{start_line}: {packet_label} {packet_num}: Emergency ATLAS_UNAVAILABLE requires non-empty 'Incident:' field"
+        )
 
 
 def validate_inbox_file(path: str) -> list[str]:
@@ -152,108 +287,35 @@ def validate_inbox_file(path: str) -> list[str]:
     packets = _split_packets(all_lines[start_idx:], start_line_offset=start_idx)
 
     for n, pkt in enumerate(packets, start=1):
-        fields, sections = _parse_packet(pkt)
+        fields, sections, next_fields, next_sections = _parse_packet(pkt)
+        _validate_packet_fields(
+            errors=errors,
+            path=path,
+            packet_num=n,
+            start_line=pkt.start_line,
+            fields=fields,
+            sections=sections,
+            expected_owner=expected_owner,
+        )
 
-        for k in REQUIRED_FIELDS:
-            if not fields.get(k, "").strip():
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field '{k}:'")
-
-        for s in REQUIRED_SECTIONS:
-            if len([x for x in sections.get(s, []) if x.strip()]) == 0:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: section '{s}:' has no items")
-
-        owner = fields.get("Owner", "").strip()
-        if expected_owner and owner:
-            if "<" in owner or ">" in owner:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: Owner looks like a placeholder: {owner!r}")
-            elif owner.upper() != expected_owner:
-                errors.append(
-                    f"{path}:{pkt.start_line}: packet {n}: Owner {owner!r} does not match inbox {expected_owner!r}"
-                )
-
-        requester = fields.get("Requester", "").strip()
-        emergency = fields.get("Emergency", "").strip().upper()
-        incident = fields.get("Incident", "").strip()
-        notify = fields.get("Notify", "").strip().lower()
-        approval_gate = fields.get("Approval Gate", "").strip()
-        gate_evidence = fields.get("Gate Evidence", "").strip()
-
-        if notify:
-            # Support "telegram,discord" style lists but reject unknown tokens.
-            tokens = [t.strip() for t in re.split(r"[,+\s]+", notify) if t.strip()]
-            bad = sorted({t for t in tokens if t not in ALLOWED_NOTIFY_CHANNELS})
-            if bad:
-                errors.append(
-                    f"{path}:{pkt.start_line}: packet {n}: Notify contains unknown channel(s): {bad!r} "
-                    f"(allowed: {sorted(ALLOWED_NOTIFY_CHANNELS)!r})"
-                )
-
-        if expected_owner:
-            allowed_requesters = {"ORION"}
-            if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
-                allowed_requesters = {"ATLAS"}
-
-                # Emergency bypass: ORION may request directly only when ATLAS is unavailable,
-                # and only for reversible diagnostic/recovery work (see docs/AGENT_HIERARCHY.md).
-                if emergency == "ATLAS_UNAVAILABLE":
-                    allowed_requesters = {"ATLAS", "ORION"}
-
-            if requester:
-                if requester.upper() not in allowed_requesters:
-                    extra = ""
-                    if expected_owner in ATLAS_DIRECTED_SUBAGENTS:
-                        extra = " (use 'Requester: ATLAS' unless Emergency: ATLAS_UNAVAILABLE)"
-                    errors.append(
-                        f"{path}:{pkt.start_line}: packet {n}: Requester must be one of {sorted(allowed_requesters)!r} "
-                        f"(got {requester!r}){extra}"
-                    )
-
-        if approval_gate:
-            if approval_gate not in ALLOWED_APPROVAL_GATES:
-                errors.append(
-                    f"{path}:{pkt.start_line}: packet {n}: Approval Gate must be one of "
-                    f"{sorted(ALLOWED_APPROVAL_GATES)!r} (got {approval_gate!r})"
-                )
-            if not gate_evidence:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: Approval Gate requires non-empty 'Gate Evidence:'")
-            if approval_gate == "LEDGER_RESULT_REQUIRED":
-                if owner.upper() not in {"ATLAS", "ORION"}:
-                    errors.append(
-                        f"{path}:{pkt.start_line}: packet {n}: Approval Gate LEDGER_RESULT_REQUIRED requires "
-                        f"Owner to be 'ATLAS' or 'ORION' (got {owner!r})"
-                    )
-                if gate_evidence and not re.search(r"\bledger\b", gate_evidence, flags=re.IGNORECASE):
-                    errors.append(
-                        f"{path}:{pkt.start_line}: packet {n}: Gate Evidence must reference LEDGER when "
-                        f"Approval Gate is LEDGER_RESULT_REQUIRED"
-                    )
-
-        if expected_owner == "POLARIS":
-            opened = fields.get("Opened", "").strip()
-            due = fields.get("Due", "").strip()
-            execution_mode = fields.get("Execution Mode", "").strip()
-            tool_scope = fields.get("Tool Scope", "").strip()
-            notify = fields.get("Notify", "").strip()
-            if not opened:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Opened:'")
-            elif not _is_yyyy_mm_dd(opened):
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: 'Opened:' must be YYYY-MM-DD (got {opened!r})")
-            if not due:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Due:'")
-            elif not _is_yyyy_mm_dd(due):
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: 'Due:' must be YYYY-MM-DD (got {due!r})")
-            if not execution_mode:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Execution Mode:'")
-            if not tool_scope:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Tool Scope:'")
-            if not notify:
-                errors.append(f"{path}:{pkt.start_line}: packet {n}: missing required field 'Notify:'")
-
-        # Emergency bypass packets must be incident-linked for auditability.
-        if emergency == "ATLAS_UNAVAILABLE" and not incident:
-            errors.append(
-                f"{path}:{pkt.start_line}: packet {n}: Emergency ATLAS_UNAVAILABLE requires non-empty 'Incident:' field"
+        has_next_packet = bool(next_fields) or any(next_sections[s] for s in REQUIRED_SECTIONS)
+        if has_next_packet:
+            _validate_packet_fields(
+                errors=errors,
+                path=path,
+                packet_num=n,
+                start_line=pkt.start_line,
+                fields=next_fields,
+                sections=next_sections,
+                expected_owner=(next_fields.get("Owner", "").strip().upper() or None),
+                packet_label="next packet",
             )
+            trigger = (next_fields.get("On Result", "OK") or "OK").strip().upper()
+            if trigger not in ALLOWED_NEXT_PACKET_RESULTS:
+                errors.append(
+                    f"{path}:{pkt.start_line}: next packet {n}: On Result must be one of "
+                    f"{sorted(ALLOWED_NEXT_PACKET_RESULTS)!r} (got {trigger!r})"
+                )
 
     return errors
 

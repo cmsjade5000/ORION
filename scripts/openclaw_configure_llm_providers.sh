@@ -2,10 +2,10 @@
 set -euo pipefail
 
 INCLUDE_KIMI_FALLBACK=1
-INCLUDE_GEMINI_FALLBACK=1
 LOCAL_BASE_URL="${LOCAL_LLM_BASE_URL:-http://127.0.0.1:1234/v1}"
 LOCAL_MODEL="${LOCAL_LLM_MODEL:-qwen3.5-4b-mlx}"
 CURATED_FREE_MODEL="${OPENROUTER_CURATED_FREE_MODEL:-openai/gpt-oss-20b:free}"
+OPENAI_PRIMARY_MODEL="${OPENAI_PRIMARY_MODEL:-openai/gpt-5.4}"
 DRY_RUN=0
 OPENROUTER_MODEL_LIST=""
 
@@ -16,9 +16,9 @@ Usage: scripts/openclaw_configure_llm_providers.sh [options]
 Configure OpenClaw runtime for ORION's provider matrix.
 
 Options:
+  --openai-primary-model <id> Set OpenAI primary model id (default: openai/gpt-5.4)
   --include-kimi-fallback   Keep NVIDIA Build Kimi K2.5 as tertiary model fallback (default)
   --no-kimi-fallback        Disable NVIDIA Build fallback
-  --no-gemini-fallback      Disable Gemini compatibility fallback
   --curated-free-model <id> Set curated OpenRouter :free fallback model id
   --local-base-url <url>    Register/update LM Studio local provider base URL
   --local-model <model>     Register/update local model id
@@ -26,9 +26,8 @@ Options:
   -h, --help                Show help
 
 Notes:
-- OpenRouter is the default primary lane using openrouter/auto where available.
-- OpenAI is treated as a direct API control/eval lane and does not require custom
-  OpenClaw provider wiring here.
+- OpenAI is the default primary lane for ORION runtime routing.
+- OpenRouter stays configured only as an explicit fallback path.
 - This script modifies ~/.openclaw/openclaw.json via `openclaw config set`.
 USAGE
 }
@@ -80,9 +79,9 @@ while [[ $# -gt 0 ]]; do
       INCLUDE_KIMI_FALLBACK=0
       shift
       ;;
-    --no-gemini-fallback)
-      INCLUDE_GEMINI_FALLBACK=0
-      shift
+    --openai-primary-model)
+      OPENAI_PRIMARY_MODEL="$2"
+      shift 2
       ;;
     --curated-free-model)
       CURATED_FREE_MODEL="$2"
@@ -112,23 +111,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-OPENROUTER_AUTO_MODEL="$(resolve_model_id openrouter/auto openrouter/openrouter/auto)"
 OPENROUTER_FREE_MODEL="$(resolve_model_id openrouter/free openrouter/openrouter/free)"
-OPENROUTER_HUNTER_MODEL="$(resolve_model_id openrouter/hunter-alpha openrouter/openrouter/hunter-alpha)"
 CURATED_FREE_RESOLVED="$(resolve_model_id "$CURATED_FREE_MODEL" "openrouter/${CURATED_FREE_MODEL}")"
 
-run_cmd echo "Resolved OpenRouter models: auto=${OPENROUTER_AUTO_MODEL} free=${OPENROUTER_FREE_MODEL} hunter=${OPENROUTER_HUNTER_MODEL} curated=${CURATED_FREE_RESOLVED}"
+run_cmd echo "Configured primary=${OPENAI_PRIMARY_MODEL} free=${OPENROUTER_FREE_MODEL} curated=${CURATED_FREE_RESOLVED}"
 
 run_cmd openclaw config set tools.profile coding
 run_cmd openclaw config set models.mode merge
-run_cmd openclaw config set agents.defaults.model.primary "$OPENROUTER_AUTO_MODEL"
+run_cmd openclaw config set agents.defaults.model.primary "$OPENAI_PRIMARY_MODEL"
 run_cmd openclaw models fallbacks clear
 run_cmd openclaw models fallbacks add "$OPENROUTER_FREE_MODEL"
 run_cmd openclaw models fallbacks add "$CURATED_FREE_RESOLVED"
-
-if [[ "$INCLUDE_GEMINI_FALLBACK" -eq 1 ]]; then
-  run_cmd openclaw models fallbacks add google/gemini-2.5-flash-lite
-fi
 
 run_cmd openclaw config set --json 'models.providers["nvidia-build"]' "{
   \"api\": \"openai-completions\",

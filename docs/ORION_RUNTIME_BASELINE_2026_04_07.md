@@ -21,7 +21,7 @@ Key current-state facts:
 | --- | --- | --- | --- |
 | OpenClaw version | Historical docs still emphasize `2026.3.13` upgrade notes | `OpenClaw 2026.4.5` | Treat `2026.3.13` docs as history, not current baseline |
 | Memory slot | Template default is `memory-lancedb` | Runtime slot is `memory-core` | Keep template conservative; document runtime separately |
-| Dreaming | Template keeps dreaming disabled | Runtime has dreaming enabled | Keep pilot framing in repo docs; do not imply auto-trusted memory |
+| Dreaming | Template keeps dreaming disabled | Runtime has dreaming enabled | Document the active runtime path explicitly while keeping template-vs-runtime differences clear |
 | ClawHub | March docs treat it as an intake/pilot topic | `openclaw skills list` exposes ClawHub-backed discovery now | Adopt as the default skill discovery/update workflow |
 | ACPX | Not part of checked-in allowlist | Bundled in runtime, enabled in live config | Treat as a bounded live execution surface for ATLAS-owned specialist work |
 | Browser plugin | Current browser posture is operator-pack and managed-browser guidance | Bundled in runtime, disabled by allowlist | Defer unless it materially outperforms current managed-browser flows |

@@ -370,8 +370,11 @@ def _coarse_log_bucket(line: str) -> str:
     return text[:120]
 
 
-def _run_command(cmd: list[str], *, cwd: Path) -> dict[str, Any]:
+def _run_command(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> dict[str, Any]:
     try:
+        merged_env = os.environ.copy()
+        if env:
+            merged_env.update(env)
         proc = subprocess.run(
             cmd,
             cwd=str(cwd),
@@ -380,6 +383,7 @@ def _run_command(cmd: list[str], *, cwd: Path) -> dict[str, Any]:
             text=True,
             timeout=120,
             check=False,
+            env=merged_env,
         )
         return {
             "cmd": cmd,
@@ -391,16 +395,46 @@ def _run_command(cmd: list[str], *, cwd: Path) -> dict[str, Any]:
         return {"cmd": cmd, "exit_code": 99, "stdout": "", "stderr": str(exc)}
 
 
-def _safe_fix_commands(root: Path) -> list[list[str]]:
-    return [
-        ["openclaw", "config", "validate", "--json"],
-        ["openclaw", "agents", "bindings", "--json"],
-        ["openclaw", "plugins", "list", "--json"],
-        ["openclaw", "hooks", "list"],
-        ["openclaw", "gateway", "status", "--json"],
-        ["openclaw", "sessions", "cleanup", "--agent", "main", "--dry-run", "--fix-missing", "--json"],
-        ["python3", "scripts/task_execution_loop.py", "--repo-root", str(root), "--apply", "--stale-hours", "24"],
+def _safe_fix_commands(root: Path, recurring: list[dict[str, Any]]) -> list[tuple[list[str], dict[str, str] | None]]:
+    commands: list[tuple[list[str], dict[str, str] | None]] = [
+        (["openclaw", "config", "validate", "--json"], None),
+        (["openclaw", "agents", "bindings", "--json"], None),
+        (["openclaw", "plugins", "list", "--json"], None),
+        (["openclaw", "hooks", "list"], None),
+        (["openclaw", "gateway", "status", "--json"], None),
+        (["python3", "scripts/task_execution_loop.py", "--repo-root", str(root), "--apply", "--stale-hours", "24"], None),
     ]
+    text = " ".join(str(item.get("summary") or "").lower() for item in recurring)
+    if any(token in text for token in ("session", "listener invoked outside active run", "backing session missing", "stale", "lost")):
+        commands.append((["python3", "scripts/runtime_reconcile.py", "--repo-root", str(root), "--apply", "--json"], None))
+        commands.append((["python3", "scripts/task_registry_repair.py", "--repo-root", str(root), "--apply", "--json"], None))
+        commands.append(
+            (
+                [
+                    "python3",
+                    "scripts/session_maintenance.py",
+                    "--repo-root",
+                    str(root),
+                    "--agent",
+                    "main",
+                    "--fix-missing",
+                    "--apply",
+                    "--doctor",
+                    "--min-missing",
+                    "1",
+                    "--min-reclaim",
+                    "1",
+                    "--json",
+                ],
+                {"AUTO_OK": "1"},
+            )
+        )
+    else:
+        commands.append((["openclaw", "sessions", "cleanup", "--agent", "main", "--dry-run", "--fix-missing", "--json"], None))
+    if "discord" in text:
+        commands.append((["openclaw", "channels", "status", "--probe", "--json"], None))
+        commands.append((["openclaw", "channels", "logs", "--channel", "discord", "--json", "--lines", "200"], None))
+    return commands
 
 
 def _events_since(conn: sqlite3.Connection, hours: int) -> list[sqlite3.Row]:
@@ -589,8 +623,8 @@ def cmd_review(args: argparse.Namespace) -> int:
     fixes_attempted = 0
     fixes_applied = 0
     if args.apply_safe_fixes and recurring:
-        for cmd in _safe_fix_commands(root):
-            result = _run_command(cmd, cwd=root)
+        for cmd, env in _safe_fix_commands(root, recurring):
+            result = _run_command(cmd, cwd=root, env=env)
             fix_results.append(result)
             fixes_attempted += 1
             if result["exit_code"] == 0:

@@ -64,6 +64,10 @@ Output Format:
     - a follow-up "Results" update when `Result:` is written.
 - `Idempotency Key:` optional stable key to dedupe runner-backed packets across retries/reruns.
   - Used by `scripts/run_inbox_packets.py` to avoid repeating the same work when the packet is re-filed or re-queued.
+- `Packet ID:` optional stable packet identity. If omitted, automation derives one from packet content or idempotency.
+- `Parent Packet ID:` optional lineage pointer for follow-on or recovery packets.
+- `Root Packet ID:` optional root lineage pointer across multi-hop workflows.
+- `Workflow ID:` optional workflow identity for grouping related packets and job artifacts.
 - Retry policy (used by `scripts/run_inbox_packets.py` for allowlisted read-only packets):
   - `Retry Max Attempts:` integer (default `1`, meaning no retries)
   - `Retry Backoff Seconds:` number (default `60`)
@@ -240,9 +244,25 @@ Inbox files are append-only queues of Task Packets.
 - Do not pre-create an empty `Result:` placeholder. Leave the `Result:` block for the specialist/runner.
 - If the packet included `Notify: telegram`, ORION may notify Cory automatically (see `scripts/notify_inbox_results.py` + `HEARTBEAT.md`).
 - For allowlisted read-only packets, `scripts/run_inbox_packets.py` can execute the `Commands to run:` section and write the `Result:` block.
+- `scripts/task_execution_loop.py` and `scripts/inbox_cycle.py` also derive durable delegated-job state under `tasks/JOBS/*.json`.
   - Formatting requirement for `Commands to run:`:
     - Preferred: header line `Commands to run:` followed by bullet lines (example `- diagnose_gateway.sh`).
     - Supported: single-line form `Commands to run: diagnose_gateway.sh`.
+- For tested automatic handoff, a terminal packet may declare one explicit follow-on packet using the prefixed mirror contract:
+  - `Next Packet On Result:` `OK` | `FAILED` | `BLOCKED` | `ANY` (optional; default `OK`)
+  - `Next Packet Owner:`
+  - `Next Packet Requester:`
+  - `Next Packet Objective:`
+  - `Next Packet Success Criteria:`
+  - `Next Packet Constraints:`
+  - `Next Packet Inputs:`
+  - `Next Packet Risks:`
+  - `Next Packet Stop Gates:`
+  - `Next Packet Output Format:`
+  - Optional extra follow-on fields may also be supplied with the same prefix, for example `Next Packet Notify:` or `Next Packet Tool Scope:`.
+  - `scripts/task_execution_loop.py` appends that follow-on packet exactly once and records `Handoff Source: <inbox>:<line>` in the generated packet.
+  - Generated follow-on packets also carry `Packet ID`, `Parent Packet ID`, `Root Packet ID`, and `Workflow ID` so durable job artifacts can group the whole workflow instead of isolated packets.
+- When a pending packet exceeds the stale threshold, `scripts/task_execution_loop.py --apply` may append one recovery packet exactly once with a `recovery:stale:` idempotency key and preserved workflow lineage.
 - Requester field policy:
   - Most specialist inboxes: `Requester: ORION`.
   - POLARIS inbox: `Requester: ORION`.

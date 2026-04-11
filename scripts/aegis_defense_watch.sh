@@ -125,7 +125,7 @@ for id in "${new_ids[@]}"; do
     cat <<EOF
 AEGIS prepared a ${kind}: ${id}
 
-Reply "review ${id}" and I'll walk you through it, or run:
+Reply "review ${id}" and I will walk you through it, or run:
 scripts/aegis_defense.sh show ${id}
 EOF
   )

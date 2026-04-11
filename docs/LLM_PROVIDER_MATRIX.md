@@ -1,6 +1,6 @@
 # LLM Provider Matrix
 
-This file is the durable routing reference for ORION's OpenRouter-first, multi-provider LLM setup.
+This file is the durable routing reference for ORION's OpenAI-first, multi-provider LLM setup.
 
 Machine-readable sources:
 - `config/llm_provider_registry.json`
@@ -11,11 +11,12 @@ Operational helpers:
 - `scripts/openclaw_configure_llm_providers.sh`
 - `scripts/run_llm_provider_benchmarks.py`
 
-## Provider lanes (OpenRouter-first)
+## Provider lanes (OpenAI-first)
 
 | Provider | Lane | Primary use | Promotion rule |
 | --- | --- | --- | --- |
-| OpenRouter (`openrouter/auto`) | openrouter-auto-primary | Live ORION routing, handoffs, and default day-to-day tool selection | Stays default unless rollback evidence requires compatibility fallback |
+| OpenAI Responses API | openai-control-plane | Live ORION routing, handoffs, structured outputs, and eval control | Stays default unless rollback evidence requires compatibility fallback |
+| OpenRouter (`openrouter/auto`) | openrouter-auto-primary | Compatibility fallback for live ORION routing and handoffs | Can be promoted only with explicit rollback evidence |
 | OpenRouter (`hunter-alpha`) | openrouter-hunter-alpha | Non-sensitive research synthesis and second opinions | Non-sensitive only; prompts/completions are provider-logged |
 | OpenRouter (free-tier bounded model) | openrouter-free-bounded | Bounded utility tasks (summarization, extraction, tagging) | Never owns high-stakes orchestration |
 
@@ -23,8 +24,6 @@ Operational helpers:
 
 | Provider | Lane | Primary use | Promotion rule |
 | --- | --- | --- | --- |
-| Gemini via OpenClaw | production-fallback | Legacy production fallback and rollback lane | Can be promoted only with benchmark evidence and rollback notes |
-| OpenAI Responses API | control-eval | Structured outputs, tool contract tests, eval generation, trace grading | Never becomes primary silently |
 | Kimi K2.5 via NVIDIA Build | kimi-specialist | Deliberate long-context, style-sensitive, and second-opinion lane; only a last-resort hosted fallback outside specialist routing | Must pass ORION-specific evals before fallback promotion |
 | Local runtime | bounded-local-backup | Optional local bounded utility work | Never owns high-stakes orchestration |
 
@@ -32,11 +31,11 @@ Operational helpers:
 
 | Task | Primary | Fallbacks | Local allowed |
 | --- | --- | --- | --- |
-| Routing and specialist handoffs | openrouter-auto-primary | Gemini, OpenAI; hand off to Kimi only through an explicit specialist lane | no |
-| Structured output and tool validation | OpenAI | openrouter-auto-primary, Gemini; keep Kimi behind stable compatibility lanes | no |
-| Research and second opinions | openrouter-hunter-alpha | openrouter-auto-primary, OpenAI; Kimi is an explicit specialist lane for long-context or alternate reasoning | no |
-| Evals and trace grading | OpenAI | openrouter-auto-primary, Gemini; Kimi only when the eval explicitly targets that lane | no |
-| Bounded utility work | openrouter-free-bounded | Local, openrouter-auto-primary | yes |
+| Routing and specialist handoffs | OpenAI | OpenRouter auto, then Kimi | no |
+| Structured output and tool validation | OpenAI | OpenRouter auto, then Kimi | no |
+| Research and second opinions | OpenAI | OpenRouter Hunter Alpha, OpenRouter auto, then Kimi | no |
+| Evals and trace grading | OpenAI | OpenRouter auto, then Kimi | no |
+| Bounded utility work | OpenAI | Local, OpenRouter free bounded, OpenRouter auto | yes |
 
 ## Hard rules
 
@@ -52,11 +51,10 @@ Operational helpers:
 Use `config/llm_provider_benchmark_report.template.json` as the baseline report shape.
 
 Provider-specific request surfaces in the harness:
+- OpenAI control plane: Responses API with strict `text.format.type=json_schema`
 - OpenRouter auto primary: OpenRouter API with model `openrouter/auto`
 - OpenRouter Hunter Alpha: OpenRouter API with provider-specific Hunter Alpha model id
 - OpenRouter free bounded: OpenRouter API with bounded/free-tier model id
-- Gemini via OpenClaw: embedded schema prompt through `openclaw agent --local --json`
-- OpenAI control plane: Responses API with strict `text.format.type=json_schema`
 - Kimi via NVIDIA Build: OpenAI-compatible `chat/completions` with `response_format.json_schema`
 - Local runtime (compatibility): OpenAI-compatible `chat/completions` with `response_format.json_schema`
 

@@ -1,0 +1,23 @@
+{
+  "age_hours": null,
+  "inbox": {
+    "line": 3,
+    "path": "tasks/INBOX/aegis_plan_watch_delegation.md"
+  },
+  "job_id": "pkt-146e466b8a5b010a",
+  "notify": "",
+  "objective": "Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat.",
+  "owner": "AEGIS_PLAN_WATCH_DELEGATION",
+  "packet_id": "pkt-146e466b8a5b010a",
+  "parent_packet_id": "",
+  "pending_since_ts": null,
+  "requester": "ORION",
+  "result_status": "OK",
+  "root_packet_id": "pkt-146e466b8a5b010a",
+  "stale_threshold_hours": 24.0,
+  "state": "pending_verification",
+  "ticket_refs": [],
+  "updated_ts": 1775914351.143861,
+  "version": 1,
+  "workflow_id": "pkt-146e466b8a5b010a"
+}

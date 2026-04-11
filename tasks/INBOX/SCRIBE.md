@@ -37,6 +37,7 @@ Output Format:
 - Single message body only.
 
 Result:
+Status: OK
 TELEGRAM_MESSAGE:
 Wrapped up recent ORION platform changes:
 - Strengthened Task Packet validation (Notify lint; Emergency requires Incident) with new tests.

@@ -1,0 +1,25 @@
+{
+  "job_count": 1,
+  "jobs": [
+    {
+      "inbox": {
+        "line": 9,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "pkt-56b620502f5d5624",
+      "objective": "Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory.",
+      "owner": "ATLAS",
+      "packet_id": "pkt-56b620502f5d5624",
+      "parent_packet_id": "",
+      "state": "pending_verification"
+    }
+  ],
+  "owners": [
+    "ATLAS"
+  ],
+  "root_packet_id": "pkt-56b620502f5d5624",
+  "state": "in_progress",
+  "updated_ts": 1775914351.143861,
+  "version": 1,
+  "workflow_id": "pkt-56b620502f5d5624"
+}

@@ -1,0 +1,37 @@
+{
+  "input": {
+    "metadata": {
+      "channel": "telegram",
+      "has_specialist_result": true,
+      "queued_count": 0,
+      "result_count": 1,
+      "source": "notify_inbox_results"
+    },
+    "request_text": "Automated delegated-result summary notification.",
+    "response_text": "Inbox update:\n\nResults:\n\n1. [SCRIBE] Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up).\nStatus: OK\nTELEGRAM_MESSAGE:\nWrapped up recent ORION platform changes:\n- Strengthened Task Packet validation (Notify lint; Emergency requires Incident) with new tests.\n- Added shared inbox state helpers and refactored inbox notification to use them.\n- Extended inbox packet runner with retry/backoff state support and a new `--state-path`.\n- Verified test suite passes (npm test: unittest + validate_task_packets).\nfile: tasks/INBOX/SCRIBE.md:9",
+    "scope": "automated_summary",
+    "tags": [
+      "automated_outbound",
+      "delegated_result_summary",
+      "notify_telegram"
+    ]
+  },
+  "kind": "orion_policy_gate",
+  "mode": "audit",
+  "rules": {
+    "default_mode": "audit",
+    "name": "orion_runtime_policy",
+    "path": "/Users/corystoner/src/ORION/config/orion_policy_rules.json",
+    "version": 1
+  },
+  "summary": {
+    "blocked": false,
+    "blocking_violations": 0,
+    "evaluated_rules": 1,
+    "passed": true,
+    "total_rules": 9,
+    "violations": 0
+  },
+  "timestamp": "2026-04-09T14:01:01.387937+00:00",
+  "violations": []
+}

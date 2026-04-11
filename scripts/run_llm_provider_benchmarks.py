@@ -482,10 +482,7 @@ def probe_openrouter_chat_completions(key: str, model: str) -> tuple[bool, str]:
 def provider_readiness(provider_id: str, provider: dict[str, Any], live: bool) -> dict[str, Any]:
     ready = False
     note = "unknown provider"
-    if provider_id == "gemini-openclaw":
-        ready = shutil.which("openclaw") is not None
-        note = "openclaw available" if ready else "openclaw binary not found"
-    elif provider_id == "openai-control-plane":
+    if provider_id == "openai-control-plane":
         key = (os.getenv("OPENAI_API_KEY") or "").strip()
         if not key:
             return {"provider_ready": False, "skip_reason": "missing OPENAI_API_KEY"}
@@ -886,8 +883,6 @@ def main() -> int:
                         "notes": "dry run placeholder",
                     }
                 )
-            elif provider_id == "gemini-openclaw":
-                row = bench_openclaw(provider_id, provider, task_id)
             elif provider_id == "openai-control-plane":
                 row = bench_openai(provider_id, provider, task_id)
             elif provider_id == "kimi-k2-5-nvidia-build":
@@ -932,9 +927,9 @@ def main() -> int:
         "run_mode": "dry_run" if args.dry_run else "live",
         "results": results,
         "summary": {
-            "primary_candidate": "openrouter-auto-primary",
+            "primary_candidate": "openai-control-plane",
             "promotion_recommended": bool(results) and all(item["pass_fail"] == "pass" for item in results),
-            "notes": "Dry-run rows are placeholders. Live promotion requires provider-ready pass results.",
+            "notes": "Dry-run rows are placeholders. Live promotion requires provider-ready pass results with OpenAI kept primary.",
             "unready_providers": sorted({item["provider"] for item in results if not item["provider_ready"]}),
         },
     }

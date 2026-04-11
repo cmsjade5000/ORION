@@ -16,7 +16,6 @@ class LlmProviderArtifactsTest(unittest.TestCase):
     def test_registry_includes_required_provider_lanes(self) -> None:
         provider_ids = {item["provider_id"] for item in self.registry["providers"]}
         required = {
-            "gemini-openclaw",
             "openai-control-plane",
             "kimi-k2-5-nvidia-build",
             "local-bounded-runtime",
@@ -51,6 +50,8 @@ class LlmProviderArtifactsTest(unittest.TestCase):
         openai = by_id["openai-control-plane"]
         kimi = by_id["kimi-k2-5-nvidia-build"]
         self.assertEqual(openai["api_path"], "https://api.openai.com/v1/responses")
+        self.assertEqual(openai["lane"], "production-orchestrator")
+        self.assertIn("routing", openai["allowed_tasks"])
         self.assertIn("structured_outputs", openai["allowed_tasks"])
         self.assertEqual(kimi["models"], ["moonshotai/kimi-k2.5"])
         self.assertIn("research_synthesis", kimi["allowed_tasks"])
