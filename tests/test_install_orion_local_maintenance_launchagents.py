@@ -14,8 +14,17 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
     def test_runner_covers_enabled_local_jobs(self):
         for needle in (
             "assistant-inbox-notify",
+            "assistant-email-triage",
             "assistant-task-loop",
             "assistant-agenda-refresh",
+            "orion-error-review",
+            "orion-session-maintenance",
+            "orion-ops-bundle",
+            "orion-judgment-layer",
+        ):
+            self.assertIn(needle, self.runner)
+        self.assertIn("scripts/inbox_cycle.py", self.runner)
+        for needle in (
             "kalshi-ref-arb-digest",
             "kalshi-digest-delivery-guard",
             "kalshi-digest-reliability-daily",
@@ -24,34 +33,26 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
             "orion-lane-hotspots-daily",
             "orion-stop-gate-daily",
             "orion-monthly-scorecard-daily",
-            "orion-error-review",
-            "orion-session-maintenance",
-            "orion-ops-bundle",
-            "orion-judgment-layer",
             "orion-skill-discovery-weekly",
         ):
-            self.assertIn(needle, self.runner)
+            self.assertNotIn(needle, self.runner)
 
     def test_installer_disables_duplicate_crons(self):
         for needle in (
             'disable_cron_by_name "assistant-inbox-notify"',
+            'disable_cron_by_name "assistant-email-triage"',
             'disable_cron_by_name "assistant-task-loop"',
             'disable_cron_by_name "assistant-agenda-refresh"',
-            'disable_cron_by_name "kalshi-ref-arb-digest"',
-            'disable_cron_by_name "kalshi-digest-delivery-guard"',
-            'disable_cron_by_name "kalshi-digest-reliability-daily"',
-            'disable_cron_by_name "orion-reliability-daily"',
-            'disable_cron_by_name "orion-route-hygiene-daily"',
-            'disable_cron_by_name "orion-lane-hotspots-daily"',
-            'disable_cron_by_name "orion-stop-gate-daily"',
-            'disable_cron_by_name "orion-monthly-scorecard-daily"',
             'disable_cron_by_name "orion-error-review"',
             'disable_cron_by_name "orion-session-maintenance"',
             'disable_cron_by_name "orion-ops-bundle"',
             'disable_cron_by_name "orion-judgment-layer"',
-            'disable_cron_by_name "orion-skill-discovery-weekly"',
         ):
             self.assertIn(needle, self.installer)
+        self.assertNotIn(
+            'install_plist "com.openclaw.orion.assistant_task_loop"',
+            self.installer,
+        )
 
 
 if __name__ == "__main__":

@@ -1,23 +1,26 @@
-# ORION Gateway (OpenClaw Workspace)
+# ORION Core Gateway (OpenClaw Workspace)
 
-This repo is an **OpenClaw workspace** for a local-first agent orchestration system ("Gateway").
+This repo is an **OpenClaw workspace** for ORION core: a local-first admin copilot and safe orchestration system.
 
 Design goals:
 - single user-facing ingress (ORION)
-- specialists are scoped and non-user-facing
+- a small default specialist surface for core work
 - identities are generated to reduce drift
 - delegation is structured and auditable (Task Packets)
 - secrets never enter Git
-- admin-copilot usefulness over dashboards or novelty surfaces
+- admin-copilot usefulness over novelty surfaces or product sprawl
 
 ## Runtime Model
 
 - **ORION** (`agentId: main`) is the only user-facing bot (Telegram/Discord/Slack when configured).
-- Specialists run as isolated OpenClaw agents: **ATLAS**, **NODE**, **PULSE**, **STRATUS**, **PIXEL**, **QUEST**, **EMBER**, **LEDGER**, **POLARIS**, **SCRIBE**, **WIRE**.
+- Default ORION core delegation lanes are **ATLAS**, **POLARIS**, **WIRE**, and **SCRIBE**.
+- Optional retained lanes are **LEDGER** and **EMBER**.
+- **NODE**, **PULSE**, and **STRATUS** remain internal implementation detail behind **ATLAS**.
+- **PIXEL** and **QUEST** remain available only as non-core extension lanes and are not part of the default ORION core routing surface.
 - ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
 - Specialists return results to ORION only (never message Cory directly).
 - ORION local installs should pin `tools.profile` to `coding`; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset.
-- Checked-in runtime templates now default ORION to `openai/gpt-5.4` with OpenRouter + MiniMax fallbacks.
+- Checked-in runtime templates now default ORION to `openai/gpt-5.4` with OpenRouter + MiniMax fallbacks and no Gemini lane.
 
 ## Go Live (macOS)
 
@@ -40,22 +43,23 @@ openclaw models status
 ```
 
 Latest local/runtime baseline:
-- Runtime verified on 2026-04-09 against `OpenClaw 2026.4.9`.
+- Runtime verified on 2026-04-11 against `OpenClaw 2026.4.10`.
 - Historical upgrade note remains in `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`.
 - Current sweep baseline and follow-on decisions live in:
   - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
   - `docs/ORION_TOOL_PILOTS_2026_04.md`
   - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
 
-Current verification snapshot (2026-04-07):
-- `openclaw --version` returned `OpenClaw 2026.4.9`.
+Current verification snapshot (2026-04-11):
+- `openclaw --version` returned `OpenClaw 2026.4.10`.
 - `openclaw config validate --json` returned `{"valid":true,...}`.
 - Live runtime plugin allowlist includes `telegram`, `discord`, `slack`, `open-prose`, `minimax`, `google`, `openrouter`, and `openai`.
 - Live runtime memory slot is `memory-core`, and dreaming is enabled in runtime.
 - ACPX is enabled in the live runtime for bounded specialist execution.
 - ACPX live usage is pinned to ATLAS-owned bounded work with `permissionMode=approve-reads`, `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`.
 - Firecrawl remains disabled in the live runtime because `FIRECRAWL_API_KEY` is not configured.
-- Checked-in templates still keep `memory-lancedb` as the conservative default and keep `memory-core`/dreaming in pilot posture.
+- Checked-in templates still keep `memory-lancedb` as the conservative default while the live runtime uses `memory-core` with dreaming enabled.
+- OpenClaw `2026.4.10` adds bundled Codex provider support, Active Memory as an optional plugin, and `commands.list` gateway RPC; ORION core keeps those as upstream options, not automatic repo commitments.
 - `openclaw skills list` confirms ClawHub-backed skill discovery is available in the local runtime.
 - `browser` and `firecrawl` remain bundled plugin surfaces that are not allowlisted in the current live config.
 - `make incident-bundle` writes a read-only ORION ops bundle under `tmp/incidents/` plus a stable summary at `tasks/NOTES/orion-ops-status.md`.
@@ -68,7 +72,7 @@ Capability intake brief:
   - `docs/OPENCLAW_CAPABILITY_INTAKE_2026_03_18.md`
   - `docs/ORION_TOOLSET_ADOPTION_2026_03_22.md`
 - `docs/ORION_FUNCTIONAL_REVIEW_2026_04_06.md`
-- `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md`
+- `docs/OPENCLAW_MEMORY_DREAMING.md`
 
 ## Recovery
 
@@ -100,11 +104,11 @@ Internal reliability review:
 - `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
 - `docs/ORION_ERROR_REVIEW.md`
 
-Memory/dreaming pilot:
-- ORION keeps `MEMORY.md` as curated truth and `memory-lancedb` as the active checked-in template default for now.
+Memory/dreaming:
+- ORION keeps `memory-lancedb` as the active checked-in template default for now.
 - Live runtime has moved to `memory-core` with dreaming enabled; treat that as runtime state, not a blanket repo default.
-- OpenClaw `2026.4.9` dreaming remains documented here as a pilot path under `memory-core`, not an auto-trusted memory source.
-- See `docs/OPENCLAW_MEMORY_DREAMING_PILOT.md` before switching the memory slot or enabling `/dreaming`.
+- OpenClaw `2026.4.10` is the current verified runtime; dreaming remains documented here as the active `memory-core` path.
+- See `docs/OPENCLAW_MEMORY_DREAMING.md` before switching the memory slot or enabling `/dreaming`.
 - For dreaming to populate short-term recall, ORION memory search must include `memory` in `agents.list[].memorySearch.sources`; `sessions` alone will not write the dreaming recall store.
 - For deterministic direct ORION turns, prefer the guarded wrapper path over raw `openclaw agent`:
   - `make dreaming-status`
@@ -124,28 +128,36 @@ Standard operator health bundle:
   - `tmp/openclaw_operator_health_bundle_latest.json`
   - `tmp/openclaw_operator_health_bundle_latest.md`
 
+## Core Boundary
+
+ORION core owns:
+- admin-copilot Telegram commands (`/today`, `/capture`, `/followups`, `/review`)
+- task packets, delegated-job state, and core maintenance loops
+- routing, retrieval, drafting, safety, and proof-driven execution
+
+ORION core does not own by default:
+- trading, market, game, or media product surfaces
+- product-specific Telegram commands
+- product-specific scheduled jobs
+
+Non-core surfaces now live behind explicit extension seams. See:
+- `docs/ORION_SINGLE_BOT_ORCHESTRATION.md`
+- `docs/ORION_EXTENSION_SURFACES.md`
+- `apps/extensions/`
+
 ## Telegram Surfaces
 
 Primary Telegram commands in ORION DM:
-- Paper-trading quick commands:
-  - `/paper_help` for a quick in-chat command list
-  - `/paper_status` for current paper status
-  - `/paper_update` (or `/paper_update 24`) for status + digest window
-- Flic conversation commands:
-  - `/flic` starts a guided 4-question movie flow and emits a locked Vault picks deep link.
-  - `/reroll` keeps the same filters and advances picks offset for a fresh stack.
-  - `/flicreset` clears in-memory Flic conversation state for the current DM.
-
-Config:
-- Flic deep-link router env vars:
-  - `FLIC_ROUTER_ENABLED=1`
-  - `FLIC_VAULT_BASE_URL=https://vault966-r2.fly.dev`
-  - `FLIC_BOT_USERNAME=Flic_GatewayBot`
-  - Optional: `FLIC_APP_SHORT_NAME=<telegram-miniapp-short-name>`
+- `/today` for agenda from calendar + reminders + delegated work + open tickets
+- `/capture <text>` for quick capture queued to POLARIS
+- `/followups` for waiting-on items and POLARIS queue
+- `/review` for concise daily review / next actions
+- `/agents` for the core agent dashboard
+- `/dreaming ...` for guarded memory/dreaming controls
 
 ## Discord (Optional)
 
-OpenClaw includes a bundled Discord channel plugin (disabled by default). This workspace supports Discord as a first-class request + thread routing surface.
+OpenClaw includes a bundled Discord channel plugin (disabled by default). ORION core keeps Discord available as an optional request/update surface, but not as a reason to widen the default specialist or product surface.
 
 Setup:
 - `docs/DISCORD_SETUP.md`
@@ -183,6 +195,10 @@ OpenClaw injects these workspace files on the first turn of new sessions:
   - Human-readable queue for ORION triage.
 - `tasks/INBOX/*.md`
   - Per-agent inboxes for specialist assignments.
+- `docs/ORION_EXTENSION_SURFACES.md`
+  - Boundary and handoff model for non-core product surfaces.
+- `apps/extensions/`
+  - Moved extension-owned Telegram/product surfaces that are not part of the default ORION core runtime path.
 - `memory/WORKING.md`
   - Current working state (keep it lean).
 - `skills/`

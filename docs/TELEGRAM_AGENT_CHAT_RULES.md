@@ -22,9 +22,11 @@ Current Telegram commands (implemented by the Telegram plugin, not by specialist
 - `/review` returns a bounded daily review.
 - `/dreaming status|on|off|help` inspects or updates ORION's dreaming config via the local assistant command path.
 - `/agents` shows the Agent Dashboard inline keyboard.
-- `/flic` starts a guided 4-question movie-picks flow and returns a locked Vault picks deep link.
-- `/reroll` reuses the last Flic filters and advances offset for a fresh stack.
-- `/flicreset` clears in-memory Flic chat state for the current DM.
+
+Extension-only Telegram surfaces are intentionally outside the default ORION core bot path:
+- Flic, Kalshi, and Pogo command handlers now live under `apps/extensions/telegram/`
+- they are not registered by `src/plugins/telegram/index.ts`
+- enable them only in an extension runtime or a product-specific bot surface
 
 ---
 ## 2. Hierarchy & Speaking Protocol

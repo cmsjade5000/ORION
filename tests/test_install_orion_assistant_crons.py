@@ -15,8 +15,8 @@ class TestInstallOrionAssistantCrons(unittest.TestCase):
         self.assertIn('--name "$job_name"', self.script)
         self.assertIn('"orion-ops-bundle"', self.script)
         self.assertIn('upsert_job "$jobs_json" "assistant-agenda-refresh"', self.script)
+        self.assertIn('upsert_job "$jobs_json" "assistant-email-triage"', self.script)
         self.assertIn('upsert_job "$jobs_json" "assistant-inbox-notify"', self.script)
-        self.assertIn('upsert_job "$jobs_json" "assistant-task-loop"', self.script)
         self.assertIn('upsert_job "$jobs_json" "orion-error-review"', self.script)
         self.assertIn('upsert_job "$jobs_json" "orion-session-maintenance"', self.script)
         self.assertIn('upsert_job "$jobs_json" "orion-ops-bundle"', self.script)
@@ -34,19 +34,22 @@ class TestInstallOrionAssistantCrons(unittest.TestCase):
         self.assertGreaterEqual(self.script.count("--wake next-heartbeat"), 2)
         self.assertEqual(self.script.count("Then respond exactly NO_REPLY."), 6)
         self.assertEqual(self.script.count("Ignore stdout/stderr unless it fails."), 6)
+        self.assertIn("scripts/email_triage_router.py", self.script)
         self.assertIn("scripts/orion_error_db.py", self.script)
         self.assertIn("scripts/session_maintenance.py", self.script)
+        self.assertIn("scripts/inbox_cycle.py", self.script)
 
     def test_follow_through_examples_use_no_deliver(self):
         self.assertIn('bash scripts/install_orion_assistant_crons.sh', self.follow_through)
+        self.assertIn('--name "assistant-email-triage"', self.follow_through)
         self.assertIn('--name "assistant-inbox-notify"', self.follow_through)
-        self.assertIn('--name "task-loop-heartbeat"', self.follow_through)
-        self.assertIn('--name "task-loop-weekly-reconcile"', self.follow_through)
         self.assertIn('--name "orion-session-maintenance"', self.follow_through)
         self.assertIn('--name "orion-ops-bundle"', self.follow_through)
         self.assertIn('--name "inbox-result-notify-discord"', self.follow_through)
-        self.assertGreaterEqual(self.follow_through.count("--no-deliver"), 6)
-        self.assertGreaterEqual(self.follow_through.count("--wake next-heartbeat"), 6)
+        self.assertGreaterEqual(self.follow_through.count("--no-deliver"), 5)
+        self.assertGreaterEqual(self.follow_through.count("--wake next-heartbeat"), 5)
+        self.assertIn("scripts/email_triage_router.py", self.follow_through)
+        self.assertIn("scripts/inbox_cycle.py", self.follow_through)
 
 
 if __name__ == "__main__":

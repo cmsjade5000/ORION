@@ -7,8 +7,27 @@ Define how ORION operates when it is the only Telegram-enabled bot.
 ## Runtime Model
 
 - User-facing channel access: ORION only
-- Specialist reasoning: isolated OpenClaw agents (internal-only)
+- Core specialist reasoning: isolated OpenClaw agents (internal-only)
 - AEGIS: remote sentinel only (monitor/revive), not a user-facing chat bot
+
+Default ORION core routing lanes:
+- ATLAS
+- POLARIS
+- WIRE
+- SCRIBE
+
+Optional retained lanes:
+- LEDGER
+- EMBER
+
+Implementation-detail lanes behind ATLAS:
+- NODE
+- PULSE
+- STRATUS
+
+Non-core extension lanes:
+- PIXEL
+- QUEST
 
 ## Orchestration Flow
 
@@ -21,6 +40,12 @@ Define how ORION operates when it is the only Telegram-enabled bot.
    - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run the specialist turn manually with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
 4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
 5. ORION collects outputs, resolves conflicts, and returns one response to the user.
+
+## Core Boundary
+
+ORION core is the admin-copilot control plane. Trading, gaming, recommendation, and media mini-flows should not widen the default routing surface or default Telegram command set.
+
+Use `docs/ORION_EXTENSION_SURFACES.md` when a non-core product surface still needs a bounded handoff from core.
 
 ### PDF And File Review Path (2026.3.2)
 
@@ -58,7 +83,7 @@ Administrative load routing:
 - Task/incident organization (“paperwork”): ATLAS → NODE.
 - Day-to-day assistant work (today agenda, quick capture, follow-through, email prep): ORION -> POLARIS first.
 - External fact validation and current release/tool verification: ORION -> WIRE.
-- Discovery, option scouting, and “what should we look at?” work: ORION -> PIXEL.
+- Discovery and gaming requests are off-core extension work; do not route them by default in ORION core.
 
 ## POLARIS Admin Co-Pilot Model
 

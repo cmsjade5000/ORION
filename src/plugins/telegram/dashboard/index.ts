@@ -7,16 +7,15 @@ export function registerDashboard(bot: Bot) {
   bot.command("agents", async (ctx) => {
     const keyboard = new InlineKeyboard()
       .text("ORION", "agent_ORION")
-      .text("EMBER", "agent_EMBER")
-      .row()
       .text("ATLAS", "agent_ATLAS")
-      .text("PIXEL", "agent_PIXEL")
       .row()
-      .text("QUEST", "agent_QUEST")
+      .text("POLARIS", "agent_POLARIS")
+      .text("WIRE", "agent_WIRE")
+      .row()
+      .text("SCRIBE", "agent_SCRIBE")
       .text("LEDGER", "agent_LEDGER")
       .row()
-      .text("NODE", "agent_NODE")
-      .text("POLARIS", "agent_POLARIS");
+      .text("EMBER", "agent_EMBER");
 
     await ctx.reply("Select an agent to view details:", {
       reply_markup: keyboard,
@@ -44,31 +43,6 @@ function agentInfo(id: string): string | null {
         "ATLAS",
         "Ops/execution director (coordinates NODE/PULSE/STRATUS for infra work).",
       ].join("\n");
-    case "NODE":
-      return [
-        "NODE",
-        "System glue and coordination (internal-only).",
-      ].join("\n");
-    case "PULSE":
-      return [
-        "PULSE",
-        "Scheduling and workflow automation (internal-only).",
-      ].join("\n");
-    case "STRATUS":
-      return [
-        "STRATUS",
-        "DevOps and gateway implementation (internal-only).",
-      ].join("\n");
-    case "PIXEL":
-      return [
-        "PIXEL",
-        "Discovery and inspiration (internal-only).",
-      ].join("\n");
-    case "QUEST":
-      return [
-        "QUEST",
-        "Gaming co-pilot for in-game tactics, builds, and progression planning (internal-only).",
-      ].join("\n");
     case "EMBER":
       return [
         "EMBER",
@@ -83,6 +57,16 @@ function agentInfo(id: string): string | null {
       return [
         "POLARIS",
         "Admin co-pilot for reminders/calendar/email-prep/contact workflows (internal-only).",
+      ].join("\n");
+    case "WIRE":
+      return [
+        "WIRE",
+        "Sources-first retrieval and release validation (internal-only).",
+      ].join("\n");
+    case "SCRIBE":
+      return [
+        "SCRIBE",
+        "Send-ready drafting and formatting (internal-only).",
       ].join("\n");
     default:
       return null;

@@ -1,9 +1,9 @@
 import type { Bot } from "grammy";
 import fs from "node:fs";
 import path from "node:path";
-import { requireOperatorAccess } from "../access";
-import { runCommand } from "../process";
-import { BoundedExecutor, ChatTaskQueue } from "../queue";
+import { requireOperatorAccess } from "../../../../src/plugins/telegram/access";
+import { runCommand } from "../../../../src/plugins/telegram/process";
+import { BoundedExecutor, ChatTaskQueue } from "../../../../src/plugins/telegram/queue";
 
 type Json = any;
 const digestExecutor = new BoundedExecutor(

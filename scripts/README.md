@@ -180,6 +180,27 @@ python3 scripts/assistant_status.py --cmd refresh --json
 
 ---
 
+## email_triage_router.py
+
+### Purpose
+Poll the ORION AgentMail inbox, threat-screen inbound mail at a metadata level, and append bounded `TASK_PACKET v1` entries into the specialist inbox files.
+
+### Usage
+
+Dry-run:
+
+```bash
+python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20
+```
+
+Apply writes:
+
+```bash
+python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20 --apply
+```
+
+---
+
 ## orion_incident_bundle.py
 
 ### Purpose
@@ -679,7 +700,7 @@ python3 scripts/kalshi_ref_arb.py trade --series KXBTC --limit 10
 ```
 
 Docs:
-- `docs/KALSHI_REF_ARB.md`
+- `apps/extensions/kalshi/docs/KALSHI_REF_ARB.md`
 
 ---
 
@@ -813,24 +834,25 @@ State is persisted at:
 ## local_job_runner.py
 
 ### Purpose
-Run approval-prone local maintenance/reporting jobs directly on the host through one local job bundle LaunchAgent instead of OpenClaw `system.run` cron wrappers.
+Legacy local job bundle runner for ORION core maintenance.
 
-Covered jobs include:
-- assistant agenda/task maintenance
-- Kalshi digest and digest reliability reports
-- ORION daily/weekly local maintenance jobs such as error review, ops bundle, route hygiene, lane hotspots, stop gate, monthly scorecard, and skill discovery
+Covered jobs now mirror the reduced ORION core surface:
+- assistant agenda refresh
+- inbox cycle follow-through
+- AgentMail triage
+- ORION error review, session maintenance, and ops bundle
 
-### Preferred unattended install
+### Current unattended install
 
 ```bash
-bash scripts/install_orion_local_job_bundle_launchagent.sh
+bash scripts/install_orion_local_maintenance_launchagents.sh
 ```
 
 Notes:
-- This installs a macOS LaunchAgent named `com.openclaw.orion.local_job_bundle` that wakes every 60 seconds and runs due local jobs directly.
-- The installer disables duplicate OpenClaw cron jobs for the covered local jobs so Telegram/Discord stop receiving `system.run` approval prompts for them.
-- This is the preferred fix when live jobs are leaking system.run approval prompts into chat channels.
-- Jobs that are truly agent-driven or Task Packet-based are intentionally left on OpenClaw cron.
+- `install_orion_local_job_bundle_launchagent.sh` is now a compatibility wrapper that removes the old bundle LaunchAgent and forwards to the canonical maintenance installer.
+- The canonical installer writes one LaunchAgent per maintenance job through `scripts/orion_local_maintenance_runner.sh`.
+- `assistant-inbox-notify` running `scripts/inbox_cycle.py` is the canonical core follow-through loop.
+- It also disables duplicate OpenClaw cron jobs for the covered local jobs so Telegram/Discord stop receiving `system.run` approval prompts for them.
 
 ---
 

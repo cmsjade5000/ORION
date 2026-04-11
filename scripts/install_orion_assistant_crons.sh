@@ -20,6 +20,7 @@ fi
 
 legacy_names=(
   "assistant-agenda-refresh"
+  "assistant-email-triage"
   "assistant-inbox-notify"
   "assistant-task-loop"
   "inbox-result-notify"
@@ -33,8 +34,8 @@ legacy_names=(
 
 canonical_names=(
   "assistant-agenda-refresh"
+  "assistant-email-triage"
   "assistant-inbox-notify"
-  "assistant-task-loop"
   "orion-error-review"
   "orion-session-maintenance"
   "orion-ops-bundle"
@@ -150,8 +151,8 @@ upsert_job() {
 }
 
 CMD1="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/assistant_status.py --cmd refresh --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-CMD2="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/notify_inbox_results.py --require-notify-telegram. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
-CMD3="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/task_execution_loop.py --apply --stale-hours 24. Do not request elevated execution. Do not add --strict-stale. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD2="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20 --apply. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+CMD3="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/inbox_cycle.py --repo-root . --runner-max-packets 4 --stale-hours 24 --notify-max-per-run 8. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 CMD4="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 CMD5="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 CMD6="Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
@@ -161,8 +162,8 @@ prune_jobs "$jobs_json"
 jobs_json="$(openclaw cron list --all --json)"
 
 upsert_job "$jobs_json" "assistant-agenda-refresh" "Refresh ORION assistant agenda artifact" "*/15 * * * *" "$CMD1"
-upsert_job "$jobs_json" "assistant-inbox-notify" "Notify Cory when assistant packets complete" "*/2 * * * *" "$CMD2"
-upsert_job "$jobs_json" "assistant-task-loop" "Reconcile assistant tickets and fail loudly on stale admin work" "*/5 * * * *" "$CMD3"
+upsert_job "$jobs_json" "assistant-email-triage" "Poll ORION AgentMail and route safe inbound email into inbox task packets" "*/5 * * * *" "$CMD2"
+upsert_job "$jobs_json" "assistant-inbox-notify" "Advance safe inbox work, reconcile lanes, and notify Cory" "*/2 * * * *" "$CMD3"
 upsert_job "$jobs_json" "orion-error-review" "Review recurring ORION errors and apply safe remediations" "15 2 * * *" "$CMD4"
 upsert_job "$jobs_json" "orion-session-maintenance" "Prune stale ORION session metadata when drift exceeds threshold" "45 2 * * *" "$CMD5"
 upsert_job "$jobs_json" "orion-ops-bundle" "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence" "30 3 * * *" "$CMD6"
