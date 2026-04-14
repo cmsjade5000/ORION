@@ -112,12 +112,13 @@ Result:
 
 Keep it short; avoid tool logs and secrets.
 
-## Cron (Recommended)
+## Cron (Compatibility Only)
 
-Add the assistant follow-through crons after Telegram inbound is verified:
+Do not use OpenClaw `agentTurn` cron wrappers for deterministic ORION maintenance by default.
+The compatibility installer now requires an explicit override:
 
 ```bash
-bash scripts/install_orion_assistant_crons.sh
+ALLOW_LLM_CRON_WRAPPERS=1 bash scripts/install_orion_assistant_crons.sh --apply
 ```
 
 For local unattended execution on macOS, prefer:
@@ -139,7 +140,7 @@ Nightly reliability review:
 - Incident bundle snapshot: `python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json`
 - Report artifact: `tasks/NOTES/orion-ops-status.md`
 
-Equivalent manual commands:
+Equivalent manual `agentTurn` cron commands are kept only for explicit compatibility/debug cases:
 
 ```bash
 openclaw cron add \

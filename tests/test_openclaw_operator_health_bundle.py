@@ -109,6 +109,8 @@ class TestOpenClawOperatorHealthBundle(unittest.TestCase):
                 smoke_message=self.mod.SMOKE_MESSAGE,
                 smoke_thinking="low",
                 smoke_timeout_s=120,
+                allow_live_model_probe=True,
+                allow_live_smoke=True,
             )
 
         commands = [call.args[0] for call in run_mock.call_args_list]
@@ -141,6 +143,82 @@ class TestOpenClawOperatorHealthBundle(unittest.TestCase):
         self.assertTrue(report["summary"]["memory_ok"])
         self.assertTrue(report["summary"]["rem_harness_ok"])
         self.assertTrue(report["summary"]["smoke_ok"])
+        self.assertTrue(report["allowLiveModelProbe"])
+        self.assertTrue(report["allowLiveSmoke"])
+
+    def test_build_report_skips_live_checks_without_opt_in(self):
+        responses = [
+            SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "service": {
+                            "loaded": True,
+                            "runtime": {"status": "running"},
+                            "configAudit": {"ok": True},
+                        },
+                        "rpc": {"ok": True},
+                    }
+                ),
+                stderr="",
+            ),
+            SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"defaultModel": "openai/gpt-5.4"}),
+                stderr="",
+            ),
+            SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    [
+                        {
+                            "audit": {"exists": True, "entryCount": 3},
+                            "status": {"dirty": False},
+                        }
+                    ]
+                ),
+                stderr="",
+            ),
+            SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "rem": {"sourceEntryCount": 3},
+                        "deep": {"candidateCount": 3},
+                    }
+                ),
+                stderr="",
+            ),
+        ]
+
+        with mock.patch.object(self.mod.subprocess, "run", side_effect=responses) as run_mock:
+            report = self.mod.build_report(
+                repo_root=Path("/repo"),
+                agent="main",
+                probe_max_tokens=16,
+                smoke_message=self.mod.SMOKE_MESSAGE,
+                smoke_thinking="low",
+                smoke_timeout_s=120,
+                allow_live_model_probe=False,
+                allow_live_smoke=False,
+            )
+
+        commands = [call.args[0] for call in run_mock.call_args_list]
+        self.assertEqual(
+            commands,
+            [
+                ["openclaw", "gateway", "status", "--json"],
+                ["openclaw", "models", "status", "--json"],
+                ["openclaw", "memory", "status", "--agent", "main", "--json"],
+                ["openclaw", "memory", "rem-harness", "--agent", "main", "--json"],
+            ],
+        )
+        smoke = next(check for check in report["checks"] if check["name"] == "smoke-turn")
+        self.assertTrue(smoke["ok"])
+        self.assertTrue(smoke["skipped"])
+        self.assertTrue(report["summary"]["overall_ok"])
+        self.assertFalse(report["allowLiveModelProbe"])
+        self.assertFalse(report["allowLiveSmoke"])
 
     def test_main_writes_bundle_artifacts(self):
         responses = [
@@ -161,6 +239,8 @@ class TestOpenClawOperatorHealthBundle(unittest.TestCase):
                     "openclaw_operator_health_bundle.py",
                     "--repo-root",
                     "/repo",
+                    "--allow-live-model-probe",
+                    "--allow-live-smoke",
                     "--output-json",
                     str(out_json),
                     "--output-md",

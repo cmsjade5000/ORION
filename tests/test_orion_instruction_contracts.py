@@ -218,6 +218,17 @@ class TestOrionInstructionContracts(unittest.TestCase):
         self.assertIn("request_permissions", self.orion_role_text)
         self.assertIn("@plugin", self.orion_role_text)
         self.assertIn("mcp-first", self.orion_role_text)
+        self.assertIn("sessions_spawn` -> `sessions_yield`", self.orion_role_text)
+        self.assertIn("Keep ORION non-recursive", self.orion_role_text)
+        self.assertIn("subagents steer", self.orion_role_text)
+
+    def test_atlas_recursive_orchestration_contract(self):
+        self.assertIn("ATLAS is the only recursive orchestrator in ORION core.", self.atlas_role_text)
+        self.assertIn("sessions_spawn` -> `sessions_yield`", self.atlas_role_text)
+        self.assertIn("subagents list", self.atlas_role_text)
+        self.assertIn("subagents steer", self.atlas_role_text)
+        self.assertIn("subagents kill", self.atlas_role_text)
+        self.assertIn("Do not use recursive orchestration for speculative fan-out", self.atlas_role_text)
         self.assertIn("skills/mcporter/SKILL.md", self.orion_role_text)
         self.assertIn("config/mcporter.json", self.orion_role_text)
         self.assertIn("must not expose raw MCP payloads", self.orion_role_text)

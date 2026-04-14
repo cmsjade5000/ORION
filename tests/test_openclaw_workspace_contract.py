@@ -43,6 +43,8 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.provider_matrix = (cls.repo / "docs" / "LLM_PROVIDER_MATRIX.md").read_text(
             encoding="utf-8"
         )
+        cls.low_cost_mode = (cls.repo / "docs" / "LOW_COST_MODE.md").read_text(encoding="utf-8")
+        cls.agents_md = (cls.repo / "AGENTS.md").read_text(encoding="utf-8")
         cls.scripts_readme = (cls.repo / "scripts" / "README.md").read_text(encoding="utf-8")
         cls.polaris_inbox = (cls.repo / "tasks" / "INBOX" / "POLARIS.md").read_text(encoding="utf-8")
         cls.compat_0114 = (cls.repo / "docs" / "CODEX_0114_COMPATIBILITY_REPORT.md").read_text(
@@ -83,13 +85,13 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("baseUrl: https://openrouter.ai/api/v1", self.yaml_example)
         self.assertIn("model: text-embedding-3-small", self.yaml_example)
 
-    def test_examples_default_to_openai_gpt_54(self):
+    def test_examples_default_to_low_cost_primary(self):
         model_defaults = self.json_example["agents"]["defaults"]["model"]
-        self.assertEqual(model_defaults["primary"], "openai/gpt-5.4")
-        self.assertIn("openrouter/openrouter/free", model_defaults["fallbacks"])
+        self.assertEqual(model_defaults["primary"], "openrouter/openrouter/free")
+        self.assertIn("openai/gpt-oss-20b:free", model_defaults["fallbacks"])
         self.assertIn("minimax/MiniMax-M2.7-highspeed", model_defaults["fallbacks"])
-        self.assertIn("openai/gpt-5.4", self.readme)
-        self.assertIn("primary: openai/gpt-5.4", self.yaml_example)
+        self.assertIn("openrouter/openrouter/free", self.readme)
+        self.assertIn("primary: openrouter/openrouter/free", self.yaml_example)
 
     def test_examples_include_cooldowns_codex_search_and_exec_approvals(self):
         cooldowns = self.json_example["auth"]["cooldowns"]
@@ -98,7 +100,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertEqual(cooldowns["overloadedBackoffMs"], 45000)
 
         codex_search = self.json_example["tools"]["web"]["search"]["openaiCodex"]
-        self.assertTrue(codex_search["enabled"])
+        self.assertFalse(codex_search["enabled"])
         self.assertEqual(codex_search["mode"], "cached")
         self.assertEqual(codex_search["contextSize"], "high")
         self.assertEqual(codex_search["userLocation"]["timezone"], "America/New_York")
@@ -113,18 +115,30 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         main_agent = self.json_example["agents"]["list"][0]
         collections = main_agent["memorySearch"]["qmd"]["extraCollections"]
         self.assertEqual([item["name"] for item in collections], ["ledger", "polaris"])
+        atlas_agent = next(agent for agent in self.json_example["agents"]["list"] if agent["id"] == "atlas")
+        self.assertEqual(atlas_agent["subagents"]["allowAgents"], ["node", "pulse", "stratus"])
         ember_agent = next(agent for agent in self.json_example["agents"]["list"] if agent["id"] == "ember")
-        self.assertEqual(ember_agent["model"]["primary"], "openai/gpt-5.4")
+        self.assertEqual(ember_agent["model"]["primary"], "openrouter/openrouter/free")
+        self.assertIn("openai/gpt-oss-20b:free", ember_agent["model"]["fallbacks"])
         self.assertIn("nvidia-build/moonshotai/kimi-k2.5", ember_agent["model"]["fallbacks"])
         self.assertIn("extraCollections:", self.yaml_example)
         self.assertIn("name: ledger", self.yaml_example)
         self.assertIn("name: polaris", self.yaml_example)
+        self.assertIn("- id: atlas", self.yaml_example)
         self.assertIn("- id: ember", self.yaml_example)
+
+    def test_subagent_defaults_capture_native_control_plane(self):
+        subagents = self.json_example["agents"]["defaults"]["subagents"]
+        self.assertEqual(subagents["maxConcurrent"], 11)
+        self.assertEqual(subagents["maxSpawnDepth"], 2)
+        self.assertIn("maxConcurrent: 11", self.yaml_example)
+        self.assertIn("maxSpawnDepth: 2", self.yaml_example)
 
     def test_provider_matrix_keeps_kimi_specialized(self):
         self.assertIn("kimi-specialist", self.provider_matrix)
         self.assertIn("intentional specialist lane", self.provider_matrix)
         self.assertIn("Keep it out of hot-path production fallback chains", self.provider_matrix)
+        self.assertIn("Premium OpenAI/Codex lanes are explicit opt-in", self.provider_matrix)
 
     def test_examples_use_secretref_for_optional_credentials(self):
         discord_token = self.json_example["channels"]["discord"]["token"]
@@ -180,10 +194,12 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
-        self.assertIn("OpenClaw 2026.4.10", self.readme)
+        self.assertIn("OpenClaw 2026.4.14", self.readme)
         self.assertIn("ORION_RUNTIME_BASELINE_2026_04_07.md", self.readme)
         self.assertIn("ORION_EXTENSION_SURFACES.md", self.readme)
         self.assertIn("REPO_HYGIENE.md", self.readme)
+        self.assertIn("NATIVE_SUBAGENT_CONTROL_PLANE.md", self.readme)
+        self.assertIn("LOW_COST_MODE.md", self.readme)
         self.assertIn("sessions_yield", self.upgrade_notes)
         self.assertIn("isolated cron", self.upgrade_notes)
         self.assertIn("cross-agent workspace", self.upgrade_notes)
@@ -197,6 +213,18 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn('"allowAgents": [', (self.repo / "openclaw.json.example").read_text(encoding="utf-8"))
         for needle in ("node", "pulse", "stratus", "pixel", "quest"):
             self.assertNotIn(needle, allow_agents)
+
+    def test_atlas_is_only_recursive_orchestrator_in_templates(self):
+        atlas_agent = next(agent for agent in self.json_example["agents"]["list"] if agent["id"] == "atlas")
+        self.assertEqual(atlas_agent["subagents"]["allowAgents"], ["node", "pulse", "stratus"])
+        self.assertIn("ATLAS is the only recursive orchestrator", self.yaml_example)
+        self.assertIn("Task Packets remain the durable record", self.yaml_example)
+
+    def test_low_cost_mode_is_documented_as_default(self):
+        for text in (self.low_cost_mode, self.agents_md, self.readme, self.migration):
+            self.assertIn("low-cost mode", text)
+        self.assertIn("premium OpenAI/Codex lanes", self.low_cost_mode)
+        self.assertIn("do not run automatic `openclaw models status --probe`", self.low_cost_mode)
 
     def test_live_docs_use_src_workspace_path(self):
         live_texts = (

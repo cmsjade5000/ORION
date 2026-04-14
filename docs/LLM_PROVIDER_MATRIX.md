@@ -1,6 +1,6 @@
 # LLM Provider Matrix
 
-This file is the durable routing reference for ORION's OpenAI-first, multi-provider LLM setup.
+This file is the durable routing reference for ORION's low-cost-first, multi-provider LLM setup.
 
 Machine-readable sources:
 - `config/llm_provider_registry.json`
@@ -11,14 +11,14 @@ Operational helpers:
 - `scripts/openclaw_configure_llm_providers.sh`
 - `scripts/run_llm_provider_benchmarks.py`
 
-## Provider lanes (OpenAI-first)
+## Provider lanes (low-cost-first)
 
 | Provider | Lane | Primary use | Promotion rule |
 | --- | --- | --- | --- |
-| OpenAI Responses API | openai-control-plane | Live ORION routing, handoffs, structured outputs, and eval control | Stays default unless rollback evidence requires compatibility fallback |
-| OpenRouter (`openrouter/auto`) | openrouter-auto-primary | Compatibility fallback for live ORION routing and handoffs | Can be promoted only with explicit rollback evidence |
+| OpenRouter (`openrouter/auto`) | openrouter-auto-primary | Default hosted ORION routing, handoffs, structured outputs, and eval control | Stays default unless rollback evidence requires a different low-cost lane |
+| OpenAI Responses API | openai-control-plane | Premium opt-in control lane for hard cases, audits, or explicit user-approved spend | Never becomes ambient default without explicit promotion evidence |
 | OpenRouter (`hunter-alpha`) | openrouter-hunter-alpha | Non-sensitive research synthesis and second opinions | Non-sensitive only; prompts/completions are provider-logged |
-| OpenRouter (free-tier bounded model) | openrouter-free-bounded | Bounded utility tasks (summarization, extraction, tagging) | Never owns high-stakes orchestration |
+| OpenRouter (free-tier bounded model) | openrouter-free-bounded | Cheapest hosted lane for bounded utility tasks and low-stakes repo work | Never owns high-stakes orchestration |
 
 ## Compatibility lanes (backward-compatible)
 
@@ -31,11 +31,11 @@ Operational helpers:
 
 | Task | Primary | Fallbacks | Local allowed |
 | --- | --- | --- | --- |
-| Routing and specialist handoffs | OpenAI | OpenRouter auto, then Kimi | no |
-| Structured output and tool validation | OpenAI | OpenRouter auto, then Kimi | no |
-| Research and second opinions | OpenAI | OpenRouter Hunter Alpha, OpenRouter auto, then Kimi | no |
-| Evals and trace grading | OpenAI | OpenRouter auto, then Kimi | no |
-| Bounded utility work | OpenAI | Local, OpenRouter free bounded, OpenRouter auto | yes |
+| Routing and specialist handoffs | OpenRouter auto | OpenRouter free bounded, then OpenAI, then Kimi | no |
+| Structured output and tool validation | OpenRouter auto | OpenRouter free bounded, then OpenAI, then Kimi | no |
+| Research and second opinions | OpenRouter auto | Hunter Alpha, OpenRouter free bounded, then OpenAI, then Kimi | no |
+| Evals and trace grading | OpenRouter auto | OpenRouter free bounded, then OpenAI, then Kimi | no |
+| Bounded utility work | Local | OpenRouter free bounded, OpenRouter auto, then OpenAI | yes |
 
 ## Hard rules
 
@@ -43,6 +43,7 @@ Operational helpers:
 - High-risk, destructive, or external-delivery actions still require human approval.
 - Hunter Alpha is non-sensitive-only because provider logs prompts/completions; do not send secrets, credentials, or regulated personal data.
 - Local models do not own specialist orchestration, approval gates, or external messaging decisions.
+- Premium OpenAI/Codex lanes are explicit opt-in escalation paths, not the repo default.
 - NVIDIA Build Kimi is an intentional specialist lane. Keep it out of hot-path production fallback chains for `main`/`ledger`, and place it after stable compatibility providers when it is present as a fallback at all.
 - Provider changes require benchmark evidence and rollback notes.
 

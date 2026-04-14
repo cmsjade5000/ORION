@@ -17,10 +17,10 @@ Design goals:
 - Optional retained lanes are **LEDGER** and **EMBER**.
 - **NODE**, **PULSE**, and **STRATUS** remain internal implementation detail behind **ATLAS**.
 - **PIXEL** and **QUEST** remain available only as non-core extension lanes and are not part of the default ORION core routing surface.
-- ORION delegates using `sessions_spawn` (sub-agents) plus a Task Packet (see `docs/TASK_PACKET.md`).
+- ORION delegates using `sessions_spawn` plus a Task Packet, and uses `sessions_yield` for active long-running sessions while keeping Task Packets as the durable record (see `docs/TASK_PACKET.md` and `docs/NATIVE_SUBAGENT_CONTROL_PLANE.md`).
 - Specialists return results to ORION only (never message Cory directly).
 - ORION local installs should pin `tools.profile` to `coding`; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset.
-- Checked-in runtime templates now default ORION to `openai/gpt-5.4` with OpenRouter + MiniMax fallbacks and no Gemini lane.
+- Checked-in runtime templates now default ORION to `openrouter/openrouter/free` with cheap/free fallbacks first; premium OpenAI/Codex lanes are explicit opt-in only.
 
 ## Go Live (macOS)
 
@@ -43,15 +43,15 @@ openclaw models status
 ```
 
 Latest local/runtime baseline:
-- Runtime verified on 2026-04-11 against `OpenClaw 2026.4.10`.
+- Runtime verified on 2026-04-14 against `OpenClaw 2026.4.14`.
 - Historical upgrade note remains in `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`.
 - Current sweep baseline and follow-on decisions live in:
   - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
   - `docs/ORION_TOOL_PILOTS_2026_04.md`
   - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
 
-Current verification snapshot (2026-04-11):
-- `openclaw --version` returned `OpenClaw 2026.4.10`.
+Current verification snapshot (2026-04-14):
+- `openclaw --version` returned `OpenClaw 2026.4.14`.
 - `openclaw config validate --json` returned `{"valid":true,...}`.
 - Live runtime plugin allowlist includes `telegram`, `discord`, `slack`, `open-prose`, `minimax`, `google`, `openrouter`, and `openai`.
 - Live runtime memory slot is `memory-core`, and dreaming is enabled in runtime.
@@ -59,7 +59,8 @@ Current verification snapshot (2026-04-11):
 - ACPX live usage is pinned to ATLAS-owned bounded work with `permissionMode=approve-reads`, `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`.
 - Firecrawl remains disabled in the live runtime because `FIRECRAWL_API_KEY` is not configured.
 - Checked-in templates still keep `memory-lancedb` as the conservative default while the live runtime uses `memory-core` with dreaming enabled.
-- OpenClaw `2026.4.10` adds bundled Codex provider support, Active Memory as an optional plugin, and `commands.list` gateway RPC; ORION core keeps those as upstream options, not automatic repo commitments.
+- OpenClaw `2026.4.14` is the current verified runtime; bundled Codex provider support, Active Memory, and `commands.list` remain available, and this release train materially improved plugin loading plus memory/dreaming reliability.
+- `openclaw gateway install --force` on `2026.4.14` still leaves the LaunchAgent audit dirty because the generated plist embeds `OPENCLAW_GATEWAY_TOKEN`; treat that as a current installer regression and verify with `openclaw gateway status --json` after reinstalls.
 - `openclaw skills list` confirms ClawHub-backed skill discovery is available in the local runtime.
 - `browser` and `firecrawl` remain bundled plugin surfaces that are not allowlisted in the current live config.
 - `make incident-bundle` writes a read-only ORION ops bundle under `tmp/incidents/` plus a stable summary at `tasks/NOTES/orion-ops-status.md`.
@@ -107,7 +108,7 @@ Internal reliability review:
 Memory/dreaming:
 - ORION keeps `memory-lancedb` as the active checked-in template default for now.
 - Live runtime has moved to `memory-core` with dreaming enabled; treat that as runtime state, not a blanket repo default.
-- OpenClaw `2026.4.10` is the current verified runtime; dreaming remains documented here as the active `memory-core` path.
+- OpenClaw `2026.4.14` is the current verified runtime; dreaming remains documented here as the active `memory-core` path.
 - See `docs/OPENCLAW_MEMORY_DREAMING.md` before switching the memory slot or enabling `/dreaming`.
 - For dreaming to populate short-term recall, ORION memory search must include `memory` in `agents.list[].memorySearch.sources`; `sessions` alone will not write the dreaming recall store.
 - For deterministic direct ORION turns, prefer the guarded wrapper path over raw `openclaw agent`:
@@ -123,7 +124,9 @@ Memory/dreaming:
 
 Standard operator health bundle:
 - Run `make operator-health-bundle` after gateway, model, or memory changes.
-- It checks gateway status, `models status --probe`, memory status, `memory rem-harness`, and one live `main` smoke turn.
+- By default it stays read-only: gateway status, `models status`, memory status, and `memory rem-harness`.
+- Live token spend is opt-in via `ALLOW_LIVE_MODEL_PROBE=1` and/or `ALLOW_LIVE_SMOKE=1`.
+- Repo planning and code-mod work should stay in low-cost mode by default; see `docs/LOW_COST_MODE.md`.
 - Artifacts:
   - `tmp/openclaw_operator_health_bundle_latest.json`
   - `tmp/openclaw_operator_health_bundle_latest.md`
@@ -209,6 +212,7 @@ OpenClaw injects these workspace files on the first turn of new sessions:
 ## Skill Ownership
 
 - The current per-agent skill and tool ownership matrix lives in `docs/ASSISTANT_SKILLS.md`.
+- Repo-wide cost policy and low-spend defaults live in `docs/LOW_COST_MODE.md`.
 - Use ClawHub as the standard discovery/update channel for skill review, but keep repo curation and policy review in the loop.
 - Treat setup-gated skills as `pending setup`, not live capability.
 

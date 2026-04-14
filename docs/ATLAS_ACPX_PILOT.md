@@ -4,7 +4,7 @@ Status: live bounded execution surface
 
 ## Purpose
 
-Use ACPX for bounded specialist execution while keeping ORION ingress and Task Packet durability unchanged.
+Use ACPX for bounded specialist execution while keeping native subagents as the default delegation path, ORION ingress unchanged, and Task Packet durability intact.
 
 ## Live Verification
 
@@ -42,6 +42,7 @@ What the smoke test enforces:
 - ATLAS owns the pilot
 - ATLAS owns the live ACPX lane
 - specialist execution only
+- native `sessions_spawn` plus `sessions_yield` remains the default control path for ORION-core delegation
 - Task Packets remain the durable async contract
 - no ORION ingress bypass
 - no direct user-facing ACPX usage

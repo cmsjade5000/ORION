@@ -43,7 +43,7 @@ Pilot candidate:
 
 Live workflow:
 - ACPX specialist execution for bounded internal-only work
-  Policy: ATLAS-owned only, Task Packets remain durable, `approve-reads` plus `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`
+  Policy: native subagents stay default, ATLAS-owned only, Task Packets remain durable, `approve-reads` plus `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`
 
 ## WIRE
 

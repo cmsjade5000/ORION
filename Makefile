@@ -216,13 +216,17 @@ dreaming-off:
 
 ## Standard operator health bundle for gateway, models, memory, REM, and smoke checks
 operator-health-bundle:
-	@python3 scripts/openclaw_operator_health_bundle.py \
-		--probe-max-tokens "$${PROBE_MAX_TOKENS:-16}" \
-		--thinking "$${THINKING:-low}" \
-		--timeout "$${TIMEOUT:-120}" \
-		--output-json tmp/openclaw_operator_health_bundle_latest.json \
-		--output-md tmp/openclaw_operator_health_bundle_latest.md \
-		--json
+	@args=""; \
+		if [ "$${ALLOW_LIVE_MODEL_PROBE:-0}" = "1" ]; then args="$$args --allow-live-model-probe"; fi; \
+		if [ "$${ALLOW_LIVE_SMOKE:-0}" = "1" ]; then args="$$args --allow-live-smoke"; fi; \
+		python3 scripts/openclaw_operator_health_bundle.py \
+			--probe-max-tokens "$${PROBE_MAX_TOKENS:-16}" \
+			--thinking "$${THINKING:-low}" \
+			--timeout "$${TIMEOUT:-120}" \
+			--output-json tmp/openclaw_operator_health_bundle_latest.json \
+			--output-md tmp/openclaw_operator_health_bundle_latest.md \
+			$$args \
+			--json
 
 ## One-shot coding-party batch (eval + reliability + canary health)
 party-batch-once:

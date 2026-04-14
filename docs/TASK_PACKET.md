@@ -13,6 +13,7 @@ Goal: keep delegation structured, auditable, and low-ambiguity.
 - ORION must include a Task Packet for any non-trivial delegation.
 - Cron jobs must use a Task Packet in the `--message` payload.
 - Specialists should refuse work that lacks enough fields to execute safely.
+- Native subagent control for active sessions may update packet status or notes, but the Task Packet remains the durable source of intent and guardrails.
 
 ## Minimal Task Packet (Required Fields)
 
@@ -46,6 +47,9 @@ Output Format:
 - `Execution Mode:` `direct` | `delegate` | `parallel` | `batch`
   - `parallel` is for independent, non-destructive work only.
   - `batch` is for bounded row-wise jobs (for example `spawn_agents_on_csv`) with explicit schema and limits.
+- `Lifecycle State:` `spawned` | `yielded` | `steered` | `cancelled` | `completed`
+  - Use when a packet is mirrored into status notes or delegated-job tracking.
+  - `yielded` means the current turn was suspended with `sessions_yield`; it does not replace the Task Packet as the durable record.
 - `Policy Mode:` `audit` | `block`
   - Optional runtime enforcement hint for automation packets that pass through ORION policy gating.
   - Default is `audit`; use `block` only after clean-window promotion gates are satisfied.

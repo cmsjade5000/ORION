@@ -416,14 +416,14 @@ python3 scripts/orion_error_db.py review --window-hours 24 --apply-safe-fixes --
 ## install_orion_assistant_crons.sh
 
 ### Purpose
-Print or install the lightweight assistant crons for agenda refresh, inbox notifications, and stale-work reconciliation.
-It also installs the nightly ORION error-review cron.
+Compatibility installer for the older OpenClaw `agentTurn` cron wrappers used for deterministic maintenance jobs.
+The preferred path is `install_orion_local_maintenance_launchagents.sh`, which runs those jobs directly without an extra model turn.
 
 ### Usage
 
 ```bash
-./scripts/install_orion_assistant_crons.sh
-./scripts/install_orion_assistant_crons.sh --apply
+ALLOW_LLM_CRON_WRAPPERS=1 ./scripts/install_orion_assistant_crons.sh
+ALLOW_LLM_CRON_WRAPPERS=1 ./scripts/install_orion_assistant_crons.sh --apply
 ```
 
 ---

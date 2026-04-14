@@ -13,10 +13,13 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 ## Migrated To Runtime
 
 - `tools.profile = "coding"` (pin ORION to a local workspace posture; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset)
-- `agents.defaults.model.primary = "openai/gpt-5.4"` (pinned)
-- `agents.defaults.model.fallbacks = ["openrouter/openrouter/free","openai/gpt-oss-20b:free","minimax/MiniMax-M2.7-highspeed","minimax/MiniMax-M2.7"]` (provider-restricted)
+- `agents.defaults.model.primary = "openrouter/openrouter/free"` (low-cost default)
+- `agents.defaults.model.fallbacks = ["openai/gpt-oss-20b:free","minimax/MiniMax-M2.7-highspeed","minimax/MiniMax-M2.7"]` (cheap/free-first)
 - `agents.defaults.workspace = "/Users/corystoner/src/ORION"`
+- `agents.defaults.subagents.maxConcurrent = 11` (keep native parallel delegation aligned with the live runtime)
+- `agents.defaults.subagents.maxSpawnDepth = 2` (allow ATLAS-owned depth-1 recursion without making ORION itself recursive)
 - `agents.list[0].subagents.allowAgents = ["atlas","ember","ledger","polaris","scribe","wire"]` (explicit ORION core delegation allowlist for `sessions_spawn`)
+- `agents.list[1].subagents.allowAgents = ["node","pulse","stratus"]` (ATLAS-only recursive child surface)
 - `hooks.internal.enabled = ["session-memory","command-logger"]`
 - `channels.telegram.enabled = true`
 - `channels.telegram.commands.native = true`
@@ -65,11 +68,12 @@ Recommended assistant-specific checks:
 openclaw hooks list
 openclaw plugins list --json
 openclaw agents bindings --json
+openclaw config get 'agents.defaults.subagents'
 ```
 
-## Operational Notes (OpenClaw 2026.4.10)
+## Operational Notes (OpenClaw 2026.4.14)
 
-Latest local upgrade verification: 2026-04-11 on ORION's Mac runtime.
+Latest local upgrade verification: 2026-04-14 on ORION's Mac runtime.
 
 Important upstream behavior changes for this workspace:
 
@@ -78,7 +82,8 @@ Important upstream behavior changes for this workspace:
 - Agent memory injection was hardened on case-insensitive filesystems, which matters on macOS.
 - Gateway health/reporting is stricter around degraded reachability and unanswered client requests.
 - Channel/binding collisions now fail fast, so `openclaw agents bindings --json` is part of the recommended post-change check path.
-- OpenClaw `2026.4.10` adds bundled Codex provider support, Active Memory as an optional plugin, and `commands.list` RPC. ORION core keeps those as upstream capabilities rather than widening the default repo-owned control plane.
+- OpenClaw `2026.4.14` keeps bundled Codex provider support, Active Memory, and `commands.list`, and the release train materially improved plugin loading plus memory/dreaming reliability.
+- On 2026-04-14, `openclaw gateway install --force` still generated a LaunchAgent plist with embedded `OPENCLAW_GATEWAY_TOKEN`; treat `gateway-token-embedded` from `openclaw gateway status --json` as an upstream installer regression until a follow-up release clears the audit.
 
 See:
 - `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
@@ -100,7 +105,7 @@ Practical rule:
 
 ## Dreaming Pilot Note (OpenClaw 2026.4.5)
 
-OpenClaw `2026.4.10` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
+OpenClaw `2026.4.14` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
 
 Practical ORION rule:
 - Do not flip `plugins.slots.memory` from `memory-lancedb` to `memory-core` casually.
@@ -108,7 +113,9 @@ Practical ORION rule:
 - When piloting, use only the documented public keys:
   - `enabled`
   - `frequency`
-- After any OpenClaw config change, run `make operator-health-bundle` so gateway, model, memory, REM, and live-turn health stay aligned.
+- After any OpenClaw config change, run `make operator-health-bundle` so gateway, model, and memory health stay aligned.
+- Live provider probes and smoke turns are opt-in: set `ALLOW_LIVE_MODEL_PROBE=1` and/or `ALLOW_LIVE_SMOKE=1` when you intentionally want token-spending checks.
+- ORION repo planning and code-mod work should stay in low-cost mode by default: local context first, targeted verification only, no automatic paid probes.
 
 Observed official surfaces:
 - Slash command: `/dreaming on|off|status|help`
@@ -209,9 +216,9 @@ For supported credential fields, prefer SecretRef objects over raw `${ENV}` stri
 ## Auth Required For Model Routing
 
 Current runtime model routing requires auth for:
-- `openrouter` (for `openrouter/auto`)
-- `openai` (for `openai/gpt-5.4` API-key usage)
-- `openai-codex` (for `openai-codex/gpt-5.4` OAuth usage)
+- `openrouter` (for `openrouter/openrouter/free` and `openrouter/auto`)
+- optional `openai` (only when you intentionally enable a premium OpenAI lane)
+- optional `openai-codex` (only when you intentionally enable Codex/OAuth lanes)
 
 Set auth with either:
 - `openclaw models auth login --provider <provider>`
@@ -225,7 +232,9 @@ openclaw models status
 openclaw hooks list
 openclaw plugins list --json
 openclaw config get agents.defaults.workspace
+openclaw config get 'agents.defaults.subagents'
 openclaw config get 'agents.list[0].subagents.allowAgents'
+openclaw config get 'agents.list[1].subagents.allowAgents'
 openclaw config get 'hooks.internal.enabled'
 openclaw config get 'plugins.slots.memory'
 openclaw config get channels.telegram

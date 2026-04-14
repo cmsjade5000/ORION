@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install bounded-proactive assistant crons after Telegram inbound has been verified.
-# Safe default: print commands unless --apply is passed.
+# Compatibility installer for bounded-proactive assistant crons after Telegram inbound has been verified.
+# Deterministic local maintenance should use LaunchAgents instead; this path requires explicit opt-in.
 
 APPLY=0
+ALLOW_LLM_CRON_WRAPPERS="${ALLOW_LLM_CRON_WRAPPERS:-0}"
+ALLOW_SCHEDULER_OVERLAP="${ALLOW_SCHEDULER_OVERLAP:-0}"
 if [[ "${2:-}" == "--apply" || "${1:-}" == "--apply" ]]; then
   APPLY=1
 fi
@@ -40,6 +42,25 @@ canonical_names=(
   "orion-session-maintenance"
   "orion-ops-bundle"
 )
+
+launchagent_overlap_guard() {
+  python3 scripts/orion_scheduler_overlap_guard.py \
+    --launch-agents-dir "${HOME}/Library/LaunchAgents" \
+    --cron-jobs "${HOME}/.openclaw/cron/jobs.json"
+}
+
+if [[ "${ALLOW_LLM_CRON_WRAPPERS}" != "1" ]]; then
+  cat <<'TXT' >&2
+ERROR: Refusing to install LLM-backed cron wrappers for deterministic ORION maintenance jobs.
+Use scripts/install_orion_local_maintenance_launchagents.sh for the default local maintenance path.
+Override only with ALLOW_LLM_CRON_WRAPPERS=1 when you explicitly want agentTurn cron wrappers.
+TXT
+  exit 2
+fi
+
+if [[ "${ALLOW_SCHEDULER_OVERLAP}" != "1" ]]; then
+  launchagent_overlap_guard
+fi
 
 run_cmd() {
   if [[ "$APPLY" -eq 1 ]]; then
@@ -167,3 +188,7 @@ upsert_job "$jobs_json" "assistant-inbox-notify" "Advance safe inbox work, recon
 upsert_job "$jobs_json" "orion-error-review" "Review recurring ORION errors and apply safe remediations" "15 2 * * *" "$CMD4"
 upsert_job "$jobs_json" "orion-session-maintenance" "Prune stale ORION session metadata when drift exceeds threshold" "45 2 * * *" "$CMD5"
 upsert_job "$jobs_json" "orion-ops-bundle" "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence" "30 3 * * *" "$CMD6"
+
+if [[ "$APPLY" -eq 1 && "${ALLOW_SCHEDULER_OVERLAP}" != "1" ]]; then
+  launchagent_overlap_guard
+fi

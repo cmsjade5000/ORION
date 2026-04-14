@@ -35,7 +35,9 @@ Non-core extension lanes:
 2. ORION decides direct answer vs specialist delegation.
 3. If delegation is needed:
    - Preferred: delegate via `sessions_spawn` using a Task Packet.
-   - Do not treat `sessions_yield` as the default durable async path; use packet-backed reconciliation for work that must survive beyond the current session.
+   - For active long-running delegated work, suspend the current turn with `sessions_yield` after the child is correctly scoped.
+   - Use `subagents list` for bounded state inspection, `subagents steer` for bounded correction, and `subagents kill` for explicit cancel/recovery.
+   - Do not treat `sessions_yield` as the durable system of record; use packet-backed reconciliation for work that must survive beyond the current session.
    - Optional: swarm planning (`swarm-planner`) and parallel execution (`parallel-task`) when you explicitly want it.
    - Fallback: append a Task Packet to `tasks/INBOX/<AGENT>.md` and run the specialist turn manually with `openclaw agent --agent <id> ...` (do not deliver to Telegram).
 4. ORION sends a Task Packet (per `docs/TASK_PACKET.md`) and links any task-specific files.
@@ -77,6 +79,7 @@ For operational work, ORION should route through ATLAS:
 - ATLAS → ORION (integrated result)
 
 This keeps ORION focused on user-facing synthesis while ATLAS coordinates internal ops specialists.
+ATLAS is the only recursive orchestrator in ORION core; ORION itself stays non-recursive.
 
 Administrative load routing:
 - Recurring triage (cron/heartbeat/queue scanning): ATLAS → PULSE.

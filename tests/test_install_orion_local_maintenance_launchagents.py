@@ -49,6 +49,8 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
             'disable_cron_by_name "orion-judgment-layer"',
         ):
             self.assertIn(needle, self.installer)
+        self.assertIn('python3 "${overlap_guard}"', self.installer)
+        self.assertIn("scripts/orion_scheduler_overlap_guard.py", self.installer)
         self.assertNotIn(
             'install_plist "com.openclaw.orion.assistant_task_loop"',
             self.installer,

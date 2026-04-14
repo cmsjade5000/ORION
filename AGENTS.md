@@ -87,6 +87,16 @@ If instructions conflict, SECURITY.md takes precedence.
   - otherwise use official OpenAI documentation and release notes before relying on repo-local notes
 - Treat repo-local OpenAI/Codex compatibility docs as secondary guidance; current official OpenAI docs win if they differ.
 
+## Low-Cost Mode (Default)
+
+- Treat low-cost mode as the permanent default posture for this workspace.
+- For planning or executing ORION code modifications:
+  - prefer local file reads, existing repo docs, and targeted tests before any web or live-model path
+  - avoid automatic live provider probes, smoke turns, benchmark runs, or premium search lanes
+  - keep verification local and scoped to the files or contracts changed
+  - escalate to premium OpenAI/Codex lanes only when Cory explicitly opts in or a bounded low-cost attempt has already failed and the spend tradeoff is stated plainly
+- Low-cost mode applies to planning work too, not just execution. Keep prompts narrow, avoid gratuitous fan-out, and avoid model-dependent validation unless the user explicitly wants it.
+
 ---
 
 ## Sub-Agent Announce Policy (sessions_spawn)

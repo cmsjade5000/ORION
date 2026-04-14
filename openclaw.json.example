@@ -6,9 +6,9 @@
     "web": {
       "search": {
         "enabled": true,
-        "_comment_openaiCodex": "Optional: when a Codex-capable lane is selected, prefer provider-native web_search instead of duplicating the managed search path.",
+        "_comment_openaiCodex": "Low-cost default: keep provider-native Codex web_search off unless a premium research session explicitly needs it.",
         "openaiCodex": {
-          "enabled": true,
+          "enabled": false,
           "mode": "cached",
           "contextSize": "high",
           "userLocation": {
@@ -33,11 +33,10 @@
     "defaults": {
       "workspace": "/Users/corystoner/src/ORION",
       "model": {
-        "_comment_model": "Default posture: use OpenAI GPT-5.4 for production orchestration. Keep the fallback chain explicit so provider drift does not silently change ORION behavior.",
-        "_comment_fallbacks": "Keep Kimi out of the default production fallback chain. Use OpenRouter + MiniMax for general orchestration and reserve Kimi for an intentional specialist lane.",
-        "primary": "openai/gpt-5.4",
+        "_comment_model": "Permanent low-cost posture: keep ORION on the cheapest viable hosted lane by default. Premium OpenAI/Codex routing is explicit opt-in only.",
+        "_comment_fallbacks": "Keep the default chain cheap and deterministic. Kimi and other premium/specialist lanes stay outside the hot-path fallback order unless explicitly enabled.",
+        "primary": "openrouter/openrouter/free",
         "fallbacks": [
-          "openrouter/openrouter/free",
           "openai/gpt-oss-20b:free",
           "minimax/MiniMax-M2.7-highspeed",
           "minimax/MiniMax-M2.7"
@@ -55,7 +54,9 @@
       },
       "maxConcurrent": 4,
       "subagents": {
-        "maxConcurrent": 8
+        "_comment_async": "Use native subagent control for active sessions. Keep Task Packets as the durable record for work that must survive beyond the current session.",
+        "maxConcurrent": 11,
+        "maxSpawnDepth": 2
       }
     },
     "list": [
@@ -91,13 +92,24 @@
         }
       },
       {
-        "_comment": "Keep specialist routing OpenAI-first; Kimi stays available only as an explicit fallback.",
+        "_comment": "ATLAS is the only recursive orchestrator in ORION core. Keep its child surface limited to internal implementation lanes.",
+        "id": "atlas",
+        "subagents": {
+          "allowAgents": [
+            "node",
+            "pulse",
+            "stratus"
+          ]
+        }
+      },
+      {
+        "_comment": "Keep specialist routing low-cost-first; Kimi stays available only as an explicit fallback.",
         "id": "ember",
         "model": {
-          "primary": "openai/gpt-5.4",
+          "primary": "openrouter/openrouter/free",
           "fallbacks": [
-            "nvidia-build/moonshotai/kimi-k2.5",
-            "openrouter/free"
+            "openai/gpt-oss-20b:free",
+            "nvidia-build/moonshotai/kimi-k2.5"
           ]
         }
       }

@@ -27,7 +27,7 @@ Key current-state facts:
 | Browser plugin | Current browser posture is operator-pack and managed-browser guidance | Bundled in runtime, disabled by allowlist | Defer unless it materially outperforms current managed-browser flows |
 | Firecrawl plugin | Mentioned as a candidate in March notes | Bundled in runtime, disabled by allowlist | Strongest retrieval pilot candidate for WIRE |
 | OpenProse | Enabled in templates and runtime | Enabled | Keep as optional workflow formalization, not the durable default async primitive |
-| Async work model | Some docs still mention `sessions_yield` as preference | Durable repo reality remains Task Packet plus reconcile loops | Keep Task Packets as the default async contract |
+| Async work model | Some docs still downplay native subagent control | Durable repo reality remains Task Packet plus reconcile loops | Use `sessions_spawn -> sessions_yield` for active session control, while keeping Task Packets as the durable async contract |
 
 ## Runtime Evidence Snapshot
 
@@ -45,7 +45,7 @@ Key current-state facts:
 - WIRE owns evidence-first external retrieval.
 - PIXEL owns discovery and tool scouting, not source-of-record retrieval.
 - POLARIS remains the admin orchestrator.
-- Task Packets remain the default durable async primitive until a better operational model is proven.
+- Native subagent control should cover active session orchestration, while Task Packets remain the default durable async primitive.
 
 ## Audit Command
 

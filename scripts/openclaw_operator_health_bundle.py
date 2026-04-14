@@ -4,10 +4,10 @@ Standard operator health bundle for ORION / OpenClaw.
 
 Checks:
 - gateway status
-- models status/probe
+- models status (optional live probe)
 - memory status
 - memory rem-harness
-- one live main-agent smoke turn
+- optional live main-agent smoke turn
 
 The bundle is intentionally JSON-first so operators can pipe it into tooling.
 """
@@ -97,8 +97,12 @@ def check_gateway(cmd: list[str]) -> dict[str, Any]:
     }
 
 
-def check_models(cmd: list[str], probe_max_tokens: int) -> dict[str, Any]:
-    proc = run_cmd(cmd + ["models", "status", "--probe", "--probe-max-tokens", str(probe_max_tokens), "--json"])
+def check_models(cmd: list[str], probe_max_tokens: int, *, allow_live_probe: bool) -> dict[str, Any]:
+    argv = cmd + ["models", "status"]
+    if allow_live_probe:
+        argv.extend(["--probe", "--probe-max-tokens", str(probe_max_tokens)])
+    argv.append("--json")
+    proc = run_cmd(argv)
     payload = extract_json_payload(proc)
     auth = payload.get("auth") or {}
     probes = auth.get("probes") or {}
@@ -113,14 +117,16 @@ def check_models(cmd: list[str], probe_max_tokens: int) -> dict[str, Any]:
     if selected_probe is None and results:
         selected_probe = results[0]
     selected_status = (selected_probe or {}).get("status")
-    ok = proc.returncode == 0 and selected_status == "ok"
+    ok = proc.returncode == 0 and (selected_status == "ok" if allow_live_probe else True)
     return {
         "name": "models",
-        "command": cmd + ["models", "status", "--probe", "--probe-max-tokens", str(probe_max_tokens), "--json"],
+        "command": argv,
         "returncode": proc.returncode,
         "stdout": payload,
         "stderr": proc.stderr.strip(),
         "ok": ok,
+        "live_probe_enabled": allow_live_probe,
+        "live_probe_skipped": not allow_live_probe,
         "default_model": default_model or None,
         "selected_probe": selected_probe,
         "probe_count": len(results),
@@ -169,22 +175,43 @@ def check_rem_harness(cmd: list[str], agent: str) -> dict[str, Any]:
     }
 
 
-def check_smoke_turn(cmd: list[str], agent: str, thinking: str, timeout_s: int, message: str) -> dict[str, Any]:
-    proc = run_cmd(
-        cmd
-        + [
-            "agent",
-            "--agent",
-            agent,
-            "--message",
-            message,
-            "--thinking",
-            thinking,
-            "--timeout",
-            str(timeout_s),
-            "--json",
-        ]
-    )
+def check_smoke_turn(
+    cmd: list[str],
+    agent: str,
+    thinking: str,
+    timeout_s: int,
+    message: str,
+    *,
+    allow_live_smoke: bool,
+) -> dict[str, Any]:
+    argv = cmd + [
+        "agent",
+        "--agent",
+        agent,
+        "--message",
+        message,
+        "--thinking",
+        thinking,
+        "--timeout",
+        str(timeout_s),
+        "--json",
+    ]
+    if not allow_live_smoke:
+        return {
+            "name": "smoke-turn",
+            "command": argv,
+            "returncode": 0,
+            "stdout": None,
+            "stderr": "",
+            "ok": True,
+            "skipped": True,
+            "skip_reason": "live smoke disabled; pass --allow-live-smoke to run this check",
+            "smoke_text": None,
+            "provider": None,
+            "model": None,
+            "session_id": None,
+        }
+    proc = run_cmd(argv)
     payload = extract_json_payload(proc)
     result = ((payload.get("result") or {}).get("payloads") or [])
     smoke_text = ""
@@ -195,23 +222,12 @@ def check_smoke_turn(cmd: list[str], agent: str, thinking: str, timeout_s: int, 
     ok = proc.returncode == 0 and smoke_text == EXPECTED_SMOKE_TEXT
     return {
         "name": "smoke-turn",
-        "command": cmd
-        + [
-            "agent",
-            "--agent",
-            agent,
-            "--message",
-            message,
-            "--thinking",
-            thinking,
-            "--timeout",
-            str(timeout_s),
-            "--json",
-        ],
+        "command": argv,
         "returncode": proc.returncode,
         "stdout": payload,
         "stderr": proc.stderr.strip(),
         "ok": ok,
+        "skipped": False,
         "smoke_text": smoke_text or None,
         "provider": agent_meta.get("provider"),
         "model": agent_meta.get("model"),
@@ -219,13 +235,30 @@ def check_smoke_turn(cmd: list[str], agent: str, thinking: str, timeout_s: int, 
     }
 
 
-def build_report(*, repo_root: Path, agent: str, probe_max_tokens: int, smoke_message: str, smoke_thinking: str, smoke_timeout_s: int) -> dict[str, Any]:
+def build_report(
+    *,
+    repo_root: Path,
+    agent: str,
+    probe_max_tokens: int,
+    smoke_message: str,
+    smoke_thinking: str,
+    smoke_timeout_s: int,
+    allow_live_model_probe: bool,
+    allow_live_smoke: bool,
+) -> dict[str, Any]:
     cmd = default_openclaw_cmd(repo_root)
     gateway = check_gateway(cmd)
-    models = check_models(cmd, probe_max_tokens)
+    models = check_models(cmd, probe_max_tokens, allow_live_probe=allow_live_model_probe)
     memory = check_memory(cmd, agent)
     rem_harness = check_rem_harness(cmd, agent)
-    smoke = check_smoke_turn(cmd, agent, smoke_thinking, smoke_timeout_s, smoke_message)
+    smoke = check_smoke_turn(
+        cmd,
+        agent,
+        smoke_thinking,
+        smoke_timeout_s,
+        smoke_message,
+        allow_live_smoke=allow_live_smoke,
+    )
 
     checks = [gateway, models, memory, rem_harness, smoke]
     failed = [check["name"] for check in checks if not check["ok"]]
@@ -234,6 +267,8 @@ def build_report(*, repo_root: Path, agent: str, probe_max_tokens: int, smoke_me
         "agent": agent,
         "probeMaxTokens": probe_max_tokens,
         "smokeMessage": smoke_message,
+        "allowLiveModelProbe": allow_live_model_probe,
+        "allowLiveSmoke": allow_live_smoke,
         "checks": checks,
         "summary": {
             "overall_ok": not failed,
@@ -258,6 +293,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Repo root: `{report.get('repoRoot')}`",
         f"- Agent: `{report.get('agent')}`",
         f"- Probe max tokens: `{report.get('probeMaxTokens')}`",
+        f"- Live model probe: `{str(bool(report.get('allowLiveModelProbe'))).lower()}`",
+        f"- Live smoke turn: `{str(bool(report.get('allowLiveSmoke'))).lower()}`",
         f"- Overall OK: `{str(bool(summary.get('overall_ok'))).lower()}`",
         f"- Failed checks: `{', '.join(summary.get('failed_checks') or []) or '-'}`",
         "",
@@ -286,6 +323,8 @@ def main() -> int:
     ap.add_argument("--smoke-message", default=SMOKE_MESSAGE, help="Exact smoke-turn message to send.")
     ap.add_argument("--thinking", default="low", help="Thinking level for the live smoke turn.")
     ap.add_argument("--timeout", type=int, default=120, help="Timeout in seconds for the smoke turn.")
+    ap.add_argument("--allow-live-model-probe", action="store_true", help="Run models status with a live provider probe.")
+    ap.add_argument("--allow-live-smoke", action="store_true", help="Run a live main-agent smoke turn.")
     ap.add_argument("--output-json", help="Write the bundle JSON report to this path.")
     ap.add_argument("--output-md", help="Write a markdown summary to this path.")
     ap.add_argument("--json", action="store_true", help="Print JSON to stdout.")
@@ -299,6 +338,8 @@ def main() -> int:
         smoke_message=args.smoke_message,
         smoke_thinking=args.thinking,
         smoke_timeout_s=args.timeout,
+        allow_live_model_probe=args.allow_live_model_probe,
+        allow_live_smoke=args.allow_live_smoke,
     )
 
     if args.output_json:

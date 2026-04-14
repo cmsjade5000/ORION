@@ -1,8 +1,10 @@
 import importlib.util
 import inspect
 import json
+import subprocess
 import sys
 import tempfile
+import time
 import threading
 import unittest
 from pathlib import Path
@@ -203,7 +205,7 @@ class TestTaskExecutionLoop(unittest.TestCase):
             ),
         }
 
-        def _runner(argv, capture_output, text, check):
+        def _runner(argv, capture_output, text, check, timeout):
             key = tuple(argv)
             if key not in command_map:
                 raise AssertionError(f"Unexpected command: {argv}")
@@ -876,6 +878,98 @@ class TestTaskExecutionLoop(unittest.TestCase):
         self.assertEqual(summary["counts"]["canonical_issues"], 0)
         self.assertIn("assistant-task-loop: failed", summary["recent_failures"])
 
+    def test_run_capture_returns_timeout_snapshot(self):
+        with mock.patch.object(
+            self.loop.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(cmd=["openclaw", "tasks", "list", "--json"], timeout=1.5),
+        ):
+            snapshot = self.loop._run_capture(["openclaw", "tasks", "list", "--json"])
+
+        self.assertEqual(snapshot.returncode, 124)
+        self.assertEqual(snapshot.stdout, "")
+        self.assertIn("command timed out after", snapshot.stderr)
+        self.assertIsNone(snapshot.data)
+
+    def test_run_completes_when_openclaw_snapshot_times_out(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+
+            command_map = {
+                ("openclaw", "gateway", "health"): mock.Mock(returncode=0, stdout="Gateway Health\nOK (123ms)\n", stderr=""),
+                (
+                    "openclaw",
+                    "gateway",
+                    "status",
+                    "--json",
+                ): mock.Mock(
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "rpc": {"ok": True},
+                            "health": {"healthy": True},
+                            "service": {"runtime": {"status": "running"}},
+                        }
+                    ),
+                    stderr="",
+                ),
+                (
+                    "openclaw",
+                    "channels",
+                    "status",
+                    "--probe",
+                    "--json",
+                ): mock.Mock(
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "channels": {
+                                "telegram": {"configured": True, "running": True, "probe": {"ok": True}},
+                            }
+                        }
+                    ),
+                    stderr="",
+                ),
+            }
+
+            def _runner(argv, capture_output, text, check, timeout):
+                key = tuple(argv)
+                if key in {
+                    ("openclaw", "tasks", "list", "--json"),
+                    ("openclaw", "tasks", "audit", "--json"),
+                }:
+                    raise subprocess.TimeoutExpired(cmd=argv, timeout=timeout)
+                if key not in command_map:
+                    raise AssertionError(f"Unexpected command: {argv}")
+                return command_map[key]
+
+            with mock.patch.object(self.loop.subprocess, "run", side_effect=_runner):
+                rc = self._run_loop(root, apply=True, strict=False, stale_seconds=86400)
+
+            self.assertEqual(rc, 0)
+            status_md = (root / "tasks" / "NOTES" / "status.md").read_text(encoding="utf-8")
+            self.assertIn("## OpenClaw Tasks", status_md)
+            self.assertIn("total=0", status_md)
+
+    def test_collect_openclaw_snapshot_runs_in_parallel(self):
+        started = []
+
+        def _fake_capture(argv):
+            started.append(tuple(argv))
+            time.sleep(0.2)
+            return self.loop.CommandSnapshot(argv=argv, returncode=0, stdout="", stderr="", data=None)
+
+        with mock.patch.object(self.loop, "_run_capture", side_effect=_fake_capture):
+            t0 = time.perf_counter()
+            snapshot = self.loop._collect_openclaw_snapshot()
+            elapsed = time.perf_counter() - t0
+
+        self.assertLess(elapsed, 0.6)
+        self.assertEqual(len(started), 5)
+        self.assertEqual(snapshot.gateway_health.argv, ["openclaw", "gateway", "health"])
+        self.assertEqual(snapshot.tasks_audit.argv, ["openclaw", "tasks", "audit", "--json"])
+
     def test_notes_status_parses_json_with_leading_warning_noise(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -945,7 +1039,7 @@ class TestTaskExecutionLoop(unittest.TestCase):
                 ),
             }
 
-            def _runner(argv, capture_output, text, check):
+            def _runner(argv, capture_output, text, check, timeout):
                 key = tuple(argv)
                 if key not in command_map:
                     raise AssertionError(f"Unexpected command: {argv}")

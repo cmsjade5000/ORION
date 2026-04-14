@@ -11,7 +11,7 @@
 - (none)
 
 ## Evidence
-- discord_restart_indicators=15
+- discord_restart_indicators=6
 - telegram_fallback_indicators=4
 
 ## Recommended Actions

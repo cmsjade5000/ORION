@@ -5,10 +5,11 @@
     {
       "task_id": "routing_and_handoffs",
       "description": "ORION chooses owner, asks gates, and routes to specialists.",
-      "primary_provider": "openai-control-plane",
+      "primary_provider": "openrouter-auto-primary",
       "fallback_providers": [
-        "kimi-k2-5-nvidia-build",
-        "openrouter-auto-primary"
+        "openrouter-free-bounded",
+        "openai-control-plane",
+        "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
       "requires_schema": true,
@@ -17,9 +18,10 @@
     {
       "task_id": "structured_output_validation",
       "description": "Generate or judge schema-constrained outputs and tool arguments.",
-      "primary_provider": "openai-control-plane",
+      "primary_provider": "openrouter-auto-primary",
       "fallback_providers": [
-        "openrouter-auto-primary",
+        "openrouter-free-bounded",
+        "openai-control-plane",
         "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
@@ -29,10 +31,11 @@
     {
       "task_id": "research_and_second_opinions",
       "description": "Deep synthesis, alternative plans, and second-pass reasoning.",
-      "primary_provider": "openai-control-plane",
+      "primary_provider": "openrouter-auto-primary",
       "fallback_providers": [
         "openrouter-hunter-alpha",
-        "openrouter-auto-primary",
+        "openrouter-free-bounded",
+        "openai-control-plane",
         "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
@@ -42,9 +45,10 @@
     {
       "task_id": "evals_and_trace_grading",
       "description": "Benchmark generation, trace grading, and red-team judging.",
-      "primary_provider": "openai-control-plane",
+      "primary_provider": "openrouter-auto-primary",
       "fallback_providers": [
-        "openrouter-auto-primary",
+        "openrouter-free-bounded",
+        "openai-control-plane",
         "kimi-k2-5-nvidia-build"
       ],
       "local_allowed": false,
@@ -54,11 +58,11 @@
     {
       "task_id": "bounded_local_utility",
       "description": "Summarization, extraction, tagging, and cheap preprocessing.",
-      "primary_provider": "openai-control-plane",
+      "primary_provider": "local-bounded-runtime",
       "fallback_providers": [
-        "local-bounded-runtime",
         "openrouter-free-bounded",
-        "openrouter-auto-primary"
+        "openrouter-auto-primary",
+        "openai-control-plane"
       ],
       "local_allowed": true,
       "requires_schema": true,

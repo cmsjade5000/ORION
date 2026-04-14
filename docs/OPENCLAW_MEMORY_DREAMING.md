@@ -1,6 +1,6 @@
 # OpenClaw Memory Dreaming
 
-This repo tracks the OpenClaw `2026.4.10` dreaming surface as the active dreaming path for ORION's `memory-core` runtime.
+This repo tracks the OpenClaw `2026.4.14` dreaming surface as the active dreaming path for ORION's `memory-core` runtime.
 
 ## Goal
 
@@ -15,7 +15,7 @@ Adopt memory consolidation without turning background promotion into a silent so
 
 ## Official OpenClaw Surface
 
-Verified against the `2026.4.10` CLI/docs:
+Verified against the `2026.4.14` CLI/docs:
 - Config path: `plugins.entries.memory-core.config.dreaming`
 - Public config keys:
   - `enabled`
@@ -35,7 +35,7 @@ Verified against the `2026.4.10` CLI/docs:
 Default managed sweep cadence:
 - `0 3 * * *`
 
-Upstream notes in `2026.4.10` that matter for ORION core:
+Upstream notes in `2026.4.14` that matter for ORION core:
 - dreaming remains on the public `memory-core` surface
 - Active Memory exists upstream as an optional plugin, but ORION core keeps the checked-in template conservative
 - bundled Codex provider support and `commands.list` are runtime capabilities, not a reason to widen ORION core ownership
