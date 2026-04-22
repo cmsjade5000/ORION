@@ -71,19 +71,22 @@ openclaw agents bindings --json
 openclaw config get 'agents.defaults.subagents'
 ```
 
-## Operational Notes (OpenClaw 2026.4.14)
+## Operational Notes (OpenClaw 2026.4.21)
 
-Latest local upgrade verification: 2026-04-14 on ORION's Mac runtime.
+Latest local upgrade verification: 2026-04-22 on ORION's Mac runtime.
 
 Important upstream behavior changes for this workspace:
 
 - Isolated cron deadlock handling improved in `2026.3.13`, which benefits assistant agenda refresh, inbox notify, and follow-through loops.
 - Cross-agent workspace resolution improved for subagent spawns, which pairs with this repo's canonical `/Users/corystoner/src/ORION` workspace path.
 - Agent memory injection was hardened on case-insensitive filesystems, which matters on macOS.
-- Gateway health/reporting is stricter around degraded reachability and unanswered client requests.
+- Gateway health/reporting is stricter around degraded reachability and unanswered client requests; immediate post-restart probes can still transiently refuse on this host, so re-check after the LaunchAgent settles.
 - Channel/binding collisions now fail fast, so `openclaw agents bindings --json` is part of the recommended post-change check path.
-- OpenClaw `2026.4.14` keeps bundled Codex provider support, Active Memory, and `commands.list`, and the release train materially improved plugin loading plus memory/dreaming reliability.
-- On 2026-04-14, `openclaw gateway install --force` still generated a LaunchAgent plist with embedded `OPENCLAW_GATEWAY_TOKEN`; treat `gateway-token-embedded` from `openclaw gateway status --json` as an upstream installer regression until a follow-up release clears the audit.
+- OpenClaw `2026.4.20` enforces session-store pruning by default and can split cron runtime execution state into `~/.openclaw/cron/jobs-state.json` while keeping `jobs.json` stable for definitions.
+- OpenClaw `2026.4.20` and `2026.4.21` keep bundled Codex provider support, Active Memory, and `commands.list`, while materially improving plugin loading, memory/dreaming reliability, and doctor/plugin dependency repair behavior.
+- OpenClaw `2026.4.21` tightens owner-command auth: owner-enforced commands now require a real owner identity or `operator.admin`, not just permissive channel fallback.
+- The older `gateway-token-embedded` LaunchAgent warning from `2026.4.14` is not the current verified state on this machine; the current LaunchAgent config audit is clean after the `2026.4.21` upgrade.
+- This host needed a post-upgrade local npm rebuild inside `dist/extensions/discord` to restore the bundled Discord runtime dependencies. Treat that as a packaged-runtime repair note, not a repo-config change.
 
 See:
 - `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`
@@ -103,13 +106,13 @@ Practical rule:
   interpolation is the portable runtime pattern here rather than a `SecretRef`
   object.
 
-## Dreaming Pilot Note (OpenClaw 2026.4.5)
+## Dreaming Pilot Note (OpenClaw 2026.4.21)
 
-OpenClaw `2026.4.14` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
+OpenClaw `2026.4.21` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
 
 Practical ORION rule:
-- Do not flip `plugins.slots.memory` from `memory-lancedb` to `memory-core` casually.
-- Keep dreaming disabled in the template until the active memory backend is stable enough for background promotion.
+- The live runtime is already on `memory-core` with dreaming enabled, but keep the checked-in template conservative unless the repo intentionally decides to make that the default for new installs.
+- Do not widen that live posture casually into the template without re-verifying memory reliability and operator expectations.
 - When piloting, use only the documented public keys:
   - `enabled`
   - `frequency`

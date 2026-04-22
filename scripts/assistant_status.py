@@ -26,10 +26,66 @@ from assistant_common import (
     today_et,
     write_text,
 )
+from delegation_delivery_rules import blocked_direct_telegram_delivery
 
 
 AGENDA_PATH = Path("tasks/NOTES/assistant-agenda.md")
 DREAMING_COMMANDS = ["dreaming-status", "dreaming-help", "dreaming-on", "dreaming-off"]
+
+
+def _load_job_summary(root: Path) -> dict[str, object]:
+    summary_path = root / "tasks" / "JOBS" / "summary.json"
+    if not summary_path.exists():
+        return {}
+    try:
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _summary_jobs(root: Path) -> list[dict[str, object]]:
+    jobs = _load_job_summary(root).get("jobs", [])
+    if isinstance(jobs, list) and jobs:
+        return [job for job in jobs if isinstance(job, dict)]
+
+    fallback_jobs: list[dict[str, object]] = []
+    for packet in load_packets(root):
+        owner = packet.fields.get("Owner", packet.inbox_path.stem.upper())
+        objective = packet.fields.get("Objective", "").strip() or "(no objective)"
+        notify = packet.fields.get("Notify", "")
+        state = "queued" if packet.result_status is None else "pending_verification"
+        result: dict[str, object] = {
+            "present": bool(packet.result_status),
+            "raw_status": packet.result_status,
+            "status": (packet.result_status or "pending").lower(),
+            "job_state": state,
+        }
+        fallback_jobs.append(
+            {
+                "job_id": f"fallback:{packet.inbox_path.name}:{packet.start_line}",
+                "workflow_id": "",
+                "state": state,
+                "state_reason": "fallback_packet_scan",
+                "owner": owner,
+                "objective": objective,
+                "notify": notify,
+                "notify_channels": [],
+                "queued_digest": "",
+                "result_digest": "",
+                "result": result,
+                "inbox": {
+                    "path": str(packet.inbox_path.relative_to(root)),
+                    "line": packet.start_line,
+                },
+            }
+        )
+    return fallback_jobs
+
+
+def _summary_workflows(root: Path) -> list[dict[str, object]]:
+    workflows = _load_job_summary(root).get("workflows", [])
+    return [item for item in workflows if isinstance(item, dict)] if isinstance(workflows, list) else []
 
 
 def _run_text_command(argv: list[str], *, cwd: Path, timeout: int = 20) -> tuple[bool, str]:
@@ -158,9 +214,8 @@ def _render_today(root: Path) -> tuple[str, str]:
     calendar_payload = load_calendar_events(root)
     reminders = load_reminders(root)
     tickets = load_tickets(root)
-    packets = load_packets(root)
     active_tickets = [ticket for ticket in tickets if ticket.lane in {"backlog", "in-progress", "testing"}]
-    pending_packets = [packet for packet in packets if packet.result_status is None]
+    pending_jobs = [job for job in _summary_jobs(root) if str(job.get("state") or "").strip().lower() == "queued"]
 
     lines = [
         f"ORION today ({today_et()})",
@@ -177,10 +232,10 @@ def _render_today(root: Path) -> tuple[str, str]:
 
     lines.append("")
     lines.append("Open delegated work:")
-    if pending_packets:
-        for packet in pending_packets[:5]:
-            owner = packet.fields.get("Owner", "UNKNOWN")
-            objective = packet.fields.get("Objective", "").strip() or "(no objective)"
+    if pending_jobs:
+        for job in pending_jobs[:5]:
+            owner = str(job.get("owner") or "UNKNOWN").strip() or "UNKNOWN"
+            objective = str(job.get("objective") or "").strip() or "(no objective)"
             lines.append(f"- {owner}: {objective}")
     else:
         lines.append("- No pending Task Packets.")
@@ -193,18 +248,25 @@ def _render_today(root: Path) -> tuple[str, str]:
     else:
         lines.append("- No open tickets.")
 
+    safety_checks = _load_delegated_specialist_delivery_checks(root)
+    if safety_checks:
+        lines.append("")
+        lines.append("Delegation safety checks:")
+        for item in safety_checks:
+            lines.append(f"- {item}")
+
     message = "\n".join(lines).strip()
-    return message, _render_markdown_snapshot(calendar_payload, reminders, active_tickets, pending_packets)
+    return message, _render_markdown_snapshot(calendar_payload, reminders, active_tickets, pending_jobs)
 
 
 def _render_followups(root: Path) -> tuple[str, str]:
     tickets = load_tickets(root)
     followups = extract_followup_lines(tickets)
-    packets = load_packets(root, owner="POLARIS")
     pending_polaris = [
-        f"{packet.fields.get('Objective', '(no objective)')}"
-        for packet in packets
-        if packet.result_status is None
+        str(job.get("objective") or "(no objective)")
+        for job in _summary_jobs(root)
+        if str(job.get("owner") or "").strip().upper() == "POLARIS"
+        and str(job.get("state") or "").strip().lower() == "queued"
     ]
 
     lines = [
@@ -224,8 +286,80 @@ def _render_followups(root: Path) -> tuple[str, str]:
     if not pending_polaris:
         lines.append("- No pending POLARIS packets.")
 
+    lines.append("")
+    lines.append("Delegated workflow follow-ups:")
+    job_followups = _load_delegated_workflow_followups(root)
+    for item in job_followups:
+        lines.append(f"- {item}")
+    if not job_followups:
+        lines.append("- None blocking or manual.")
+
+    followup_safety = _load_delegated_specialist_delivery_checks(root)
+    if followup_safety:
+        lines.append("")
+        lines.append("Delegation safety checks:")
+        for item in followup_safety:
+            lines.append(f"- {item}")
+
     message = "\n".join(lines).strip()
     return message, message
+
+
+def _load_delegated_workflow_followups(root: Path) -> list[str]:
+    followups: list[str] = []
+    state_priority = {"blocked": 0, "manual_required": 1, "unsupported": 2}
+
+    def _safe_int(value: object, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _workflow_sort_key(entry: dict[str, object]) -> tuple[int, str]:
+        state = str(entry.get("state") or "").strip().lower()
+        return (state_priority.get(state, 99), str(entry.get("workflow_id") or ""))
+
+    for workflow in sorted(_summary_workflows(root), key=_workflow_sort_key):
+        if not isinstance(workflow, dict):
+            continue
+
+        state = str(workflow.get("state") or "").strip().lower()
+        if state not in {"blocked", "manual_required", "unsupported"}:
+            continue
+
+        workflow_id = str(workflow.get("workflow_id") or "(unknown)").strip()
+        owners = workflow.get("owners")
+        owner_text = ", ".join(str(owner).strip() for owner in owners if str(owner).strip()) if isinstance(owners, list) else "unknown"
+        if not owner_text:
+            owner_text = "unknown"
+        job_count = _safe_int(workflow.get("job_count"), 0)
+        followups.append(
+            f"{state}: workflow {workflow_id} (owners={owner_text}, jobs={job_count})"
+        )
+
+    return followups
+
+
+def _load_delegated_specialist_delivery_checks(root: Path) -> list[str]:
+    safety_findings: list[str] = []
+    for job in _summary_jobs(root):
+        owner = str(job.get("owner") or "UNKNOWN").strip() or "UNKNOWN"
+        notify = str(job.get("notify") or "")
+        if not blocked_direct_telegram_delivery(owner, notify):
+            continue
+
+        objective = str(job.get("objective") or "").strip() or "(no objective)"
+        status = str(job.get("result", {}).get("raw_status") or job.get("state") or "pending") if isinstance(job.get("result"), dict) else str(job.get("state") or "pending")
+        inbox = job.get("inbox", {})
+        if not isinstance(inbox, dict):
+            inbox = {}
+        inbox_path = str(inbox.get("path") or "(unknown)")
+        line_no = int(inbox.get("line") or 0)
+        safety_findings.append(
+            f"Potential direct specialist Telegram delivery: {owner} packet in {Path(inbox_path).name}:{line_no} ({status}) — {objective}"
+        )
+
+    return safety_findings
 
 
 def _render_review(root: Path) -> tuple[str, str]:
@@ -249,7 +383,7 @@ def _render_review(root: Path) -> tuple[str, str]:
     return message, message
 
 
-def _render_markdown_snapshot(calendar_payload, reminders, tickets, pending_packets) -> str:
+def _render_markdown_snapshot(calendar_payload, reminders, tickets, pending_jobs) -> str:
     generated_at = now_et().strftime("%Y-%m-%d %H:%M %Z")
     lines = [
         "# Assistant Agenda",
@@ -267,10 +401,10 @@ def _render_markdown_snapshot(calendar_payload, reminders, tickets, pending_pack
     lines.extend([f"- {ticket.title} [{ticket.lane}]" for ticket in tickets[:8]] or ["- No open tickets."])
     lines.append("")
     lines.append("## Delegated Work")
-    if pending_packets:
-        for packet in pending_packets[:8]:
-            owner = packet.fields.get("Owner", "UNKNOWN")
-            objective = packet.fields.get("Objective", "").strip() or "(no objective)"
+    if pending_jobs:
+        for job in pending_jobs[:8]:
+            owner = str(job.get("owner") or "UNKNOWN").strip() or "UNKNOWN"
+            objective = str(job.get("objective") or "").strip() or "(no objective)"
             lines.append(f"- {owner}: {objective}")
     else:
         lines.append("- No pending Task Packets.")

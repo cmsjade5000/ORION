@@ -3576,3 +3576,19 @@ Follow-up Owner: ATLAS
 Follow-up Tasks:
 - Review recurring runtime error and harden the prevention path.
 Closed: open
+
+INCIDENT v1
+Id: INC-20260418-0615-orion-recurring-erro
+Opened: 2026-04-18T06:15:47Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: timeout
+Evidence:
+- fingerprint=06d03c2a3d62411c occurrences=4
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open

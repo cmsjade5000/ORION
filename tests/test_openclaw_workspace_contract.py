@@ -15,6 +15,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
             bootstrap_path.read_text(encoding="utf-8") if bootstrap_path.exists() else ""
         )
         cls.workflow = (cls.repo / "docs" / "WORKFLOW.md").read_text(encoding="utf-8")
+        cls.start_here = (cls.repo / "docs" / "ORION_START_HERE.md").read_text(encoding="utf-8")
         cls.recovery = (cls.repo / "docs" / "RECOVERY.md").read_text(encoding="utf-8")
         cls.migration = (cls.repo / "docs" / "OPENCLAW_CONFIG_MIGRATION.md").read_text(
             encoding="utf-8"
@@ -158,7 +159,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("id: NVIDIA_API_KEY", self.yaml_example)
 
     def test_docs_add_config_validate_to_standard_checks(self):
-        for text in (self.readme, self.workflow, self.recovery, self.migration):
+        for text in (self.readme, self.start_here, self.workflow, self.recovery, self.migration):
             self.assertIn("openclaw config validate --json", text)
 
         self.assertIn("config-validate:", self.makefile)
@@ -182,6 +183,10 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("openai/text-embedding-3-small", self.migration)
 
     def test_assistant_docs_are_wired(self):
+        self.assertIn("docs/ORION_START_HERE.md", self.readme)
+        self.assertIn("docs/ORION_START_HERE.md", self.workflow)
+        self.assertIn("docs/ORION_START_HERE.md", self.single_bot)
+        self.assertIn("docs/ORION_START_HERE.md", self.agents_md)
         self.assertIn("/today", self.readme)
         self.assertIn("/capture", self.readme)
         self.assertIn("POLARIS", self.assistant_workflows)
@@ -199,6 +204,10 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("ORION_EXTENSION_SURFACES.md", self.readme)
         self.assertIn("REPO_HYGIENE.md", self.readme)
         self.assertIn("NATIVE_SUBAGENT_CONTROL_PLANE.md", self.readme)
+        self.assertIn("TASK_PACKET.md", self.start_here)
+        self.assertIn("NATIVE_SUBAGENT_CONTROL_PLANE.md", self.start_here)
+        self.assertIn("FOLLOW_THROUGH.md", self.start_here)
+        self.assertIn("ORION_SINGLE_BOT_ORCHESTRATION.md", self.start_here)
         self.assertIn("LOW_COST_MODE.md", self.readme)
         self.assertIn("sessions_yield", self.upgrade_notes)
         self.assertIn("isolated cron", self.upgrade_notes)

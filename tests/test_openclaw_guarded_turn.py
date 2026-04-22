@@ -32,6 +32,26 @@ class TestOpenClawGuardedTurn(unittest.TestCase):
         )
         fake.chmod(0o755)
 
+    def _write_fake_openclaw_with_prefix(self, root: Path, *, response_text: str) -> None:
+        scripts_dir = root / "scripts"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        fake = scripts_dir / "openclaww.sh"
+        fake.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "if [ \"${1:-}\" = \"agent\" ]; then\n"
+            "  printf 'Gateway agent failed; falling back to embedded: invalid channel\\n'\n"
+            "  cat <<'JSON'\n"
+            f"{{\"result\":{{\"payloads\":[{{\"text\":{json.dumps(response_text)} }}]}}}}\n"
+            "JSON\n"
+            "  exit 0\n"
+            "fi\n"
+            "echo \"unsupported\" >&2\n"
+            "exit 9\n",
+            encoding="utf-8",
+        )
+        fake.chmod(0o755)
+
     def _write_rules(self, root: Path, *, block_mode: str) -> None:
         cfg = root / "config"
         cfg.mkdir(parents=True, exist_ok=True)
@@ -128,6 +148,43 @@ class TestOpenClawGuardedTurn(unittest.TestCase):
             self.assertTrue((root / "tmp" / "sent.log").exists())
             self.assertIn("DELIVERED", proc.stderr)
 
+    def test_blocks_specialist_direct_telegram_delivery(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "tmp").mkdir(parents=True, exist_ok=True)
+            self._write_fake_openclaw(root, response_text="Specialist result path")
+            self._write_rules(root, block_mode="audit")
+
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--agent",
+                    "PIXEL",
+                    "--runtime-channel",
+                    "local",
+                    "--message",
+                    "Run Pixel specialist follow-up.",
+                    "--policy-mode",
+                    "audit",
+                    "--rules",
+                    "config/orion_policy_rules.json",
+                    "--deliver-channel",
+                    "telegram",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertNotIn("DELIVERED", proc.stderr)
+            self.assertFalse((root / "tmp" / "sent.log").exists())
+            self.assertIn("BLOCKED:", proc.stderr)
+
     def test_sanitizes_internal_tool_wrapper_before_print_and_delivery(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -196,6 +253,80 @@ class TestOpenClawGuardedTurn(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertIn("ORION dreaming status", proc.stdout)
             self.assertIn("Memory slot:", proc.stdout)
+
+    def test_local_runtime_channel_omits_channel_flag(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "tmp").mkdir(parents=True, exist_ok=True)
+            scripts_dir = root / "scripts"
+            scripts_dir.mkdir(parents=True, exist_ok=True)
+            fake = scripts_dir / "openclaww.sh"
+            fake.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                f"printf '%s\\n' \"$@\" > {str((root / 'tmp' / 'argv.txt').as_posix())}\n"
+                "cat <<'JSON'\n"
+                "{\"result\":{\"payloads\":[{\"text\":\"Hello from ORION\"}]}}\n"
+                "JSON\n",
+                encoding="utf-8",
+            )
+            fake.chmod(0o755)
+            self._write_rules(root, block_mode="audit")
+
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--runtime-channel",
+                    "local",
+                    "--message",
+                    "Hello bridge",
+                    "--policy-mode",
+                    "audit",
+                    "--rules",
+                    "config/orion_policy_rules.json",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            argv_text = (root / "tmp" / "argv.txt").read_text(encoding="utf-8")
+            self.assertNotIn("--channel\nlocal\n", argv_text)
+
+    def test_parses_json_after_prefix_warning(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_fake_openclaw_with_prefix(root, response_text="Hello after fallback")
+            self._write_rules(root, block_mode="audit")
+
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--runtime-channel",
+                    "local",
+                    "--message",
+                    "Hello bridge",
+                    "--policy-mode",
+                    "audit",
+                    "--rules",
+                    "config/orion_policy_rules.json",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("Hello after fallback", proc.stdout)
 
 
 if __name__ == "__main__":

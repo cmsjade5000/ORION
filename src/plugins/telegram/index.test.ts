@@ -13,6 +13,7 @@ describe("setupTelegramPlugin", () => {
     setupTelegramPlugin(bot);
 
     expect(bot.command).toHaveBeenCalledWith("today", expect.any(Function));
+    expect(bot.command).toHaveBeenCalledWith("orion", expect.any(Function));
     expect(bot.command).toHaveBeenCalledWith("agents", expect.any(Function));
     expect(bot.command).not.toHaveBeenCalledWith("paper_help", expect.any(Function));
     expect(bot.command).not.toHaveBeenCalledWith("pogo_help", expect.any(Function));

@@ -28,9 +28,11 @@ from pathlib import Path
 try:
     from inbox_state import load_kv_state, save_kv_state, sha256_lines
     from inbox_file_ops import atomic_write_text, ensure_packets_header, locked_file, packet_identity
+    from delegation_delivery_rules import blocked_direct_telegram_delivery
 except Exception:  # pragma: no cover
     from scripts.inbox_state import load_kv_state, save_kv_state, sha256_lines  # type: ignore
     from scripts.inbox_file_ops import atomic_write_text, ensure_packets_header, locked_file, packet_identity  # type: ignore
+    from scripts.delegation_delivery_rules import blocked_direct_telegram_delivery  # type: ignore
 
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
@@ -289,6 +291,9 @@ def _process_one_packet(repo_root: Path, pref: PacketRef, *, state_path: Path) -
     fields = pref.fields
     owner = (fields.get("Owner", "").strip() or pref.inbox_path.stem).upper()
     notify = fields.get("Notify", "").strip().lower()
+
+    if blocked_direct_telegram_delivery(owner, notify):
+        return False
 
     if notify not in {"telegram", "discord"}:
         return False

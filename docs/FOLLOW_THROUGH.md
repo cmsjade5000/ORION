@@ -8,6 +8,11 @@ Inbound email uses a separate lightweight triage loop first: AgentMail is polled
 
 For the admin-copilot posture, this is required infrastructure rather than optional polish.
 
+Canonical runtime model:
+- `tasks/INBOX/*.md` remains the durable input surface for packet creation, result append, and lineage.
+- `tasks/JOBS/<job>.json`, `tasks/JOBS/wf-*.json`, and `tasks/JOBS/summary.json` are the canonical read model for delegated-work state.
+- Notification and operator-status surfaces should read `tasks/JOBS` artifacts first and treat inbox markdown as compatibility fallback only.
+
 ## Mechanism (Single-Bot Mode)
 
 1. ORION creates a Task Packet in `tasks/INBOX/<AGENT>.md` and includes:
@@ -22,6 +27,10 @@ For the admin-copilot posture, this is required infrastructure rather than optio
      - `--policy-rules config/orion_policy_rules.json`
      - `--policy-mode audit|block` (default `audit`)
 4. The cycle writes durable per-job artifacts to `tasks/JOBS/*.json`, per-workflow artifacts to `tasks/JOBS/wf-*.json`, updates `tasks/JOBS/summary.json`, and the notifier remembers what it already sent (state in `tmp/inbox_notify_state.json`).
+
+Read-model expectations:
+- Per-job artifacts carry the canonical state, state reason, notify channels, stable queued/result digests, and a safe result preview.
+- `summary.json` is the aggregate API for queued/result/workflow status; status views should not re-infer that state from inbox markdown when the summary is present.
 
 Canonical delegated-job states:
 - `queued`
@@ -65,6 +74,7 @@ Notes:
 - Heartbeat outputs remain `NO_REPLY`; the script does the send.
   - Telegram: direct API call (token file or env var).
   - Discord: uses `openclaw message send --channel discord ...` (so this script never touches the Discord token).
+- Telegram and Discord should share one normalized delegated-job event model, with only delivery adapters differing.
 
 ## Closed-Loop Enforcement
 

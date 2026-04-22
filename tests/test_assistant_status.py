@@ -103,6 +103,42 @@ class TestAssistantStatus(unittest.TestCase):
             self.assertIn("Reply to Jordan", payload["message"])
             self.assertIn("Prepare today's agenda", payload["message"])
 
+    def test_today_surfaces_specialist_telegram_direct_delivery_blocks(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            packets = root / "tasks" / "INBOX"
+            packets.mkdir(parents=True, exist_ok=True)
+            (packets / "PIXEL.md").write_text(
+                "# PIXEL Inbox\n\n## Packets\n"
+                "TASK_PACKET v1\n"
+                "Owner: PIXEL\n"
+                "Requester: ATLAS\n"
+                "Notify: telegram\n"
+                "Objective: Build sample specialist packet.\n"
+                "Success Criteria:\n- done\n"
+                "Constraints:\n- none\n"
+                "Inputs:\n- (none)\n"
+                "Risks:\n- low\n"
+                "Stop Gates:\n- none\n"
+                "Output Format:\n- short\n",
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "today", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            message = payload["message"]
+
+            self.assertIn("Delegation safety checks:", message)
+            self.assertIn("Potential direct specialist Telegram delivery: PIXEL", message)
+
     def test_refresh_writes_assistant_agenda_artifact(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -116,6 +152,104 @@ class TestAssistantStatus(unittest.TestCase):
             )
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertTrue((root / "tasks" / "NOTES" / "assistant-agenda.md").exists())
+
+    def test_followups_includes_delegated_workflow_followups(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            jobs_dir = root / "tasks" / "JOBS"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            (jobs_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "workflows": [
+                            {
+                                "workflow_id": "wf-manual",
+                                "state": "manual_required",
+                                "owners": ["ATLAS"],
+                                "job_count": "seven",
+                            },
+                            {
+                                "workflow_id": "wf-blocked",
+                                "state": "blocked",
+                                "owners": ["PIXEL", "ATLAS"],
+                                "job_count": 3,
+                            },
+                            {
+                                "workflow_id": "wf-complete",
+                                "state": "complete",
+                                "owners": ["PIXEL"],
+                                "job_count": 1,
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "followups", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            message = payload["message"]
+
+            self.assertIn("Delegated workflow follow-ups:", message)
+            self.assertIn("blocked: workflow wf-blocked (owners=PIXEL, ATLAS, jobs=3)", message)
+            self.assertIn("manual_required: workflow wf-manual (owners=ATLAS, jobs=0)", message)
+            self.assertNotIn("complete:", message)
+            self.assertLess(
+                message.find("blocked: workflow wf-blocked"),
+                message.find("manual_required: workflow wf-manual"),
+            )
+
+    def test_today_reads_pending_work_from_job_summary_without_inbox_packet_scan(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            jobs_dir = root / "tasks" / "JOBS"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            (jobs_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "jobs": [
+                            {
+                                "job_id": "pkt-123",
+                                "workflow_id": "wf-123",
+                                "state": "queued",
+                                "state_reason": "pending_packet",
+                                "owner": "POLARIS",
+                                "objective": "Prepare today's agenda from summary.",
+                                "notify": "telegram",
+                                "notify_channels": ["telegram"],
+                                "queued_digest": "digest-123",
+                                "result_digest": None,
+                                "result": {"status": "pending", "job_state": "queued", "present": False, "raw_status": None},
+                                "inbox": {"path": "tasks/INBOX/POLARIS.md", "line": 4},
+                            }
+                        ],
+                        "workflows": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "tasks" / "INBOX" / "POLARIS.md").unlink()
+
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "today", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertIn("Prepare today's agenda from summary.", payload["message"])
 
     def test_review_includes_recent_memory_matches(self):
         with tempfile.TemporaryDirectory() as td:

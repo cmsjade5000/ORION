@@ -6,7 +6,9 @@ This workspace runs multiple isolated OpenClaw agents on the same Mac mini.
 
 - ORION (`agentId: main`): the only user-facing ingress agent.
 - ATLAS: operational director and executor.
-- NODE / PULSE / STRATUS: internal-only ops sub-agents directed by ATLAS.
+- NODE: packet and incident hygiene, directed by ATLAS.
+- PULSE: workflow queueing, retries, and pacing, directed by ATLAS.
+- STRATUS: infra and host implementation, directed by ATLAS.
 - WIRE: evidence-first retrieval specialist directly invoked by ORION as needed.
 - PIXEL / QUEST / EMBER / LEDGER / POLARIS / SCRIBE: internal specialists directly invoked by ORION as needed.
 
@@ -22,7 +24,10 @@ Preferred coordination path:
 
 1. Cory talks to ORION (Slack/Telegram).
 2. ORION delegates operational work to ATLAS via a Task Packet.
-3. ATLAS delegates sub-tasks to NODE / PULSE / STRATUS via Task Packets.
+3. ATLAS delegates sub-tasks to NODE / PULSE / STRATUS via Task Packets:
+   - NODE for packet and incident records
+   - PULSE for queue/retry orchestration
+   - STRATUS for infra and host work
 4. ATLAS returns an integrated result to ORION.
 5. ORION communicates externally.
 

@@ -115,6 +115,17 @@ def _value_points_to_whatsapp(value: Any) -> bool:
     return False
 
 
+def _iter_delivery_payloads(job: dict[str, Any]) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for delivery_key in ("delivery", "deliveryContext"):
+        delivery = job.get(delivery_key)
+        if isinstance(delivery, dict):
+            payloads.append(delivery)
+        elif isinstance(delivery, str):
+            payloads.append({"channel": delivery})
+    return payloads
+
+
 def _iter_sessions(data: Any) -> Iterable[tuple[str, dict[str, Any]]]:
     if isinstance(data, dict):
         sessions = data.get("sessions")
@@ -317,54 +328,50 @@ def main() -> int:
                 if not _is_job_enabled(job):
                     continue
 
-                delivery = job.get("delivery")
-                if not isinstance(delivery, dict):
-                    continue
-
                 job_ref = str(job.get("id") or job.get("name") or f"jobs[{idx}]")
-                channel = _normalize_channel(delivery.get("channel"))
-                mode = _normalize_channel(delivery.get("mode"))
                 message = _extract_message(job.get("payload"))
-
-                if channel == "whatsapp":
-                    unsafe_findings.append(
-                        {
-                            "type": "cron_whatsapp_enabled",
-                            "path": str(cron_path),
-                            "ref": job_ref,
-                            "reason": "enabled cron job routes delivery.channel=whatsapp",
-                        }
-                    )
-
-                if channel == "last" and mode == "announce":
-                    if _contains_no_reply(message):
-                        safe_findings.append(
-                            {
-                                "type": "cron_last_announce_noreply",
-                                "path": str(cron_path),
-                                "ref": job_ref,
-                                "reason": "enabled last+announce cron with NO_REPLY marker can be set to mode=none",
-                            }
-                        )
-                        if args.apply:
-                            delivery["mode"] = "none"
-                            cron_modified = True
-                            changes.append(
-                                {
-                                    "action": "cron_delivery_mode_set_none",
-                                    "path": str(cron_path),
-                                    "detail": f"{job_ref} delivery.mode announce -> none",
-                                }
-                            )
-                    else:
+                for payload in _iter_delivery_payloads(job):
+                    channel = _normalize_channel(payload.get("channel"))
+                    mode = _normalize_channel(payload.get("mode"))
+                    if channel == "whatsapp":
                         unsafe_findings.append(
                             {
-                                "type": "cron_last_announce_without_noreply",
+                                "type": "cron_whatsapp_enabled",
                                 "path": str(cron_path),
                                 "ref": job_ref,
-                                "reason": "enabled last+announce cron missing NO_REPLY marker",
+                                "reason": "enabled cron job routes delivery.channel=whatsapp",
                             }
                         )
+
+                    if channel == "last" and mode == "announce":
+                        if _contains_no_reply(message):
+                            safe_findings.append(
+                                {
+                                    "type": "cron_last_announce_noreply",
+                                    "path": str(cron_path),
+                                    "ref": job_ref,
+                                    "reason": "enabled last+announce cron with NO_REPLY marker can be set to mode=none",
+                                }
+                            )
+                            if args.apply and "mode" in payload:
+                                payload["mode"] = "none"
+                                cron_modified = True
+                                changes.append(
+                                    {
+                                        "action": "cron_delivery_mode_set_none",
+                                        "path": str(cron_path),
+                                        "detail": f"{job_ref} delivery.mode announce -> none",
+                                    }
+                                )
+                        else:
+                            unsafe_findings.append(
+                                {
+                                    "type": "cron_last_announce_without_noreply",
+                                    "path": str(cron_path),
+                                    "ref": job_ref,
+                                    "reason": "enabled last+announce cron missing NO_REPLY marker",
+                                }
+                            )
         elif cron_path.exists() and not unsafe_findings:
             warnings.append(f"cron jobs file present but has unexpected shape: {cron_path}")
     else:

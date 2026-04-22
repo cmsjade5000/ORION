@@ -22,6 +22,8 @@ If you are ORION (`agentId: main`):
 - The single user-facing ingress agent is **ORION** (`agentId: main`).
 - ORION interprets user requests, decomposes them, and delegates to specialists.
 
+For first-time onboarding and runtime checks, start with `docs/ORION_START_HERE.md`.
+
 ### ORION Must Load Its SOUL (Hard Rule)
 
 OpenClaw does not reliably inject generated `agents/<AGENT>/SOUL.md` artifacts into the live system prompt.

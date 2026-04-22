@@ -12,7 +12,7 @@ Notes:
 
 ## ORION Dreaming Path
 
-OpenClaw `2026.4.14` exposes dreaming in `memory-core`.
+OpenClaw `2026.4.21` exposes dreaming in `memory-core`.
 
 ORION stance:
 - Keep `memory-lancedb` as the active template default until memory reliability is boring.

@@ -1,6 +1,7 @@
 import importlib.util
 import inspect
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -360,13 +361,25 @@ class TestTaskExecutionLoop(unittest.TestCase):
 
             by_objective = {item["objective"]: item for item in payloads}
             self.assertEqual(by_objective["Start delegated job."]["state"], "in_progress")
+            self.assertEqual(by_objective["Start delegated job."]["state_reason"], "ticket_in_progress")
+            self.assertEqual(by_objective["Start delegated job."]["notify_channels"], ["telegram"])
+            self.assertTrue(by_objective["Start delegated job."]["queued_digest"])
             self.assertEqual(by_objective["Finish delegated job."]["state"], "pending_verification")
+            self.assertEqual(by_objective["Finish delegated job."]["state_reason"], "result_ok_waiting_done")
+            self.assertEqual(by_objective["Finish delegated job."]["result"]["status"], "ok")
+            self.assertTrue(by_objective["Finish delegated job."]["result_digest"])
+            self.assertEqual(by_objective["Finish delegated job."]["result"]["preview_lines"][0], "Status: OK")
 
             summary = json.loads((jobs_dir / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["job_count"], 2)
             self.assertEqual(summary["counts"]["in_progress"], 1)
             self.assertEqual(summary["counts"]["pending_verification"], 1)
+            self.assertEqual(summary["result_counts"]["pending"], 1)
+            self.assertEqual(summary["result_counts"]["ok"], 1)
             self.assertEqual(summary["workflow_count"], 2)
+            summary_job = next(item for item in summary["jobs"] if item["objective"] == "Finish delegated job.")
+            self.assertEqual(summary_job["state_reason"], "result_ok_waiting_done")
+            self.assertTrue(summary_job["result_digest"])
 
     def test_terminal_packet_appends_next_packet_exactly_once(self):
         with tempfile.TemporaryDirectory() as td:
@@ -732,6 +745,62 @@ class TestTaskExecutionLoop(unittest.TestCase):
             rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=24 * 3600, now=1700000000.0)
             self.assertEqual(rc, 0)
             self.assertEqual(atlas_inbox.read_text(encoding="utf-8").count("Idempotency Key: recovery:stale:"), 1)
+
+            jobs_summary = json.loads((root / "tasks" / "JOBS" / "summary.json").read_text(encoding="utf-8"))
+            stale_entry = next(item for item in jobs_summary["jobs"] if item["objective"] == "Stale specialist task.")
+            self.assertEqual(stale_entry["state"], "blocked")
+            self.assertEqual(stale_entry["state_reason"], "stale_pending")
+
+    def test_notify_script_can_send_from_job_artifacts_after_loop_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_ticket(root, lane="testing", num=12, slug="notify-summary", status="testing")
+            self._write_inbox(
+                root,
+                "WIRE",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: WIRE",
+                        "Requester: ORION",
+                        "Notify: telegram",
+                        "Objective: Summarize finished delegated work.",
+                        "Inputs: tasks/WORK/testing/0012-notify-summary.md",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: finished",
+                    ]
+                ),
+            )
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            (root / "tasks" / "INBOX" / "WIRE.md").unlink()
+            notify_script = Path(__file__).resolve().parents[1] / "scripts" / "notify_inbox_results.py"
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(notify_script),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--max-per-run",
+                    "10",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("[WIRE] Summarize finished delegated work.", proc.stdout)
 
     def test_notes_status_and_plan_are_regenerated_with_non_empty_summaries(self):
         with tempfile.TemporaryDirectory() as td:

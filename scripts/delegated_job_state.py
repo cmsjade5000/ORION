@@ -14,11 +14,13 @@ import json
 from pathlib import Path
 
 try:
-    from inbox_state import sha256_lines
+    from inbox_state import parse_notify_channels, sha256_lines
     from inbox_file_ops import atomic_write_text
+    from outbound_text_guard import sanitize_outbound_text
 except Exception:  # pragma: no cover
-    from scripts.inbox_state import sha256_lines  # type: ignore
+    from scripts.inbox_state import parse_notify_channels, sha256_lines  # type: ignore
     from scripts.inbox_file_ops import atomic_write_text  # type: ignore
+    from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
 
 
 def packet_content_id(fields: dict[str, str], packet_before_result: list[str]) -> str:
@@ -61,6 +63,41 @@ def infer_job_state(
     return "queued"
 
 
+def infer_job_state_reason(
+    *,
+    result_status: str | None,
+    ticket_lanes: list[str],
+    pending_since_ts: float | None,
+    stale_threshold_hours: float,
+    now_ts: float,
+) -> str:
+    normalized = (result_status or "").strip().upper()
+    if normalized == "FAILED":
+        return "result_failed"
+    if normalized == "BLOCKED":
+        return "result_blocked"
+    if normalized == "OK":
+        if "done" in ticket_lanes:
+            return "result_ok_ticket_done"
+        return "result_ok_waiting_done"
+
+    if ticket_lanes:
+        if "testing" in ticket_lanes:
+            return "ticket_testing"
+        if "done" in ticket_lanes:
+            return "ticket_done"
+        if "in-progress" in ticket_lanes:
+            return "ticket_in_progress"
+
+    if pending_since_ts is not None:
+        age_h = max(0.0, (now_ts - pending_since_ts) / 3600.0)
+        if age_h > stale_threshold_hours:
+            return "stale_pending"
+        return "pending_packet"
+
+    return "packet_present"
+
+
 def infer_workflow_state(states: list[str]) -> str:
     normalized = [str(state or "").strip() for state in states if str(state or "").strip()]
     if not normalized:
@@ -72,6 +109,73 @@ def infer_workflow_state(states: list[str]) -> str:
     if any(state in {"in_progress", "pending_verification"} for state in normalized):
         return "in_progress"
     return "queued"
+
+
+def normalize_result_status(result_status: str | None) -> str:
+    normalized = (result_status or "").strip().upper()
+    if normalized in {"OK", "FAILED", "BLOCKED"}:
+        return normalized.lower()
+    return "pending"
+
+
+def normalize_notify(raw_notify: str) -> tuple[str, list[str]]:
+    channels = sorted(parse_notify_channels(raw_notify))
+    return raw_notify.strip(), channels
+
+
+def extract_result_block(packet_lines: list[str]) -> list[str] | None:
+    start = None
+    for idx, line in enumerate(packet_lines):
+        if line.strip() == "Result:":
+            start = idx
+            break
+    if start is None:
+        return None
+    block = packet_lines[start:]
+    if not any(line.strip() for line in block[1:]):
+        return None
+    return block
+
+
+def preview_result_lines(result_block: list[str], *, max_lines: int = 12, max_chars: int = 900) -> list[str]:
+    non_empty: list[tuple[int, str]] = []
+    for idx, raw in enumerate(result_block[1:], start=1):
+        line = sanitize_outbound_text(raw.rstrip())
+        if not line.strip():
+            continue
+        non_empty.append((idx, line))
+
+    if not non_empty:
+        return ["(Result present, but empty.)"]
+
+    out: list[str] = []
+    chars = 0
+    cut = 0
+    for _, line in non_empty:
+        out.append(line)
+        chars += len(line) + 1
+        cut += 1
+        if cut >= max_lines or chars >= max_chars:
+            break
+
+    if out:
+        last = out[-1].strip().lower()
+        if last in {"next step:", "next step (if any):"} and cut < len(non_empty):
+            nxt = non_empty[cut][1]
+            if chars + len(nxt) + 1 <= max_chars:
+                out.append(nxt)
+
+    return out
+
+
+def build_result_record(*, result_status: str | None, state: str) -> dict[str, object]:
+    raw_status = (result_status or "").strip().upper()
+    return {
+        "present": bool(raw_status),
+        "status": normalize_result_status(result_status),
+        "raw_status": raw_status or None,
+        "job_state": state,
+    }
 
 
 def build_job_record(
@@ -117,6 +221,20 @@ def build_job_record(
         stale_threshold_hours=stale_threshold_hours,
         now_ts=now_ts,
     )
+    state_reason = infer_job_state_reason(
+        result_status=packet.result_status,
+        ticket_lanes=ticket_lanes,
+        pending_since_ts=pending_since_ts,
+        stale_threshold_hours=stale_threshold_hours,
+        now_ts=now_ts,
+    )
+    notify_raw, notify_channels = normalize_notify(packet.fields.get("Notify", ""))
+    result_block = extract_result_block(packet.lines)
+    queued_digest = sha256_lines(before_result)
+    result_digest = sha256_lines(result_block or []) if result_block else None
+    result = build_result_record(result_status=packet.result_status, state=state)
+    if result_block:
+        result["preview_lines"] = preview_result_lines(result_block)
 
     age_hours = None
     if pending_since_ts is not None:
@@ -130,11 +248,16 @@ def build_job_record(
         "root_packet_id": getattr(packet, "root_packet_id", job_id),
         "workflow_id": getattr(packet, "workflow_id", job_id),
         "state": state,
+        "state_reason": state_reason,
         "owner": packet.fields.get("Owner", packet.inbox_path.stem.upper()),
         "requester": packet.fields.get("Requester", ""),
         "objective": packet.fields.get("Objective", ""),
-        "notify": packet.fields.get("Notify", ""),
+        "notify": notify_raw,
+        "notify_channels": notify_channels,
+        "queued_digest": queued_digest,
+        "result_digest": result_digest,
         "result_status": packet.result_status,
+        "result": result,
         "inbox": {
             "path": packet.display_path,
             "line": packet.start_line,
@@ -198,8 +321,14 @@ def write_job_artifacts(
                 "packet_id": record["packet_id"],
                 "parent_packet_id": record["parent_packet_id"],
                 "state": record["state"],
+                "state_reason": record["state_reason"],
                 "owner": record["owner"],
                 "objective": record["objective"],
+                "notify": record["notify"],
+                "notify_channels": record["notify_channels"],
+                "queued_digest": record["queued_digest"],
+                "result_digest": record["result_digest"],
+                "result": record["result"],
                 "inbox": record["inbox"],
             }
         )
@@ -233,6 +362,13 @@ def write_job_artifacts(
             "workflow_id": workflow_id,
             "root_packet_id": workflow["root_packet_id"],
             "state": workflow_state,
+            "state_reasons": sorted(
+                {
+                    str(job.get("state_reason") or "").strip()
+                    for job in workflow["jobs"]
+                    if str(job.get("state_reason") or "").strip()
+                }
+            ),
             "owners": sorted(str(owner) for owner in workflow["owners"]),
             "job_count": len(workflow["jobs"]),
             "jobs": workflow["jobs"],
@@ -253,17 +389,29 @@ def write_job_artifacts(
         "jobs": [
             {
                 "job_id": rec["job_id"],
+                "workflow_id": rec["workflow_id"],
                 "state": rec["state"],
+                "state_reason": rec["state_reason"],
                 "owner": rec["owner"],
                 "objective": rec["objective"],
+                "notify": rec["notify"],
+                "notify_channels": rec["notify_channels"],
+                "queued_digest": rec["queued_digest"],
+                "result_digest": rec["result_digest"],
+                "result": rec["result"],
                 "inbox": rec["inbox"],
             }
             for rec in sorted(records, key=lambda item: (str(item["state"]), str(item["owner"]), str(item["objective"])))
         ],
+        "result_counts": {
+            key: sum(1 for rec in records if str(rec["result"]["status"]) == key)
+            for key in sorted({str(rec["result"]["status"]) for rec in records})
+        },
         "workflows": [
             {
                 "workflow_id": rec["workflow_id"],
                 "state": rec["state"],
+                "state_reasons": rec["state_reasons"],
                 "owners": rec["owners"],
                 "job_count": rec["job_count"],
             }

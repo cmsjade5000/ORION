@@ -42,7 +42,7 @@
           "phrase": "delegate to ATLAS"
         }
       ],
-      "notes": "Infra and gateway work route through ATLAS, then STRATUS/NODE/PULSE as needed."
+      "notes": "Infra and gateway work route through ATLAS, then STRATUS for host work and PULSE for queue/retry staging as needed."
     },
     {
       "id": "emotional_support",
@@ -147,14 +147,14 @@
       "file_expectations": [
         {
           "path": "src/core/shared/ROUTING.md",
-          "phrase": "then NODE if needed"
+          "phrase": "then NODE when packet or incident records need cleanup"
         },
         {
           "path": "src/agents/ORION.md",
           "phrase": "Treat NODE, PULSE, and STRATUS as implementation detail behind ATLAS"
         }
       ],
-      "notes": "System glue and repo-organization drift route through ATLAS, which may use NODE as an internal implementation lane."
+      "notes": "System glue and repo-organization drift route through ATLAS, which may use NODE for packet and incident structure."
     }
   ]
 }

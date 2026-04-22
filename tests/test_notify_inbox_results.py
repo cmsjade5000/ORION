@@ -16,6 +16,11 @@ class TestNotifyInboxResults(unittest.TestCase):
         p = inbox / f"{agent}.md"
         p.write_text(f"# {agent} Inbox\n\n## Packets\n{body}", encoding="utf-8")
 
+    def _write_jobs_summary(self, root: Path, payload: dict) -> None:
+        jobs_dir = root / "tasks" / "JOBS"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        (jobs_dir / "summary.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
     def test_dry_run_notifies_only_notify_telegram(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -337,3 +342,76 @@ class TestNotifyInboxResults(unittest.TestCase):
             self.assertIn("Workflow alerts:", r.stdout)
             self.assertIn("state=blocked owners=ATLAS, NODE jobs=2", r.stdout)
             self.assertIn("workflow: wf-123", r.stdout)
+
+    def test_dry_run_prefers_job_summary_artifacts_without_inbox_scan(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_jobs_summary(
+                root,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "job_id": "pkt-queued",
+                            "workflow_id": "wf-q",
+                            "state": "queued",
+                            "state_reason": "pending_packet",
+                            "owner": "POLARIS",
+                            "objective": "Prepare today's agenda.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "queued_digest": "digest-queued",
+                            "result_digest": None,
+                            "result": {"status": "pending", "job_state": "queued", "present": False, "raw_status": None},
+                            "inbox": {"path": "tasks/INBOX/POLARIS.md", "line": 4},
+                        },
+                        {
+                            "job_id": "pkt-result",
+                            "workflow_id": "wf-r",
+                            "state": "pending_verification",
+                            "state_reason": "result_ok_waiting_done",
+                            "owner": "WIRE",
+                            "objective": "Summarize research.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "queued_digest": "digest-old",
+                            "result_digest": "digest-result",
+                            "result": {
+                                "status": "ok",
+                                "job_state": "pending_verification",
+                                "present": True,
+                                "raw_status": "OK",
+                                "preview_lines": ["Status: OK", "Summary: all set"],
+                            },
+                            "inbox": {"path": "tasks/INBOX/WIRE.md", "line": 9},
+                        },
+                    ],
+                    "workflows": [],
+                },
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--notify-queued",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("[POLARIS] Prepare today's agenda.", r.stdout)
+            self.assertIn("[WIRE] Summarize research.", r.stdout)

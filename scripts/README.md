@@ -363,6 +363,46 @@ make acpx-smoke
 
 ---
 
+## primeta_avatar.py
+
+### Purpose
+Use Primeta's hosted MCP endpoint as an optional avatar layer for ORION via `mcporter`.
+
+### Usage
+
+Authenticate once:
+
+```bash
+python3 scripts/primeta_avatar.py auth
+```
+
+Check status:
+
+```bash
+python3 scripts/primeta_avatar.py status --json
+```
+
+Connect ORION to a named Primeta session:
+
+```bash
+python3 scripts/primeta_avatar.py connect --connection-name orion
+```
+
+Speak through the avatar:
+
+```bash
+python3 scripts/primeta_avatar.py send --text "[friendly] ORION wrapped the task successfully."
+```
+
+Inspect available personas and hook config:
+
+```bash
+python3 scripts/primeta_avatar.py list-personas --json
+python3 scripts/primeta_avatar.py hook-config --json
+```
+
+---
+
 ## github_structured_workflow_pilot.py
 
 ### Purpose

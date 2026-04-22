@@ -29,6 +29,11 @@ try:
 except Exception:  # pragma: no cover
     from scripts.outbound_text_guard import sanitize_outbound_text  # type: ignore
 
+try:
+    from delegation_delivery_rules import is_internal_specialist_owner
+except Exception:  # pragma: no cover
+    from scripts.delegation_delivery_rules import is_internal_specialist_owner  # type: ignore
+
 
 def _extract_response_text(run_obj: dict[str, Any]) -> str:
     payloads = (((run_obj or {}).get("result") or {}).get("payloads") or [])
@@ -40,8 +45,36 @@ def _extract_response_text(run_obj: dict[str, Any]) -> str:
     return sanitize_outbound_text("\n\n".join(parts).strip())
 
 
+def _parse_openclaw_json_output(raw: str) -> dict[str, Any]:
+    text = str(raw or "").strip()
+    if not text:
+        raise ValueError("empty openclaw output")
+
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            obj, end = decoder.raw_decode(text[idx:])
+        except Exception:
+            continue
+        if text[idx + end :].strip():
+            continue
+        if isinstance(obj, dict):
+            return obj
+    raise ValueError("could not locate final JSON object in openclaw output")
+
+
 def _run_openclaw_agent(*, cmd: list[str], agent: str, channel: str, message: str, thinking: str, timeout_s: int, session_id: str | None) -> tuple[int, str, str]:
-    argv = cmd + ["agent", "--agent", agent, "--channel", channel]
+    normalized_channel = str(channel or "").strip().lower()
+    argv = cmd + ["agent", "--agent", agent]
+    if normalized_channel and normalized_channel not in {"local", "embedded", "default"}:
+        argv += ["--channel", channel]
     if session_id:
         argv += ["--session-id", session_id]
     argv += [
@@ -59,7 +92,7 @@ def _run_openclaw_agent(*, cmd: list[str], agent: str, channel: str, message: st
         return proc.returncode, "", (proc.stderr or proc.stdout or "openclaw agent failed").strip()
 
     try:
-        obj = json.loads(proc.stdout)
+        obj = _parse_openclaw_json_output(proc.stdout)
     except Exception as e:
         return 1, "", f"could not parse openclaw JSON output: {e}"
 
@@ -244,6 +277,14 @@ def main() -> int:
 
     if blocked:
         print(f"BLOCKED: outbound delivery suppressed by policy gate ({out_json})", file=sys.stderr)
+        return 2
+
+    deliver_channel = args.deliver_channel.strip().lower()
+    if deliver_channel == "telegram" and is_internal_specialist_owner(args.agent):
+        print(
+            f"BLOCKED: {args.agent} is an internal specialist and cannot deliver directly to Telegram ({out_json})",
+            file=sys.stderr,
+        )
         return 2
 
     if args.deliver_channel.strip():

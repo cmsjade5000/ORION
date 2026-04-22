@@ -38,11 +38,11 @@ PASSING_CASES = [
     ),
     (
         SimPrompt(9, "Node artifact", "Config drift."),
-        "I’m delegating this to NODE. Propose one durable artifact path, such as a docs/ decision record template, before creating any new memory file.",
+        "I’m delegating this to NODE. Propose a durable packet or incident record path, such as a docs/ decision record template, before creating any new memory file.",
     ),
     (
         SimPrompt(10, "Committee synthesis", "Redesign my home dashboard."),
-        "Owners: PIXEL for options, LEDGER for cost, NODE for structure, ATLAS for execution. Timebox exploration to 30 minutes, then return one concrete next step and deliverable.",
+        "Owners: PIXEL for options, LEDGER for cost, NODE for packet/incident structure, ATLAS for execution. Timebox exploration to 30 minutes, then return one concrete next step and deliverable.",
     ),
 ]
 

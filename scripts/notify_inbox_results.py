@@ -76,6 +76,7 @@ class PacketQueued:
 class WorkflowAlert:
     workflow_id: str
     state: str
+    state_reasons: tuple[str, ...]
     owners: tuple[str, ...]
     job_count: int
     alert_hash: str
@@ -415,6 +416,85 @@ def _find_packets(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResul
     return queued, results
 
 
+def _find_packets_from_job_summary(repo_root: Path) -> tuple[list[PacketQueued], list[PacketResult]]:
+    summary_path = repo_root / "tasks" / "JOBS" / "summary.json"
+    if not summary_path.exists():
+        return [], []
+
+    try:
+        payload = json.loads(_read_text(summary_path))
+    except Exception:
+        return [], []
+
+    jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
+    if not isinstance(jobs, list):
+        return [], []
+
+    queued: list[PacketQueued] = []
+    results: list[PacketResult] = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+
+        inbox = job.get("inbox", {})
+        if not isinstance(inbox, dict):
+            inbox = {}
+
+        display_path = str(inbox.get("path") or "").strip()
+        line_no = int(inbox.get("line") or 0)
+        owner = str(job.get("owner") or "").strip() or "UNKNOWN"
+        objective = str(job.get("objective") or "").strip() or "(no objective)"
+        notify = str(job.get("notify") or "").strip().lower()
+        state = str(job.get("state") or "").strip().lower()
+        result = job.get("result", {})
+        if not isinstance(result, dict):
+            result = {}
+
+        path = (repo_root / display_path).resolve() if display_path else repo_root
+        if state == "queued":
+            digest = str(job.get("queued_digest") or "").strip()
+            if not digest:
+                continue
+            queued.append(
+                PacketQueued(
+                    inbox_path=path,
+                    display_path=display_path or path.as_posix(),
+                    packet_start_line=line_no,
+                    owner=owner,
+                    objective=objective,
+                    notify=notify,
+                    queued_hash=digest,
+                )
+            )
+            continue
+
+        result_status = str(result.get("status") or "").strip().lower()
+        digest = str(job.get("result_digest") or "").strip()
+        if result_status in {"ok", "failed", "blocked"} and digest:
+            preview = result.get("preview_lines", [])
+            if not isinstance(preview, list):
+                preview = []
+            sanitized_preview = [
+                sanitize_outbound_text(str(line).rstrip())
+                for line in preview
+                if str(line).strip()
+            ]
+            results.append(
+                PacketResult(
+                    inbox_path=path,
+                    display_path=display_path or path.as_posix(),
+                    packet_start_line=line_no,
+                    owner=owner,
+                    objective=objective,
+                    notify=notify,
+                    result_hash=digest,
+                    result_preview_lines=sanitized_preview or ["(Result present, but empty.)"],
+                )
+            )
+
+    return queued, results
+
+
 def _find_workflow_alerts(repo_root: Path) -> list[WorkflowAlert]:
     summary_path = repo_root / "tasks" / "JOBS" / "summary.json"
     if not summary_path.exists():
@@ -432,15 +512,23 @@ def _find_workflow_alerts(repo_root: Path) -> list[WorkflowAlert]:
         if state not in {"blocked", "manual_required", "unsupported"}:
             continue
         workflow_id = str(workflow.get("workflow_id") or "").strip()
+        state_reasons = tuple(
+            sorted(
+                str(reason).strip()
+                for reason in workflow.get("state_reasons", [])
+                if str(reason).strip()
+            )
+        ) if isinstance(workflow.get("state_reasons"), list) else ()
         owners = tuple(sorted(str(owner).strip() for owner in workflow.get("owners", []) if str(owner).strip()))
         job_count = int(workflow.get("job_count") or 0)
         digest = hashlib.sha256(
-            f"{workflow_id}|{state}|{'|'.join(owners)}|{job_count}".encode("utf-8", errors="replace")
+            f"{workflow_id}|{state}|{'|'.join(state_reasons)}|{'|'.join(owners)}|{job_count}".encode("utf-8", errors="replace")
         ).hexdigest()
         alerts.append(
             WorkflowAlert(
                 workflow_id=workflow_id,
                 state=state,
+                state_reasons=state_reasons,
                 owners=owners,
                 job_count=job_count,
                 alert_hash=digest,
@@ -483,6 +571,8 @@ def _format_message(
         for i, item in enumerate(workflow_alerts, start=1):
             owners = ", ".join(item.owners) if item.owners else "unknown"
             lines.append(f"{i}. state={item.state} owners={owners} jobs={item.job_count}")
+            if item.state_reasons:
+                lines.append(f"reasons: {', '.join(item.state_reasons)}")
             lines.append(f"workflow: {item.workflow_id}")
         lines.append("")
 
@@ -595,7 +685,9 @@ def main() -> int:
     state_path = (repo_root / args.state_path).resolve()
     state = _load_state(state_path)
 
-    queued, results = _find_packets(repo_root)
+    queued, results = _find_packets_from_job_summary(repo_root)
+    if not queued and not results:
+        queued, results = _find_packets(repo_root)
     workflow_alerts = _find_workflow_alerts(repo_root)
 
     # Only allow user-facing notifications when explicitly opted in, unless overridden.

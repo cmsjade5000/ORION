@@ -97,10 +97,26 @@ class TestAgentRosterIntegrity(unittest.TestCase):
         polaris = self._read("src/agents/POLARIS.md")
 
         self.assertIn("| Workflow | Primary | Backup | Gatekeeper |", matrix)
+        self.assertIn("Task packet and incident record hygiene", matrix)
+        self.assertIn("Scheduled workflow queueing and retry staging", matrix)
         self.assertIn("Kalshi policy/risk/parameter changes", matrix)
         self.assertIn("docs/AGENT_OWNERSHIP_MATRIX.md", hierarchy)
         self.assertIn("docs/AGENT_OWNERSHIP_MATRIX.md", orchestration)
         self.assertIn("Max active packets: 8.", polaris)
+
+    def test_node_and_pulse_have_distinct_boundaries(self):
+        node = self._read("src/agents/NODE.md")
+        pulse = self._read("src/agents/PULSE.md")
+        routing = self._read("src/core/shared/ROUTING.md")
+        atlas = self._read("src/agents/ATLAS.md")
+
+        self.assertIn("Task-packet and incident-record hygiene", node)
+        self.assertIn("Workflow queueing, retries, and pacing", pulse)
+        self.assertIn("packet and incident hygiene under ATLAS", routing)
+        self.assertIn("workflow queueing, retries, and pacing", atlas)
+        self.assertNotIn("memory support", node)
+        self.assertNotIn("system glue", node)
+        self.assertNotIn("memory support", pulse)
 
 
 if __name__ == "__main__":

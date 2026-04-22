@@ -1,4 +1,5 @@
 import { Bot, InlineKeyboard } from "grammy";
+import { buildMiniAppUrl } from "../miniapp";
 
 /**
  * Registers the /agents command to display the Agent Dashboard inline keyboard.
@@ -15,7 +16,9 @@ export function registerDashboard(bot: Bot) {
       .text("SCRIBE", "agent_SCRIBE")
       .text("LEDGER", "agent_LEDGER")
       .row()
-      .text("EMBER", "agent_EMBER");
+      .text("EMBER", "agent_EMBER")
+      .row()
+      .webApp("Open ORION", buildMiniAppUrl("home"));
 
     await ctx.reply("Select an agent to view details:", {
       reply_markup: keyboard,

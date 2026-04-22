@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.openclaw.orion.miniapp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO_ROOT__/scripts/orion_miniapp_runner.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__REPO_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ORION_WORKSPACE</key>
+    <string>__REPO_ROOT__</string>
+    <key>ORION_MINIAPP_HOST</key>
+    <string>0.0.0.0</string>
+    <key>ORION_MINIAPP_PORT</key>
+    <string>8787</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/com.openclaw.orion.miniapp.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/com.openclaw.orion.miniapp.log</string>
+</dict>
+</plist>
