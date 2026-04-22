@@ -8,7 +8,7 @@ This doc standardizes how ATLAS coordinates multi-step work so outputs remain:
 ## When To Use
 
 Use these conventions when ATLAS is coordinating:
-- multiple specialists (NODE/PULSE/STRATUS) for one outcome
+- multiple specialists (NODE for packet/incident hygiene, PULSE for workflow queueing/retries, STRATUS for host implementation) for one outcome
 - a parallel execution burst
 - a sequence that may require retries/backoff
 - a browser-led or local-device workflow that requires proof, approval handling, or host-side execution safety
@@ -36,6 +36,9 @@ Use these conventions when ATLAS is coordinating:
    - narrow scope
    - explicit Success Criteria
    - explicit Stop Gates
+   - NODE packets should focus on packet structure or incident records
+   - PULSE packets should focus on queueing, retries, or bounded workflow pacing
+   - STRATUS packets should focus on infra or host-side implementation
 2. ATLAS runs sub-agents in parallel when tasks do not depend on each other.
 3. ATLAS merges results into one integrated response for ORION.
 

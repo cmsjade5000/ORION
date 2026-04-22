@@ -3,16 +3,15 @@
 agents:
   defaults:
     model:
-      # Default posture: use OpenAI GPT-5.4 for production orchestration.
-      # Keep the fallback chain explicit so provider drift does not silently change ORION behavior.
-      primary: openai/gpt-5.4
+      # Permanent low-cost posture: keep ORION on the cheapest viable hosted lane by default.
+      # Premium OpenAI/Codex routing is explicit opt-in only.
+      primary: openrouter/openrouter/free
       fallbacks:
-        - openrouter/openrouter/free
         - openai/gpt-oss-20b:free
         - minimax/MiniMax-M2.7-highspeed
         - minimax/MiniMax-M2.7
-        # Keep Kimi out of the default production fallback chain.
-        # Route it intentionally via a specialist lane instead.
+        # Keep premium and specialist lanes out of the default fallback chain.
+        # Route them intentionally only when low-cost lanes are insufficient.
     # RECOMMENDED when running this repo locally:
     # workspace: /Users/corystoner/src/ORION
     compaction:
@@ -23,6 +22,12 @@ agents:
         - Red Lines
       # Keep a short recent-turn tail before synthesis.
       recentTurnsPreserve: 8
+    subagents:
+      # Native subagent control is the default for active sessions.
+      # Keep Task Packets as the durable record for work that must survive
+      # beyond the current session.
+      maxConcurrent: 11
+      maxSpawnDepth: 2
   list:
     - id: main
       memorySearch:
@@ -35,13 +40,29 @@ agents:
               path: ~/.openclaw/agents/ledger/sessions
             - name: polaris
               path: ~/.openclaw/agents/polaris/sessions
+      subagents:
+        allowAgents:
+          - atlas
+          - ember
+          - ledger
+          - polaris
+          - scribe
+          - wire
+    - id: atlas
+      # ATLAS is the only recursive orchestrator in ORION core.
+      # Keep its child surface limited to internal implementation lanes.
+      subagents:
+        allowAgents:
+          - node
+          - pulse
+          - stratus
     - id: ember
-      # Keep specialist routing OpenAI-first; Kimi stays available only as an explicit fallback.
+      # Keep specialist routing low-cost-first; Kimi stays available only as an explicit fallback.
       model:
-        primary: openai/gpt-5.4
+        primary: openrouter/openrouter/free
         fallbacks:
+          - openai/gpt-oss-20b:free
           - nvidia-build/moonshotai/kimi-k2.5
-          - openrouter/free
 
 auth:
   cooldowns:
@@ -56,9 +77,9 @@ tools:
   web:
     search:
       enabled: true
-      # Optional: let Codex-capable lanes use provider-native web_search.
+      # Low-cost default: keep provider-native Codex web_search off unless a premium research session explicitly needs it.
       openaiCodex:
-        enabled: true
+        enabled: false
         mode: cached
         contextSize: high
         userLocation:
@@ -98,20 +119,19 @@ hooks:
 #         - id: qwen3.5-4b-mlx
 #           name: Local bounded runtime
 #
-# Example routing (OpenAI GPT-5.4 primary with OpenRouter + MiniMax fallbacks, plus an optional Kimi fallback):
+# Example routing (low-cost OpenRouter primary with cheap fallbacks, plus an optional Kimi specialist fallback):
 # agents:
 #   defaults:
 #     model:
-#       primary: openai/gpt-5.4
+#       primary: openrouter/openrouter/free
 #       fallbacks:
-#         - openrouter/openrouter/free
 #         - openai/gpt-oss-20b:free
 #         - minimax/MiniMax-M2.7-highspeed
 #         - minimax/MiniMax-M2.7
 #   list:
 #     - id: ember
 #       model:
-#         primary: openai/gpt-5.4
+#         primary: openrouter/openrouter/free
 #         fallbacks:
 #           - nvidia-build/moonshotai/kimi-k2.5
 
@@ -212,7 +232,8 @@ channels:
 
 # Delegation note:
 # ORION core should delegate to the reduced specialist surface using OpenClaw isolated agents
-# (preferred: sessions_spawn), not by granting specialists any external channel permissions.
+# (preferred: sessions_spawn -> sessions_yield for active sessions), not by granting
+# specialists any external channel permissions. Task Packets remain the durable record.
 
 plugins:
   slots:

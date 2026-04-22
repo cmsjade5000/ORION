@@ -58,6 +58,7 @@ class TestOrionAgentToolingRefresh(unittest.TestCase):
     def test_acpx_live_policy_is_bounded_and_smoke_tested(self):
         for needle in (
             "ATLAS owns the live ACPX lane",
+            "native subagents stay default",
             "no direct user-facing ACPX usage",
             "pluginToolsMcpBridge=false",
             "permissionMode=approve-reads",

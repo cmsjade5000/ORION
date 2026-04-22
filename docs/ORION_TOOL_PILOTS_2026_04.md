@@ -61,6 +61,7 @@ Reference:
 - Why: ACPX may improve bounded specialist isolation and plugin-tools MCP bridging for internal-only work
 - Scope:
   - isolated specialist execution only
+  - no replacement of native subagents as the default control path
   - no replacement of Task Packets as the durable async contract
   - no user-facing channel bypass
   - runtime stays pinned to read-approved, non-interactive-fail, bridge-disabled settings

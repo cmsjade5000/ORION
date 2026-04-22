@@ -3,6 +3,7 @@
 This document defines the group chat conventions, agent roles, reaction mappings, and onboarding steps for inviting Gateway specialist agents into a shared Telegram group.
 
 **Current mode:** Single bot only (ORION). Multi-bot group chat is deferred. Keep the multi-bot sections below as a future plan.
+For the main onboarding path and runtime checks, use [docs/ORION_START_HERE.md](/Users/corystoner/src/ORION/docs/ORION_START_HERE.md).
 
 ---
 ## 1. Bot Identities (Telegram Handles)
@@ -20,6 +21,7 @@ Current Telegram commands (implemented by the Telegram plugin, not by specialist
 - `/capture <text>` queues a quick admin capture to POLARIS.
 - `/followups` summarizes waiting-on items and POLARIS queue state.
 - `/review` returns a bounded daily review.
+- `/orion` opens the ORION Main Mini App.
 - `/dreaming status|on|off|help` inspects or updates ORION's dreaming config via the local assistant command path.
 - `/agents` shows the Agent Dashboard inline keyboard.
 
@@ -33,16 +35,7 @@ Extension-only Telegram surfaces are intentionally outside the default ORION cor
 
 1. **ORION** is the only bot responding in Telegram right now.
 2. **Specialists** are invoked internally by ORION and do not speak directly in Telegram.
-3. **Future (multi-bot) rules** remain below once multi-bot is re-enabled.
-
-### Agent Roles & Triggers
-- **ATLAS:** Executes and reports on operational tasks (installations, smoke tests, automation).
-- **PIXEL:** Shares discovery, research, and tech evaluations (new projects, demos).
-- **PULSE:** Posts workflow/job status updates (heartbeats, retries, alerts).
-- **STRATUS:** Announces infra provisioning, CI/CD status, and environment changes.
-- **EMBER:** Offers emotional grounding or check‑ins if conversation signals stress.
-- **LEDGER:** Provides financial cost analyses, budget alerts, and trade‑off insights.
-- **NODE:** Addresses architecture/code organization questions (to be enabled later).
+3. If Telegram ever becomes multi-bot again, treat that as a separate project rather than part of default onboarding.
 
 ---
 ## 3. Tapback Reaction Guidelines
@@ -60,6 +53,8 @@ For warnings or completions, agents should reply inline with plain text status i
 ---
 ## 4. Onboarding & Token Configuration
 
+For the full first-time walkthrough, start at [docs/ORION_START_HERE.md](/Users/corystoner/src/ORION/docs/ORION_START_HERE.md). This section is the Telegram-specific appendix.
+
 1. **Generate Bot Token** via BotFather for ORION.
 2. **Store token** in a token file (plain token value only):
    ```bash
@@ -72,10 +67,5 @@ For warnings or completions, agents should reply inline with plain text status i
 5. **Create Telegram group** and invite ORION and the user (if using a group).
 6. **Verify** ORION responds:
    - `ping` (basic liveness), and
-   - `/agents` (dashboard).
-
----
-## 5. Questions & Concerns
-
-- When we re-enable multi-bot Telegram, do we want separate bot tokens per specialist or keep specialists internal-only and add only one more bot at a time?
-- Do we want a pinned group rules message at that time (roles + reactions + safety)?
+   - `/agents` (dashboard),
+   - `/orion` (Mini App launch).

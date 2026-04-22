@@ -14,6 +14,7 @@ Why this exists:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import dataclasses
 import datetime as dt
 import json
@@ -391,11 +392,35 @@ def _packet_id(fields: dict[str, str], packet_before_result: list[str]) -> str:
     return packet_content_id(fields, packet_before_result)
 
 
+def _openclaw_capture_timeout_seconds() -> float:
+    raw = (os.environ.get("TASK_EXECUTION_OPENCLAW_TIMEOUT_S") or "").strip()
+    if not raw:
+        return 8.0
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return 8.0
+
+
 def _run_capture(argv: list[str]) -> CommandSnapshot:
     try:
-        cp = subprocess.run(argv, capture_output=True, text=True, check=False)
+        cp = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_openclaw_capture_timeout_seconds(),
+        )
     except FileNotFoundError as exc:
         return CommandSnapshot(argv=argv, returncode=127, stdout="", stderr=str(exc), data=None)
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout if isinstance(exc.stdout, str) else ""
+        stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+        timeout_note = (
+            f"command timed out after {_openclaw_capture_timeout_seconds():.1f}s: {' '.join(argv)}"
+        )
+        stderr = ((stderr + "\n") if stderr else "") + timeout_note
+        return CommandSnapshot(argv=argv, returncode=124, stdout=stdout, stderr=stderr, data=None)
 
     stdout = cp.stdout or ""
     stderr = cp.stderr or ""
@@ -406,12 +431,28 @@ def _run_capture(argv: list[str]) -> CommandSnapshot:
 
 
 def _collect_openclaw_snapshot() -> OpenClawSnapshot:
+    commands = {
+        "gateway_health": ["openclaw", "gateway", "health"],
+        "gateway_status": ["openclaw", "gateway", "status", "--json"],
+        "channels_status": ["openclaw", "channels", "status", "--probe", "--json"],
+        "tasks_list": ["openclaw", "tasks", "list", "--json"],
+        "tasks_audit": ["openclaw", "tasks", "audit", "--json"],
+    }
+    results: dict[str, CommandSnapshot] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(commands)) as executor:
+        future_map = {
+            executor.submit(_run_capture, argv): name
+            for name, argv in commands.items()
+        }
+        for future in concurrent.futures.as_completed(future_map):
+            results[future_map[future]] = future.result()
+
     return OpenClawSnapshot(
-        gateway_health=_run_capture(["openclaw", "gateway", "health"]),
-        gateway_status=_run_capture(["openclaw", "gateway", "status", "--json"]),
-        channels_status=_run_capture(["openclaw", "channels", "status", "--probe", "--json"]),
-        tasks_list=_run_capture(["openclaw", "tasks", "list", "--json"]),
-        tasks_audit=_run_capture(["openclaw", "tasks", "audit", "--json"]),
+        gateway_health=results["gateway_health"],
+        gateway_status=results["gateway_status"],
+        channels_status=results["channels_status"],
+        tasks_list=results["tasks_list"],
+        tasks_audit=results["tasks_audit"],
     )
 
 

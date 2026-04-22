@@ -42,10 +42,13 @@ class KalshiMarket:
 class KalshiOrder:
     ticker: str
     side: str  # "yes" or "no"
-    action: str  # "buy" only in our initial scope
+    action: str  # "buy" or "sell"
     count: int
     price_dollars: str  # "0.xxxx"
     client_order_id: str
+    time_in_force: str = "fill_or_kill"
+    reduce_only: bool = False
+    cancel_order_on_pause: bool = True
 
 
 class KalshiClient:
@@ -165,8 +168,9 @@ class KalshiClient:
             # Kalshi order endpoints accept cent-based prices; include these for compatibility.
             "yes_price": cents if order.side == "yes" else None,
             "no_price": cents if order.side == "no" else None,
-            # Conservative default: avoid leaving resting orders around if edge disappears.
-            "time_in_force": "fill_or_kill",
+            "time_in_force": str(order.time_in_force),
+            "reduce_only": bool(order.reduce_only),
+            "cancel_order_on_pause": bool(order.cancel_order_on_pause),
         }
         # Remove nulls to match API expectations.
         body = {k: v for k, v in body.items() if v is not None}

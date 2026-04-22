@@ -67,8 +67,12 @@ class TestDelegatedJobState(unittest.TestCase):
                 )
 
             self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["result"]["status"], "pending")
+            self.assertEqual(records[0]["result"]["job_state"], "queued")
             summary = json.loads((jobs_dir / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["workflow_count"], 1)
+            self.assertEqual(summary["jobs"][0]["result"]["status"], "pending")
+            self.assertEqual(summary["result_counts"]["pending"], 1)
 
 
 if __name__ == "__main__":

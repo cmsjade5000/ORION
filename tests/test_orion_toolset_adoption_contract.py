@@ -44,7 +44,7 @@ class TestOrionToolsetAdoptionContract(unittest.TestCase):
         self.assertIn("scripts/orion_toolset_audit.py", self.makefile)
 
     def test_baseline_docs_capture_template_vs_runtime_split(self):
-        self.assertIn("Live OpenClaw runtime is `2026.4.5`", self.baseline_doc)
+        self.assertIn("Live OpenClaw runtime was `2026.4.5`", self.baseline_doc)
         self.assertIn("memory-core", self.baseline_doc)
         self.assertIn("ClawHub-backed skill discovery is available now", self.baseline_doc)
         self.assertIn("checked-in template", self.baseline_doc)

@@ -31,11 +31,11 @@ Delegate when:
 - Setup/maintenance/checklists are needed
 
 ATLAS is also the operational director for:
-- NODE
-- PULSE
-- STRATUS
+- NODE (packet and incident hygiene)
+- PULSE (workflow queueing, retries, and pacing)
+- STRATUS (gateway/service health and host implementation)
 
-If ORION needs system glue, workflow automation, or infra health work, route through ATLAS.
+If ORION needs packet or incident hygiene, workflow automation, or infra health work, route through ATLAS.
 
 ### POLARIS
 
@@ -78,11 +78,12 @@ Constraints:
 
 ### NODE
 
-System glue and architecture under ATLAS.
+Packet and incident hygiene under ATLAS.
 
 Delegate when:
-- Multi-agent coordination is needed
-- Repo/system structure is unclear or drifting
+- Packet structure is unclear
+- Incident records need cleanup
+- Repo/system structure is drifting
 
 Chain of command:
 - NODE takes direction from ATLAS (preferred).
@@ -90,10 +91,10 @@ Chain of command:
 
 ### PULSE
 
-Workflow orchestration and automation under ATLAS.
+Workflow queueing and retry orchestration under ATLAS.
 
 Delegate when:
-- Cron, retries, monitoring, or job flows are central
+- Cron, retries, queue aging, or workflow pacing are central
 
 Chain of command:
 - PULSE takes direction from ATLAS (preferred).

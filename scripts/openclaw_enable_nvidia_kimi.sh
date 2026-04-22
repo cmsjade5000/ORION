@@ -28,7 +28,7 @@ openclaw config set --json 'models.providers["nvidia-build"]' '{
 # Optional: add NVIDIA Build as the last fallback only.
 # openclaw models fallbacks add nvidia-build/moonshotai/kimi-k2.5
 #
-# Optional: keep OpenAI primary and use Kimi only as an explicit fallback.
-# openclaw models set openai/gpt-5.4
+# Optional: keep a low-cost primary and use Kimi only as an explicit fallback.
+# openclaw models set openrouter/openrouter/free
 
-openclaw models status --probe
+openclaw models status

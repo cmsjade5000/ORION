@@ -3,9 +3,48 @@
   "updated_at": "2026-04-09",
   "providers": [
     {
+      "provider_id": "openrouter-auto-primary",
+      "display_name": "OpenRouter Auto",
+      "lane": "default-orchestrator",
+      "api_path": "https://openrouter.ai/api/v1/chat/completions",
+      "api_surface": "OpenRouter OpenAI-compatible Chat Completions",
+      "models": [
+        "openrouter/auto"
+      ],
+      "allowed_tasks": [
+        "normal_chat",
+        "routing",
+        "specialist_handoffs",
+        "tool_selection",
+        "light_retrieval_synthesis",
+        "structured_outputs",
+        "tool_contract_testing",
+        "eval_generation",
+        "trace_grading",
+        "redteam_judging",
+        "research_synthesis",
+        "second_opinion_reasoning",
+        "alternative_plan_generation",
+        "long_context_comparison"
+      ],
+      "forbidden_tasks": [
+        "destructive_execution_without_approval",
+        "unguarded_external_delivery",
+        "provider_promotion_without_benchmark_win"
+      ],
+      "fallback_order": 1,
+      "requires_schema": true,
+      "requires_hitl": true,
+      "role_summary": "Default hosted ORION orchestration lane with lower-cost posture than premium control planes.",
+      "docs": [
+        "https://openrouter.ai/docs/quickstart",
+        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
+      ]
+    },
+    {
       "provider_id": "openai-control-plane",
       "display_name": "OpenAI Responses API",
-      "lane": "production-orchestrator",
+      "lane": "premium-opt-in",
       "api_path": "https://api.openai.com/v1/responses",
       "api_surface": "OpenAI Responses API",
       "models": [
@@ -33,44 +72,14 @@
         "unguarded_external_delivery",
         "silent_primary_promotion"
       ],
-      "fallback_order": 1,
+      "fallback_order": 4,
       "requires_schema": true,
       "requires_hitl": true,
-      "role_summary": "Default live ORION orchestration lane for routing, schemas, and high-control execution.",
+      "role_summary": "Premium opt-in control lane for hard cases, audits, and explicitly approved spend.",
       "docs": [
         "https://platform.openai.com/docs/api-reference/responses",
         "https://developers.openai.com/api/docs/guides/structured-outputs",
         "https://developers.openai.com/api/docs/guides/function-calling"
-      ]
-    },
-    {
-      "provider_id": "openrouter-auto-primary",
-      "display_name": "OpenRouter Auto",
-      "lane": "production-fallback",
-      "api_path": "https://openrouter.ai/api/v1/chat/completions",
-      "api_surface": "OpenRouter OpenAI-compatible Chat Completions",
-      "models": [
-        "openrouter/auto"
-      ],
-      "allowed_tasks": [
-        "normal_chat",
-        "routing",
-        "specialist_handoffs",
-        "tool_selection",
-        "light_retrieval_synthesis"
-      ],
-      "forbidden_tasks": [
-        "destructive_execution_without_approval",
-        "unguarded_external_delivery",
-        "provider_promotion_without_benchmark_win"
-      ],
-      "fallback_order": 2,
-      "requires_schema": true,
-      "requires_hitl": true,
-      "role_summary": "Compatibility fallback lane when the primary OpenAI route is degraded or unavailable.",
-      "docs": [
-        "https://openrouter.ai/docs/quickstart",
-        "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
       ]
     },
     {
@@ -111,6 +120,7 @@
       "api_path": "https://openrouter.ai/api/v1/chat/completions",
       "api_surface": "OpenRouter OpenAI-compatible Chat Completions",
       "models": [
+        "openrouter/openrouter/free",
         "openrouter/free",
         "openai/gpt-oss-20b:free",
         "qwen/qwen3-coder:free",
@@ -130,10 +140,10 @@
         "approval_gate_judgments",
         "destructive_tool_decisions"
       ],
-      "fallback_order": 4,
+      "fallback_order": 2,
       "requires_schema": true,
       "requires_hitl": false,
-      "role_summary": "Low-cost bounded utility lane using OpenRouter free router plus curated free models.",
+      "role_summary": "Cheapest hosted lane for bounded utility work and low-stakes repo tasks.",
       "docs": [
         "https://openrouter.ai/docs/features/provider-routing",
         "/Users/corystoner/src/ORION/docs/LLM_ACCESS.md"
@@ -164,10 +174,10 @@
         "approval_gate_judgments",
         "destructive_tool_decisions"
       ],
-      "fallback_order": 6,
+      "fallback_order": 1,
       "requires_schema": true,
       "requires_hitl": false,
-      "role_summary": "Offline/local bounded utility backup lane.",
+      "role_summary": "Preferred bounded local lane for low-cost utility work and preprocessing.",
       "docs": [
         "/Users/corystoner/src/ORION/docs/LLM_PROVIDER_MATRIX.md"
       ]

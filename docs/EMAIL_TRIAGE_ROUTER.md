@@ -69,9 +69,9 @@ Tracks:
 - `written_keys` (idempotency keys)
 - `updated_at`
 
-## Cron (recommended)
+## Cron (compatibility only)
 
-Run every 5 minutes in isolated ORION session:
+If you explicitly need the older `agentTurn` wrapper path, run every 5 minutes in an isolated ORION session:
 
 ```bash
 openclaw cron add \
@@ -84,7 +84,7 @@ openclaw cron add \
   --message "Run python3 scripts/email_triage_router.py --limit 20 --apply. Respond NO_REPLY."
 ```
 
-This is also wired into the local maintenance bundle as `assistant-email-triage`.
+The default local path is the direct maintenance bundle (`scripts/install_orion_local_maintenance_launchagents.sh`), which runs `assistant-email-triage` without paying for an extra model turn.
 
 ## Safety
 

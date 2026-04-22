@@ -43,7 +43,7 @@ Pilot candidate:
 
 Live workflow:
 - ACPX specialist execution for bounded internal-only work
-  Policy: ATLAS-owned only, Task Packets remain durable, `approve-reads` plus `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`
+  Policy: native subagents stay default, ATLAS-owned only, Task Packets remain durable, `approve-reads` plus `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`
 
 ## WIRE
 
@@ -94,25 +94,24 @@ Pilot candidate:
 Default now:
 - `task-packet-guard`
 - `session-logs`
-- `mcporter`
 
 Pending setup:
-- none
+- `mcporter`
 
 Pilot candidate:
-- `postgres-job-queue`
+- none
 
 ## PULSE
 
 Default now:
 - `task-packet-guard`
 - `session-logs`
+- `postgres-job-queue`
 
 Pending setup:
 - none
 
 Pilot candidate:
-- `postgres-job-queue`
 - `web-monitor`
 
 ## STRATUS

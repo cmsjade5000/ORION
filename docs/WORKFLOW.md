@@ -2,6 +2,8 @@
 
 This document outlines the recommended workflow for developing and maintaining the Gateway system.
 
+If you are onboarding or doing a fresh runtime setup, start with [docs/ORION_START_HERE.md](/Users/corystoner/src/ORION/docs/ORION_START_HERE.md). This document is the deeper workflow reference.
+
 ## Setup
 
 1. **Prerequisites**

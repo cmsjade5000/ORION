@@ -1,19 +1,23 @@
 # ORION Runtime Baseline 2026-04-07
 
-Status: current baseline memo  
+Status: historical baseline memo, superseded by the 2026-04-22 runtime verification in `README.md`  
 Scope: repo-grounded and runtime-grounded April 2026 posture refresh
 
 ## Summary
 
 This memo replaces the stale assumptions from the March 2026 capability intake and toolset adoption notes when evaluating ORION's current agent/tool posture.
 
-Key current-state facts:
-- Live OpenClaw runtime is `2026.4.5`.
+Key current-state facts at the time of this memo:
+- Live OpenClaw runtime was `2026.4.5`.
 - Live runtime config differs from the checked-in template in important ways.
 - ClawHub-backed skill discovery is available now.
 - `acpx` is enabled in the active runtime for bounded specialist execution.
 - `browser` and `firecrawl` exist as bundled runtime surfaces but are not allowlisted in the active runtime.
 - Checked-in templates remain conservative and should stay separate from live runtime facts.
+
+Current note from 2026-04-22:
+- The live runtime has since moved to `OpenClaw 2026.4.21`.
+- The live gateway is healthy on `2026.4.21`, Discord and Telegram are both configured in runtime, and the machine now carries the newer session-pruning, stricter owner-command auth, and cron `jobs-state.json` behavior from `2026.4.20` and `2026.4.21`.
 
 ## Documented vs Runtime vs Recommended
 
@@ -27,7 +31,7 @@ Key current-state facts:
 | Browser plugin | Current browser posture is operator-pack and managed-browser guidance | Bundled in runtime, disabled by allowlist | Defer unless it materially outperforms current managed-browser flows |
 | Firecrawl plugin | Mentioned as a candidate in March notes | Bundled in runtime, disabled by allowlist | Strongest retrieval pilot candidate for WIRE |
 | OpenProse | Enabled in templates and runtime | Enabled | Keep as optional workflow formalization, not the durable default async primitive |
-| Async work model | Some docs still mention `sessions_yield` as preference | Durable repo reality remains Task Packet plus reconcile loops | Keep Task Packets as the default async contract |
+| Async work model | Some docs still downplay native subagent control | Durable repo reality remains Task Packet plus reconcile loops | Use `sessions_spawn -> sessions_yield` for active session control, while keeping Task Packets as the durable async contract |
 
 ## Runtime Evidence Snapshot
 
@@ -45,7 +49,7 @@ Key current-state facts:
 - WIRE owns evidence-first external retrieval.
 - PIXEL owns discovery and tool scouting, not source-of-record retrieval.
 - POLARIS remains the admin orchestrator.
-- Task Packets remain the default durable async primitive until a better operational model is proven.
+- Native subagent control should cover active session orchestration, while Task Packets remain the default durable async primitive.
 
 ## Audit Command
 

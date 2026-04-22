@@ -1,0 +1,59 @@
+{
+  "schema_version": "orion.judgment.v1",
+  "generated_at_utc": "2026-04-12T07:40:43Z",
+  "overall_status": "ok",
+  "score": {
+    "severity": "S4",
+    "score_value": 18,
+    "recommendation": "log-only",
+    "reasons": [],
+    "evidence": [
+      "discord_restart_indicators=4",
+      "telegram_fallback_indicators=3"
+    ],
+    "recommended_actions": [
+      "No action required; continue monitoring."
+    ],
+    "rollback": [
+      "None."
+    ],
+    "verification_probes": [
+      "openclaw health",
+      "openclaw channels status --probe",
+      "scripts/stratus_healthcheck.sh"
+    ]
+  },
+  "delivery": {
+    "recommendation": "log-only",
+    "should_notify": false,
+    "should_digest": false
+  },
+  "policy_path": "/Users/corystoner/src/ORION/ops/judgment-policy.v1.json",
+  "normalized_signals": {
+    "incident_id": "ORION-JUDGMENT-20260412T074043Z",
+    "detected_utc": null,
+    "gateway_health_ok": true,
+    "gateway_health_note": "Gateway Health",
+    "config_integrity_ok": true,
+    "channels_degraded_count": 0,
+    "approval_timeouts": 0,
+    "stale_task_runs": 0,
+    "discord_restart_indicators": 4,
+    "telegram_fallback_indicators": 3,
+    "exec_elevation_failures": 0,
+    "codex_ready": true,
+    "user_reports": false,
+    "task_audit_ok": true,
+    "task_list_ok": true
+  },
+  "source_bundle": "/Users/corystoner/src/ORION/tmp/incidents/20260412T034004-0400/summary.json",
+  "notification": {
+    "attempted": false,
+    "sent": false,
+    "channel": "telegram",
+    "suppressed": false,
+    "dry_run": false,
+    "reason": "recommendation-not-alert",
+    "command": null
+  }
+}

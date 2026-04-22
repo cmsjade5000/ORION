@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INCLUDE_KIMI_FALLBACK=1
+INCLUDE_KIMI_FALLBACK=0
 LOCAL_BASE_URL="${LOCAL_LLM_BASE_URL:-http://127.0.0.1:1234/v1}"
 LOCAL_MODEL="${LOCAL_LLM_MODEL:-qwen3.5-4b-mlx}"
 CURATED_FREE_MODEL="${OPENROUTER_CURATED_FREE_MODEL:-openai/gpt-oss-20b:free}"
-OPENAI_PRIMARY_MODEL="${OPENAI_PRIMARY_MODEL:-openai/gpt-5.4}"
+PRIMARY_MODEL="${PRIMARY_MODEL:-openrouter/openrouter/free}"
 DRY_RUN=0
 OPENROUTER_MODEL_LIST=""
 
@@ -13,11 +13,12 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/openclaw_configure_llm_providers.sh [options]
 
-Configure OpenClaw runtime for ORION's provider matrix.
+Configure OpenClaw runtime for ORION's low-cost provider matrix.
 
 Options:
-  --openai-primary-model <id> Set OpenAI primary model id (default: openai/gpt-5.4)
-  --include-kimi-fallback   Keep NVIDIA Build Kimi K2.5 as tertiary model fallback (default)
+  --primary-model <id>         Set primary model id (default: openrouter/openrouter/free)
+  --openai-primary-model <id>  Deprecated alias for --primary-model
+  --include-kimi-fallback      Add NVIDIA Build Kimi K2.5 as an explicit premium fallback
   --no-kimi-fallback        Disable NVIDIA Build fallback
   --curated-free-model <id> Set curated OpenRouter :free fallback model id
   --local-base-url <url>    Register/update LM Studio local provider base URL
@@ -26,8 +27,8 @@ Options:
   -h, --help                Show help
 
 Notes:
-- OpenAI is the default primary lane for ORION runtime routing.
-- OpenRouter stays configured only as an explicit fallback path.
+- Low-cost routing is the default posture for ORION runtime changes.
+- Premium lanes should be enabled only intentionally after a bounded low-cost attempt fails or the user opts in.
 - This script modifies ~/.openclaw/openclaw.json via `openclaw config set`.
 USAGE
 }
@@ -80,7 +81,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --openai-primary-model)
-      OPENAI_PRIMARY_MODEL="$2"
+      PRIMARY_MODEL="$2"
+      shift 2
+      ;;
+    --primary-model)
+      PRIMARY_MODEL="$2"
       shift 2
       ;;
     --curated-free-model)
@@ -114,14 +119,20 @@ done
 OPENROUTER_FREE_MODEL="$(resolve_model_id openrouter/free openrouter/openrouter/free)"
 CURATED_FREE_RESOLVED="$(resolve_model_id "$CURATED_FREE_MODEL" "openrouter/${CURATED_FREE_MODEL}")"
 
-run_cmd echo "Configured primary=${OPENAI_PRIMARY_MODEL} free=${OPENROUTER_FREE_MODEL} curated=${CURATED_FREE_RESOLVED}"
+run_cmd echo "Configured primary=${PRIMARY_MODEL} free=${OPENROUTER_FREE_MODEL} curated=${CURATED_FREE_RESOLVED}"
 
 run_cmd openclaw config set tools.profile coding
 run_cmd openclaw config set models.mode merge
-run_cmd openclaw config set agents.defaults.model.primary "$OPENAI_PRIMARY_MODEL"
+run_cmd openclaw config set agents.defaults.model.primary "$PRIMARY_MODEL"
 run_cmd openclaw models fallbacks clear
-run_cmd openclaw models fallbacks add "$OPENROUTER_FREE_MODEL"
-run_cmd openclaw models fallbacks add "$CURATED_FREE_RESOLVED"
+if [[ "$PRIMARY_MODEL" != "$OPENROUTER_FREE_MODEL" ]]; then
+  run_cmd openclaw models fallbacks add "$OPENROUTER_FREE_MODEL"
+fi
+if [[ "$CURATED_FREE_RESOLVED" != "$PRIMARY_MODEL" && "$CURATED_FREE_RESOLVED" != "$OPENROUTER_FREE_MODEL" ]]; then
+  run_cmd openclaw models fallbacks add "$CURATED_FREE_RESOLVED"
+fi
+run_cmd openclaw models fallbacks add minimax/MiniMax-M2.7-highspeed
+run_cmd openclaw models fallbacks add minimax/MiniMax-M2.7
 
 run_cmd openclaw config set --json 'models.providers["nvidia-build"]' "{
   \"api\": \"openai-completions\",
@@ -142,7 +153,7 @@ if [[ "$INCLUDE_KIMI_FALLBACK" -eq 1 ]]; then
 fi
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  openclaw models status --probe
+  openclaw models status
 else
-  echo "[dry-run] openclaw models status --probe"
+  echo "[dry-run] openclaw models status"
 fi

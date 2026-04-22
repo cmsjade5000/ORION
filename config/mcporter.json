@@ -6,6 +6,10 @@
         "mcp-server"
       ],
       "description": "Codex MCP server via stdio"
+    },
+    "primeta": {
+      "url": "https://primeta.ai/mcp",
+      "description": "Optional Primeta avatar presentation layer for ORION via hosted MCP + OAuth"
     }
   },
   "imports": []

@@ -363,6 +363,46 @@ make acpx-smoke
 
 ---
 
+## primeta_avatar.py
+
+### Purpose
+Use Primeta's hosted MCP endpoint as an optional avatar layer for ORION via `mcporter`.
+
+### Usage
+
+Authenticate once:
+
+```bash
+python3 scripts/primeta_avatar.py auth
+```
+
+Check status:
+
+```bash
+python3 scripts/primeta_avatar.py status --json
+```
+
+Connect ORION to a named Primeta session:
+
+```bash
+python3 scripts/primeta_avatar.py connect --connection-name orion
+```
+
+Speak through the avatar:
+
+```bash
+python3 scripts/primeta_avatar.py send --text "[friendly] ORION wrapped the task successfully."
+```
+
+Inspect available personas and hook config:
+
+```bash
+python3 scripts/primeta_avatar.py list-personas --json
+python3 scripts/primeta_avatar.py hook-config --json
+```
+
+---
+
 ## github_structured_workflow_pilot.py
 
 ### Purpose
@@ -416,14 +456,14 @@ python3 scripts/orion_error_db.py review --window-hours 24 --apply-safe-fixes --
 ## install_orion_assistant_crons.sh
 
 ### Purpose
-Print or install the lightweight assistant crons for agenda refresh, inbox notifications, and stale-work reconciliation.
-It also installs the nightly ORION error-review cron.
+Compatibility installer for the older OpenClaw `agentTurn` cron wrappers used for deterministic maintenance jobs.
+The preferred path is `install_orion_local_maintenance_launchagents.sh`, which runs those jobs directly without an extra model turn.
 
 ### Usage
 
 ```bash
-./scripts/install_orion_assistant_crons.sh
-./scripts/install_orion_assistant_crons.sh --apply
+ALLOW_LLM_CRON_WRAPPERS=1 ./scripts/install_orion_assistant_crons.sh
+ALLOW_LLM_CRON_WRAPPERS=1 ./scripts/install_orion_assistant_crons.sh --apply
 ```
 
 ---

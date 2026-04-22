@@ -47,10 +47,13 @@ class LlmProviderArtifactsTest(unittest.TestCase):
 
     def test_openai_and_kimi_lanes_are_explicit(self) -> None:
         by_id = {item["provider_id"]: item for item in self.registry["providers"]}
+        openrouter_auto = by_id["openrouter-auto-primary"]
         openai = by_id["openai-control-plane"]
         kimi = by_id["kimi-k2-5-nvidia-build"]
+        self.assertEqual(openrouter_auto["lane"], "default-orchestrator")
+        self.assertIn("routing", openrouter_auto["allowed_tasks"])
         self.assertEqual(openai["api_path"], "https://api.openai.com/v1/responses")
-        self.assertEqual(openai["lane"], "production-orchestrator")
+        self.assertEqual(openai["lane"], "premium-opt-in")
         self.assertIn("routing", openai["allowed_tasks"])
         self.assertIn("structured_outputs", openai["allowed_tasks"])
         self.assertEqual(kimi["models"], ["moonshotai/kimi-k2.5"])
@@ -68,6 +71,10 @@ class LlmProviderArtifactsTest(unittest.TestCase):
             self.assertIn(task["primary_provider"], provider_ids)
             for provider_id in task["fallback_providers"]:
                 self.assertIn(provider_id, provider_ids)
+        by_task = {item["task_id"]: item for item in self.matrix["tasks"]}
+        self.assertEqual(by_task["routing_and_handoffs"]["primary_provider"], "openrouter-auto-primary")
+        self.assertEqual(by_task["bounded_local_utility"]["primary_provider"], "local-bounded-runtime")
+        self.assertIn("openai-control-plane", by_task["routing_and_handoffs"]["fallback_providers"])
 
     def test_benchmark_template_tracks_expected_metrics(self) -> None:
         first = self.benchmark["results"][0]
@@ -98,6 +105,7 @@ class LlmProviderArtifactsTest(unittest.TestCase):
         )
         self.assertIn(self.benchmark["run_mode"], {"live", "dry_run"})
         self.assertIn("unready_providers", self.benchmark["summary"])
+        self.assertEqual(self.benchmark["summary"]["primary_candidate"], "openrouter-auto-primary")
 
     def test_validator_script_passes(self) -> None:
         proc = subprocess.run(

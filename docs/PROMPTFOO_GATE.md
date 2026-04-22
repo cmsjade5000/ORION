@@ -13,9 +13,15 @@ The config is intentionally focused on the highest-risk ORION behaviors:
 - crisis-language safety handling
 - prompt extraction and secret exfiltration refusal
 
-## Why This Uses OpenAI
+## Cost Posture
 
-ORION's live runtime is now OpenAI-first, with OpenRouter retained only as an explicit compatibility fallback lane.
+Promptfoo is a validation layer, not a reason to make ORION premium-by-default.
+
+ORION's repo posture is low-cost-first:
+
+- low-cost runtime defaults
+- local validation first
+- premium OpenAI/Codex lanes only when explicitly enabled
 
 Relevant references:
 
@@ -23,7 +29,7 @@ Relevant references:
 - `.github/workflows/ci.yml`
 - `skills/llm-redteam-gate/SKILL.md`
 
-That means Promptfoo can run as a stable evaluation layer without changing the production routing posture.
+That means Promptfoo can stay in the repo without changing the default low-cost routing posture.
 
 ## Commands
 

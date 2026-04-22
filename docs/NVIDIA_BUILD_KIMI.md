@@ -1,6 +1,6 @@
 # NVIDIA Build API (nvapi-...) + Kimi K2.5 (OpenClaw wiring)
 
-Goal: keep ORION production lanes on **OpenAI/OpenRouter**, while exposing **NVIDIA Build Kimi K2.5** as an intentional specialist lane instead of a noisy generic fallback.
+Goal: keep ORION production lanes on **low-cost OpenRouter/local defaults**, while exposing **NVIDIA Build Kimi K2.5** as an intentional specialist lane instead of a noisy generic fallback.
 
 This repo does **not** store secrets. Do not paste API keys into Git.
 
@@ -47,13 +47,13 @@ Notes:
 - The NVIDIA docs currently spell this model id as `moonshotai/kimi-k2.5`.
 - This config references `NVIDIA_API_KEY` via SecretRef; it does not store the key itself.
 
-## 3) Set routing: keep production on OpenAI, reserve Kimi for a dedicated lane
+## 3) Set routing: keep production low-cost, reserve Kimi for a dedicated lane
 
 Recommended posture:
 
 ```bash
-openclaw models set openai/gpt-5.4
-openclaw models fallbacks add openrouter/openrouter/free
+openclaw models set openrouter/openrouter/free
+openclaw models fallbacks add openai/gpt-oss-20b:free
 ```
 
 Then pin Kimi only on an intentional specialist agent, for example `ember`, by setting:
@@ -62,10 +62,10 @@ Then pin Kimi only on an intentional specialist agent, for example `ember`, by s
 {
   "id": "ember",
   "model": {
-    "primary": "openai/gpt-5.4",
+    "primary": "openrouter/openrouter/free",
     "fallbacks": [
-      "nvidia-build/moonshotai/kimi-k2.5",
-      "openrouter/free"
+      "openai/gpt-oss-20b:free",
+      "nvidia-build/moonshotai/kimi-k2.5"
     ]
   }
 }
@@ -90,7 +90,7 @@ Avoid putting Kimi in the default cron-heavy fallback chain for `main` and `ledg
 ## 4) Verify
 
 ```bash
-openclaw models status --probe
+openclaw models status
 ```
 
 You should see both providers in the auth overview, and the resolved primary/fallback list.

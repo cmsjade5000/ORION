@@ -1,6 +1,7 @@
 import { Bot } from "grammy";
 import { registerAssistantCommands } from "./assistant";
 import { registerDashboard } from "./dashboard";
+import { maybeConfigureMenuButton, registerMiniAppLaunch } from "./miniapp";
 
 /**
  * Sets up the ORION core Telegram surface.
@@ -10,5 +11,7 @@ import { registerDashboard } from "./dashboard";
  */
 export function setupTelegramPlugin(bot: Bot) {
   registerAssistantCommands(bot);
+  registerMiniAppLaunch(bot);
   registerDashboard(bot);
+  void maybeConfigureMenuButton(bot);
 }

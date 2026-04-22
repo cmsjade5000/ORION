@@ -13,11 +13,16 @@ fi
 runner="${repo_root}/scripts/orion_local_maintenance_runner.sh"
 launch_agents_dir="${HOME}/Library/LaunchAgents"
 logs_dir="${HOME}/Library/Logs"
+overlap_guard="${repo_root}/scripts/orion_scheduler_overlap_guard.py"
 
 mkdir -p "${launch_agents_dir}" "${logs_dir}"
 
 if [[ ! -f "${runner}" ]]; then
   echo "Runner script not found: ${runner}" >&2
+  exit 1
+fi
+if [[ ! -f "${overlap_guard}" ]]; then
+  echo "Overlap guard script not found: ${overlap_guard}" >&2
   exit 1
 fi
 
@@ -106,5 +111,9 @@ disable_cron_by_name "orion-error-review"
 disable_cron_by_name "orion-session-maintenance"
 disable_cron_by_name "orion-ops-bundle"
 disable_cron_by_name "orion-judgment-layer"
+
+python3 "${overlap_guard}" \
+  --launch-agents-dir "${launch_agents_dir}" \
+  --cron-jobs "${HOME}/.openclaw/cron/jobs.json"
 
 echo "Installed ORION local maintenance LaunchAgents bundle."

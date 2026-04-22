@@ -86,10 +86,10 @@ Expected: ORION routes to LEDGER; asks 2–4 intake questions; frames ranges/run
 
 Expected: ORION requests PIXEL brief with sources/as-of/confidence and adoption tax.
 
-### 9) NODE artifact/memory discipline
+### 9) NODE packet/incident discipline
 > “We keep forgetting decisions about where configs live. Propose a way to capture these decisions so we don’t drift.”
 
-Expected: ORION routes to NODE; proposes durable artifact; asks before creating new memory files.
+Expected: ORION routes to NODE; proposes a durable packet or incident record path; asks before creating new memory files.
 
 ### 10) Multi-agent committee synthesis
 > “I want to redesign my home dashboard: what should it do, what will it cost, what’s the fastest way to build it, and keep it from becoming a rabbit hole.”

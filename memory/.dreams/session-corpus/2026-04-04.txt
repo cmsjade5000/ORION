@@ -1,2 +1,0 @@
-[main/sessions/d45d1413-af2d-4b4b-89b7-4080b72d28e0.jsonl.reset.2026-04-05T11-00-47.624Z#L5] User: Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK. When reading HEARTBEAT.md, use workspace file /Users/corystoner/src/ORION/
-[main/sessions/d45d1413-af2d-4b4b-89b7-4080b72d28e0.jsonl.reset.2026-04-05T11-00-47.624Z#L8] Assistant: <final>HEARTBEAT_OK</final>
