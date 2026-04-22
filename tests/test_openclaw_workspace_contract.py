@@ -199,7 +199,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
-        self.assertIn("OpenClaw 2026.4.14", self.readme)
+        self.assertIn("OpenClaw 2026.4.21", self.readme)
         self.assertIn("ORION_RUNTIME_BASELINE_2026_04_07.md", self.readme)
         self.assertIn("ORION_EXTENSION_SURFACES.md", self.readme)
         self.assertIn("REPO_HYGIENE.md", self.readme)
