@@ -1,0 +1,211 @@
+{
+  "cron": {
+    "by_agent": {
+      "unknown": 1
+    },
+    "by_channel": {
+      "none": 1
+    },
+    "disabled": 33,
+    "enabled": 1,
+    "total": 34
+  },
+  "delivery_queue": {
+    "by_channel": {},
+    "files": 0,
+    "top_errors": []
+  },
+  "eval_gate": {
+    "metrics": {
+      "baseline": {
+        "avg_prompt_score": 7.7,
+        "confidence": 40,
+        "fail": 4,
+        "pass": 6,
+        "pass_rate": 0.6,
+        "safety_zeros": 1,
+        "total": 10
+      },
+      "current": {
+        "avg_prompt_score": 8.7,
+        "confidence": 100,
+        "fail": 0,
+        "pass": 10,
+        "pass_rate": 1.0,
+        "safety_zeros": 0,
+        "total": 10
+      },
+      "delta": {
+        "avg_prompt_score": 1.0,
+        "confidence": 60,
+        "pass_rate": 0.4,
+        "safety_zeros": -1
+      }
+    },
+    "reasons": [],
+    "status": "pass"
+  },
+  "generated_at": "2026-04-27T15:46:44.401300+00:00",
+  "inbox_queue_contract": {
+    "assertions": [],
+    "canonical_job": {
+      "delivery_mode": "launchagent",
+      "enabled": true,
+      "name": "assistant-inbox-notify",
+      "present": false,
+      "sessionTarget": "launchagent"
+    },
+    "legacy_queue_jobs_enabled": [],
+    "legacy_queue_jobs_present": [],
+    "notes": [
+      "legacy canonical scheduler mapping is expected to be queue-cycle driven"
+    ],
+    "path": "/Users/corystoner/.openclaw/cron/jobs.json",
+    "status": "pass"
+  },
+  "jobs_state": {
+    "by_last_status": {
+      "error": 2,
+      "ok": 30
+    },
+    "delivery_status_counts": {
+      "delivered": 5,
+      "not-delivered": 17,
+      "not-requested": 2
+    },
+    "status": "ok",
+    "total": 34,
+    "version": 1
+  },
+  "kind": "reliability_snapshot",
+  "lane_wait_24h": {
+    "avg_ms": 39588.5,
+    "by_lane": {
+      "session:agent:main:main": 4
+    },
+    "count": 4,
+    "hours": 24,
+    "max_ms": 73792,
+    "p95_ms": 55215
+  },
+  "queue": {
+    "counts": {
+      "pending_verification": 0,
+      "queued": 0,
+      "total_jobs": 4,
+      "workflow_count": 4
+    },
+    "path": "tasks/JOBS/summary.json",
+    "state_buckets": {
+      "pending_verification": {
+        "age_buckets": {
+          "0-1h": 0,
+          "1-4h": 0,
+          "4-24h": 0,
+          ">24h": 0
+        },
+        "age_max": null,
+        "age_mean": null,
+        "age_min": null,
+        "count": 0,
+        "missing_age_or_threshold": 0,
+        "stale_count": 0,
+        "stale_ratio": 0.0,
+        "state": "pending_verification"
+      },
+      "queued": {
+        "age_buckets": {
+          "0-1h": 0,
+          "1-4h": 0,
+          "4-24h": 0,
+          ">24h": 0
+        },
+        "age_max": null,
+        "age_mean": null,
+        "age_min": null,
+        "count": 0,
+        "missing_age_or_threshold": 0,
+        "stale_count": 0,
+        "stale_ratio": 0.0,
+        "state": "queued"
+      }
+    }
+  },
+  "queue_growth": {
+    "delta": {
+      "pending_verification_delta": 0,
+      "queued_delta": 0
+    },
+    "delta_total_ratio": 0.0,
+    "previous": {
+      "file": "eval/history/reliability-20260427-154642.json",
+      "pending_verification": 0,
+      "queued": 0
+    },
+    "slo_pass": true
+  },
+  "queue_health": {
+    "age_summary": {
+      "pending_verification": [
+        null,
+        null,
+        null
+      ],
+      "queued": [
+        null,
+        null,
+        null
+      ]
+    },
+    "assertions": [],
+    "counts": {
+      "pending_verification": 0,
+      "queued": 0,
+      "total_jobs": 4,
+      "workflow_count": 4
+    },
+    "state_buckets": {
+      "pending_verification": {
+        "age_buckets": {
+          "0-1h": 0,
+          "1-4h": 0,
+          "4-24h": 0,
+          ">24h": 0
+        },
+        "age_max": null,
+        "age_mean": null,
+        "age_min": null,
+        "count": 0,
+        "missing_age_or_threshold": 0,
+        "stale_count": 0,
+        "stale_ratio": 0.0,
+        "state": "pending_verification"
+      },
+      "queued": {
+        "age_buckets": {
+          "0-1h": 0,
+          "1-4h": 0,
+          "4-24h": 0,
+          ">24h": 0
+        },
+        "age_max": null,
+        "age_mean": null,
+        "age_min": null,
+        "count": 0,
+        "missing_age_or_threshold": 0,
+        "stale_count": 0,
+        "stale_ratio": 0.0,
+        "state": "queued"
+      }
+    },
+    "status": "pass"
+  },
+  "slo": {
+    "max_pending_verification": 120,
+    "max_pending_verification_share": 0.6,
+    "max_queue_growth_ratio": 0.4,
+    "max_queued": 160,
+    "max_stale_ratio": 0.2,
+    "status": "pass"
+  }
+}
