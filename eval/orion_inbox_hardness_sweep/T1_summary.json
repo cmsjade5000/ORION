@@ -1,7 +1,822 @@
 {
   "counts": {
-    "pending_verification": 3,
-    "queued": 20
+    "pending_verification": 4,
+    "queued": 24
   },
-  "states_present": "array"
+  "job_count": 28,
+  "jobs": [
+    {
+      "inbox": {
+        "line": 3,
+        "path": "tasks/INBOX/aegis_plan_watch_delegation.md"
+      },
+      "job_id": "pkt-146e466b8a5b010a",
+      "notify": "",
+      "notify_channels": [],
+      "objective": "Poll AEGIS for new HITL plans (defense/maintenance) and notify the Telegram group chat.",
+      "owner": "AEGIS_PLAN_WATCH_DELEGATION",
+      "queued_digest": "146e466b8a5b010afc8792ecac066f1630db72b50b282dab73f4aebe1836c72f",
+      "result": {
+        "job_state": "pending_verification",
+        "present": true,
+        "preview_lines": [
+          "Status: OK",
+          "Findings:",
+          "- `bash -n scripts/aegis_defense_watch.sh` passes.",
+          "- `DRY_RUN=1 ORION_TELEGRAM_CHAT_ID=-5007679487 bash scripts/aegis_defense_watch.sh` exited 0 on 2026-04-09.",
+          "- No new plans were emitted in the current local state, so the watch exited quietly as designed.",
+          "Artifacts:",
+          "- scripts/aegis_defense_watch.sh",
+          "- tmp/aegis_defense_plans.seen",
+          "Next step (if any):",
+          "- None."
+        ],
+        "raw_status": "OK",
+        "status": "ok"
+      },
+      "result_digest": "087d9ba3f7d6ff5e1fecf4727d9c067b8646a507c50ff74d1c087deb57aa530c",
+      "state": "pending_verification",
+      "state_reason": "result_ok_waiting_done",
+      "workflow_id": "pkt-146e466b8a5b010a"
+    },
+    {
+      "inbox": {
+        "line": 9,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "pkt-56b620502f5d5624",
+      "notify": "",
+      "notify_channels": [],
+      "objective": "Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory.",
+      "owner": "ATLAS",
+      "queued_digest": "56b620502f5d56246d2899a0e183a10ced7776b9615325f090b9c9ce8c5e0483",
+      "result": {
+        "job_state": "pending_verification",
+        "present": true,
+        "preview_lines": [
+          "Status: OK",
+          "Findings:",
+          "- Remote `/usr/local/bin/aegis-sentinel` sha256 matches repo `scripts/aegis_remote/aegis-sentinel`: `ea60c1eb1a3d4c8a029d626339bed33205147bbfc35963f3117be8dc3fa7ed51`.",
+          "- `systemctl is-active aegis-sentinel.timer` returned `active` on 2026-04-09.",
+          "- `systemctl is-active aegis-sentinel.service` returned `inactive`, consistent with a timer-driven oneshot service.",
+          "- `/var/log/aegis-sentinel/sentinel.log` shows repeated `OK: sentinel cycle` entries through `2026-04-09T13:59:07Z`.",
+          "- Recent Tailscale online/active churn is logged as `suppressed`, matching the intended noise fix.",
+          "Artifacts:",
+          "- scripts/aegis_remote/aegis-sentinel",
+          "- ssh root@100.75.104.54 verification output captured in this turn",
+          "Next step (if any):",
+          "- None."
+        ],
+        "raw_status": "OK",
+        "status": "ok"
+      },
+      "result_digest": "401c4b4b91a56baeb55adf922a4114322a1fd0d9c3935865347ccd220d229317",
+      "state": "pending_verification",
+      "state_reason": "result_ok_waiting_done",
+      "workflow_id": "pkt-56b620502f5d5624"
+    },
+    {
+      "inbox": {
+        "line": 5,
+        "path": "tasks/INBOX/orion_hardness_sweep_test.md"
+      },
+      "job_id": "pkt-3d92d8a21c960c11",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Synthetic packet lifecycle transition check for inbox queue migration.",
+      "owner": "ORION_TEST",
+      "queued_digest": "3d92d8a21c960c11768afc67ab28f482f748c689fa6023e56bc237eed99f089d",
+      "result": {
+        "job_state": "pending_verification",
+        "present": true,
+        "preview_lines": [
+          "Status: OK",
+          "What changed / what I found:",
+          "- Synthetic lifecycle dry-run result appended intentionally for migration proof."
+        ],
+        "raw_status": "OK",
+        "status": "ok"
+      },
+      "result_digest": "57e7b69e103570d321817a78b8036a1983969675f590b707222499f5347f7ee0",
+      "state": "pending_verification",
+      "state_reason": "result_ok_waiting_done",
+      "workflow_id": "pkt-3d92d8a21c960c11"
+    },
+    {
+      "inbox": {
+        "line": 9,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "pkt-36a66680bf9aa360",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Draft a Telegram message for Cory summarizing the recent ORION platform changes (wrapping up).",
+      "owner": "SCRIBE",
+      "queued_digest": "36a66680bf9aa360bed7fca439b4fbbcff56f8281ae1fdb1e601dbe25d6345cf",
+      "result": {
+        "job_state": "pending_verification",
+        "present": true,
+        "preview_lines": [
+          "Status: OK",
+          "TELEGRAM_MESSAGE:",
+          "Wrapped up recent ORION platform changes:",
+          "- Strengthened Task Packet validation (Notify lint; Emergency requires Incident) with new tests.",
+          "- Added shared inbox state helpers and refactored inbox notification to use them.",
+          "- Extended inbox packet runner with retry/backoff state support and a new `--state-path`.",
+          "- Verified test suite passes (npm test: unittest + validate_task_packets)."
+        ],
+        "raw_status": "OK",
+        "status": "ok"
+      },
+      "result_digest": "ecfea3be3cfad6bc9cd3954bfb63922f4acabd621ecec62133f4a6504d5f5df2",
+      "state": "pending_verification",
+      "state_reason": "result_ok_waiting_done",
+      "workflow_id": "pkt-36a66680bf9aa360"
+    },
+    {
+      "inbox": {
+        "line": 181,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-a6b1caf8d5dac7fa",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Recover stale delegated workflow for [SCRIBE] Create a send-ready draft response from the inbound request context.",
+      "owner": "ATLAS",
+      "queued_digest": "20c8ed6b6bb308288a275ff931e54d0fe6c598c4f3c35362df46c920015fa4af",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "inbox": {
+        "line": 208,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-56ef7a57a622f83f",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Recover stale delegated workflow for [SCRIBE] Create a send-ready draft response from the inbound request context.",
+      "owner": "ATLAS",
+      "queued_digest": "d4a7a78cef3293d08a477c7e1cce41b4d86d1100a42c3344f1b47a91eb4f38c8",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-d0001017dca01409"
+    },
+    {
+      "inbox": {
+        "line": 50,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-65ed39ff98adf9c3",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "c7c2ae2fb39418a9483d9fcd6b5e933c174cf8a675953205f215ddf8b70065e5",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "inbox": {
+        "line": 83,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-f2a9338a659085ae",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "b4faa1e06b1aeed40fa7a8a929cb7aa5b1380a7ec9146d4c51d41692f3f4bf83",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "inbox": {
+        "line": 116,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-65ed39ff98adf9c3",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "c7c2ae2fb39418a9483d9fcd6b5e933c174cf8a675953205f215ddf8b70065e5",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "inbox": {
+        "line": 149,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-f2a9338a659085ae",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "a2cf423252bb0a442ecfee540d2550f8b06106e6e9ce40dd1dabe62698cb6c28",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "inbox": {
+        "line": 236,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-65ed39ff98adf9c3",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "c7c2ae2fb39418a9483d9fcd6b5e933c174cf8a675953205f215ddf8b70065e5",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "inbox": {
+        "line": 269,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-f2a9338a659085ae",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "b4faa1e06b1aeed40fa7a8a929cb7aa5b1380a7ec9146d4c51d41692f3f4bf83",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "inbox": {
+        "line": 302,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-65ed39ff98adf9c3",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "c7c2ae2fb39418a9483d9fcd6b5e933c174cf8a675953205f215ddf8b70065e5",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "inbox": {
+        "line": 335,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-f2a9338a659085ae",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "b4faa1e06b1aeed40fa7a8a929cb7aa5b1380a7ec9146d4c51d41692f3f4bf83",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "inbox": {
+        "line": 368,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-65ed39ff98adf9c3",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "c7c2ae2fb39418a9483d9fcd6b5e933c174cf8a675953205f215ddf8b70065e5",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "inbox": {
+        "line": 401,
+        "path": "tasks/INBOX/ATLAS.md"
+      },
+      "job_id": "ik-f2a9338a659085ae",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ATLAS",
+      "queued_digest": "7639841bf178ec3285d9948284b518be4e8be346c7d87fccd2498aa8ee3e96ce",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "inbox": {
+        "line": 5,
+        "path": "tasks/INBOX/ORION.md"
+      },
+      "job_id": "ik-40d4a02532be92db",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Recover stale delegated workflow for [ATLAS] Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ORION",
+      "queued_digest": "5d7211ecd7e0e6b0d59db7d0d91b721e4df70fec0eb88bbd79ade7de4fcd4fe3",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "inbox": {
+        "line": 32,
+        "path": "tasks/INBOX/ORION.md"
+      },
+      "job_id": "ik-37f3da1abd36f2d9",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Recover stale delegated workflow for [ATLAS] Translate inbound ops request into a safe execution plan with explicit stop gates.",
+      "owner": "ORION",
+      "queued_digest": "c6ac89512accb84d875ccf262e0ac75770c709a2992163b3ed9cfd2a91066059",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "inbox": {
+        "line": 49,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-854220da2d0873f0",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "61b77a92fed6c4f71756ed308a55304ce623f8815f9bd46263881f237e54b294",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "inbox": {
+        "line": 82,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-d0001017dca01409",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "e01b6e2ec23bc1ff640cf1e5af18e4768da1a0c165d8848c615fc1e7a4eab541",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-d0001017dca01409"
+    },
+    {
+      "inbox": {
+        "line": 115,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-854220da2d0873f0",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "61b77a92fed6c4f71756ed308a55304ce623f8815f9bd46263881f237e54b294",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "inbox": {
+        "line": 148,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-d0001017dca01409",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "e01b6e2ec23bc1ff640cf1e5af18e4768da1a0c165d8848c615fc1e7a4eab541",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-d0001017dca01409"
+    },
+    {
+      "inbox": {
+        "line": 181,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-854220da2d0873f0",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "61b77a92fed6c4f71756ed308a55304ce623f8815f9bd46263881f237e54b294",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "inbox": {
+        "line": 214,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-d0001017dca01409",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "e01b6e2ec23bc1ff640cf1e5af18e4768da1a0c165d8848c615fc1e7a4eab541",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-d0001017dca01409"
+    },
+    {
+      "inbox": {
+        "line": 247,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-854220da2d0873f0",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "61b77a92fed6c4f71756ed308a55304ce623f8815f9bd46263881f237e54b294",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "inbox": {
+        "line": 280,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-d0001017dca01409",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "e01b6e2ec23bc1ff640cf1e5af18e4768da1a0c165d8848c615fc1e7a4eab541",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-d0001017dca01409"
+    },
+    {
+      "inbox": {
+        "line": 313,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-854220da2d0873f0",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "61b77a92fed6c4f71756ed308a55304ce623f8815f9bd46263881f237e54b294",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "inbox": {
+        "line": 346,
+        "path": "tasks/INBOX/SCRIBE.md"
+      },
+      "job_id": "ik-d0001017dca01409",
+      "notify": "telegram",
+      "notify_channels": [
+        "telegram"
+      ],
+      "objective": "Create a send-ready draft response from the inbound request context.",
+      "owner": "SCRIBE",
+      "queued_digest": "413d022a40f8e0017d20bb5b6673bdca18eb4fc035ba5fa3c40aade85a9bf74f",
+      "result": {
+        "job_state": "queued",
+        "present": false,
+        "raw_status": null,
+        "status": "pending"
+      },
+      "result_digest": null,
+      "state": "queued",
+      "state_reason": "pending_packet",
+      "workflow_id": "ik-d0001017dca01409"
+    }
+  ],
+  "result_counts": {
+    "ok": 4,
+    "pending": 24
+  },
+  "updated_ts": 1777301036.984621,
+  "version": 1,
+  "workflow_count": 8,
+  "workflow_counts": {
+    "in_progress": 4,
+    "queued": 4
+  },
+  "workflows": [
+    {
+      "job_count": 6,
+      "owners": [
+        "ATLAS",
+        "ORION"
+      ],
+      "state": "queued",
+      "state_reasons": [
+        "pending_packet"
+      ],
+      "workflow_id": "ik-65ed39ff98adf9c3"
+    },
+    {
+      "job_count": 6,
+      "owners": [
+        "ATLAS",
+        "SCRIBE"
+      ],
+      "state": "queued",
+      "state_reasons": [
+        "pending_packet"
+      ],
+      "workflow_id": "ik-854220da2d0873f0"
+    },
+    {
+      "job_count": 6,
+      "owners": [
+        "ATLAS",
+        "SCRIBE"
+      ],
+      "state": "queued",
+      "state_reasons": [
+        "pending_packet"
+      ],
+      "workflow_id": "ik-d0001017dca01409"
+    },
+    {
+      "job_count": 6,
+      "owners": [
+        "ATLAS",
+        "ORION"
+      ],
+      "state": "queued",
+      "state_reasons": [
+        "pending_packet"
+      ],
+      "workflow_id": "ik-f2a9338a659085ae"
+    },
+    {
+      "job_count": 1,
+      "owners": [
+        "AEGIS_PLAN_WATCH_DELEGATION"
+      ],
+      "state": "in_progress",
+      "state_reasons": [
+        "result_ok_waiting_done"
+      ],
+      "workflow_id": "pkt-146e466b8a5b010a"
+    },
+    {
+      "job_count": 1,
+      "owners": [
+        "SCRIBE"
+      ],
+      "state": "in_progress",
+      "state_reasons": [
+        "result_ok_waiting_done"
+      ],
+      "workflow_id": "pkt-36a66680bf9aa360"
+    },
+    {
+      "job_count": 1,
+      "owners": [
+        "ORION_TEST"
+      ],
+      "state": "in_progress",
+      "state_reasons": [
+        "result_ok_waiting_done"
+      ],
+      "workflow_id": "pkt-3d92d8a21c960c11"
+    },
+    {
+      "job_count": 1,
+      "owners": [
+        "ATLAS"
+      ],
+      "state": "in_progress",
+      "state_reasons": [
+        "result_ok_waiting_done"
+      ],
+      "workflow_id": "pkt-56b620502f5d5624"
+    }
+  ]
 }

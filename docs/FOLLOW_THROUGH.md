@@ -2,7 +2,7 @@
 
 Problem: ORION can delegate multi-step work to specialists, but results may land asynchronously (for example in `tasks/INBOX/*.md`). If nothing triggers a user-facing follow-up, Cory ends up prodding ORION with “continue” messages.
 
-Goal: when a delegated packet is queued or completes, the inbox cycle advances what it can, reconciles ticket state, records durable job state, and sends a short Telegram or Discord update automatically.
+Goal: when a delegated packet is queued or completes, the inbox cycle advances what it can, reconciles ticket state, records durable job state, and sends a short Telegram update automatically.
 
 Inbound email uses a separate lightweight triage loop first: AgentMail is polled, safe messages are converted into `TASK_PACKET v1` entries, and then the normal inbox cycle picks those packets up.
 
@@ -16,7 +16,8 @@ Canonical runtime model:
 ## Mechanism (Single-Bot Mode)
 
 1. ORION creates a Task Packet in `tasks/INBOX/<AGENT>.md` and includes:
-   - `Notify: telegram` or `Notify: discord` (or `Notify: telegram,discord`)
+  - `Notify: telegram`
+  - `Notify: telegram,discord` is compatibility-only and must be opt-in.
 2. The specialist writes a `Result:` block under that packet when done.
 3. A periodic inbox cycle executes:
    - `python3 scripts/run_inbox_packets.py --repo-root .`
@@ -27,6 +28,7 @@ Canonical runtime model:
      - `--policy-rules config/orion_policy_rules.json`
      - `--policy-mode audit|block` (default `audit`)
 4. The cycle writes durable per-job artifacts to `tasks/JOBS/*.json`, per-workflow artifacts to `tasks/JOBS/wf-*.json`, updates `tasks/JOBS/summary.json`, and the notifier remembers what it already sent (state in `tmp/inbox_notify_state.json`).
+5. Telegram is the default notification surface for this workflow, with Discord kept for explicit compatibility paths only.
 
 Read-model expectations:
 - Per-job artifacts carry the canonical state, state reason, notify channels, stable queued/result digests, and a safe result preview.
@@ -74,7 +76,7 @@ Notes:
 - Heartbeat outputs remain `NO_REPLY`; the script does the send.
   - Telegram: direct API call (token file or env var).
   - Discord: uses `openclaw message send --channel discord ...` (so this script never touches the Discord token).
-- Telegram and Discord should share one normalized delegated-job event model, with only delivery adapters differing.
+- Telegram is the canonical outbound surface for inbox follow-through in this sweep. Discord remains compatibility-only and should stay out of default cron loops.
 
 ## Closed-Loop Enforcement
 
@@ -126,6 +128,11 @@ Keep it short; avoid tool logs and secrets.
 
 Do not use OpenClaw `agentTurn` cron wrappers for deterministic ORION maintenance by default.
 The compatibility installer now requires an explicit override:
+
+Runbook guard (no-reintroduction rule):
+- Do not run or restore `ai.orion.inbox_packet_runner` or `com.openclaw.orion.assistant_task_loop` for inbox follow-through.
+- Keep `assistant-inbox-notify` and explicitly approved ORION jobs as the active maintenance path.
+- If these stale wrappers are detected, remove them and re-run overlap checks before enabling any inbox loop.
 
 ```bash
 ALLOW_LLM_CRON_WRAPPERS=1 bash scripts/install_orion_assistant_crons.sh --apply
@@ -209,7 +216,7 @@ openclaw cron add \
   --message "Use system.run to execute exactly: python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
 ```
 
-Discord variant (set a default target first):
+Discord compatibility variant (explicit opt-in only):
 
 ```bash
 export DISCORD_DEFAULT_POST_TARGET="user:<CORY_DISCORD_USER_ID>"
@@ -226,7 +233,7 @@ openclaw cron add \
 
 ## Dry-Run / Testing
 
-This prints what it would send and does not require Telegram/Discord credentials:
+This prints what it would send and does not require Telegram credentials:
 
 ```bash
 NOTIFY_DRY_RUN=1 python3 scripts/notify_inbox_results.py --require-notify-telegram
@@ -238,7 +245,4 @@ You can also suppress sends while still writing notifier state:
 ORION_SUPPRESS_TELEGRAM=1 python3 scripts/notify_inbox_results.py --require-notify-telegram
 ```
 
-```bash
-ORION_SUPPRESS_DISCORD=1 DISCORD_DEFAULT_POST_TARGET="user:<CORY_DISCORD_USER_ID>" \
-  python3 scripts/notify_inbox_results.py --require-notify-discord
-```
+Notifier outcome keys are now explicit in `tmp/inbox_notify_state.json` and dead-letter records are emitted to `tmp/inbox_notify_dead_letters.jsonl` when suppression or send failures occur.

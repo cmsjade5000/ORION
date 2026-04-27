@@ -1,0 +1,6 @@
+{
+  "ok": true,
+  "launch_agents_dir": "/Users/corystoner/Library/LaunchAgents",
+  "cron_jobs_path": "/Users/corystoner/.openclaw/cron/jobs.json",
+  "overlaps": []
+}

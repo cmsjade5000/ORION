@@ -94,6 +94,90 @@ def _parse_notify_channels(raw: str) -> set[str]:
     return parse_notify_channels(raw)
 
 
+NOTIFY_OUTCOMES = {
+    "delivered": "delivered",
+    "suppressed": "suppressed",
+    "failed": "failed-to-deliver",
+}
+
+
+def _state_has_seen(state: dict[str, float], *, channel: str, kind: str, digest: str) -> bool:
+    pref = f"{channel}:{kind}:"
+    if f"{pref}delivered:{digest}" in state:
+        return True
+    if f"{pref}suppressed:{digest}" in state:
+        return True
+    if f"{pref}failed:{digest}" in state:
+        return True
+
+    # Back-compat with legacy keys.
+    if kind == "result":
+        if channel == "telegram" and digest in state:
+            return True
+        if f"telegram:{digest}" in state:
+            return True
+    if kind == "queued":
+        if channel == "telegram" and f"queued:{digest}" in state:
+            return True
+        if f"queued:{channel}:{digest}" in state:
+            return True
+    if kind == "workflow":
+        if f"workflow:{channel}:{digest}" in state:
+            return True
+    return False
+
+
+def _mark_delivery_outcome(
+    state: dict[str, float],
+    *,
+    channel: str,
+    kind: str,
+    digest: str,
+    outcome: str,
+    now: float,
+) -> None:
+    state[f"{channel}:{kind}:{outcome}:{digest}"] = now
+
+    if kind == "result":
+        if channel == "telegram":
+            # Keep legacy telegram result keys so older runs continue to dedupe.
+            state[digest] = now
+            state[f"{channel}:{digest}"] = now
+    elif kind == "queued":
+        if channel == "telegram":
+            state[f"queued:{digest}"] = now
+        state[f"queued:{channel}:{digest}"] = now
+    elif kind == "workflow":
+        state[f"workflow:{channel}:{digest}"] = now
+
+
+def _normalize_outcome(reason: str) -> str:
+    return reason.replace("-", "_").replace(" ", "_").strip("_").lower()
+
+
+def _outcome_error_class(err: Exception) -> str:
+    if isinstance(err, urllib.error.HTTPError):
+        return f"telegram_http_{err.code}"
+    if isinstance(err, urllib.error.URLError):
+        return "network_unreachable"
+    msg = str(err).lower()
+    if "no route to host" in msg or "connection refused" in msg:
+        return "network_unreachable"
+    return _normalize_outcome(err.__class__.__name__)
+
+
+def _append_dead_letter(path: Path, *, reason_class: str, reason_detail: str, item_record: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "reason_class": reason_class,
+        "reason_detail": reason_detail,
+    }
+    entry.update(item_record)
+    with path.open("a", encoding="utf-8") as fp:
+        fp.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
 def _split_packets(lines: list[str], start_line_offset: int) -> list[tuple[int, list[str]]]:
     """
     Return list of (start_line_number, packet_lines) for TASK_PACKET v1 blocks.
@@ -622,6 +706,63 @@ def _policy_history_paths(*, repo_root: Path, output_dir: str, channel: str, msg
     return out_dir / f"{stem}.json", out_dir / f"{stem}.md"
 
 
+def _gate_message(
+    *,
+    channel: str,
+    message: str,
+    rule_set,
+    rule_path_output_dir: str,
+    policy_mode: str,
+    queued_count: int,
+    result_count: int,
+    workflow_alert_count: int = 0,
+    repo_root: Path,
+) -> tuple[bool, dict[str, object]]:
+    payload = {
+        "scope": "automated_summary",
+        "request_text": "Automated delegated-result summary notification.",
+        "response_text": message,
+        "tags": [
+            "automated_outbound",
+            "delegated_result_summary",
+            f"notify_{channel}",
+        ],
+        "metadata": {
+            "source": "notify_inbox_results",
+            "channel": channel,
+            "queued_count": queued_count,
+            "result_count": result_count,
+            "workflow_alert_count": workflow_alert_count,
+            "has_specialist_result": result_count > 0,
+        },
+    }
+
+    # NOTE: policy mode for this script is passed in from CLI args (args.policy_mode),
+    # and must be in-bounds by parser constraints.
+    report = evaluate_policy(
+        payload=payload,
+        rule_set=rule_set,
+        run_mode=policy_mode,
+    )
+    # Use local helper variables captured from surrounding main() scope.
+    out_json, out_md = _policy_history_paths(
+        repo_root=repo_root,
+        output_dir=rule_path_output_dir,
+        channel=channel,
+        msg=message,
+    )
+    out_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    out_md.write_text(render_markdown(report), encoding="utf-8")
+    blocked = bool((report.get("summary") or {}).get("blocked"))
+    violations = int((report.get("summary") or {}).get("violations") or 0)
+    if violations > 0:
+        print(
+            f"POLICY_{channel.upper()} violations={violations} blocked={blocked} report={out_json}",
+            file=sys.stderr,
+        )
+    return blocked, {"json": str(out_json), "md": str(out_md), "report": report}
+
+
 def _resolve_rules_path(repo_root: Path, configured_path: str) -> Path:
     raw = Path(configured_path)
     if raw.is_absolute():
@@ -646,6 +787,11 @@ def main() -> int:
         "--state-path",
         default="tmp/inbox_notify_state.json",
         help="State file path (default: tmp/inbox_notify_state.json)",
+    )
+    ap.add_argument(
+        "--dead-letter-path",
+        default="tmp/inbox_notify_dead_letters.jsonl",
+        help="Dead-letter path for failed deliveries (default: tmp/inbox_notify_dead_letters.jsonl)",
     )
     ap.add_argument("--max-per-run", type=int, default=3, help="Max results to notify per run (default: 3)")
     ap.add_argument(
@@ -683,6 +829,7 @@ def main() -> int:
 
     repo_root = Path(args.repo_root).resolve()
     state_path = (repo_root / args.state_path).resolve()
+    dead_letter_path = (repo_root / args.dead_letter_path).resolve()
     state = _load_state(state_path)
 
     queued, results = _find_packets_from_job_summary(repo_root)
@@ -690,29 +837,12 @@ def main() -> int:
         queued, results = _find_packets(repo_root)
     workflow_alerts = _find_workflow_alerts(repo_root)
 
-    # Only allow user-facing notifications when explicitly opted in, unless overridden.
     if args.require_notify_telegram:
         queued = [c for c in queued if "telegram" in _parse_notify_channels(c.notify)]
         results = [c for c in results if "telegram" in _parse_notify_channels(c.notify)]
     if args.require_notify_discord:
         queued = [c for c in queued if "discord" in _parse_notify_channels(c.notify)]
         results = [c for c in results if "discord" in _parse_notify_channels(c.notify)]
-
-    def _state_has_result(channel: str, h: str) -> bool:
-        if f"{channel}:{h}" in state:
-            return True
-        # Back-compat: older versions stored Telegram result hashes without a prefix.
-        if channel == "telegram" and h in state:
-            return True
-        return False
-
-    def _state_has_queued(channel: str, h: str) -> bool:
-        if f"queued:{channel}:{h}" in state:
-            return True
-        # Back-compat: queued notifications were historically Telegram-only and channel-agnostic.
-        if channel == "telegram" and f"queued:{h}" in state:
-            return True
-        return False
 
     queued_tg = [q for q in queued if "telegram" in _parse_notify_channels(q.notify)]
     queued_dc = [q for q in queued if "discord" in _parse_notify_channels(q.notify)]
@@ -723,24 +853,24 @@ def main() -> int:
     new_queued_dc: list[PacketQueued] = []
     if args.notify_queued:
         for q in queued_tg:
-            if not _state_has_queued("telegram", q.queued_hash):
+            if not _state_has_seen(state, channel="telegram", kind="queued", digest=q.queued_hash):
                 new_queued_tg.append(q)
         for q in queued_dc:
-            if not _state_has_queued("discord", q.queued_hash):
+            if not _state_has_seen(state, channel="discord", kind="queued", digest=q.queued_hash):
                 new_queued_dc.append(q)
 
-    new_results_tg: list[PacketResult] = [r for r in results_tg if not _state_has_result("telegram", r.result_hash)]
-    new_results_dc: list[PacketResult] = [r for r in results_dc if not _state_has_result("discord", r.result_hash)]
+    new_results_tg: list[PacketResult] = [r for r in results_tg if not _state_has_seen(state, channel="telegram", kind="result", digest=r.result_hash)]
+    new_results_dc: list[PacketResult] = [r for r in results_dc if not _state_has_seen(state, channel="discord", kind="result", digest=r.result_hash)]
 
-    new_alerts_tg = [item for item in workflow_alerts if f"workflow:telegram:{item.alert_hash}" not in state]
-    new_alerts_dc = [item for item in workflow_alerts if f"workflow:discord:{item.alert_hash}" not in state]
+    new_alerts_tg = [item for item in workflow_alerts if not _state_has_seen(state, channel="telegram", kind="workflow", digest=item.alert_hash)]
+    new_alerts_dc = [item for item in workflow_alerts if not _state_has_seen(state, channel="discord", kind="workflow", digest=item.alert_hash)]
 
     if not new_queued_tg and not new_results_tg and not new_queued_dc and not new_results_dc and not new_alerts_tg and not new_alerts_dc:
         print("NOTIFY_IDLE")
         return 0
 
-    # Cap items per channel per run.
     cap = max(1, int(args.max_per_run))
+
     def _cap_lists(
         qs: list[PacketQueued],
         rs: list[PacketResult],
@@ -780,63 +910,126 @@ def main() -> int:
             _format_message(queued=new_queued_dc, results=new_results_dc, workflow_alerts=new_alerts_dc, max_len=1900)
         )
 
-    def _gate_message(*, channel: str, message: str, queued_count: int, result_count: int) -> tuple[bool, dict[str, object]]:
-        payload = {
-            "scope": "automated_summary",
-            "request_text": "Automated delegated-result summary notification.",
-            "response_text": message,
-            "tags": [
-                "automated_outbound",
-                "delegated_result_summary",
-                f"notify_{channel}",
-            ],
-            "metadata": {
-                "source": "notify_inbox_results",
+    def _item_record(kind: str, item: PacketQueued | PacketResult | WorkflowAlert, digest: str, channel: str) -> dict[str, object]:
+        if kind == "workflow":
+            return {
+                "kind": kind,
                 "channel": channel,
-                "queued_count": queued_count,
-                "result_count": result_count,
-                "workflow_alert_count": len(new_alerts_tg if channel == "telegram" else new_alerts_dc),
-                "has_specialist_result": result_count > 0,
-            },
-        }
-        report = evaluate_policy(payload=payload, rule_set=rule_set, run_mode=args.policy_mode)
-        out_json, out_md = _policy_history_paths(
-            repo_root=repo_root,
-            output_dir=args.policy_output_dir,
-            channel=channel,
-            msg=message,
-        )
-        out_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        out_md.write_text(render_markdown(report), encoding="utf-8")
-        blocked = bool((report.get("summary") or {}).get("blocked"))
-        violations = int((report.get("summary") or {}).get("violations") or 0)
-        if violations > 0:
-            print(
-                f"POLICY_{channel.upper()} violations={violations} blocked={blocked} report={out_json}",
-                file=sys.stderr,
-            )
-        return blocked, {"json": str(out_json), "md": str(out_md), "report": report}
+                "digest": digest,
+                "workflow_id": item.workflow_id,
+                "owners": list(item.owners),
+                "state": item.state,
+                "state_reasons": list(item.state_reasons),
+                "job_count": item.job_count,
+            }
 
-    if tg_msg:
+        if isinstance(item, PacketQueued):
+            return {
+                "kind": kind,
+                "channel": channel,
+                "digest": digest,
+                "owner": item.owner,
+                "objective": item.objective,
+                "path": item.display_path,
+                "line_no": item.packet_start_line,
+            }
+
+        if isinstance(item, PacketResult):
+            return {
+                "kind": kind,
+                "channel": channel,
+                "digest": digest,
+                "owner": item.owner,
+                "objective": item.objective,
+                "path": item.display_path,
+                "line_no": item.packet_start_line,
+            }
+
+        # pragma: no cover
+        raise RuntimeError("unsupported item")
+
+    def _emit_channel_outcome(
+        *,
+        channel: str,
+        items: list[tuple[str, str, PacketQueued | PacketResult | WorkflowAlert]],
+        outcome: str,
+        now_ts: float,
+        reason_class: str | None = None,
+        reason_detail: str | None = None,
+    ) -> None:
+        for kind, digest, item in items:
+            _mark_delivery_outcome(
+                state,
+                channel=channel,
+                kind=kind,
+                digest=digest,
+                outcome=outcome,
+                now=now_ts,
+            )
+            if outcome != NOTIFY_OUTCOMES["failed"]:
+                continue
+            _append_dead_letter(
+                dead_letter_path,
+                reason_class=(reason_class or "unknown"),
+                reason_detail=(reason_detail or ""),
+                item_record=_item_record(kind, item, digest, channel),
+            )
+
+    def _events_from(
+        queued: list[PacketQueued],
+        results: list[PacketResult],
+        alerts: list[WorkflowAlert],
+    ) -> list[tuple[str, str, PacketQueued | PacketResult | WorkflowAlert]]:
+        return [("queued", it.queued_hash, it) for it in queued] + [
+            ("result", it.result_hash, it) for it in results
+        ] + [("workflow", it.alert_hash, it) for it in alerts]
+
+    tg_events = _events_from(new_queued_tg, new_results_tg, new_alerts_tg)
+    dc_events = _events_from(new_queued_dc, new_results_dc, new_alerts_dc)
+
+    fail_any = False
+    now = time.time()
+
+    def _gate(channel: str, message: str, queued_count: int, result_count: int) -> bool:
         blocked, _ = _gate_message(
+            channel=channel,
+            message=message,
+            rule_set=rule_set,
+            rule_path_output_dir=args.policy_output_dir,
+            policy_mode=args.policy_mode,
+            queued_count=queued_count,
+            result_count=result_count,
+            workflow_alert_count=len(new_alerts_tg if channel == "telegram" else new_alerts_dc),
+            repo_root=repo_root,
+        )
+        if blocked:
+            print(f"ERROR: {channel.upper()} outbound notification blocked by policy gate.", file=sys.stderr)
+        return blocked
+
+    tg_blocked = bool(tg_msg and _gate("telegram", tg_msg, len(new_queued_tg), len(new_results_tg)))
+    dc_blocked = bool(dc_msg and _gate("discord", dc_msg, len(new_queued_dc), len(new_results_dc)))
+
+    if tg_blocked:
+        fail_any = True
+        _emit_channel_outcome(
             channel="telegram",
-            message=tg_msg,
-            queued_count=len(new_queued_tg),
-            result_count=len(new_results_tg),
+            items=tg_events,
+            outcome=NOTIFY_OUTCOMES["failed"],
+            now_ts=now,
+            reason_class="policy_block",
+            reason_detail="policy_gate_blocked",
         )
-        if blocked:
-            print("ERROR: Telegram outbound notification blocked by policy gate.", file=sys.stderr)
-            return 2
-    if dc_msg:
-        blocked, _ = _gate_message(
+
+    if dc_blocked:
+        fail_any = True
+        _emit_channel_outcome(
             channel="discord",
-            message=dc_msg,
-            queued_count=len(new_queued_dc),
-            result_count=len(new_results_dc),
+            items=dc_events,
+            outcome=NOTIFY_OUTCOMES["failed"],
+            now_ts=now,
+            reason_class="policy_block",
+            reason_detail="policy_gate_blocked",
         )
-        if blocked:
-            print("ERROR: Discord outbound notification blocked by policy gate.", file=sys.stderr)
-            return 2
 
     if dry_all:
         if new_queued_tg or new_results_tg or new_alerts_tg:
@@ -845,61 +1038,96 @@ def main() -> int:
         if new_queued_dc or new_results_dc or new_alerts_dc:
             print("DISCORD:")
             print(dc_msg)
+
+        if not tg_blocked:
+            _emit_channel_outcome(
+                channel="telegram",
+                items=tg_events,
+                outcome=NOTIFY_OUTCOMES["suppressed"],
+                now_ts=now,
+            )
+        if not dc_blocked:
+            _emit_channel_outcome(
+                channel="discord",
+                items=dc_events,
+                outcome=NOTIFY_OUTCOMES["suppressed"],
+                now_ts=now,
+            )
     else:
-        if (new_queued_tg or new_results_tg or new_alerts_tg) and not suppress_tg:
-            chat_id = _get_telegram_chat_id()
-            token = _get_telegram_bot_token()
-            if not token:
-                print(
-                    "ERROR: Missing Telegram bot token (~/.openclaw/secrets/telegram.token or TELEGRAM_BOT_TOKEN).",
-                    file=sys.stderr,
-                )
-                return 2
-
+        if (new_queued_tg or new_results_tg or new_alerts_tg) and not suppress_tg and not tg_blocked:
             try:
+                chat_id = _get_telegram_chat_id()
+                token = _get_telegram_bot_token()
+                if not token:
+                    raise RuntimeError("missing_telegram_bot_token")
                 _telegram_send_message(chat_id=chat_id, token=token, text=tg_msg)
-            except urllib.error.HTTPError as e:
-                print(f"ERROR: Telegram HTTP error: {e.code}", file=sys.stderr)
-                return 2
             except Exception as e:
-                print(f"ERROR: Telegram send failed: {e}", file=sys.stderr)
-                return 2
+                fail_any = True
+                reason_class = _outcome_error_class(e)
+                reason_detail = str(e)
+                _emit_channel_outcome(
+                    channel="telegram",
+                    items=tg_events,
+                    outcome=NOTIFY_OUTCOMES["failed"],
+                    now_ts=now,
+                    reason_class=reason_class,
+                    reason_detail=reason_detail,
+                )
+            else:
+                _emit_channel_outcome(
+                    channel="telegram",
+                    items=tg_events,
+                    outcome=NOTIFY_OUTCOMES["delivered"],
+                    now_ts=now,
+                )
+        elif not tg_blocked:
+            _emit_channel_outcome(
+                channel="telegram",
+                items=tg_events,
+                outcome=NOTIFY_OUTCOMES["suppressed"],
+                now_ts=now,
+            )
 
-        if (new_queued_dc or new_results_dc or new_alerts_dc) and not suppress_dc:
+        if (new_queued_dc or new_results_dc or new_alerts_dc) and not suppress_dc and not dc_blocked:
             try:
                 target = _get_discord_default_target(repo_root)
                 _discord_send_message(repo_root=repo_root, target=target, text=dc_msg)
             except Exception as e:
-                print(f"ERROR: Discord send failed: {e}", file=sys.stderr)
-                return 2
-
-    now = time.time()
-    # In dry-run / suppression mode, we still advance state to avoid spamming during local loop testing.
-    if new_results_tg or new_queued_tg or new_alerts_tg:
-        for it in new_results_tg:
-            state[f"telegram:{it.result_hash}"] = now
-            # Back-compat: keep the legacy Telegram key so older runs remain quiet.
-            state[it.result_hash] = now
-        for it in new_queued_tg:
-            state[f"queued:telegram:{it.queued_hash}"] = now
-            state[f"queued:{it.queued_hash}"] = now
-        for it in new_alerts_tg:
-            state[f"workflow:telegram:{it.alert_hash}"] = now
-
-    if new_results_dc or new_queued_dc or new_alerts_dc:
-        for it in new_results_dc:
-            state[f"discord:{it.result_hash}"] = now
-        for it in new_queued_dc:
-            state[f"queued:discord:{it.queued_hash}"] = now
-        for it in new_alerts_dc:
-            state[f"workflow:discord:{it.alert_hash}"] = now
+                fail_any = True
+                reason_class = _outcome_error_class(e)
+                reason_detail = str(e)
+                _emit_channel_outcome(
+                    channel="discord",
+                    items=dc_events,
+                    outcome=NOTIFY_OUTCOMES["failed"],
+                    now_ts=now,
+                    reason_class=reason_class,
+                    reason_detail=reason_detail,
+                )
+            else:
+                _emit_channel_outcome(
+                    channel="discord",
+                    items=dc_events,
+                    outcome=NOTIFY_OUTCOMES["delivered"],
+                    now_ts=now,
+                )
+        elif not dc_blocked:
+            _emit_channel_outcome(
+                channel="discord",
+                items=dc_events,
+                outcome=NOTIFY_OUTCOMES["suppressed"],
+                now_ts=now,
+            )
 
     # Bound state size to avoid unbounded growth.
     if len(state) > 5000:
-        # Keep newest N based on timestamp values.
         state = dict(sorted(state.items(), key=lambda kv: kv[1], reverse=True)[:4000])
 
     _save_state(state_path, state)
+    if fail_any:
+        print("NOTIFY_FAILED")
+        return 2
+
     print("NOTIFY_OK")
     return 0
 

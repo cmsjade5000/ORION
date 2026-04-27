@@ -1,417 +1,846 @@
-[
-  {
-    "id": "666e6776-cb97-4c34-8baa-a16a0b94dcd2",
-    "name": "Morning briefing",
-    "description": null,
-    "schedule": {
-      "expr": "0 7 * * *",
-      "kind": "cron",
-      "tz": "America/New_York"
+{
+  "version": 1,
+  "jobs": [
+    {
+      "agentId": "main",
+      "createdAtMs": 1769710850560,
+      "delivery": {
+        "bestEffort": true,
+        "channel": "whatsapp",
+        "mode": "none",
+        "to": "+14126123690"
+      },
+      "enabled": false,
+      "id": "666e6776-cb97-4c34-8baa-a16a0b94dcd2",
+      "name": "Morning briefing",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Create Cory’s morning briefing and EMAIL it to cory.stoner@icloud.com from cory.stoner@icloud.com using Himalaya (account: icloud). Do NOT send to WhatsApp.\n\nCRITICAL RELIABILITY REQUIREMENT (sanitization):\n- BEFORE embedding any external command output (especially icalBuddy) into a heredoc/JSON/shell arg, sanitize it to remove NUL bytes and other control characters.\n- Strip \\x00 and all chars with ord < 32 except \\n, \\r, \\t. (Backspace \\b and NUL \\x00 previously broke the send step.)\n- Recommended sanitizer:\n  python3 - <<'PY'\n  import sys\n  s=sys.stdin.read().replace('\\\\x00','')\n  s=''.join(ch for ch in s if ch in '\\\\n\\\\r\\\\t' or (ord(ch)>=32 and ord(ch)!=127))\n  sys.stdout.write(s)\n  PY\n\nData sources (use local commands):\n- Calendar (today): use icalBuddy and include ONLY these calendars: Work, Appointment/Meeting, Errands/Tasks, Family, Events, Work Shift Schedule.\n  Example:\n  icalBuddy -b '' -nc -ic 'Work,Appointment/Meeting,Errands/Tasks,Family,Events,Work Shift Schedule' -iep 'title,datetime,location,url,notes' eventsToday\n  Then pipe through sanitizer above.\n- Reminders:\n  - Due today: remindctl today --json\n  - Overdue: remindctl overdue --json\n- Weather: current + today forecast for Cory’s area (America/New_York). Prefer wttr.in; if it times out, use api.weather.gov.\n\nAdd NEWS (topics: tech, AI, local Pittsburgh):\n- Find 1–2 interesting, high-quality articles.\n- If web_search is unavailable, use reliable RSS (e.g., https://www.theverge.com/rss/index.xml) and/or Post-Gazette RSS (http://www.post-gazette.com/rss) and include direct links.\n- For each: Title — Outlet — 1 sentence why it matters — link.\n\nAdd RELEVANCE:\n- 1–3 bullets of anything else that could be fun/useful/informative today based on available signals.\n\nEmail formatting:\n- Subject: Morning Briefing — {YYYY-MM-DD}\n- Body: multipart/alternative with BOTH plain text and simple HTML.\n\nHTML style:\n- Clean system font stack; section headers; bullet lists; subtle separators.\n- No external images.\n\nSend via: himalaya message send --account icloud with proper MIME headers + boundaries.\n\nAfter sending: verify success (exit code / output) and if send fails, surface an error (do not silently succeed)."
+      },
+      "schedule": {
+        "expr": "0 7 * * *",
+        "kind": "cron",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "ba0738ed-c07e-40d6-924f-7bb646461f30",
-    "name": "Daily System Status Check",
-    "description": null,
-    "schedule": {
-      "expr": "0 8 * * *",
-      "kind": "cron",
-      "tz": "America/New_York"
+    {
+      "agentId": "main",
+      "createdAtMs": 1770486051007,
+      "enabled": false,
+      "id": "ba0738ed-c07e-40d6-924f-7bb646461f30",
+      "name": "Daily System Status Check",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "TASK_PACKET v1\nOwner: ORION\nRequester: ORION\nObjective: Perform a daily system status check on the OpenClaw gateway and active sessions.\nSuccess Criteria:\n- System status report generated.\n- No critical errors identified in gateway or session lists.\nConstraints:\n- Do not perform any system modification actions.\n- Keep analysis to OS/Gateway/Session level status checks.\nInputs:\n- None\nRisks:\n- Low. Read-only checks.\nStop Gates:\n- Any command that modifies system state, files, or credentials.\nOutput Format:\n- Bulleted summary of check results."
+      },
+      "schedule": {
+        "expr": "0 8 * * *",
+        "kind": "cron",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "main",
+      "wakeMode": "next-heartbeat",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "95c70f1c-2f41-4a61-9dd4-8a7bd751f7f8",
-    "name": "morning-brief-voice",
-    "description": "Send ORION daily morning brief to Cory via Telegram (voice + links)",
-    "schedule": {
-      "expr": "30 7 * * *",
-      "kind": "cron",
-      "tz": "America/New_York"
+    {
+      "agentId": "main",
+      "createdAtMs": 1770711790795,
+      "delivery": {
+        "channel": "telegram",
+        "mode": "announce",
+        "to": "8471523294"
+      },
+      "description": "Send ORION daily morning brief to Cory via Telegram (voice + links)",
+      "enabled": false,
+      "id": "95c70f1c-2f41-4a61-9dd4-8a7bd751f7f8",
+      "name": "morning-brief-voice",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run scripts/morning_debrief_voice_send.sh --text-only --send. Respond NO_REPLY."
+      },
+      "schedule": {
+        "expr": "30 7 * * *",
+        "kind": "cron",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "83e6ca84-2270-4003-a434-51e89f646dc7",
-    "name": "atlas-inbox-worker",
-    "description": "ATLAS: process one pending inbox packet (safe/read-only) and write Result block",
-    "schedule": {
-      "anchorMs": 1770714548111,
-      "everyMs": 60000,
-      "kind": "every"
+    {
+      "agentId": "atlas",
+      "createdAtMs": 1770714548111,
+      "delivery": {
+        "channel": "last",
+        "mode": "none"
+      },
+      "description": "ATLAS: process one pending inbox packet (safe/read-only) and write Result block",
+      "enabled": false,
+      "id": "83e6ca84-2270-4003-a434-51e89f646dc7",
+      "name": "atlas-inbox-worker",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Check tasks/INBOX/ATLAS.md for the newest TASK_PACKET v1 that lacks a Result: block. Only proceed if Constraints indicate read-only checks (or the packet is explicitly marked AUTO_OK). Execute the Inputs commands/scripts, then write a Result: block under that packet in tasks/INBOX/ATLAS.md using the packet's Output Format. If no eligible pending packet exists, respond NO_REPLY.",
+        "timeoutSeconds": 110
+      },
+      "schedule": {
+        "anchorMs": 1770714548111,
+        "everyMs": 60000,
+        "kind": "every"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "1f558e3a-1028-4f6c-948e-bc024fc4e479",
-    "name": "kalshi-ref-arb-digest",
-    "description": "Kalshi ref arb Telegram digest at 7am/3pm/11pm America/New_York (8h window)",
-    "schedule": {
-      "expr": "0 7,15,23 * * *",
-      "kind": "cron",
-      "tz": "America/New_York"
+    {
+      "agentId": "main",
+      "createdAtMs": 1771129258294,
+      "delivery": {
+        "channel": "last",
+        "mode": "none"
+      },
+      "description": "Kalshi ref arb Telegram digest at 7am/3pm/11pm America/New_York (8h window)",
+      "enabled": false,
+      "id": "1f558e3a-1028-4f6c-948e-bc024fc4e479",
+      "name": "kalshi-ref-arb-digest",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly this command (no added args): cd /Users/corystoner/src/ORION && python3 -m scripts.kalshi_digest --window-hours 8 --send-email --email-html\nIgnore stdout/stderr unless it fails. Then respond exactly: NO_REPLY."
+      },
+      "schedule": {
+        "expr": "0 7,15,23 * * *",
+        "kind": "cron",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "a32452da-3350-4bad-b0d7-546fd06d8c69",
-    "name": "Daily Task Review Reminder",
-    "description": null,
-    "schedule": {
-      "expr": "0 9 * * 1-5",
-      "kind": "cron",
-      "tz": "America/New_York"
+    {
+      "agentId": "main",
+      "createdAtMs": 1771309496258,
+      "enabled": false,
+      "id": "a32452da-3350-4bad-b0d7-546fd06d8c69",
+      "name": "Daily Task Review Reminder",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "Review your tasks."
+      },
+      "schedule": {
+        "expr": "0 9 * * 1-5",
+        "kind": "cron",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "main",
+      "wakeMode": "now",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "72a50d3a-e065-4d00-9c38-6e1e59c8bd67",
-    "name": "kalshi-ref-arb-5m",
-    "description": null,
-    "schedule": {
-      "anchorMs": 1771321510238,
-      "everyMs": 300000,
-      "kind": "every"
+    {
+      "agentId": "main",
+      "createdAtMs": 1771321510238,
+      "delivery": {
+        "mode": "announce"
+      },
+      "enabled": false,
+      "id": "72a50d3a-e065-4d00-9c38-6e1e59c8bd67",
+      "name": "kalshi-ref-arb-5m",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "cd /Users/corystoner/Desktop/ORION && python3 scripts/kalshi_autotrade_cycle.py .",
+        "timeoutSeconds": 300
+      },
+      "schedule": {
+        "anchorMs": 1771321510238,
+        "everyMs": 300000,
+        "kind": "every"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
-    "name": "polymarket-sports-paper-60s",
-    "description": "Polymarket sports paper-only paired arb cycle every 60 seconds (strict), executed by LEDGER.",
-    "schedule": {
-      "kind": "every",
-      "everyMs": 60000,
-      "anchorMs": 1775010970691
+    {
+      "id": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+      "agentId": "ledger",
+      "name": "polymarket-sports-paper-60s",
+      "description": "Polymarket sports paper-only paired arb cycle every 60 seconds (strict), executed by LEDGER.",
+      "enabled": false,
+      "createdAtMs": 1771530106985,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 60000,
+        "anchorMs": 1775010970691
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly:\n/Users/corystoner/.openclaw/workspaces/orion-ledger/scripts/polymarket_sports_paper_cycle.py\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) Do not request elevated execution. If approval is required, use the configured Telegram approval flow and wait for the decision.\n3) If the command exits non-zero, reply exactly: ERROR polymarket_sports_paper_cycle_rc_nonzero\n4) If the command exits with code 0, reply exactly: NO_REPLY",
+        "timeoutSeconds": 120
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "telegram"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "2100241c-4d30-4d04-88bc-90cbad8c8094",
-    "name": "routing-audit-weekly",
-    "description": "Weekly POLARIS routing/queue audit summary via ORION Telegram",
-    "schedule": {
-      "kind": "cron",
-      "expr": "0 9 * * 5",
-      "tz": "America/New_York"
+    {
+      "id": "2100241c-4d30-4d04-88bc-90cbad8c8094",
+      "agentId": "main",
+      "name": "routing-audit-weekly",
+      "description": "Weekly POLARIS routing/queue audit summary via ORION Telegram",
+      "enabled": false,
+      "createdAtMs": 1771559335732,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * 5",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "TASK_PACKET v1\nOwner: ORION\nRequester: ORION\nObjective: Run weekly routing audit and post a concise Telegram line-item summary.\nSuccess Criteria:\n- Runs scripts/routing_audit_weekly.py once.\n- Returns exactly five summary lines in the required format.\nConstraints:\n- Summary only; no raw logs or command dumps.\n- No destructive actions.\nInputs:\n- scripts/routing_audit_weekly.py\n- tasks/INBOX/POLARIS.md\n- docs/AGENT_OWNERSHIP_MATRIX.md\nRisks:\n- low\nStop Gates:\n- Any credential/config mutation.\nOutput Format:\n- Return exactly these 5 lines and nothing else:\n  Queue: <active>/8, oldest=<Nd>\n  Aging: >24h=<n>, >48h=<n>, >72h=<n>, >120h=<n>\n  Escalations: <none|brief items>\n  Routing: misroutes=<n>, gate_misses=<n>, notify_noise=<n>\n  Next actions: <none|1-3 brief bullets>\n\nRun first:\ncd /Users/corystoner/src/ORION && python3 scripts/routing_audit_weekly.py\n\nMapping rules:\n- queue=<a>/8 oldest=<d>d -> Queue line\n- aging_bands=>24h:x,>48h:y,>72h:z,>120h:w -> Aging line\n- misroutes_or_requester_violations, kalshi_gate_misses, notification_noise -> Routing line\n- If misroutes>0 or gate_misses>0 or any aging band >72h >0: Escalations must not be none.\n- If misroutes>0 or gate_misses>0 or notify_noise>0 or any aging band >24h >0: Next actions must include 1-3 concrete bullets (not none).\n- Only when all routing metrics are zero and all aging bands are zero: Escalations and Next actions may both be none."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8471523294"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "5e382185-d4ec-4d56-8269-6a9fb9467254",
-    "name": "orion-personal-morning-brief",
-    "description": null,
-    "schedule": {
-      "kind": "cron",
-      "expr": "15 7 * * 1-5",
-      "tz": "America/New_York"
+    {
+      "id": "5e382185-d4ec-4d56-8269-6a9fb9467254",
+      "agentId": "main",
+      "name": "orion-personal-morning-brief",
+      "enabled": false,
+      "createdAtMs": 1771729885336,
+      "schedule": {
+        "kind": "cron",
+        "expr": "15 7 * * 1-5",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "TASK_PACKET v1\nOwner: ORION\nRequester: ORION\nObjective: Build a concise MORNING BRIEF for Cory with clear priorities and the first 15-minute action.\nSuccess Criteria:\n- Produces a Morning Brief using the daily briefing template.\n- Explicitly lists assumptions and missing inputs; no fabricated facts.\n- Includes mission, top outcomes, schedule reality check, deadlines, and energy plan.\nConstraints:\n- Keep output concise and actionable.\n- Do not claim reminder/scheduling changes are already configured.\n- No destructive commands.\nInputs:\n- skills/daily-briefing/SKILL.md\nRisks:\n- low\nStop Gates:\n- Any destructive command.\n- Any credential/configuration mutation.\nOutput Format:\n- Daily briefing text only (morning format)."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8471523294"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "908d34a6-9e27-4c94-94af-c613db594a4d",
-    "name": "orion-personal-evening-reset",
-    "description": null,
-    "schedule": {
-      "kind": "cron",
-      "expr": "30 20 * * 1-5",
-      "tz": "America/New_York"
+    {
+      "id": "908d34a6-9e27-4c94-94af-c613db594a4d",
+      "agentId": "main",
+      "name": "orion-personal-evening-reset",
+      "enabled": false,
+      "createdAtMs": 1771729886180,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 20 * * 1-5",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "TASK_PACKET v1\nOwner: ORION\nRequester: ORION\nObjective: Run an evening reset and produce the next life-admin queue for tomorrow.\nSuccess Criteria:\n- Produces an evening reset with carry-forward and tomorrow setup.\n- Produces a prioritized life-admin today/next queue with blockers if present.\n- Explicitly marks assumptions and missing inputs; no fabricated facts.\nConstraints:\n- Keep output concise and execution-focused.\n- No irreversible actions.\n- No destructive commands.\nInputs:\n- skills/daily-briefing/SKILL.md\n- skills/life-admin-queue/SKILL.md\nRisks:\n- low\nStop Gates:\n- Any destructive command.\n- Any irreversible financial/legal action.\nOutput Format:\n- Evening reset summary plus life-admin queue sections."
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8471523294"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "30800b89-18d6-4270-af1a-73ccea0e1383",
-    "name": "arc-field-guide-lock-watchdog",
-    "description": "Clears stale arc_fg_loop_state active_run locks older than 15m",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/5 * * * *"
+    {
+      "id": "30800b89-18d6-4270-af1a-73ccea0e1383",
+      "agentId": "quest",
+      "name": "arc-field-guide-lock-watchdog",
+      "description": "Clears stale arc_fg_loop_state active_run locks older than 15m",
+      "enabled": false,
+      "createdAtMs": 1771733812269,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/5 * * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && python3 scripts/arc_fg_lock_watchdog.py --state tmp/arc_fg_loop_state.json --max-age-minutes 15 . Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "df852cfe-d872-4981-ad64-a345d0ebc873",
-    "name": "arc-field-guide-forced-handoff-loop",
-    "description": "Forces 3 offline specialist delegations (SCRIBE+LEDGER+POLARIS) with ORION handoff packets",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/15 * * * *"
+    {
+      "id": "df852cfe-d872-4981-ad64-a345d0ebc873",
+      "agentId": "main",
+      "name": "arc-field-guide-forced-handoff-loop",
+      "description": "Forces 3 offline specialist delegations (SCRIBE+LEDGER+POLARIS) with ORION handoff packets",
+      "enabled": false,
+      "createdAtMs": 1771734313878,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/15 * * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "TASK_PACKET v1\nOwner: ORION\nRequester: ORION\nObjective: Force offline specialist progress for Arc Raiders Field Guide using ORION-built handoff context packets.\nSuccess Criteria:\n- Complete exactly 3 specialist delegations in this run:\n  - SCRIBE for FG-Chapters-Layout (edit target: `docs/arc-raiders-field-guide/chapters-layout-draft.md`)\n  - LEDGER for FG-Cost-Breakdown (edit target: `docs/arc-raiders-field-guide/cost-breakdown-draft.md`)\n  - POLARIS for FG-Project-Management (edit target: `docs/arc-raiders-field-guide/project-management-draft.md`)\n- Child specialists must operate from ORION-provided handoff context only (no Discord reads).\n- Return concrete draft deltas against target drafts (section edits, row edits, add/remove proposals).\n- ORION must apply at least one concrete edit to each target draft file every run, using specialist output or direct fallback synthesis.\n- Post one FG-HQ rollup with session IDs, attempted/completed counts, and actionable edit deltas.\nConstraints:\n- Timebox: 16 minutes max.\n- Concurrency: max 3 sub-agent sessions.\n- Use `sessions_spawn` with `mode=\"run\"` only.\n- No destructive/config/credential actions.\n- Do not skip delegations due to \"no material deltas\".\n- Delegation gate: if fewer than 3 delegations are attempted, write `last_error=\"forced_handoff_not_executed\"` to `tmp/arc_fg_loop_state.json` and report blocked status.\n- Child instruction hard rule: include `NO_DISCORD_TOOLS` in each child task and provide inline handoff context packet with:\n  - target thread id/name\n  - latest message excerpts (up to 12)\n  - objective and done criteria\n  - known blockers\n  - relevant links from `docs/arc-raiders-field-guide/sources.md`\n- Wait for all child runs to complete before final summary.\n- Completion gate: do not return final summary until all child session IDs are captured and each target file has a proposed or applied delta.\n- Direct-edit fallback: if any specialist output is partial/blocked, ORION must still update that target file directly with best-effort concrete edits and mark fallback used.\n- Strict completeness rule: final rollup is valid only if all required markers below are present and set to `yes`.\n- Blocking rule: if any required marker is missing or `no`, set `last_error=\"forced_handoff_incomplete_rollup\"` in `tmp/arc_fg_loop_state.json` and include `BLOCKED_REASON: forced_handoff_incomplete_rollup` in rollup.\nInputs:\n- tmp/arc_fg_thread_registry.json\n- tmp/arc_fg_loop_state.json\n- docs/arc-raiders-field-guide/sources.md\n- docs/arc-raiders-field-guide/chapters-layout-draft.md\n- docs/arc-raiders-field-guide/cost-breakdown-draft.md\n- docs/arc-raiders-field-guide/project-management-draft.md\n- docs/TASK_PACKET.md\nOutput Format:\n- FG-HQ rollup with:\n  - delegations attempted/completed\n  - child session IDs\n  - draft deltas from SCRIBE, LEDGER, and POLARIS\n  - links/sources referenced\n  - next 3 edits to apply\n  - literal markers (required):\n    - SCRIBE_DELTA_PRESENT: yes|no\n    - LEDGER_DELTA_PRESENT: yes|no\n    - POLARIS_DELTA_PRESENT: yes|no\n    - CHAPTERS_FILE_UPDATED: yes|no\n    - COST_FILE_UPDATED: yes|no\n    - PM_FILE_UPDATED: yes|no\n    - FINAL_STATUS: complete|blocked",
+        "timeoutSeconds": 1100
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "discord",
+        "to": "channel:1474970174485692509"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "dd1d3968-df7d-4f9c-8593-9a03ec85bebe",
-    "name": "arc-field-guide-forced-handoff-rollup-guard",
-    "description": "Marks forced-handoff run blocked when rollup misses SCRIBE/LEDGER/POLARIS delta markers",
-    "schedule": {
-      "kind": "cron",
-      "expr": "2,17,32,47 * * * *"
+    {
+      "id": "dd1d3968-df7d-4f9c-8593-9a03ec85bebe",
+      "agentId": "quest",
+      "name": "arc-field-guide-forced-handoff-rollup-guard",
+      "description": "Marks forced-handoff run blocked when rollup misses SCRIBE/LEDGER/POLARIS delta markers",
+      "enabled": false,
+      "createdAtMs": 1771734884107,
+      "schedule": {
+        "kind": "cron",
+        "expr": "2,17,32,47 * * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && python3 scripts/arc_fg_rollup_guard.py --job-id df852cfe-d872-4981-ad64-a345d0ebc873 --state tmp/arc_fg_loop_state.json . Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "32998ac9-3874-4b5b-a87f-c700784cae62",
-    "name": "arc-field-guide-doc-version-publisher",
-    "description": "Publish versioned Arc FG draft attachments to discipline threads and HQ manifest",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/5 * * * *",
-      "tz": "America/New_York"
+    {
+      "id": "32998ac9-3874-4b5b-a87f-c700784cae62",
+      "agentId": "quest",
+      "name": "arc-field-guide-doc-version-publisher",
+      "description": "Publish versioned Arc FG draft attachments to discipline threads and HQ manifest",
+      "enabled": false,
+      "createdAtMs": 1771808902868,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/5 * * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && python3 scripts/arc_fg_doc_publish_versions.py . Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "c5873e09-107a-4e19-b7da-e73987659a0a",
-    "name": "arc-field-guide-thread-question-loop",
-    "description": "Ask targeted per-thread questions and auto-create missing Arc FG subject threads",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/10 * * * *",
-      "tz": "America/New_York"
+    {
+      "id": "c5873e09-107a-4e19-b7da-e73987659a0a",
+      "agentId": "quest",
+      "name": "arc-field-guide-thread-question-loop",
+      "description": "Ask targeted per-thread questions and auto-create missing Arc FG subject threads",
+      "enabled": false,
+      "createdAtMs": 1771810134098,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/10 * * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && python3 scripts/arc_fg_thread_question_loop.py --min-minutes-between-questions 20 . Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "a02afa86-bac2-41ff-bc26-5f08651a905f",
-    "name": "kalshi-digest-reliability-daily",
-    "description": "Daily Kalshi digest delivery reliability report (expected slots vs actual sends)",
-    "schedule": {
-      "kind": "cron",
-      "expr": "5 9 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "a02afa86-bac2-41ff-bc26-5f08651a905f",
+      "agentId": "main",
+      "name": "kalshi-digest-reliability-daily",
+      "description": "Daily Kalshi digest delivery reliability report (expected slots vs actual sends)",
+      "enabled": false,
+      "createdAtMs": 1772462659026,
+      "schedule": {
+        "kind": "cron",
+        "expr": "5 9 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && python3 scripts/kalshi_digest_reliability.py --daily-report --send-telegram. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "67c29ebf-49e9-4dbe-bd9a-84fe7e7ef1f6",
-    "name": "kalshi-digest-delivery-guard",
-    "description": "Alert if 07:00 Kalshi digest run is ok but no email is sent within 10 minutes",
-    "schedule": {
-      "kind": "cron",
-      "expr": "12 7 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "67c29ebf-49e9-4dbe-bd9a-84fe7e7ef1f6",
+      "agentId": "main",
+      "name": "kalshi-digest-delivery-guard",
+      "description": "Alert if 07:00 Kalshi digest run is ok but no email is sent within 10 minutes",
+      "enabled": false,
+      "createdAtMs": 1772462659030,
+      "schedule": {
+        "kind": "cron",
+        "expr": "12 7 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && python3 scripts/kalshi_digest_reliability.py --guard --send-telegram --grace-minutes 10. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "8f72c88e-95ee-4bc0-bec6-c7d363c5cdeb",
-    "name": "quest-ps5-world-news-update",
-    "description": "Weekday PS5 world news update via QUEST (sourced, concise).",
-    "schedule": {
-      "kind": "cron",
-      "expr": "30 9 * * 1-5",
-      "tz": "America/New_York"
+    {
+      "id": "8f72c88e-95ee-4bc0-bec6-c7d363c5cdeb",
+      "agentId": "quest",
+      "name": "quest-ps5-world-news-update",
+      "description": "Weekday PS5 world news update via QUEST (sourced, concise).",
+      "enabled": false,
+      "createdAtMs": 1772500870974,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 9 * * 1-5",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "TASK_PACKET v1\nOwner: QUEST\nRequester: ORION\nObjective: Deliver a concise PS5 gaming world news update.\nSuccess Criteria:\n- Provides 4-7 high-signal PS5-related updates from recent coverage.\n- Each bullet includes source domain and publication date.\n- Ends with one short \"Watch next\" line.\nConstraints:\n- Retrieval-first: use web retrieval tools and source-backed items; no fabrication.\n- Focus on PS5 ecosystem: first-party announcements, major third-party PS5 updates, release-date shifts, platform/firmware updates, and major incidents.\n- If no high-signal updates are found, say so explicitly and provide up to 2 watch items.\n- FINAL OUTPUT MUST NOT BE EMPTY.\nInputs:\n- Preferred source domains: blog.playstation.com, playstation.com, ign.com, gamespot.com, eurogamer.net, videogameschronicle.com.\nRisks:\n- medium: stale or low-signal headlines.\nStop Gates:\n- Any paid action, account mutation, or irreversible operation.\nOutput Format:\n- Title line: PS5 World News Update (<date>)\n- 4-7 bullets max, each ending with source domain + date in parentheses.\n- Final line: Watch next: <short item(s)>.\n- If retrieval fails or yields nothing, output exactly this fallback (and nothing else):\n  PS5 World News Update (<date>)\n  - No high-signal PS5 updates found in the latest scan window. (n/a)\n  Watch next: Next scheduled scan.\n\nCritical:\n- After any tool call, you MUST return final plain-text content.\n- Do not end the turn with an empty response.",
+        "timeoutSeconds": 240
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "8471523294"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "d8128d4c-9aac-41cf-aa4d-163f62696735",
-    "name": "orion-reliability-daily",
-    "description": "Daily reliability snapshot and monthly scorecard append",
-    "schedule": {
-      "kind": "cron",
-      "expr": "10 10 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "d8128d4c-9aac-41cf-aa4d-163f62696735",
+      "agentId": "main",
+      "name": "orion-reliability-daily",
+      "description": "Daily reliability snapshot and monthly scorecard append",
+      "enabled": false,
+      "createdAtMs": 1772504270985,
+      "schedule": {
+        "kind": "cron",
+        "expr": "10 10 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly: cd /Users/corystoner/src/ORION && make eval-reliability-daily\nIgnore stdout/stderr unless it fails. Then respond exactly: NO_REPLY.",
+        "timeoutSeconds": 240
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "eca22cdd-5b3b-408c-abf4-724f83c40258",
-    "name": "orion-monthly-scorecard-daily",
-    "description": "Daily monthly scorecard refresh for 2026-03",
-    "schedule": {
-      "kind": "cron",
-      "expr": "20 10 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "eca22cdd-5b3b-408c-abf4-724f83c40258",
+      "agentId": "main",
+      "name": "orion-monthly-scorecard-daily",
+      "description": "Daily monthly scorecard refresh for 2026-03",
+      "enabled": false,
+      "createdAtMs": 1772506626802,
+      "schedule": {
+        "kind": "cron",
+        "expr": "20 10 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly:\ncd /Users/corystoner/src/ORION && MONTH=$(date +%Y-%m) && make monthly-scorecard MONTH=\"$MONTH\"\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) If the command exits non-zero, reply exactly: ERROR monthly_scorecard_rc_nonzero\n3) After exit code 0, verify freshness by running:\n   cd /Users/corystoner/src/ORION && export MONTH=$(date +%Y-%m) && python3 - <<'PY'\nimport os, time\nmonth = os.environ['MONTH']\np = f'eval/monthly-scorecard-{month}.md'\nif not os.path.exists(p):\n    raise SystemExit(2)\nage = time.time() - os.path.getmtime(p)\nprint(int(age))\nraise SystemExit(0 if age <= 1800 else 3)\nPY\n4) If freshness check fails, reply exactly: ERROR monthly_scorecard_stale_artifact\n5) If all checks pass, reply exactly: NO_REPLY",
+        "timeoutSeconds": 900
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "f7f7bcb0-995a-4cbb-a1e2-a2d9fb5e91c0",
-    "name": "orion-skill-discovery-weekly",
-    "description": "Weekly skill discovery refresh (LIMIT=8)",
-    "schedule": {
-      "kind": "cron",
-      "expr": "0 11 * * 1",
-      "tz": "America/New_York"
+    {
+      "id": "f7f7bcb0-995a-4cbb-a1e2-a2d9fb5e91c0",
+      "agentId": "main",
+      "name": "orion-skill-discovery-weekly",
+      "description": "Weekly skill discovery refresh (LIMIT=8)",
+      "enabled": false,
+      "createdAtMs": 1772506627789,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 11 * * 1",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly:\ncd /Users/corystoner/src/ORION && make skill-discovery LIMIT=8\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) If the command exits non-zero, reply exactly: ERROR skill_discovery_rc_nonzero\n3) After exit code 0, verify freshness by running:\n   cd /Users/corystoner/src/ORION && python3 - <<'PY'\nimport glob, os, time\nfiles = sorted(glob.glob('eval/history/skills-discovery-*.json'))\nif not files:\n    raise SystemExit(2)\nlatest = max(files, key=os.path.getmtime)\nage = time.time() - os.path.getmtime(latest)\nprint(latest)\nprint(int(age))\nraise SystemExit(0 if age <= 1800 else 3)\nPY\n4) If freshness check fails, reply exactly: ERROR skill_discovery_stale_artifact\n5) If all checks pass, reply exactly: NO_REPLY",
+        "timeoutSeconds": 900
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "a28bbd27-aa07-416c-8756-65f9ee4283ce",
-    "name": "orion-route-hygiene-daily",
-    "description": null,
-    "schedule": {
-      "kind": "cron",
-      "expr": "12 10 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "a28bbd27-aa07-416c-8756-65f9ee4283ce",
+      "agentId": "main",
+      "name": "orion-route-hygiene-daily",
+      "enabled": false,
+      "createdAtMs": 1772507978217,
+      "schedule": {
+        "kind": "cron",
+        "expr": "12 10 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly:\ncd /Users/corystoner/src/ORION && make route-hygiene\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) If the command exits non-zero, reply exactly: ERROR route_hygiene_nonzero\n3) After exit code 0, verify freshness by running:\n   cd /Users/corystoner/src/ORION && python3 - <<'PY'\nimport glob, os, time\nfiles = sorted(glob.glob('eval/history/route-hygiene-*.json'))\nif not files:\n    raise SystemExit(2)\nlatest = files[-1]\nage = time.time() - os.path.getmtime(latest)\nprint(latest)\nprint(int(age))\nraise SystemExit(0 if age <= 900 else 3)\nPY\n4) If freshness check fails, reply exactly: ERROR route_hygiene_stale_artifact\n5) If all checks pass, reply exactly: NO_REPLY",
+        "timeoutSeconds": 900
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "a8272893-3229-4fca-8873-5874d040f04b",
-    "name": "orion-lane-hotspots-daily",
-    "description": null,
-    "schedule": {
-      "kind": "cron",
-      "expr": "14 10 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "a8272893-3229-4fca-8873-5874d040f04b",
+      "agentId": "main",
+      "name": "orion-lane-hotspots-daily",
+      "enabled": false,
+      "createdAtMs": 1772507979043,
+      "schedule": {
+        "kind": "cron",
+        "expr": "14 10 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly:\ncd /Users/corystoner/src/ORION && make lane-hotspots HOURS=24 TOP=10\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) If the command exits non-zero, reply exactly: ERROR lane_hotspots_nonzero\n3) After exit code 0, verify freshness by running:\n   cd /Users/corystoner/src/ORION && python3 - <<'PY'\nimport glob, os, time\nfiles = sorted(glob.glob('eval/history/lane-hotspots-*.json'))\nif not files:\n    raise SystemExit(2)\nlatest = files[-1]\nage = time.time() - os.path.getmtime(latest)\nprint(latest)\nprint(int(age))\nraise SystemExit(0 if age <= 900 else 3)\nPY\n4) If freshness check fails, reply exactly: ERROR lane_hotspots_stale_artifact\n5) If all checks pass, reply exactly: NO_REPLY",
+        "timeoutSeconds": 900
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "a3aead76-7ca8-427d-844d-c11485b01e50",
-    "name": "orion-stop-gate-daily",
-    "description": "Daily stop-gate enforcement for canary/promotion jobs",
-    "schedule": {
-      "kind": "cron",
-      "expr": "16 10 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "a3aead76-7ca8-427d-844d-c11485b01e50",
+      "agentId": "main",
+      "name": "orion-stop-gate-daily",
+      "description": "Daily stop-gate enforcement for canary/promotion jobs",
+      "enabled": false,
+      "createdAtMs": 1772508545091,
+      "schedule": {
+        "kind": "cron",
+        "expr": "16 10 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run to execute exactly:\ncd /Users/corystoner/src/ORION && make stop-gate-enforce MIN_FAIL_DAYS=2\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) If the command exits non-zero, reply exactly: ERROR stop_gate_nonzero\n3) After exit code 0, verify freshness by running:\n   cd /Users/corystoner/src/ORION && python3 - <<'PY'\nimport glob, os, time\njson_files = sorted(glob.glob('eval/history/stop-gate-*.json'))\nmd_files = sorted(glob.glob('eval/history/stop-gate-*.md'))\nif not json_files or not md_files:\n    raise SystemExit(2)\nlatest_json = json_files[-1]\nlatest_md = md_files[-1]\nage = max(time.time() - os.path.getmtime(latest_json), time.time() - os.path.getmtime(latest_md))\nprint(latest_json)\nprint(latest_md)\nprint(int(age))\nraise SystemExit(0 if age <= 900 else 3)\nPY\n4) If freshness check fails, reply exactly: ERROR stop_gate_stale_artifact\n5) If all checks pass, reply exactly: NO_REPLY",
+        "timeoutSeconds": 900
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "2707d448-d6eb-42b7-919c-faf75b16b38f",
-    "name": "assistant-agenda-refresh",
-    "description": "Refresh ORION assistant agenda artifact",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/15 * * * *",
-      "tz": "America/New_York"
+    {
+      "id": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+      "agentId": "main",
+      "name": "assistant-agenda-refresh",
+      "description": "Refresh ORION assistant agenda artifact",
+      "enabled": false,
+      "createdAtMs": 1773626584606,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/15 * * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: /Users/corystoner/src/ORION/scripts/assistant_status.py --cmd refresh --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "3e398876-2b45-4865-8319-0ecec041bb3f",
-    "name": "assistant-task-loop",
-    "description": "Reconcile assistant tickets and fail loudly on stale admin work",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/5 * * * *",
-      "tz": "America/New_York"
+    {
+      "id": "3e398876-2b45-4865-8319-0ecec041bb3f",
+      "agentId": "main",
+      "name": "assistant-task-loop",
+      "description": "Reconcile assistant tickets and fail loudly on stale admin work",
+      "enabled": false,
+      "createdAtMs": 1773626588769,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/5 * * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: /Users/corystoner/src/ORION/scripts/task_execution_loop.py --apply --stale-hours 24. Do not request elevated execution. Do not add --strict-stale. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY.",
+        "model": "google/gemini-2.5-flash-lite",
+        "timeoutSeconds": 0
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "ee4b8ebe-4bbf-4b28-bf94-c8061e889404",
-    "name": "orion-error-review",
-    "description": "Review recurring ORION errors and apply safe remediations",
-    "schedule": {
-      "kind": "cron",
-      "expr": "15 2 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "ee4b8ebe-4bbf-4b28-bf94-c8061e889404",
+      "agentId": "main",
+      "name": "orion-error-review",
+      "description": "Review recurring ORION errors and apply safe remediations",
+      "enabled": false,
+      "createdAtMs": 1773626590759,
+      "schedule": {
+        "kind": "cron",
+        "expr": "15 2 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_error_db.py --repo-root . review --window-hours 24 --apply-safe-fixes --escalate-incidents --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "45335984-d3bc-4e32-a1f5-311ad61e467a",
-    "name": "orion-session-maintenance",
-    "description": "Prune stale ORION session metadata when drift exceeds threshold",
-    "schedule": {
-      "kind": "cron",
-      "expr": "45 2 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "45335984-d3bc-4e32-a1f5-311ad61e467a",
+      "agentId": "main",
+      "name": "orion-session-maintenance",
+      "description": "Prune stale ORION session metadata when drift exceeds threshold",
+      "enabled": false,
+      "createdAtMs": 1773626592758,
+      "schedule": {
+        "kind": "cron",
+        "expr": "45 2 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: AUTO_OK=1 python3 scripts/session_maintenance.py --repo-root . --agent main --fix-missing --apply --doctor --min-missing 50 --min-reclaim 25 --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
-    "name": "kalshi-ref-arb-5m",
-    "description": null,
-    "schedule": {
-      "kind": "every",
-      "everyMs": 300000,
-      "anchorMs": 1775011106944
+    {
+      "id": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+      "agentId": "ledger",
+      "sessionKey": "agent:ledger:cron:bd523bc9-ba21-4c44-99ca-97c84e85f827",
+      "name": "kalshi-ref-arb-5m",
+      "enabled": false,
+      "createdAtMs": 1774324583638,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 300000,
+        "anchorMs": 1775011106944
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly:\n/Users/corystoner/src/ORION/scripts/kalshi_autotrade_cycle.py\n\nRules:\n1) Wait for completion. If system.run returns a running session id, keep polling that session until it exits.\n2) Do not request elevated execution. If approval is required, use the configured Telegram approval flow and wait for the decision.\n3) If exit code is non-zero, use the cron tool with action:wake and text:\"ERROR kalshi_cycle_rc_nonzero\".\n4) If exit code is 0, run the freshness check exactly as before:\n/Users/corystoner/src/ORION/scripts/kalshi_cycle_freshness_check.py --repo-root /Users/corystoner/src/ORION --max-age-sec 600\n5) If freshness check exit code is non-zero, use the cron tool with action:wake and text:\"ERROR kalshi_cycle_stale_status\".\n6) If all checks pass, respond exactly: NO_REPLY"
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "telegram"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "c368aa07-c5b9-46ab-bbd0-2748304c4eb5",
-    "name": "orion-ops-bundle",
-    "description": "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence",
-    "schedule": {
-      "kind": "cron",
-      "expr": "30 3 * * *",
-      "tz": "America/New_York"
+    {
+      "id": "c368aa07-c5b9-46ab-bbd0-2748304c4eb5",
+      "agentId": "main",
+      "name": "orion-ops-bundle",
+      "description": "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence",
+      "enabled": false,
+      "createdAtMs": 1775009487744,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 3 * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_incident_bundle.py --repo-root . --write-latest --json. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "2b2b3809-8f00-4df8-aa30-fc0867a1756c",
-    "name": "orion-judgment-layer",
-    "description": "Run ORION judgment layer and write latest artifacts without notifying unless policy escalates.",
-    "schedule": {
-      "kind": "cron",
-      "expr": "40 3 * * *"
+    {
+      "id": "2b2b3809-8f00-4df8-aa30-fc0867a1756c",
+      "agentId": "main",
+      "sessionKey": "agent:main:main",
+      "name": "orion-judgment-layer",
+      "description": "Run ORION judgment layer and write latest artifacts without notifying unless policy escalates.",
+      "enabled": false,
+      "createdAtMs": 1775608464749,
+      "schedule": {
+        "kind": "cron",
+        "expr": "40 3 * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/orion_judgment_layer.py --repo-root . --write-latest --json. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY.",
+        "timeoutSeconds": 600,
+        "toolsAllow": [
+          "exec"
+        ]
+      },
+      "delivery": {
+        "mode": "none"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "cbea6ab9-d9bc-4292-998a-c34d82a43cdf",
-    "name": "Daily Agenda Briefing",
-    "description": null,
-    "schedule": {
-      "expr": "30 8 * * 1-5",
-      "tz": "America/New_York",
-      "kind": "cron"
+    {
+      "id": "cbea6ab9-d9bc-4292-998a-c34d82a43cdf",
+      "agentId": "main",
+      "sessionKey": "agent:main:main",
+      "name": "Daily Agenda Briefing",
+      "enabled": false,
+      "createdAtMs": 1775747121657,
+      "schedule": {
+        "expr": "30 8 * * 1-5",
+        "tz": "America/New_York",
+        "kind": "cron"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "message": "Review today's calendar and inbox for urgent items and compile a 5-bullet agenda. Present the agenda clearly.",
+        "kind": "agentTurn"
+      },
+      "delivery": {
+        "mode": "announce"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "3714899f-5745-49e5-8255-3455c2962cea",
-    "name": "assistant-email-triage",
-    "description": "Poll ORION AgentMail and route safe inbound email into inbox task packets",
-    "schedule": {
-      "kind": "cron",
-      "expr": "*/5 * * * *",
-      "tz": "America/New_York"
+    {
+      "id": "3714899f-5745-49e5-8255-3455c2962cea",
+      "agentId": "main",
+      "name": "assistant-email-triage",
+      "description": "Poll ORION AgentMail and route safe inbound email into inbox task packets",
+      "enabled": false,
+      "createdAtMs": 1775777823208,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/5 * * * *",
+        "tz": "America/New_York"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "next-heartbeat",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Use system.run exactly once, without elevated mode and without a TTY, to execute exactly: python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20 --apply. Do not request elevated execution. Ignore stdout/stderr unless it fails. Then respond exactly NO_REPLY."
+      },
+      "delivery": {
+        "mode": "none",
+        "channel": "last"
+      },
+      "state": {}
     },
-    "enabled": false,
-    "command": null
-  },
-  {
-    "id": "fcf66f8a-4976-4dba-9bdb-275ee18a78cb",
-    "name": "Memory Dreaming Promotion",
-    "description": "[managed-by=memory-core.short-term-promotion] Promote weighted short-term recalls into MEMORY.md (limit=10, minScore=0.800, minRecallCount=3, minUniqueQueries=3, recencyHalfLifeDays=14, maxAgeDays=30).",
-    "schedule": {
-      "kind": "cron",
-      "expr": "0 3 * * *"
-    },
-    "enabled": true,
-    "command": null
-  }
-]
+    {
+      "id": "fcf66f8a-4976-4dba-9bdb-275ee18a78cb",
+      "name": "Memory Dreaming Promotion",
+      "description": "[managed-by=memory-core.short-term-promotion] Promote weighted short-term recalls into MEMORY.md (limit=10, minScore=0.800, minRecallCount=3, minUniqueQueries=3, recencyHalfLifeDays=14, maxAgeDays=30).",
+      "enabled": true,
+      "createdAtMs": 1776563164809,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 3 * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "__openclaw_memory_core_short_term_promotion_dream__",
+        "lightContext": true
+      },
+      "delivery": {
+        "mode": "none"
+      },
+      "state": {}
+    }
+  ]
+}

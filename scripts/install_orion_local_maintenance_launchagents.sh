@@ -14,6 +14,10 @@ runner="${repo_root}/scripts/orion_local_maintenance_runner.sh"
 launch_agents_dir="${HOME}/Library/LaunchAgents"
 logs_dir="${HOME}/Library/Logs"
 overlap_guard="${repo_root}/scripts/orion_scheduler_overlap_guard.py"
+stale_launch_agents=(
+  "ai.orion.inbox_packet_runner"
+  "com.openclaw.orion.assistant_task_loop"
+)
 
 mkdir -p "${launch_agents_dir}" "${logs_dir}"
 
@@ -25,6 +29,18 @@ if [[ ! -f "${overlap_guard}" ]]; then
   echo "Overlap guard script not found: ${overlap_guard}" >&2
   exit 1
 fi
+
+remove_stale_launch_agents() {
+  local existing_label
+  for existing_label in "${stale_launch_agents[@]}"; do
+    local existing_plist="${launch_agents_dir}/${existing_label}.plist"
+    if [[ -f "${existing_plist}" ]]; then
+      launchctl bootout "gui/$(id -u)" "${existing_plist}" >/dev/null 2>&1 || true
+      rm -f "${existing_plist}"
+      echo "Removed stale LaunchAgent: ${existing_plist}"
+    fi
+  done
+}
 
 install_plist() {
   local label="$1"
@@ -94,6 +110,8 @@ disable_cron_by_name() {
     done <<< "${matches}"
   fi
 }
+
+remove_stale_launch_agents
 
 install_plist "ai.orion.inbox_result_notify" "interval" "120" "assistant-inbox-notify"
 install_plist "com.openclaw.orion.assistant_email_triage" "interval" "300" "assistant-email-triage"
