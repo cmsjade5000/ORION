@@ -2,17 +2,13 @@
   "assistant_inbox_notify_count": 0,
   "canonical_job_name": "assistant-inbox-notify",
   "canonical_wrapper_required_cmd_prefix": "python3 scripts/inbox_cycle.py",
-  "generated_at": "20260427_144520Z",
+  "generated_at": "20260427_150900Z",
   "jobs_exists": true,
   "jobs_state_exists": true,
   "jobs_state_json_path": "/Users/corystoner/.openclaw/cron/jobs-state.json",
   "launch_agent_paths_seen": [
-    "/Users/corystoner/Library/LaunchAgents/ai.orion.inbox_packet_runner.plist",
-    "/Users/corystoner/Library/LaunchAgents/ai.orion.inbox_result_notify.plist",
-    "/Users/corystoner/Library/LaunchAgents/com.openclaw.orion.assistant_task_loop.plist"
+    "/Users/corystoner/Library/LaunchAgents/ai.orion.inbox_result_notify.plist"
   ],
-  "non_canonical_wrapper_jobs_present": [
-    "assistant-task-loop"
-  ],
+  "non_canonical_wrapper_jobs_present": [],
   "openclaw_jobs_json_path": "/Users/corystoner/.openclaw/cron/jobs.json"
 }

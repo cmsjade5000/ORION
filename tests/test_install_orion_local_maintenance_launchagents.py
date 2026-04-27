@@ -15,7 +15,6 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
         for needle in (
             "assistant-inbox-notify",
             "assistant-email-triage",
-            "assistant-task-loop",
             "assistant-agenda-refresh",
             "orion-error-review",
             "orion-session-maintenance",
@@ -24,6 +23,7 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
         ):
             self.assertIn(needle, self.runner)
         self.assertIn("scripts/inbox_cycle.py", self.runner)
+        self.assertNotIn("assistant-task-loop)", self.runner)
         for needle in (
             "kalshi-ref-arb-digest",
             "kalshi-digest-delivery-guard",

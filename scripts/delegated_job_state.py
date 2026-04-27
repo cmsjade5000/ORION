@@ -44,6 +44,8 @@ def infer_job_state(
     if normalized == "OK":
         if "done" in ticket_lanes:
             return "complete"
+        if not ticket_lanes:
+            return "complete"
         return "pending_verification"
 
     if ticket_lanes:
@@ -79,6 +81,8 @@ def infer_job_state_reason(
     if normalized == "OK":
         if "done" in ticket_lanes:
             return "result_ok_ticket_done"
+        if not ticket_lanes:
+            return "result_ok_no_ticket_refs"
         return "result_ok_waiting_done"
 
     if ticket_lanes:
