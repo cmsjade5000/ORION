@@ -1,0 +1,417 @@
+[
+  {
+    "id": "666e6776-cb97-4c34-8baa-a16a0b94dcd2",
+    "name": "Morning briefing",
+    "description": null,
+    "schedule": {
+      "expr": "0 7 * * *",
+      "kind": "cron",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "ba0738ed-c07e-40d6-924f-7bb646461f30",
+    "name": "Daily System Status Check",
+    "description": null,
+    "schedule": {
+      "expr": "0 8 * * *",
+      "kind": "cron",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "95c70f1c-2f41-4a61-9dd4-8a7bd751f7f8",
+    "name": "morning-brief-voice",
+    "description": "Send ORION daily morning brief to Cory via Telegram (voice + links)",
+    "schedule": {
+      "expr": "30 7 * * *",
+      "kind": "cron",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "83e6ca84-2270-4003-a434-51e89f646dc7",
+    "name": "atlas-inbox-worker",
+    "description": "ATLAS: process one pending inbox packet (safe/read-only) and write Result block",
+    "schedule": {
+      "anchorMs": 1770714548111,
+      "everyMs": 60000,
+      "kind": "every"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "1f558e3a-1028-4f6c-948e-bc024fc4e479",
+    "name": "kalshi-ref-arb-digest",
+    "description": "Kalshi ref arb Telegram digest at 7am/3pm/11pm America/New_York (8h window)",
+    "schedule": {
+      "expr": "0 7,15,23 * * *",
+      "kind": "cron",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "a32452da-3350-4bad-b0d7-546fd06d8c69",
+    "name": "Daily Task Review Reminder",
+    "description": null,
+    "schedule": {
+      "expr": "0 9 * * 1-5",
+      "kind": "cron",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "72a50d3a-e065-4d00-9c38-6e1e59c8bd67",
+    "name": "kalshi-ref-arb-5m",
+    "description": null,
+    "schedule": {
+      "anchorMs": 1771321510238,
+      "everyMs": 300000,
+      "kind": "every"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+    "name": "polymarket-sports-paper-60s",
+    "description": "Polymarket sports paper-only paired arb cycle every 60 seconds (strict), executed by LEDGER.",
+    "schedule": {
+      "kind": "every",
+      "everyMs": 60000,
+      "anchorMs": 1775010970691
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "2100241c-4d30-4d04-88bc-90cbad8c8094",
+    "name": "routing-audit-weekly",
+    "description": "Weekly POLARIS routing/queue audit summary via ORION Telegram",
+    "schedule": {
+      "kind": "cron",
+      "expr": "0 9 * * 5",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "5e382185-d4ec-4d56-8269-6a9fb9467254",
+    "name": "orion-personal-morning-brief",
+    "description": null,
+    "schedule": {
+      "kind": "cron",
+      "expr": "15 7 * * 1-5",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "908d34a6-9e27-4c94-94af-c613db594a4d",
+    "name": "orion-personal-evening-reset",
+    "description": null,
+    "schedule": {
+      "kind": "cron",
+      "expr": "30 20 * * 1-5",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "30800b89-18d6-4270-af1a-73ccea0e1383",
+    "name": "arc-field-guide-lock-watchdog",
+    "description": "Clears stale arc_fg_loop_state active_run locks older than 15m",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/5 * * * *"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "df852cfe-d872-4981-ad64-a345d0ebc873",
+    "name": "arc-field-guide-forced-handoff-loop",
+    "description": "Forces 3 offline specialist delegations (SCRIBE+LEDGER+POLARIS) with ORION handoff packets",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/15 * * * *"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "dd1d3968-df7d-4f9c-8593-9a03ec85bebe",
+    "name": "arc-field-guide-forced-handoff-rollup-guard",
+    "description": "Marks forced-handoff run blocked when rollup misses SCRIBE/LEDGER/POLARIS delta markers",
+    "schedule": {
+      "kind": "cron",
+      "expr": "2,17,32,47 * * * *"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "32998ac9-3874-4b5b-a87f-c700784cae62",
+    "name": "arc-field-guide-doc-version-publisher",
+    "description": "Publish versioned Arc FG draft attachments to discipline threads and HQ manifest",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/5 * * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "c5873e09-107a-4e19-b7da-e73987659a0a",
+    "name": "arc-field-guide-thread-question-loop",
+    "description": "Ask targeted per-thread questions and auto-create missing Arc FG subject threads",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/10 * * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "a02afa86-bac2-41ff-bc26-5f08651a905f",
+    "name": "kalshi-digest-reliability-daily",
+    "description": "Daily Kalshi digest delivery reliability report (expected slots vs actual sends)",
+    "schedule": {
+      "kind": "cron",
+      "expr": "5 9 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "67c29ebf-49e9-4dbe-bd9a-84fe7e7ef1f6",
+    "name": "kalshi-digest-delivery-guard",
+    "description": "Alert if 07:00 Kalshi digest run is ok but no email is sent within 10 minutes",
+    "schedule": {
+      "kind": "cron",
+      "expr": "12 7 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "8f72c88e-95ee-4bc0-bec6-c7d363c5cdeb",
+    "name": "quest-ps5-world-news-update",
+    "description": "Weekday PS5 world news update via QUEST (sourced, concise).",
+    "schedule": {
+      "kind": "cron",
+      "expr": "30 9 * * 1-5",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "d8128d4c-9aac-41cf-aa4d-163f62696735",
+    "name": "orion-reliability-daily",
+    "description": "Daily reliability snapshot and monthly scorecard append",
+    "schedule": {
+      "kind": "cron",
+      "expr": "10 10 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "eca22cdd-5b3b-408c-abf4-724f83c40258",
+    "name": "orion-monthly-scorecard-daily",
+    "description": "Daily monthly scorecard refresh for 2026-03",
+    "schedule": {
+      "kind": "cron",
+      "expr": "20 10 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "f7f7bcb0-995a-4cbb-a1e2-a2d9fb5e91c0",
+    "name": "orion-skill-discovery-weekly",
+    "description": "Weekly skill discovery refresh (LIMIT=8)",
+    "schedule": {
+      "kind": "cron",
+      "expr": "0 11 * * 1",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "a28bbd27-aa07-416c-8756-65f9ee4283ce",
+    "name": "orion-route-hygiene-daily",
+    "description": null,
+    "schedule": {
+      "kind": "cron",
+      "expr": "12 10 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "a8272893-3229-4fca-8873-5874d040f04b",
+    "name": "orion-lane-hotspots-daily",
+    "description": null,
+    "schedule": {
+      "kind": "cron",
+      "expr": "14 10 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "a3aead76-7ca8-427d-844d-c11485b01e50",
+    "name": "orion-stop-gate-daily",
+    "description": "Daily stop-gate enforcement for canary/promotion jobs",
+    "schedule": {
+      "kind": "cron",
+      "expr": "16 10 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "2707d448-d6eb-42b7-919c-faf75b16b38f",
+    "name": "assistant-agenda-refresh",
+    "description": "Refresh ORION assistant agenda artifact",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/15 * * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "3e398876-2b45-4865-8319-0ecec041bb3f",
+    "name": "assistant-task-loop",
+    "description": "Reconcile assistant tickets and fail loudly on stale admin work",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/5 * * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "ee4b8ebe-4bbf-4b28-bf94-c8061e889404",
+    "name": "orion-error-review",
+    "description": "Review recurring ORION errors and apply safe remediations",
+    "schedule": {
+      "kind": "cron",
+      "expr": "15 2 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "45335984-d3bc-4e32-a1f5-311ad61e467a",
+    "name": "orion-session-maintenance",
+    "description": "Prune stale ORION session metadata when drift exceeds threshold",
+    "schedule": {
+      "kind": "cron",
+      "expr": "45 2 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "92acf93d-2903-40be-bb2c-4fc7c3dd53d9",
+    "name": "kalshi-ref-arb-5m",
+    "description": null,
+    "schedule": {
+      "kind": "every",
+      "everyMs": 300000,
+      "anchorMs": 1775011106944
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "c368aa07-c5b9-46ab-bbd0-2748304c4eb5",
+    "name": "orion-ops-bundle",
+    "description": "Capture a read-only ORION incident bundle with gateway, flow, and Codex posture evidence",
+    "schedule": {
+      "kind": "cron",
+      "expr": "30 3 * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "2b2b3809-8f00-4df8-aa30-fc0867a1756c",
+    "name": "orion-judgment-layer",
+    "description": "Run ORION judgment layer and write latest artifacts without notifying unless policy escalates.",
+    "schedule": {
+      "kind": "cron",
+      "expr": "40 3 * * *"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "cbea6ab9-d9bc-4292-998a-c34d82a43cdf",
+    "name": "Daily Agenda Briefing",
+    "description": null,
+    "schedule": {
+      "expr": "30 8 * * 1-5",
+      "tz": "America/New_York",
+      "kind": "cron"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "3714899f-5745-49e5-8255-3455c2962cea",
+    "name": "assistant-email-triage",
+    "description": "Poll ORION AgentMail and route safe inbound email into inbox task packets",
+    "schedule": {
+      "kind": "cron",
+      "expr": "*/5 * * * *",
+      "tz": "America/New_York"
+    },
+    "enabled": false,
+    "command": null
+  },
+  {
+    "id": "fcf66f8a-4976-4dba-9bdb-275ee18a78cb",
+    "name": "Memory Dreaming Promotion",
+    "description": "[managed-by=memory-core.short-term-promotion] Promote weighted short-term recalls into MEMORY.md (limit=10, minScore=0.800, minRecallCount=3, minUniqueQueries=3, recencyHalfLifeDays=14, maxAgeDays=30).",
+    "schedule": {
+      "kind": "cron",
+      "expr": "0 3 * * *"
+    },
+    "enabled": true,
+    "command": null
+  }
+]

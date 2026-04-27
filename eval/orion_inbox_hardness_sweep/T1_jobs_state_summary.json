@@ -1,0 +1,146 @@
+{
+  "generated_at": "2026-04-27T14:37:27.518248Z",
+  "jobs_count": 35,
+  "samples": [
+    {
+      "id": "666e6776-cb97-4c34-8baa-a16a0b94dcd2",
+      "state": "ok",
+      "lastRunAtMs": 1769947200042,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "ba0738ed-c07e-40d6-924f-7bb646461f30",
+      "state": null,
+      "lastRunAtMs": null,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "95c70f1c-2f41-4a61-9dd4-8a7bd751f7f8",
+      "state": "error",
+      "lastRunAtMs": 1772969400027,
+      "lastDeliveryStatus": "delivered",
+      "lastDelivered": true
+    },
+    {
+      "id": "83e6ca84-2270-4003-a434-51e89f646dc7",
+      "state": "ok",
+      "lastRunAtMs": 1770715028119,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "1f558e3a-1028-4f6c-948e-bc024fc4e479",
+      "state": "ok",
+      "lastRunAtMs": 1775127600010,
+      "lastDeliveryStatus": "not-delivered",
+      "lastDelivered": false
+    },
+    {
+      "id": "a32452da-3350-4bad-b0d7-546fd06d8c69",
+      "state": "ok",
+      "lastRunAtMs": 1772805660467,
+      "lastDeliveryStatus": "not-requested",
+      "lastDelivered": null
+    },
+    {
+      "id": "72a50d3a-e065-4d00-9c38-6e1e59c8bd67",
+      "state": "ok",
+      "lastRunAtMs": 1771335310247,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "3adbdf11-8d7e-4eb2-8552-80cbf5384812",
+      "state": "ok",
+      "lastRunAtMs": 1775011240201,
+      "lastDeliveryStatus": "not-delivered",
+      "lastDelivered": false
+    },
+    {
+      "id": "2100241c-4d30-4d04-88bc-90cbad8c8094",
+      "state": "ok",
+      "lastRunAtMs": 1775221200024,
+      "lastDeliveryStatus": "delivered",
+      "lastDelivered": true
+    },
+    {
+      "id": "5e382185-d4ec-4d56-8269-6a9fb9467254",
+      "state": "ok",
+      "lastRunAtMs": 1772799362066,
+      "lastDeliveryStatus": "not-delivered",
+      "lastDelivered": false
+    },
+    {
+      "id": "908d34a6-9e27-4c94-94af-c613db594a4d",
+      "state": "ok",
+      "lastRunAtMs": 1772847063140,
+      "lastDeliveryStatus": "delivered",
+      "lastDelivered": true
+    },
+    {
+      "id": "30800b89-18d6-4270-af1a-73ccea0e1383",
+      "state": "ok",
+      "lastRunAtMs": 1772502619760,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "df852cfe-d872-4981-ad64-a345d0ebc873",
+      "state": "ok",
+      "lastRunAtMs": 1772280035748,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "dd1d3968-df7d-4f9c-8593-9a03ec85bebe",
+      "state": "ok",
+      "lastRunAtMs": 1772502427935,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "32998ac9-3874-4b5b-a87f-c700784cae62",
+      "state": "ok",
+      "lastRunAtMs": 1772502627109,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "c5873e09-107a-4e19-b7da-e73987659a0a",
+      "state": "ok",
+      "lastRunAtMs": 1772502629910,
+      "lastDeliveryStatus": null,
+      "lastDelivered": null
+    },
+    {
+      "id": "a02afa86-bac2-41ff-bc26-5f08651a905f",
+      "state": "ok",
+      "lastRunAtMs": 1775135100008,
+      "lastDeliveryStatus": "not-delivered",
+      "lastDelivered": false
+    },
+    {
+      "id": "67c29ebf-49e9-4dbe-bd9a-84fe7e7ef1f6",
+      "state": "ok",
+      "lastRunAtMs": 1775128320010,
+      "lastDeliveryStatus": "not-delivered",
+      "lastDelivered": false
+    },
+    {
+      "id": "8f72c88e-95ee-4bc0-bec6-c7d363c5cdeb",
+      "state": "ok",
+      "lastRunAtMs": 1772807465468,
+      "lastDeliveryStatus": "delivered",
+      "lastDelivered": true
+    },
+    {
+      "id": "d8128d4c-9aac-41cf-aa4d-163f62696735",
+      "state": "ok",
+      "lastRunAtMs": 1775052600010,
+      "lastDeliveryStatus": "not-delivered",
+      "lastDelivered": false
+    }
+  ]
+}
