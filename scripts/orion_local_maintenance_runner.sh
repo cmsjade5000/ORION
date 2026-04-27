@@ -77,6 +77,9 @@ case "${job}" in
   orion-judgment-layer)
     exec /usr/bin/python3 scripts/orion_judgment_layer.py --repo-root . --write-latest --json
     ;;
+  orion-yeet-worktree)
+    exec /usr/bin/env /bin/bash scripts/orion_yeet_worktree.sh
+    ;;
   *)
     echo "unknown job: ${job}" >&2
     exit 2

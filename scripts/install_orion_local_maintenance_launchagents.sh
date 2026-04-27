@@ -102,6 +102,7 @@ install_plist "com.openclaw.orion.orion_error_review" "calendar" "<dict><key>Hou
 install_plist "com.openclaw.orion.orion_session_maintenance" "calendar" "<dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>45</integer></dict>" "orion-session-maintenance"
 install_plist "com.openclaw.orion.orion_ops_bundle" "calendar" "<dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>" "orion-ops-bundle"
 install_plist "com.openclaw.orion.orion_judgment_layer" "calendar" "<dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>40</integer></dict>" "orion-judgment-layer"
+install_plist "com.openclaw.orion.orion_yeet_worktree" "interval" "43200" "orion-yeet-worktree"
 
 disable_cron_by_name "assistant-inbox-notify"
 disable_cron_by_name "assistant-email-triage"
