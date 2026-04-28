@@ -69,12 +69,20 @@ function jobsSummary(workspaceRoot) {
   });
 }
 
+function isCompletedJob(job) {
+  const state = String(job && job.state ? job.state : "").toLowerCase();
+  const result = job && typeof job.result === "object" && job.result ? job.result : {};
+  const resultStatus = String(result.status || "").toLowerCase();
+  return state === "complete" || resultStatus === "ok";
+}
+
 function packetPreview(workspaceRoot) {
   const summary = jobsSummary(workspaceRoot);
+  const jobs = Array.isArray(summary.jobs) ? summary.jobs : [];
   return {
     counts: summary.counts || {},
     updatedTs: summary.updated_ts || null,
-    jobs: Array.isArray(summary.jobs) ? summary.jobs.slice(0, 8) : [],
+    jobs: jobs.filter((job) => !isCompletedJob(job)).slice(0, 8),
     workflows: Array.isArray(summary.workflows) ? summary.workflows.slice(0, 6) : [],
   };
 }
@@ -212,7 +220,8 @@ function inboxState(workspaceRoot) {
 }
 
 function findJobById(workspaceRoot, jobId) {
-  const jobs = packetPreview(workspaceRoot).jobs || [];
+  const summary = jobsSummary(workspaceRoot);
+  const jobs = Array.isArray(summary.jobs) ? summary.jobs : [];
   return jobs.find((job) => String(job.job_id || "") === String(jobId || "")) || null;
 }
 
@@ -223,6 +232,7 @@ module.exports = {
   findJobById,
   homeState,
   inboxState,
+  isCompletedJob,
   jobsSummary,
   packetPreview,
   readJson,

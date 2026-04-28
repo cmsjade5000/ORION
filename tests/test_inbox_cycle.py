@@ -24,7 +24,7 @@ class TestInboxCycle(unittest.TestCase):
     def setUpClass(cls):
         cls.mod = _load_inbox_cycle()
 
-    def test_cycle_runs_runner_then_reconcile_then_notify(self):
+    def test_cycle_runs_runner_then_reconcile_then_notify_archive_and_reconcile(self):
         root = Path("/tmp/orion-cycle-test")
         calls = []
 
@@ -36,22 +36,33 @@ class TestInboxCycle(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout="TASK_LOOP_OK stale=0 actions=1 apply=1\n", stderr="")
             if argv[1].endswith("notify_inbox_results.py"):
                 return SimpleNamespace(returncode=0, stdout="NOTIFY_OK\n", stderr="")
+            if argv[1].endswith("archive_completed_inbox_packets.py"):
+                return SimpleNamespace(returncode=0, stdout='{"archived":[],"skipped":[]}\n', stderr="")
             raise AssertionError(f"Unexpected argv: {argv}")
 
         stdout = io.StringIO()
         with mock.patch.object(self.mod.subprocess, "run", side_effect=_runner):
             with contextlib.redirect_stdout(stdout):
-                rc = self.mod.run(root, runner_max_packets=4, stale_hours=24.0, notify_max_per_run=8)
+                rc = self.mod.run(
+                    root,
+                    runner_max_packets=4,
+                    stale_hours=24.0,
+                    notify_max_per_run=8,
+                    archive_min_age_hours=48.0,
+                )
 
         self.assertEqual(rc, 0)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 5)
         self.assertTrue(calls[0][1].endswith("run_inbox_packets.py"))
         self.assertTrue(calls[1][1].endswith("task_execution_loop.py"))
         self.assertTrue(calls[2][1].endswith("notify_inbox_results.py"))
+        self.assertTrue(calls[3][1].endswith("archive_completed_inbox_packets.py"))
+        self.assertTrue(calls[4][1].endswith("task_execution_loop.py"))
         out = stdout.getvalue()
         self.assertIn("RUNNER_IDLE", out)
         self.assertIn("TASK_LOOP_OK", out)
         self.assertIn("NOTIFY_OK", out)
+        self.assertIn('"archived":[]', out)
 
     def test_cycle_stops_on_first_nonzero_step(self):
         root = Path("/tmp/orion-cycle-test")
@@ -66,7 +77,13 @@ class TestInboxCycle(unittest.TestCase):
         stderr = io.StringIO()
         with mock.patch.object(self.mod.subprocess, "run", side_effect=_runner):
             with contextlib.redirect_stderr(stderr):
-                rc = self.mod.run(root, runner_max_packets=4, stale_hours=24.0, notify_max_per_run=8)
+                rc = self.mod.run(
+                    root,
+                    runner_max_packets=4,
+                    stale_hours=24.0,
+                    notify_max_per_run=8,
+                    archive_min_age_hours=48.0,
+                )
 
         self.assertEqual(rc, 2)
         self.assertEqual(len(calls), 1)
