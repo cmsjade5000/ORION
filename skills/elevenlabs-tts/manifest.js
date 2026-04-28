@@ -5,6 +5,58 @@ const path = require("path");
 const fetchFn = globalThis.fetch ?? require("node-fetch");
 
 let _openclawEnvVarsCache = null;
+
+const VOICE_PERSONAS = {
+  orion: {
+    label: "ORION",
+    description: "Balanced default: warm, direct, lightly wry, not announcer-y.",
+    voiceId: "HOewSHIpKJGz1xJuDEmr",
+    voiceSettings: {
+      stability: 0.58,
+      similarity_boost: 0.84,
+      style: 0.22,
+      use_speaker_boost: true,
+      speed: 0.98,
+    },
+  },
+  "orion-warm": {
+    label: "ORION Warm",
+    description: "Softer and steadier for personal notes or morning check-ins.",
+    voiceId: "HOewSHIpKJGz1xJuDEmr",
+    voiceSettings: {
+      stability: 0.66,
+      similarity_boost: 0.82,
+      style: 0.12,
+      use_speaker_boost: true,
+      speed: 0.96,
+    },
+  },
+  "orion-dry": {
+    label: "ORION Dry",
+    description: "A little more texture and wryness without turning theatrical.",
+    voiceId: "HOewSHIpKJGz1xJuDEmr",
+    voiceSettings: {
+      stability: 0.5,
+      similarity_boost: 0.84,
+      style: 0.34,
+      use_speaker_boost: true,
+      speed: 1,
+    },
+  },
+  "orion-calm": {
+    label: "ORION Calm",
+    description: "Lower-energy and grounded for supportive voice memos.",
+    voiceId: "HOewSHIpKJGz1xJuDEmr",
+    voiceSettings: {
+      stability: 0.72,
+      similarity_boost: 0.8,
+      style: 0.08,
+      use_speaker_boost: true,
+      speed: 0.94,
+    },
+  },
+};
+
 function getOpenClawEnvVars() {
   // Non-secret defaults can live in ~/.openclaw/openclaw.json under env.vars.
   // This allows the LaunchAgent gateway to provide stable defaults, and also
@@ -130,28 +182,29 @@ function normalizePresetName(preset) {
 }
 
 function parseDirectiveLine(line) {
-  // Returns { isDirective, preset, voiceId, voiceName }
+  // Returns { isDirective, persona, preset, voiceId, voiceName }
   const first = String(line || "").trim();
-  if (!first) return { isDirective: false, preset: "", voiceId: "", voiceName: "" };
+  if (!first) return { isDirective: false, persona: "", preset: "", voiceId: "", voiceName: "" };
 
   // Shorthand preset (and aliases).
   const presetShorthand = first.match(
     /^(?:#|\[)\s*(calm|narration|energetic|urgent|normal|default|warm|supportive|soothe|narrative|story|focus|brief|update|hype|excited|alert|critical)\s*(?:\]|$)/i,
   );
   if (presetShorthand && presetShorthand[1]) {
-    return { isDirective: true, preset: normalizePresetName(presetShorthand[1]), voiceId: "", voiceName: "" };
+    return { isDirective: true, persona: "", preset: normalizePresetName(presetShorthand[1]), voiceId: "", voiceName: "" };
   }
 
   // Key/value forms.
   const bracket = first.match(/^\[(?:tts|orion)\s+([^\]]+)\]$/i);
   const hash = first.match(/^#(?:tts|orion)\s*:?\s*(.+)$/i);
   const kv = bracket ? parseKvList(bracket[1]) : hash ? parseKvList(hash[1]) : null;
-  if (!kv) return { isDirective: false, preset: "", voiceId: "", voiceName: "" };
+  if (!kv) return { isDirective: false, persona: "", preset: "", voiceId: "", voiceName: "" };
 
+  const persona = String(kv.persona || "").trim().toLowerCase();
   const preset = normalizePresetName(String(kv.preset || kv.style || "").trim());
   const voiceId = String(kv.voice_id || kv.voiceid || "").trim();
   const voiceName = String(kv.voice || kv.voice_name || kv.voicename || "").trim();
-  return { isDirective: true, preset, voiceId, voiceName };
+  return { isDirective: true, persona, preset, voiceId, voiceName };
 }
 
 function extractInlineDirectives(text) {
@@ -162,18 +215,24 @@ function extractInlineDirectives(text) {
   // - "[tts preset=urgent]" / "[orion preset=calm voice_id=...]" (key/value)
   // - "#tts preset=urgent" / "#tts: preset=urgent"
   //
-  // Returns: { text, preset, voiceId, voiceName }
+  // Returns: { text, persona, preset, voiceId, voiceName }
   const raw = String(text ?? "");
   const lines = raw.split(/\r?\n/);
   const idx = lines.findIndex((ln) => String(ln).trim().length > 0);
-  if (idx === -1) return { text: raw, preset: "", voiceId: "", voiceName: "" };
+  if (idx === -1) return { text: raw, persona: "", preset: "", voiceId: "", voiceName: "" };
 
   const first = String(lines[idx]).trim();
   const parsed = parseDirectiveLine(first);
-  if (!parsed.isDirective) return { text: raw, preset: "", voiceId: "", voiceName: "" };
+  if (!parsed.isDirective) return { text: raw, persona: "", preset: "", voiceId: "", voiceName: "" };
 
   lines.splice(idx, 1);
-  return { text: lines.join("\n"), preset: parsed.preset, voiceId: parsed.voiceId, voiceName: parsed.voiceName };
+  return {
+    text: lines.join("\n"),
+    persona: parsed.persona,
+    preset: parsed.preset,
+    voiceId: parsed.voiceId,
+    voiceName: parsed.voiceName,
+  };
 }
 
 function splitTextByDirectives(text) {
@@ -184,6 +243,7 @@ function splitTextByDirectives(text) {
 
   const segments = [];
   let curPreset = "";
+  let curPersona = "";
   let curVoiceId = "";
   let curVoiceName = "";
   let curLines = [];
@@ -192,6 +252,7 @@ function splitTextByDirectives(text) {
     const body = curLines.join("\n").trim();
     if (!body) return;
     segments.push({
+      persona: curPersona,
       preset: curPreset,
       voiceId: curVoiceId,
       voiceName: curVoiceName,
@@ -204,12 +265,14 @@ function splitTextByDirectives(text) {
     const parsed = parseDirectiveLine(ln);
     if (parsed.isDirective) {
       const same =
+        parsed.persona === curPersona &&
         parsed.preset === curPreset &&
         parsed.voiceId === curVoiceId &&
         parsed.voiceName === curVoiceName;
       if (same) continue;
 
       if (curLines.join("").trim().length) flush();
+      curPersona = parsed.persona;
       curPreset = parsed.preset;
       curVoiceId = parsed.voiceId;
       curVoiceName = parsed.voiceName;
@@ -336,6 +399,39 @@ function presetVoiceSettings(preset) {
   return null;
 }
 
+function listVoicePersonas() {
+  return Object.entries(VOICE_PERSONAS).map(([name, p]) => ({
+    name,
+    label: p.label,
+    description: p.description,
+    voiceId: p.voiceId,
+    voiceSettings: { ...p.voiceSettings },
+  }));
+}
+
+function getVoicePersona(persona) {
+  const name = String(persona || "").trim().toLowerCase();
+  if (!name) return null;
+  const p = VOICE_PERSONAS[name];
+  if (!p) throw new Error(`Unknown ElevenLabs voice persona: ${persona}`);
+  return p;
+}
+
+function resolvePersonaName(persona) {
+  const direct = String(persona || "").trim().toLowerCase();
+  if (direct) return direct;
+
+  const envPersona =
+    process.env.ELEVENLABS_DEFAULT_PERSONA?.trim() ||
+    process.env.ELEVENLABS_PERSONA?.trim() ||
+    "";
+  if (envPersona) return envPersona.toLowerCase();
+
+  const oc = getOpenClawEnvVars();
+  const ocPersona = String(oc?.ELEVENLABS_DEFAULT_PERSONA || oc?.ELEVENLABS_PERSONA || "").trim();
+  return ocPersona.toLowerCase();
+}
+
 function resolvePresetName(preset) {
   const direct = String(preset || "").trim();
   if (direct) return direct;
@@ -401,6 +497,7 @@ async function resolveVoiceId({ voiceId, voiceName } = {}) {
 
 async function textToSpeechToFile({
   text,
+  persona,
   voiceId,
   voiceName,
   modelId = "eleven_multilingual_v2",
@@ -416,18 +513,22 @@ async function textToSpeechToFile({
   const t = String(extracted.text || "").trim();
   if (!t) throw new Error("textToSpeechToFile requires non-empty text");
 
+  const personaName = resolvePersonaName(persona || extracted.persona || undefined);
+  const personaConfig = getVoicePersona(personaName);
+
   const vid = await resolveVoiceId({
-    voiceId: voiceId || extracted.voiceId || undefined,
+    voiceId: voiceId || extracted.voiceId || personaConfig?.voiceId || undefined,
     voiceName: voiceName || extracted.voiceName || undefined,
   });
 
   const presetName = resolvePresetName(voiceSettingsPreset || extracted.preset || undefined);
   const preset = presetVoiceSettings(presetName);
-  const vs = voiceSettings && typeof voiceSettings === "object" ? voiceSettings : preset;
+  const personaSettings = personaConfig?.voiceSettings || null;
+  const vs = voiceSettings && typeof voiceSettings === "object" ? voiceSettings : (preset || personaSettings);
 
   if (process.env.ELEVENLABS_TTS_DEBUG === "1") {
     // Stderr only, so stdout stays a single MEDIA: line for OpenClaw attachments.
-    console.error(`[elevenlabs-tts] voiceId=${vid} preset=${presetName || "(none)"}`);
+    console.error(`[elevenlabs-tts] voiceId=${vid} persona=${personaName || "(none)"} preset=${presetName || "(none)"}`);
   }
 
   ensureDir(outDir);
@@ -464,6 +565,7 @@ async function textToSpeechToFile({
 
 async function textToSpeechToFileMulti({
   text,
+  persona,
   voiceId,
   voiceName,
   modelId = "eleven_multilingual_v2",
@@ -488,6 +590,7 @@ async function textToSpeechToFileMulti({
     const preset = seg.preset || voiceSettingsPreset || "";
     return textToSpeechToFile({
       text: seg.text,
+      persona: persona || seg.persona || undefined,
       voiceId: voiceId || seg.voiceId || undefined,
       voiceName: voiceName || seg.voiceName || undefined,
       modelId,
@@ -509,6 +612,7 @@ async function textToSpeechToFileMulti({
     const preset = seg.preset || voiceSettingsPreset || "";
     const r = await textToSpeechToFile({
       text: seg.text,
+      persona: persona || seg.persona || undefined,
       voiceId: voiceId || seg.voiceId || undefined,
       voiceName: voiceName || seg.voiceName || undefined,
       modelId,
@@ -589,10 +693,13 @@ async function textToSpeechToFileMulti({
 }
 
 module.exports = {
+  listVoicePersonas,
   listVoices,
   findVoiceIdByName,
   getDefaultVoiceSettings,
+  getVoicePersona,
   resolveVoiceId,
+  resolvePersonaName,
   resolvePresetName,
   splitTextByDirectives,
   extractInlineDirectives,

@@ -2,7 +2,7 @@
 
 Problem: ORION can delegate multi-step work to specialists, but results may land asynchronously (for example in `tasks/INBOX/*.md`). If nothing triggers a user-facing follow-up, Cory ends up prodding ORION with “continue” messages.
 
-Goal: when a delegated packet is queued or completes, the inbox cycle advances what it can, reconciles ticket state, records durable job state, and sends a short Telegram update automatically.
+Goal: when delegated work reaches a user-visible milestone, the inbox cycle advances what it can, reconciles ticket state, records durable job state, sends a short Telegram update automatically, and keeps completed packets from cluttering the active queue.
 
 Inbound email uses a separate lightweight triage loop first: AgentMail is polled, safe messages are converted into `TASK_PACKET v1` entries, and then the normal inbox cycle picks those packets up.
 
@@ -21,18 +21,29 @@ Canonical runtime model:
 2. The specialist writes a `Result:` block under that packet when done.
 3. A periodic inbox cycle executes:
    - `python3 scripts/run_inbox_packets.py --repo-root .`
+   - `python3 scripts/email_reply_worker.py --repo-root . --alert-stuck --stuck-minutes 15`
    - `python3 scripts/task_execution_loop.py --repo-root . --apply`
-   - `python3 scripts/notify_inbox_results.py --repo-root . --require-notify-telegram --notify-queued`
+   - `python3 scripts/notify_inbox_results.py --repo-root . --require-notify-telegram`
+   - `python3 scripts/archive_completed_inbox_packets.py --repo-root . --apply`
+   - `python3 scripts/inbox_doctor.py --repo-root .`
    - Convenience wrapper: `python3 scripts/inbox_cycle.py --repo-root .`
+   - Machine-readable wrapper output: `python3 scripts/inbox_cycle.py --repo-root . --json`
    - Optional policy gate hardening for the notifier:
      - `--policy-rules config/orion_policy_rules.json`
      - `--policy-mode audit|block` (default `audit`)
-4. The cycle writes durable per-job artifacts to `tasks/JOBS/*.json`, per-workflow artifacts to `tasks/JOBS/wf-*.json`, updates `tasks/JOBS/summary.json`, and the notifier remembers what it already sent (state in `tmp/inbox_notify_state.json`).
+4. The cycle writes durable per-job artifacts to `tasks/JOBS/*.json`, per-workflow artifacts to `tasks/JOBS/wf-*.json`, updates `tasks/JOBS/summary.json`, records delivery state, archives completed packets after the age-out window, and runs the doctor.
 5. Telegram is the default notification surface for this workflow, with Discord kept for explicit compatibility paths only.
 
+Email reply exception:
+- Low-risk Cory-only AgentMail reply packets can be completed by `scripts/email_reply_worker.py`.
+- The worker writes `Result: Status: OK` only after AgentMail returns a sent message id.
+- Matching email reply packets still queued after 15 minutes are actionable and should alert on Telegram.
+
 Read-model expectations:
-- Per-job artifacts carry the canonical state, state reason, notify channels, stable queued/result digests, and a safe result preview.
+- Per-job artifacts carry the canonical state, state reason, notify channels, notification delivery status, stable queued/result digests, and a safe result preview.
 - `summary.json` is the aggregate API for queued/result/workflow status; status views should not re-infer that state from inbox markdown when the summary is present.
+- `notification_delivery` distinguishes `delivered`, `failed-to-deliver`, `suppressed`, `pending`, and `not-requested` for queued and result events, with per-channel attempts, timestamps, and last error.
+- Completed packets are archived only after their terminal result has been delivered, suppressed, or dead-lettered and has aged past the 48-hour default. Queued, stale, blocked, and pending-verification packets stay active.
 
 Canonical delegated-job states:
 - `queued`
@@ -72,7 +83,7 @@ Rules:
 - If a pending packet goes stale, the same reconcile pass can append one recovery packet with preserved lineage so the workflow does not just sit in notes forever.
 
 Notes:
-- The notifier is bounded and non-spammy (default max 3 results per run).
+- The notifier is bounded and non-spammy. The canonical cycle sends result and workflow milestone notifications, not queued step-by-step pings.
 - Heartbeat outputs remain `NO_REPLY`; the script does the send.
   - Telegram: direct API call (token file or env var).
   - Discord: uses `openclaw message send --channel discord ...` (so this script never touches the Discord token).
@@ -92,6 +103,15 @@ To prevent packet/ticket drift, run:
   - Same reconcile behavior, but exits non-zero if pending packets exceed stale threshold.
   - Intended for heartbeat/cron stop-gate style enforcement.
   - In non-strict apply mode, stale packets also get an exact-once recovery handoff to `ATLAS` or `ORION` depending on ownership.
+
+Doctor and archive checks:
+
+- `python3 scripts/inbox_doctor.py --repo-root .`
+  - Read-only health check for packet validation, queue counts, summary freshness, notifier state, dead letters, LaunchAgent status, and legacy cron overlap.
+  - Use `--json` for dashboards or CI.
+- `python3 scripts/archive_completed_inbox_packets.py --repo-root .`
+  - Dry-run by default.
+  - Add `--apply` to move eligible terminal packets into `tasks/INBOX/archive/`.
 
 ## Milestone-Only Updates (POLARIS Rollouts)
 
@@ -245,4 +265,4 @@ You can also suppress sends while still writing notifier state:
 ORION_SUPPRESS_TELEGRAM=1 python3 scripts/notify_inbox_results.py --require-notify-telegram
 ```
 
-Notifier outcome keys are now explicit in `tmp/inbox_notify_state.json` and dead-letter records are emitted to `tmp/inbox_notify_dead_letters.jsonl` when suppression or send failures occur.
+Notifier outcome keys are explicit in `tmp/inbox_notify_state.json`, including per-channel attempts. Dead-letter records are emitted to `tmp/inbox_notify_dead_letters.jsonl` when suppression or send failures occur, and `tasks/JOBS/summary.json` exposes those outcomes through `notification_delivery`.

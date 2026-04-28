@@ -142,6 +142,8 @@ def _mark_delivery_outcome(
     outcome: str,
     now: float,
 ) -> None:
+    attempts_key = f"{channel}:{kind}:attempts:{digest}"
+    state[attempts_key] = float(state.get(attempts_key, 0.0) + 1.0)
     state[f"{channel}:{kind}:{outcome}:{digest}"] = now
 
     if kind == "result":

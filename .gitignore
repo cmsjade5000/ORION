@@ -34,6 +34,8 @@ tasks/NOTES/runtime-reconcile.md
 tasks/NOTES/session-maintenance.md
 tasks/NOTES/status.md
 tasks/NOTES/plan.md
+tasks/INBOX/**/*.lock
+tasks/INBOX/*.lock
 
 # generated memory/dreaming state
 memory/.dreams/
