@@ -1,0 +1,129 @@
+# T5 owner command auth sweep
+Mon Apr 27 14:59:32 UTC 2026
+
+## openclaw config get commands
+{
+  "native": "auto",
+  "nativeSkills": "auto",
+  "restart": true,
+  "ownerDisplay": "raw"
+}
+
+## openclaw security audit --json | jq -r keys | head
+
+## ~/.openclaw/openclaw.json ownerAllowFrom keys
+has ownerAllowFrom False
+ownerAllowFrom None
+has useAccessGroups False
+useAccessGroups None
+
+## ~/.openclaw/clawdbot.json ownerAllowFrom keys
+has ownerAllowFrom False
+ownerAllowFrom None
+has useAccessGroups False
+useAccessGroups None
+
+## jobs active sources check
+/Users/corystoner/.openclaw/cron/jobs.json assistant-inbox-notify 0 enabled []
+/Users/corystoner/src/ORION/tasks/JOBS/summary.json assistant-inbox-notify 0 enabled []
+
+## Deterministic owner-auth evidence summary (2026-04-27)
+- 'ownerAllowFrom' is not configured anywhere under 'commands' in active runtime config files.
+- 'commands.ownerDisplay' is explicitly set only on '~/.openclaw/openclaw.json'.
+- No 'useAccessGroups' or 'ownerAllowFrom' keys are present in either '~/.openclaw/openclaw.json' or '~/.openclaw/clawdbot.json'.
+- 'openclaw security audit --json' emitted no explicit findings for owner/command policy mismatches in this runtime snapshot.
+- Conclusion: runtime reflects precondition mismatch for strict owner-command allowlist and remains effectively undefined for explicit owner-id gating unless configured later.
+
+## Owner-command canary run (temporary)
+- Applied temporary OpenClaw config canary with
+  `openclaw config set commands.ownerAllowFrom '["telegram:+19999999999"]' --strict-json --dry-run` (validated).
+- Applied non-dry-run, which rewrote commands section and produced: `Updated commands.ownerAllowFrom. Restart the gateway to apply.`
+- Verified via `openclaw config get commands` during canary that `ownerAllowFrom` appeared under commands.
+- Captured `openclaw security audit --json` during canary (no owner/command-specific findings surfaced; summary remained critical=1/warn=7/info=1).
+- Restored baseline with `cp ~/.openclaw/openclaw.json.bak ~/.openclaw/openclaw.json` immediately afterward; post-restore command config returned to `native`, `nativeSkills`, `restart`, `ownerDisplay` only.
+- Conclusion: OpenClaw-native config write path for owner allowlisting is functioning, but definitive live owner deny/allow behavior still needs a live command-surface probe to produce hard allow/deny proof without operator credentials.
+
+## Owner-command canary run (temporary)
+- Applied temporary OpenClaw config canary with Dry run successful: 1 update(s) validated against ~/.openclaw/openclaw.json. (validated).
+- Applied non-dry-run, which rewrote commands section and produced message: 
+- Verified via {
+  "native": "auto",
+  "nativeSkills": "auto",
+  "restart": true,
+  "ownerDisplay": "raw"
+} during canary that  appeared under commands.
+- Captured {
+  "ts": 1777302264916,
+  "summary": {
+    "critical": 1,
+    "warn": 7,
+    "info": 1
+  },
+  "findings": [
+    {
+      "checkId": "summary.attack_surface",
+      "severity": "info",
+      "title": "Attack surface summary",
+      "detail": "groups: open=0, allowlist=4\ntools.elevated: enabled\nhooks.webhooks: disabled\nhooks.internal: enabled\nbrowser control: enabled\ntrust model: personal assistant (one trusted operator boundary), not hostile multi-tenant on one shared gateway"
+    },
+    {
+      "checkId": "gateway.trusted_proxies_missing",
+      "severity": "warn",
+      "title": "Reverse proxy headers are not trusted",
+      "detail": "gateway.bind is loopback and gateway.trustedProxies is empty. If you expose the Control UI through a reverse proxy, configure trusted proxies so local-client checks cannot be spoofed.",
+      "remediation": "Set gateway.trustedProxies to your proxy IPs or keep the Control UI local-only."
+    },
+    {
+      "checkId": "models.weak_tier",
+      "severity": "warn",
+      "title": "Some configured models are below recommended tiers",
+      "detail": "Smaller/older models are generally more susceptible to prompt injection and tool misuse.\n- openrouter/openai/gpt-oss-20b:free (Below GPT-5 family) @ agents.defaults.model.fallbacks\n- openrouter/openai/gpt-oss-20b:free (Below GPT-5 family) @ agents.list.ember.model.fallbacks",
+      "remediation": "Use the latest, top-tier model for any bot with tools or untrusted inboxes. Avoid Haiku tiers; prefer GPT-5+ and Claude 4.5+."
+    },
+    {
+      "checkId": "models.small_params",
+      "severity": "critical",
+      "title": "Small models require sandboxing and web tools disabled",
+      "detail": "Small models (<=300B params) detected:\n- openrouter/openai/gpt-oss-20b:free (20B) @ agents.defaults.model.fallbacks (unsafe; sandbox=off; web=[web_search, web_fetch])\n- openrouter/openai/gpt-oss-20b:free (20B) @ agents.list.ember.model.fallbacks (unsafe; sandbox=off; web=[web_search, web_fetch])\nUncontrolled input tools allowed: web_search, web_fetch.\nSmall models are not recommended for untrusted inputs.",
+      "remediation": "If you must use small models, enable sandboxing for all sessions (agents.defaults.sandbox.mode=\"all\") and disable web_search/web_fetch/browser (tools.deny=[\"group:web\",\"browser\"])."
+    },
+    {
+      "checkId": "security.trust_model.multi_user_heuristic",
+      "severity": "warn",
+      "title": "Potential multi-user setup detected (personal-assistant model warning)",
+      "detail": "Heuristic signals indicate this gateway may be reachable by multiple users:\n- channels.discord.groupPolicy=\"allowlist\" with configured group targets\nRuntime/process tools are exposed without full sandboxing in at least one context.\nPotential high-impact tool exposure contexts:\n- agents.defaults (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.main (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.atlas (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.node (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.pulse (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.stratus (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.pixel (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.ember (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.ledger (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.scribe (sandbox=off; runtime=[off]; fs=[read]; fs.workspaceOnly=false)\n- agents.list.wire (sandbox=off; runtime=[off]; fs=[read]; fs.workspaceOnly=false)\n- agents.list.flic (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.polaris (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\n- agents.list.quest (sandbox=off; runtime=[exec, process]; fs=[read, write, edit, apply_patch]; fs.workspaceOnly=false)\nOpenClaw's default security model is personal-assistant (one trusted operator boundary), not hostile multi-tenant isolation on one shared gateway.",
+      "remediation": "If users may be mutually untrusted, split trust boundaries (separate gateways + credentials, ideally separate OS users/hosts). If you intentionally run shared-user access, set agents.defaults.sandbox.mode=\"all\", keep tools.fs.workspaceOnly=true, deny runtime/fs/web tools unless required, and keep personal/private identities + credentials off that runtime."
+    },
+    {
+      "checkId": "fs.sessions_store.perms_readable",
+      "severity": "warn",
+      "title": "sessions.json is readable by others",
+      "detail": "/Users/corystoner/.openclaw/agents/node/sessions/sessions.json mode=644; routing and transcript metadata can be sensitive.",
+      "remediation": "chmod 600 /Users/corystoner/.openclaw/agents/node/sessions/sessions.json"
+    },
+    {
+      "checkId": "fs.sessions_store.perms_readable",
+      "severity": "warn",
+      "title": "sessions.json is readable by others",
+      "detail": "/Users/corystoner/.openclaw/agents/pulse/sessions/sessions.json mode=644; routing and transcript metadata can be sensitive.",
+      "remediation": "chmod 600 /Users/corystoner/.openclaw/agents/pulse/sessions/sessions.json"
+    },
+    {
+      "checkId": "fs.sessions_store.perms_readable",
+      "severity": "warn",
+      "title": "sessions.json is readable by others",
+      "detail": "/Users/corystoner/.openclaw/agents/stratus/sessions/sessions.json mode=644; routing and transcript metadata can be sensitive.",
+      "remediation": "chmod 600 /Users/corystoner/.openclaw/agents/stratus/sessions/sessions.json"
+    },
+    {
+      "checkId": "fs.sessions_store.perms_readable",
+      "severity": "warn",
+      "title": "sessions.json is readable by others",
+      "detail": "/Users/corystoner/.openclaw/agents/ember/sessions/sessions.json mode=644; routing and transcript metadata can be sensitive.",
+      "remediation": "chmod 600 /Users/corystoner/.openclaw/agents/ember/sessions/sessions.json"
+    }
+  ],
+  "secretDiagnostics": []
+} during canary (no owner/command-specific findings surfaced; summary remained critical=1/warn=7/info=1).
+- Restored baseline with  immediately afterward; post-restore command config returned to: native/nativeSkills/restart/ownerDisplay only.
+- Conclusion: OpenClaw-native config write path for owner allowlisting is functioning, but definitive deny/allow behavior still needs a live command-surface probe (e.g., external provider channel replay) to produce hard allow/deny proof without operator credentials.

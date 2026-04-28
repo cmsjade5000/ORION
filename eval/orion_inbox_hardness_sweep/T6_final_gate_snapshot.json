@@ -45,7 +45,7 @@
     "reasons": [],
     "status": "pass"
   },
-  "generated_at": "2026-04-27T15:21:54.042738+00:00",
+  "generated_at": "2026-04-27T15:46:44.401300+00:00",
   "inbox_queue_contract": {
     "assertions": [],
     "canonical_job": {
@@ -90,12 +90,12 @@
   },
   "queue": {
     "counts": {
-      "pending_verification": 4,
-      "queued": 8,
-      "total_jobs": 33,
-      "workflow_count": 9
+      "pending_verification": 0,
+      "queued": 0,
+      "total_jobs": 4,
+      "workflow_count": 4
     },
-    "path": "/Users/corystoner/src/ORION/tasks/JOBS/summary.json",
+    "path": "tasks/JOBS/summary.json",
     "state_buckets": {
       "pending_verification": {
         "age_buckets": {
@@ -107,8 +107,8 @@
         "age_max": null,
         "age_mean": null,
         "age_min": null,
-        "count": 4,
-        "missing_age_or_threshold": 4,
+        "count": 0,
+        "missing_age_or_threshold": 0,
         "stale_count": 0,
         "stale_ratio": 0.0,
         "state": "pending_verification"
@@ -123,8 +123,8 @@
         "age_max": null,
         "age_mean": null,
         "age_min": null,
-        "count": 8,
-        "missing_age_or_threshold": 8,
+        "count": 0,
+        "missing_age_or_threshold": 0,
         "stale_count": 0,
         "stale_ratio": 0.0,
         "state": "queued"
@@ -134,15 +134,15 @@
   "queue_growth": {
     "delta": {
       "pending_verification_delta": 0,
-      "queued_delta": -21
+      "queued_delta": 0
     },
-    "delta_total_ratio": -0.6364,
+    "delta_total_ratio": 0.0,
     "previous": {
-      "file": "/Users/corystoner/src/ORION/eval/history/reliability-20260427-151801.json",
-      "pending_verification": 4,
-      "queued": 29
+      "file": "eval/history/reliability-20260427-154642.json",
+      "pending_verification": 0,
+      "queued": 0
     },
-    "slo_pass": false
+    "slo_pass": true
   },
   "queue_health": {
     "age_summary": {
@@ -159,10 +159,10 @@
     },
     "assertions": [],
     "counts": {
-      "pending_verification": 4,
-      "queued": 8,
-      "total_jobs": 33,
-      "workflow_count": 9
+      "pending_verification": 0,
+      "queued": 0,
+      "total_jobs": 4,
+      "workflow_count": 4
     },
     "state_buckets": {
       "pending_verification": {
@@ -175,8 +175,8 @@
         "age_max": null,
         "age_mean": null,
         "age_min": null,
-        "count": 4,
-        "missing_age_or_threshold": 4,
+        "count": 0,
+        "missing_age_or_threshold": 0,
         "stale_count": 0,
         "stale_ratio": 0.0,
         "state": "pending_verification"
@@ -191,8 +191,8 @@
         "age_max": null,
         "age_mean": null,
         "age_min": null,
-        "count": 8,
-        "missing_age_or_threshold": 8,
+        "count": 0,
+        "missing_age_or_threshold": 0,
         "stale_count": 0,
         "stale_ratio": 0.0,
         "state": "queued"
@@ -206,6 +206,6 @@
     "max_queue_growth_ratio": 0.4,
     "max_queued": 160,
     "max_stale_ratio": 0.2,
-    "status": "warn"
+    "status": "pass"
   }
 }

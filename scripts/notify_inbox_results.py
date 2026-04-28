@@ -47,6 +47,12 @@ except Exception:  # pragma: no cover
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
+SEND_READY_HEADERS = {
+    "TELEGRAM_MESSAGE:",
+    "SLACK_MESSAGE:",
+    "EMAIL_SUBJECT:",
+    "INTERNAL:",
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -136,6 +142,8 @@ def _mark_delivery_outcome(
     outcome: str,
     now: float,
 ) -> None:
+    attempts_key = f"{channel}:{kind}:attempts:{digest}"
+    state[attempts_key] = float(state.get(attempts_key, 0.0) + 1.0)
     state[f"{channel}:{kind}:{outcome}:{digest}"] = now
 
     if kind == "result":
@@ -628,6 +636,18 @@ def _format_message(
     workflow_alerts: list[WorkflowAlert],
     max_len: int | None = None,
 ) -> str:
+    send_ready = [_extract_send_ready_telegram_message(it.result_preview_lines) for it in results]
+    if (
+        results
+        and not queued
+        and not workflow_alerts
+        and all(body is not None for body in send_ready)
+    ):
+        msg = "\n\n".join(str(body).strip() for body in send_ready if body).rstrip() + "\n"
+        if max_len is None or len(msg) <= max_len:
+            return msg
+        return _clip_message(msg, max_len=max_len)
+
     lines: list[str] = []
     lines.append("Inbox update:")
     lines.append("")
@@ -643,6 +663,12 @@ def _format_message(
         lines.append("Results:")
         lines.append("")
         for i, it in enumerate(results, start=1):
+            send_ready_body = _extract_send_ready_telegram_message(it.result_preview_lines)
+            if send_ready_body is not None:
+                lines.extend(send_ready_body.splitlines())
+                lines.append("")
+                continue
+
             head = f"{i}. [{it.owner}] {it.objective}"
             lines.append(head)
             for pl in it.result_preview_lines:
@@ -664,6 +690,10 @@ def _format_message(
     if max_len is None or len(msg) <= max_len:
         return msg
 
+    return _clip_message(msg, max_len=max_len)
+
+
+def _clip_message(msg: str, *, max_len: int) -> str:
     clipped: list[str] = []
     chars = 0
     for ln in msg.splitlines():
@@ -673,6 +703,30 @@ def _format_message(
         clipped.append(ln)
         chars += len(ln) + 1
     return "\n".join(clipped).rstrip() + "\n"
+
+
+def _extract_send_ready_telegram_message(preview_lines: list[str]) -> str | None:
+    """
+    Return the body of a SCRIBE-style Telegram draft, excluding internal handoff
+    markers such as `Status: OK` and `TELEGRAM_MESSAGE:`.
+    """
+    start: int | None = None
+    for idx, raw in enumerate(preview_lines):
+        if raw.strip() == "TELEGRAM_MESSAGE:":
+            start = idx + 1
+            break
+    if start is None:
+        return None
+
+    body: list[str] = []
+    for raw in preview_lines[start:]:
+        line = raw.rstrip()
+        if line.strip() in SEND_READY_HEADERS:
+            break
+        body.append(line)
+
+    text = "\n".join(body).strip()
+    return text or None
 
 
 def _sanitize_outbound(text: str) -> str:

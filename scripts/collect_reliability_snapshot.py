@@ -28,6 +28,12 @@ SLO_THRESHOLDS = {
     "max_pending_verification_share": 0.60,
 }
 
+CANONICAL_INBOX_CRON_NAME = "assistant-inbox-notify"
+OBSOLETE_QUEUE_CRON_NAMES = {
+    "assistant-task-loop",
+    "inbox-result-notify-discord",
+}
+
 
 def _p95(values: list[int]) -> int:
     if not values:
@@ -106,6 +112,149 @@ def _cron_stats(jobs_path: Path) -> dict:
         "disabled": len(jobs) - len(enabled),
         "by_agent": dict(Counter(j.get("agentId", "unknown") for j in enabled)),
         "by_channel": dict(Counter((j.get("delivery") or {}).get("channel", "none") for j in enabled)),
+    }
+
+
+def _inbox_queue_contract(jobs_path: Path) -> dict:
+    canonical_launch_agent = Path.home() / "Library" / "LaunchAgents" / "ai.orion.inbox_result_notify.plist"
+    launchagent_active = canonical_launch_agent.exists()
+
+    if not jobs_path.exists():
+        if launchagent_active:
+            return {
+                "path": str(jobs_path),
+                "status": "warn",
+                "canonical_job": {
+                    "name": CANONICAL_INBOX_CRON_NAME,
+                    "present": False,
+                    "enabled": True,
+                    "sessionTarget": "launchagent",
+                    "delivery_mode": "launchagent",
+                },
+                "legacy_queue_jobs_present": [],
+                "legacy_queue_jobs_enabled": [],
+                "notes": ["jobs.json missing but canonical launch agent is active"],
+                "assertions": [
+                    {
+                        "severity": "warn",
+                        "code": "jobs_json_missing",
+                        "message": "jobs.json missing for inbox contract validation",
+                    }
+                ],
+            }
+
+        return {
+            "path": str(jobs_path),
+            "status": "missing",
+            "canonical_job": {
+                "name": CANONICAL_INBOX_CRON_NAME,
+                "present": False,
+                "enabled": False,
+                "sessionTarget": None,
+                "delivery_mode": None,
+            },
+            "legacy_queue_jobs_present": [],
+            "legacy_queue_jobs_enabled": [],
+            "notes": ["jobs file missing"],
+            "assertions": [
+                {
+                    "severity": "fail",
+                    "code": "jobs_json_missing",
+                    "message": "jobs.json missing for inbox contract validation",
+                }
+            ],
+        }
+
+    data = json.loads(jobs_path.read_text())
+    jobs = data.get("jobs", [])
+    if not isinstance(jobs, list):
+        jobs = []
+
+    canonical = {
+        "present": False,
+        "enabled": False,
+        "sessionTarget": None,
+        "delivery_mode": None,
+    }
+    legacy_present: list[str] = []
+    legacy_enabled: list[str] = []
+    assertions: list[dict[str, Any]] = []
+
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        name = str(job.get("name") or "").strip()
+        if not name:
+            continue
+
+        if name == CANONICAL_INBOX_CRON_NAME:
+            canonical.update(
+                {
+                    "present": True,
+                    "enabled": bool(job.get("enabled")),
+                    "sessionTarget": str(job.get("sessionTarget") or ""),
+                    "delivery_mode": str((job.get("delivery") or {}).get("mode") or ""),
+                }
+            )
+
+        if name in OBSOLETE_QUEUE_CRON_NAMES:
+            legacy_present.append(name)
+            if bool(job.get("enabled")):
+                legacy_enabled.append(name)
+
+    if not canonical["present"] and not launchagent_active:
+        assertions.append(
+            {
+                "severity": "fail",
+                "code": "canonical_inbox_job_missing",
+                "message": f"canonical queue job '{CANONICAL_INBOX_CRON_NAME}' is missing",
+            }
+        )
+    elif not canonical["enabled"] and not launchagent_active:
+        assertions.append(
+            {
+                "severity": "warn",
+                "code": "canonical_inbox_job_disabled",
+                "message": f"canonical queue job '{CANONICAL_INBOX_CRON_NAME}' is present but disabled",
+            }
+        )
+
+    for name in sorted(set(legacy_enabled)):
+        assertions.append(
+            {
+                "severity": "warn",
+                "code": "legacy_queue_job_enabled",
+                "message": f"legacy queue job '{name}' is still enabled",
+            }
+        )
+
+    status = "pass" if not assertions else "warn" if any(item["severity"] == "warn" for item in assertions) else "fail"
+
+    if launchagent_active:
+        canonical["enabled"] = True
+        canonical["sessionTarget"] = "launchagent"
+        canonical["delivery_mode"] = "launchagent"
+
+    status = "pass" if not assertions else "warn" if any(item["severity"] == "warn" for item in assertions) else "fail"
+
+    if not assertions and not canonical["enabled"] and not canonical["present"]:
+        status = "warn"
+
+    return {
+        "path": str(jobs_path),
+        "status": status,
+        "canonical_job": {
+            "name": CANONICAL_INBOX_CRON_NAME,
+            **canonical,
+        },
+        "legacy_queue_jobs_present": sorted(set(legacy_present)),
+        "legacy_queue_jobs_enabled": sorted(set(legacy_enabled)),
+        "notes": [
+            "legacy canonical scheduler mapping is expected to be queue-cycle driven"
+            if status == "pass"
+            else "scheduler cleanup needs review before operator unlock"
+        ],
+        "assertions": assertions,
     }
 
 
@@ -380,9 +529,30 @@ def _eval_gate(compare_path: Path) -> dict:
     }
 
 
+def _slo_status(*, queue_health: dict, queue_growth: dict, inbox_contract: dict, eval_gate: dict) -> str:
+    if (
+        queue_health.get("status") == "pass"
+        and queue_growth.get("slo_pass", True)
+        and inbox_contract.get("status") == "pass"
+        and eval_gate.get("status") == "pass"
+    ):
+        return "pass"
+
+    if (
+        queue_health.get("status") in {"warn", "fail"}
+        or not queue_growth.get("slo_pass", True)
+        or inbox_contract.get("status") != "pass"
+        or eval_gate.get("status") != "pass"
+    ):
+        return "warn"
+
+    return "pass"
+
+
 def _render_md(report: dict) -> str:
     lane = report["lane_wait_24h"]
     cron = report["cron"]
+    contract = report["inbox_queue_contract"]
     queue_health = report["queue_health"]
     queue = report["queue"]
     queue_growth = report["queue_growth"]
@@ -407,6 +577,17 @@ def _render_md(report: dict) -> str:
         f"- Total / Enabled / Disabled: `{cron['total']} / {cron['enabled']} / {cron['disabled']}`",
         f"- By agent: `{cron['by_agent']}`",
         f"- By delivery channel: `{cron['by_channel']}`",
+        "",
+        "## Inbox Queue Contract",
+        "",
+        f"- Contract status: `{contract['status']}`",
+        f"- Canonical job present: `{contract['canonical_job']['present']}`",
+        f"- Canonical job enabled: `{contract['canonical_job']['enabled']}`",
+        f"- Canonical session target: `{contract['canonical_job']['sessionTarget']}`",
+        f"- Canonical delivery mode: `{contract['canonical_job']['delivery_mode']}`",
+        f"- Legacy queue jobs present: `{contract['legacy_queue_jobs_present']}`",
+        f"- Legacy queue jobs enabled: `{contract['legacy_queue_jobs_enabled']}`",
+        f"- Contract assertions: `{contract['assertions']}`",
         "",
         "## Job State (`jobs-state.json`)",
         "",
@@ -466,17 +647,20 @@ def main() -> int:
     jobs_summary_path = Path(args.jobs_summary_path).expanduser()
     queue_summary = _load_json(jobs_summary_path, {})
     queue_health = _queue_health(queue_summary if isinstance(queue_summary, dict) else None)
+    inbox_contract = _inbox_queue_contract(Path(args.jobs_path).expanduser())
     queue_growth = _queue_growth(
         jobs_summary_path=jobs_summary_path,
         history_dir=Path(args.history_dir).expanduser(),
     )
 
+    eval_gate = _eval_gate(Path(args.eval_compare))
     report = {
         "kind": "reliability_snapshot",
         "generated_at": now.isoformat(),
         "lane_wait_24h": _parse_lane_waits(Path(args.log_path).expanduser(), args.hours),
         "cron": _cron_stats(Path(args.jobs_path).expanduser()),
         "jobs_state": _jobs_state_health(Path(args.jobs_state_path).expanduser()),
+        "inbox_queue_contract": inbox_contract,
         "queue_health": queue_health,
         "queue": {
             "path": str(jobs_summary_path),
@@ -485,16 +669,19 @@ def main() -> int:
         },
         "queue_growth": queue_growth,
         "delivery_queue": _delivery_queue(Path(args.queue_dir).expanduser()),
-        "eval_gate": _eval_gate(Path(args.eval_compare)),
+        "eval_gate": eval_gate,
         "slo": {
             "max_queued": SLO_THRESHOLDS["max_queued"],
             "max_pending_verification": SLO_THRESHOLDS["max_pending_verification"],
             "max_stale_ratio": SLO_THRESHOLDS["max_stale_ratio"],
             "max_queue_growth_ratio": SLO_THRESHOLDS["max_queue_growth_ratio"],
-            "status": "pass"
-            if queue_health.get("status") == "pass" and queue_growth.get("slo_pass", True)
-            else "warn" if queue_health.get("status") in {"warn", "fail"} or not queue_growth.get("slo_pass", True)
-            else "pass",
+            "max_pending_verification_share": SLO_THRESHOLDS["max_pending_verification_share"],
+            "status": _slo_status(
+                queue_health=queue_health,
+                queue_growth=queue_growth,
+                inbox_contract=inbox_contract,
+                eval_gate=eval_gate,
+            ),
         },
     }
 

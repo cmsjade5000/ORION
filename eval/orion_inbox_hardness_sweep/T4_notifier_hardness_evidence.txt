@@ -1,0 +1,20 @@
+# T4 Notifier Hardness Evidence
+
+- Run 1 (current state):
+  - command: `python3 scripts/notify_inbox_results.py --repo-root . --require-notify-telegram --notify-queued --state-path /tmp/inbox_notify_state_t5.json`
+  - result: `NOTIFY_OK`
+  - indicates active outcome path reached.
+
+- Run 2 dedupe check (same state file):
+  - command repeated with same `--state-path`
+  - result: `NOTIFY_OK`
+  - no hard failure; same synthetic outcomes revalidated.
+
+- Failure signal check:
+  - command: `TELEGRAM_BOT_TOKEN=bad python3 scripts/notify_inbox_results.py --repo-root . --require-notify-telegram --notify-queued --state-path /tmp/inbox_notify_state_fail.json`
+  - result: `NOTIFY_FAILED`
+  - failure class stored in state for `telegram:result:failed-to-deliver:*` keys.
+
+- Observations:
+  - `tmp/inbox_notify_state_t5.json` and `/tmp/inbox_notify_state_fail.json` both update state records in deterministic key format.
+  - `tmp/inbox_notify_dead_letters.jsonl` was not written in this forced-failure test path.

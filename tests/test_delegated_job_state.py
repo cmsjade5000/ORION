@@ -74,6 +74,71 @@ class TestDelegatedJobState(unittest.TestCase):
             self.assertEqual(summary["jobs"][0]["result"]["status"], "pending")
             self.assertEqual(summary["result_counts"]["pending"], 1)
 
+    def test_write_job_artifacts_includes_notification_delivery_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            jobs_dir = root / "tasks" / "JOBS"
+            (root / "tmp").mkdir(parents=True, exist_ok=True)
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+
+            before_result = [
+                "TASK_PACKET v1",
+                "Owner: ATLAS",
+                "Requester: ORION",
+                "Notify: telegram",
+                "Objective: Deliver visible result.",
+            ]
+            result_block = [
+                "Result:",
+                "Status: OK",
+                "Summary: Done.",
+            ]
+            queued_digest = self.mod.sha256_lines(before_result)
+            result_digest = self.mod.sha256_lines(result_block)
+            notify_state = {
+                f"telegram:queued:suppressed:{queued_digest}": 1699999900.0,
+                f"telegram:queued:attempts:{queued_digest}": 1.0,
+                f"telegram:result:delivered:{result_digest}": 1700000000.0,
+                f"telegram:result:attempts:{result_digest}": 2.0,
+            }
+            (root / "tmp" / "inbox_notify_state.json").write_text(json.dumps(notify_state), encoding="utf-8")
+
+            packet = SimpleNamespace(
+                fields={
+                    "Owner": "ATLAS",
+                    "Requester": "ORION",
+                    "Notify": "telegram",
+                    "Objective": "Deliver visible result.",
+                },
+                inbox_path=root / "tasks" / "INBOX" / "ATLAS.md",
+                display_path="tasks/INBOX/ATLAS.md",
+                start_line=1,
+                lines=before_result + result_block,
+                result_status="OK",
+                ticket_refs=[],
+                pending_key="pending:done",
+                packet_id="pkt-root",
+                parent_packet_id="",
+                root_packet_id="pkt-root",
+                workflow_id="pkt-root",
+            )
+
+            records = self.mod.write_job_artifacts(
+                repo_root=root,
+                packets=[packet],
+                ticket_map={},
+                pending_since_by_key={},
+                stale_threshold_hours=24.0,
+                now_ts=1700000000.0,
+            )
+
+            delivery = records[0]["notification_delivery"]
+            self.assertEqual(delivery["queued"]["status"], "suppressed")
+            self.assertEqual(delivery["result"]["status"], "delivered")
+            self.assertEqual(delivery["result"]["channels"]["telegram"]["attempts"], 2)
+            summary = json.loads((jobs_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["jobs"][0]["notification_delivery"]["result"]["status"], "delivered")
+
 
 if __name__ == "__main__":
     unittest.main()

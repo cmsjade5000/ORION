@@ -58,10 +58,6 @@ case "${job}" in
   assistant-email-triage)
     exec /usr/bin/python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20 --apply
     ;;
-  assistant-task-loop)
-    # Compatibility alias: ORION core now treats inbox_cycle as the canonical scheduled loop.
-    exec /usr/bin/python3 scripts/inbox_cycle.py --repo-root "${repo_root}" --runner-max-packets 4 --stale-hours 24 --notify-max-per-run 8
-    ;;
   assistant-agenda-refresh)
     exec /usr/bin/python3 scripts/assistant_status.py --cmd refresh --json
     ;;

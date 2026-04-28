@@ -69,6 +69,24 @@ Tracks:
 - `written_keys` (idempotency keys)
 - `updated_at`
 
+## Low-risk reply completion
+
+The router only creates packets. The canonical inbox cycle then runs
+`scripts/email_reply_worker.py` before reconcile/notify.
+
+The reply worker auto-sends only when every gate passes:
+- Owner is `SCRIBE`.
+- Objective is a send-ready inbound email reply.
+- Sender is exactly `cory.stoner@icloud.com`.
+- Sender domain is `icloud.com`.
+- Link domains and attachment types are `(none)`.
+- Risks are exactly `low`.
+- AgentMail returns a sent `message_id`.
+
+If a matching email reply packet is still queued after 15 minutes, the worker
+sends a Telegram stuck alert and `scripts/inbox_doctor.py` reports
+`email_reply_queue` as unhealthy.
+
 ## Cron (compatibility only)
 
 If you explicitly need the older `agentTurn` wrapper path, run every 5 minutes in an isolated ORION session:

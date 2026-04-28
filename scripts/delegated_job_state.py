@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 try:
     from inbox_state import parse_notify_channels, sha256_lines
@@ -43,6 +44,8 @@ def infer_job_state(
         return "blocked"
     if normalized == "OK":
         if "done" in ticket_lanes:
+            return "complete"
+        if not ticket_lanes:
             return "complete"
         return "pending_verification"
 
@@ -79,6 +82,8 @@ def infer_job_state_reason(
     if normalized == "OK":
         if "done" in ticket_lanes:
             return "result_ok_ticket_done"
+        if not ticket_lanes:
+            return "result_ok_no_ticket_refs"
         return "result_ok_waiting_done"
 
     if ticket_lanes:
@@ -178,6 +183,140 @@ def build_result_record(*, result_status: str | None, state: str) -> dict[str, o
     }
 
 
+def _load_notify_state(repo_root: Path) -> dict[str, float]:
+    path = repo_root / "tmp" / "inbox_notify_state.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[str, float] = {}
+    for key, value in payload.items():
+        if isinstance(key, str) and isinstance(value, (int, float)):
+            out[key] = float(value)
+    return out
+
+
+def _load_notify_dead_letters(repo_root: Path) -> list[dict[str, Any]]:
+    path = repo_root / "tmp" / "inbox_notify_dead_letters.jsonl"
+    out: list[dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return out
+    for line in lines:
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            out.append(payload)
+    return out
+
+
+def _delivery_error_for(
+    dead_letters: list[dict[str, Any]],
+    *,
+    channel: str,
+    kind: str,
+    digest: str,
+) -> str:
+    for entry in reversed(dead_letters):
+        item = entry.get("item")
+        if not isinstance(item, dict):
+            continue
+        if (
+            str(item.get("channel") or "") == channel
+            and str(item.get("kind") or "") == kind
+            and str(item.get("digest") or "") == digest
+        ):
+            detail = str(entry.get("reason_detail") or "").strip()
+            reason = str(entry.get("reason_class") or "").strip()
+            return detail or reason
+    return ""
+
+
+def _delivery_channel_record(
+    notify_state: dict[str, float],
+    dead_letters: list[dict[str, Any]],
+    *,
+    channel: str,
+    kind: str,
+    digest: str | None,
+) -> dict[str, object]:
+    if not digest:
+        return {"status": "not-requested", "attempts": 0, "last_ts": None, "last_error": ""}
+
+    outcomes = ("delivered", "suppressed", "failed-to-deliver")
+    candidates: list[tuple[float, str]] = []
+    attempts_key = f"{channel}:{kind}:attempts:{digest}"
+    raw_attempts = notify_state.get(attempts_key)
+    attempts = int(raw_attempts) if isinstance(raw_attempts, (int, float)) and raw_attempts >= 0 else 0
+    for outcome in outcomes:
+        key = f"{channel}:{kind}:{outcome}:{digest}"
+        if key in notify_state:
+            attempts = max(attempts, 1)
+            candidates.append((notify_state[key], outcome))
+
+    if not candidates:
+        return {"status": "pending", "attempts": 0, "last_ts": None, "last_error": ""}
+
+    last_ts, status = max(candidates, key=lambda item: item[0])
+    return {
+        "status": status,
+        "attempts": attempts,
+        "last_ts": last_ts,
+        "last_error": _delivery_error_for(dead_letters, channel=channel, kind=kind, digest=digest)
+        if status == "failed-to-deliver"
+        else "",
+    }
+
+
+def build_notification_delivery(
+    *,
+    notify_channels: list[str],
+    queued_digest: str,
+    result_digest: str | None,
+    notify_state: dict[str, float],
+    dead_letters: list[dict[str, Any]],
+) -> dict[str, object]:
+    if not notify_channels:
+        return {
+            "queued": {"status": "not-requested", "channels": {}},
+            "result": {"status": "not-requested", "channels": {}},
+        }
+
+    def _kind(kind: str, digest: str | None) -> dict[str, object]:
+        channels = {
+            channel: _delivery_channel_record(
+                notify_state,
+                dead_letters,
+                channel=channel,
+                kind=kind,
+                digest=digest,
+            )
+            for channel in notify_channels
+        }
+        statuses = {str(payload.get("status") or "") for payload in channels.values()}
+        if "failed-to-deliver" in statuses:
+            status = "failed-to-deliver"
+        elif "pending" in statuses:
+            status = "pending"
+        elif "delivered" in statuses:
+            status = "delivered"
+        elif "suppressed" in statuses:
+            status = "suppressed"
+        else:
+            status = "not-requested"
+        return {"status": status, "channels": channels}
+
+    return {
+        "queued": _kind("queued", queued_digest),
+        "result": _kind("result", result_digest),
+    }
+
+
 def build_job_record(
     *,
     repo_root: Path,
@@ -186,6 +325,8 @@ def build_job_record(
     pending_since_ts: float | None,
     stale_threshold_hours: float,
     now_ts: float,
+    notify_state: dict[str, float] | None = None,
+    dead_letters: list[dict[str, Any]] | None = None,
 ) -> dict[str, object]:
     before_result = []
     for line in packet.lines:
@@ -254,6 +395,13 @@ def build_job_record(
         "objective": packet.fields.get("Objective", ""),
         "notify": notify_raw,
         "notify_channels": notify_channels,
+        "notification_delivery": build_notification_delivery(
+            notify_channels=notify_channels,
+            queued_digest=queued_digest,
+            result_digest=result_digest,
+            notify_state=notify_state or {},
+            dead_letters=dead_letters or [],
+        ),
         "queued_digest": queued_digest,
         "result_digest": result_digest,
         "result_status": packet.result_status,
@@ -286,6 +434,8 @@ def write_job_artifacts(
     active_paths: set[Path] = set()
     counts: dict[str, int] = {}
     workflows: dict[str, dict[str, object]] = {}
+    notify_state = _load_notify_state(repo_root)
+    dead_letters = _load_notify_dead_letters(repo_root)
 
     for packet in packets:
         pending_since_ts = pending_since_by_key.get(packet.pending_key)
@@ -296,6 +446,8 @@ def write_job_artifacts(
             pending_since_ts=pending_since_ts,
             stale_threshold_hours=stale_threshold_hours,
             now_ts=now_ts,
+            notify_state=notify_state,
+            dead_letters=dead_letters,
         )
         records.append(record)
         counts[record["state"]] = counts.get(record["state"], 0) + 1
@@ -326,6 +478,7 @@ def write_job_artifacts(
                 "objective": record["objective"],
                 "notify": record["notify"],
                 "notify_channels": record["notify_channels"],
+                "notification_delivery": record["notification_delivery"],
                 "queued_digest": record["queued_digest"],
                 "result_digest": record["result_digest"],
                 "result": record["result"],
@@ -396,6 +549,7 @@ def write_job_artifacts(
                 "objective": rec["objective"],
                 "notify": rec["notify"],
                 "notify_channels": rec["notify_channels"],
+                "notification_delivery": rec["notification_delivery"],
                 "queued_digest": rec["queued_digest"],
                 "result_digest": rec["result_digest"],
                 "result": rec["result"],

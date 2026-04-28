@@ -415,3 +415,150 @@ class TestNotifyInboxResults(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("[POLARIS] Prepare today's agenda.", r.stdout)
             self.assertIn("[WIRE] Summarize research.", r.stdout)
+
+    def test_dry_run_sends_only_scribe_telegram_message_body(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_jobs_summary(
+                root,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "job_id": "pkt-scribe",
+                            "workflow_id": "wf-scribe",
+                            "state": "pending_verification",
+                            "state_reason": "result_ok_waiting_done",
+                            "owner": "SCRIBE",
+                            "objective": "Draft a Telegram message for Cory.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "queued_digest": "digest-old",
+                            "result_digest": "digest-scribe",
+                            "result": {
+                                "status": "ok",
+                                "job_state": "pending_verification",
+                                "present": True,
+                                "raw_status": "OK",
+                                "preview_lines": [
+                                    "Status: OK",
+                                    "TELEGRAM_MESSAGE:",
+                                    "Wrapped up recent ORION platform changes:",
+                                    "- Strengthened Task Packet validation.",
+                                    "- Verified test suite passes.",
+                                ],
+                            },
+                            "inbox": {"path": "tasks/INBOX/SCRIBE.md", "line": 9},
+                        },
+                    ],
+                    "workflows": [],
+                },
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("Wrapped up recent ORION platform changes:", r.stdout)
+            self.assertIn("- Strengthened Task Packet validation.", r.stdout)
+            self.assertNotIn("Inbox update:", r.stdout)
+            self.assertNotIn("Results:", r.stdout)
+            self.assertNotIn("[SCRIBE] Draft a Telegram message", r.stdout)
+            self.assertNotIn("Status: OK", r.stdout)
+            self.assertNotIn("TELEGRAM_MESSAGE:", r.stdout)
+            self.assertNotIn("file: tasks/INBOX/SCRIBE.md:9", r.stdout)
+
+    def test_dry_run_hides_scribe_wrapper_inside_mixed_update(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_jobs_summary(
+                root,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "job_id": "pkt-wire",
+                            "workflow_id": "wf-wire",
+                            "state": "pending_verification",
+                            "owner": "WIRE",
+                            "objective": "Check current status.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "result_digest": "digest-wire",
+                            "result": {
+                                "status": "ok",
+                                "present": True,
+                                "preview_lines": ["Status: OK", "Summary: working"],
+                            },
+                            "inbox": {"path": "tasks/INBOX/WIRE.md", "line": 4},
+                        },
+                        {
+                            "job_id": "pkt-scribe",
+                            "workflow_id": "wf-scribe",
+                            "state": "pending_verification",
+                            "owner": "SCRIBE",
+                            "objective": "Draft a Telegram message for Cory.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "result_digest": "digest-scribe",
+                            "result": {
+                                "status": "ok",
+                                "present": True,
+                                "preview_lines": [
+                                    "Status: OK",
+                                    "TELEGRAM_MESSAGE:",
+                                    "Clean body only.",
+                                ],
+                            },
+                            "inbox": {"path": "tasks/INBOX/SCRIBE.md", "line": 9},
+                        },
+                    ],
+                    "workflows": [],
+                },
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("[WIRE] Check current status.", r.stdout)
+            self.assertIn("Clean body only.", r.stdout)
+            self.assertNotIn("[SCRIBE] Draft a Telegram message", r.stdout)
+            self.assertNotIn("TELEGRAM_MESSAGE:", r.stdout)
+            self.assertNotIn("file: tasks/INBOX/SCRIBE.md:9", r.stdout)

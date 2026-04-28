@@ -1,6 +1,6 @@
 # Reliability Snapshot
 
-- Generated at: `2026-04-27T15:46:42.073367+00:00`
+- Generated at: `2026-04-27T15:46:44.401300+00:00`
 - Window: last `24h`
 
 ## Lane Wait
@@ -41,7 +41,7 @@
 - Pending verification: `0`
 - Age buckets: `{'queued': {'state': 'queued', 'count': 0, 'stale_count': 0, 'stale_ratio': 0.0, 'missing_age_or_threshold': 0, 'age_min': None, 'age_max': None, 'age_mean': None, 'age_buckets': {'0-1h': 0, '1-4h': 0, '4-24h': 0, '>24h': 0}}, 'pending_verification': {'state': 'pending_verification', 'count': 0, 'stale_count': 0, 'stale_ratio': 0.0, 'missing_age_or_threshold': 0, 'age_min': None, 'age_max': None, 'age_mean': None, 'age_buckets': {'0-1h': 0, '1-4h': 0, '4-24h': 0, '>24h': 0}}}`
 - Assertions: `[]`
-- Growth: `{'previous': {'file': 'eval/history/reliability-20260427-151801.json', 'queued': 29, 'pending_verification': 4}, 'delta': {'queued_delta': -29, 'pending_verification_delta': -4}, 'delta_total_ratio': -1.0, 'slo_pass': False}`
+- Growth: `{'previous': {'file': 'eval/history/reliability-20260427-154642.json', 'queued': 0, 'pending_verification': 0}, 'delta': {'queued_delta': 0, 'pending_verification_delta': 0}, 'delta_total_ratio': 0.0, 'slo_pass': True}`
 
 ## Delivery Queue
 

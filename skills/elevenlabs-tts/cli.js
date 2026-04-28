@@ -1,14 +1,21 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-const { listVoices, splitTextByDirectives, textToSpeechToFile, textToSpeechToFileMulti } = require("./manifest");
+const {
+  listVoicePersonas,
+  listVoices,
+  splitTextByDirectives,
+  textToSpeechToFile,
+  textToSpeechToFileMulti,
+} = require("./manifest");
 
 function usage(code = 2) {
   console.error(
     [
       "Usage:",
       "  node skills/elevenlabs-tts/cli.js list-voices",
-      "  node skills/elevenlabs-tts/cli.js speak --text <text> [--voice-id <id> | --voice-name <name>] [--preset calm|energetic|narration|urgent]",
+      "  node skills/elevenlabs-tts/cli.js list-personas",
+      "  node skills/elevenlabs-tts/cli.js speak --text <text> [--persona <name>] [--voice-id <id> | --voice-name <name>] [--preset calm|energetic|narration|urgent]",
       "  node skills/elevenlabs-tts/cli.js audio-check",
       "",
       "Notes:",
@@ -42,8 +49,16 @@ async function main() {
     return;
   }
 
+  if (cmd === "list-personas") {
+    for (const p of listVoicePersonas()) {
+      console.log(`${p.name}\t${p.label}\t${p.description}`);
+    }
+    return;
+  }
+
   if (cmd === "speak") {
     const text = getFlag(args, "--text");
+    const persona = getFlag(args, "--persona");
     const voiceId = getFlag(args, "--voice-id");
     const voiceName = getFlag(args, "--voice-name");
     const preset = getFlag(args, "--preset");
@@ -57,6 +72,7 @@ async function main() {
     if (segments.length > 1) {
       await textToSpeechToFileMulti({
         text,
+        persona: persona || undefined,
         voiceId: voiceId || undefined,
         voiceName: voiceName || undefined,
         voiceSettingsPreset: preset || undefined,
@@ -70,6 +86,7 @@ async function main() {
     const effPreset = (seg.preset || preset || "").trim();
     await textToSpeechToFile({
       text: seg.text,
+      persona: persona || seg.persona || undefined,
       voiceId: voiceId || seg.voiceId || undefined,
       voiceName: voiceName || seg.voiceName || undefined,
       voiceSettingsPreset: effPreset ? effPreset : undefined,
