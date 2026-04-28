@@ -146,6 +146,10 @@ def _message_id(fields: dict[str, str]) -> str:
     return _norm(fields.get("Message ID", ""))
 
 
+def _idempotency_key(fields: dict[str, str]) -> str:
+    return _norm(fields.get("Idempotency Key", ""))
+
+
 def _request_summary(fields: dict[str, str]) -> str:
     return _norm(fields.get("Request Summary", ""))
 
@@ -243,6 +247,44 @@ def _agent_text_from_json(payload: Any) -> str:
     return ""
 
 
+def _result_field(packet_lines: list[str], key: str) -> str:
+    in_result = False
+    target = key.strip().lower()
+    for raw in packet_lines:
+        line = raw.strip()
+        if line == "Result:":
+            in_result = True
+            continue
+        if not in_result:
+            continue
+        if line.startswith("- "):
+            line = line[2:].strip()
+        m = RE_KV.match(line)
+        if m and m.group("key").strip().lower() == target:
+            return m.group("value").strip()
+    return ""
+
+
+def _completed_reply_keys(repo_root: Path) -> dict[str, str]:
+    completed: dict[str, str] = {}
+    for pref in reversed(_iter_packets(repo_root)):
+        if not _packet_has_result(pref.raw_lines):
+            continue
+        status = _result_field(pref.raw_lines, "Status").lower()
+        if status not in {"ok", "complete", "completed"}:
+            continue
+        sent_id = _result_field(pref.raw_lines, "Sent message id") or _result_field(pref.raw_lines, "Original sent message id")
+        if not sent_id:
+            continue
+        key = _idempotency_key(pref.fields)
+        msg_id = _message_id(pref.fields)
+        if key:
+            completed[f"key:{key}"] = sent_id
+        if msg_id:
+            completed[f"msg:{msg_id}"] = sent_id
+    return completed
+
+
 def _compose_prompt(pref: PacketRef) -> str:
     fields = pref.fields
     return "\n".join(
@@ -322,6 +364,25 @@ def _latest_received_matches(repo_root: Path, *, from_inbox: str, trusted_sender
     raise RuntimeError("no recent received message found for trusted sender")
 
 
+def _latest_received_message_id(repo_root: Path, *, from_inbox: str, trusted_sender: str) -> str:
+    cmd = ["node", "skills/agentmail/cli.js", "list-messages", from_inbox, "20"]
+    proc = subprocess.run(cmd, cwd=str(repo_root), text=True, capture_output=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr or proc.stdout or "agentmail list failed").strip())
+    payload = json.loads(proc.stdout)
+    messages = payload.get("messages") if isinstance(payload, dict) else []
+    for msg in messages if isinstance(messages, list) else []:
+        if not isinstance(msg, dict):
+            continue
+        labels = {str(label).strip().lower() for label in (msg.get("labels") or [])}
+        if "received" not in labels:
+            continue
+        if _extract_email(str(msg.get("from") or "")) != trusted_sender.lower():
+            continue
+        return _norm(str(msg.get("message_id") or msg.get("id") or ""))
+    raise RuntimeError("no recent received message found for trusted sender")
+
+
 def send_reply(
     repo_root: Path,
     *,
@@ -389,6 +450,38 @@ def _result_block(*, message_id: str, sent_id: str, replied_to: str, body: str) 
     ]
 
 
+def _blocked_result_block(*, message_id: str, latest_id: str) -> list[str]:
+    return [
+        "",
+        "Result:",
+        "Status: BLOCKED",
+        "What changed / what I found:",
+        "  - Did not send an AgentMail reply.",
+        "  - AgentMail reply-last would target a newer trusted message, so this older queued packet cannot be safely auto-sent.",
+        f"  - Queued message id: {message_id}",
+        f"  - Latest trusted message id: {latest_id or '(none)'}",
+        "Next step (if any):",
+        "  - Review manually if this old email still needs a reply.",
+        "",
+    ]
+
+
+def _duplicate_result_block(*, message_id: str, sent_id: str) -> list[str]:
+    return [
+        "",
+        "Result:",
+        "Status: OK",
+        "What changed / what I found:",
+        "  - Duplicate of already completed email reply packet.",
+        "  - No new email was sent.",
+        f"  - Original sent message id: {sent_id}",
+        f"  - Duplicate message id: {message_id}",
+        "Next step (if any):",
+        "  - None.",
+        "",
+    ]
+
+
 def _write_result(pref: PacketRef, result_lines: list[str]) -> None:
     identity = packet_identity(fields=pref.fields, packet_before_result=_packet_before_result(pref.raw_lines))
     lock_path = pref.inbox_path.with_suffix(pref.inbox_path.suffix + ".lock")
@@ -402,15 +495,24 @@ def _write_result(pref: PacketRef, result_lines: list[str]) -> None:
         if header_idx is None:
             raise RuntimeError(f"missing packets header: {pref.inbox_path}")
         match: tuple[int, int, list[str]] | None = None
-        for start, end, pkt_lines in _split_packets(file_lines[header_idx + 1 :]):
+        split_packets = _split_packets(file_lines[header_idx + 1 :])
+        for start, end, pkt_lines in split_packets:
+            abs_start = (header_idx + 1) + start
+            abs_end = (header_idx + 1) + end
+            if abs_start + 1 == pref.packet_start_line:
+                match = (abs_start, abs_end, pkt_lines)
+                break
+        for start, end, pkt_lines in split_packets if match is None else []:
+            abs_start = (header_idx + 1) + start
+            abs_end = (header_idx + 1) + end
             fields = _parse_fields(pkt_lines)
             candidate = packet_identity(fields=fields, packet_before_result=_packet_before_result(pkt_lines))
             if identity.idempotency_key:
                 if candidate.idempotency_key == identity.idempotency_key:
-                    match = ((header_idx + 1) + start, (header_idx + 1) + end, pkt_lines)
+                    match = (abs_start, abs_end, pkt_lines)
                     break
             elif candidate.content_hash == identity.content_hash:
-                match = ((header_idx + 1) + start, (header_idx + 1) + end, pkt_lines)
+                match = (abs_start, abs_end, pkt_lines)
                 break
         if match is None:
             raise RuntimeError("packet disappeared before result write")
@@ -438,29 +540,64 @@ def process_replies(
     compose_timeout_seconds: int = 180,
 ) -> dict[str, Any]:
     processed: list[dict[str, str]] = []
+    blocked: list[dict[str, str]] = []
+    deduped: list[dict[str, str]] = []
+    failed: list[dict[str, str]] = []
     skipped: dict[str, int] = {}
-    for pref in _iter_packets(repo_root):
+    completed_keys = _completed_reply_keys(repo_root)
+    for pref in reversed(_iter_packets(repo_root)):
         eligibility = _eligible(pref, trusted_sender=trusted_sender)
         if not eligibility.ok:
             skipped[eligibility.reason] = skipped.get(eligibility.reason, 0) + 1
             continue
         message_id = _message_id(pref.fields)
-        body = compose_reply(repo_root, pref, draft_text=draft_text, timeout_seconds=compose_timeout_seconds)
-        if dry_run:
-            processed.append({"message_id": message_id, "sent_message_id": "DRY_RUN", "replied_to": message_id})
-        else:
-            sent_id, replied_to = send_reply(
-                repo_root,
-                from_inbox=from_inbox,
-                trusted_sender=trusted_sender,
-                message_id=message_id,
-                body=body,
-            )
-            _write_result(pref, _result_block(message_id=message_id, sent_id=sent_id, replied_to=replied_to, body=body))
-            processed.append({"message_id": message_id, "sent_message_id": sent_id, "replied_to": replied_to})
+        idempotency_key = _idempotency_key(pref.fields)
+        completed_sent_id = completed_keys.get(f"key:{idempotency_key}") if idempotency_key else ""
+        completed_sent_id = completed_sent_id or completed_keys.get(f"msg:{message_id}", "")
+        if completed_sent_id:
+            if not dry_run:
+                _write_result(pref, _duplicate_result_block(message_id=message_id, sent_id=completed_sent_id))
+            deduped.append({"message_id": message_id, "sent_message_id": completed_sent_id})
+            continue
+        try:
+            latest_id = _latest_received_message_id(repo_root, from_inbox=from_inbox, trusted_sender=trusted_sender)
+            if latest_id != message_id:
+                if not dry_run:
+                    _write_result(pref, _blocked_result_block(message_id=message_id, latest_id=latest_id))
+                blocked.append({"message_id": message_id, "latest_message_id": latest_id})
+                continue
+            body = compose_reply(repo_root, pref, draft_text=draft_text, timeout_seconds=compose_timeout_seconds)
+            if dry_run:
+                processed.append({"message_id": message_id, "sent_message_id": "DRY_RUN", "replied_to": message_id})
+            else:
+                sent_id, replied_to = send_reply(
+                    repo_root,
+                    from_inbox=from_inbox,
+                    trusted_sender=trusted_sender,
+                    message_id=message_id,
+                    body=body,
+                )
+                _write_result(pref, _result_block(message_id=message_id, sent_id=sent_id, replied_to=replied_to, body=body))
+                processed.append({"message_id": message_id, "sent_message_id": sent_id, "replied_to": replied_to})
+                if idempotency_key:
+                    completed_keys[f"key:{idempotency_key}"] = sent_id
+                completed_keys[f"msg:{message_id}"] = sent_id
+        except Exception as exc:
+            failed.append({"message_id": message_id, "error": str(exc)})
+            continue
         if len(processed) >= max(1, int(max_packets)):
             break
-    return {"processed": processed, "processed_count": len(processed), "skipped": skipped}
+    return {
+        "processed": processed,
+        "processed_count": len(processed),
+        "blocked": blocked,
+        "blocked_count": len(blocked),
+        "deduped": deduped,
+        "deduped_count": len(deduped),
+        "failed": failed,
+        "failed_count": len(failed),
+        "skipped": skipped,
+    }
 
 
 def _parse_ts(raw: str) -> float | None:
@@ -568,9 +705,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
-        print(f"EMAIL_REPLY_WORKER processed={result['processed_count']}")
+        print(
+            "EMAIL_REPLY_WORKER "
+            f"processed={result['processed_count']} "
+            f"blocked={result.get('blocked_count', 0)} "
+            f"deduped={result.get('deduped_count', 0)} "
+            f"failed={result.get('failed_count', 0)}"
+        )
         if result.get("error"):
             print(f"EMAIL_REPLY_ERROR {result['error']}", file=sys.stderr)
+        for item in result.get("failed", []):
+            if isinstance(item, dict):
+                print(f"EMAIL_REPLY_ERROR {item.get('message_id', '(unknown)')}: {item.get('error', '')}", file=sys.stderr)
         if "stuck_alerts" in result:
             print(f"EMAIL_REPLY_STUCK_ALERTS alerted={result['stuck_alerts']['alerted_count']}")
     return rc

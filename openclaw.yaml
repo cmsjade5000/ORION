@@ -116,7 +116,7 @@ hooks:
 #       baseUrl: http://127.0.0.1:1234/v1
 #       apiKey: ${LOCAL_LLM_API_KEY}
 #       models:
-#         - id: qwen3.5-4b-mlx
+#         - id: qwen3.5-9b-mlx
 #           name: Local bounded runtime
 #
 # Example routing (low-cost OpenRouter primary with cheap fallbacks, plus an optional Kimi specialist fallback):

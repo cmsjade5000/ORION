@@ -3,7 +3,7 @@ set -euo pipefail
 
 INCLUDE_KIMI_FALLBACK=0
 LOCAL_BASE_URL="${LOCAL_LLM_BASE_URL:-http://127.0.0.1:1234/v1}"
-LOCAL_MODEL="${LOCAL_LLM_MODEL:-qwen3.5-4b-mlx}"
+LOCAL_MODEL="${LOCAL_LLM_MODEL:-qwen3.5-9b-mlx}"
 CURATED_FREE_MODEL="${OPENROUTER_CURATED_FREE_MODEL:-openai/gpt-oss-20b:free}"
 PRIMARY_MODEL="${PRIMARY_MODEL:-openrouter/openrouter/free}"
 DRY_RUN=0

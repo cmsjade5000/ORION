@@ -132,6 +132,10 @@ def run(
     archived_count = 0
     for name, argv in steps:
         step = _append_step(name, argv, step_emit=False if name == "archive" else None)
+        if name == "email-reply-worker" and int(step["returncode"]) != 0:
+            if emit and step.get("stderr"):
+                sys.stderr.write(str(step["stderr"]))
+            continue
         if name == "archive":
             archive_payload = _safe_json(str(step.get("stdout") or ""))
             step["parsed"] = archive_payload

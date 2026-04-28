@@ -40,6 +40,8 @@ def infer_job_state(
     now_ts: float,
 ) -> str:
     normalized = (result_status or "").strip().upper()
+    if normalized == "CANCELLED":
+        return "cancelled"
     if normalized in {"FAILED", "BLOCKED"}:
         return "blocked"
     if normalized == "OK":
@@ -75,6 +77,8 @@ def infer_job_state_reason(
     now_ts: float,
 ) -> str:
     normalized = (result_status or "").strip().upper()
+    if normalized == "CANCELLED":
+        return "result_cancelled"
     if normalized == "FAILED":
         return "result_failed"
     if normalized == "BLOCKED":
@@ -118,7 +122,7 @@ def infer_workflow_state(states: list[str]) -> str:
 
 def normalize_result_status(result_status: str | None) -> str:
     normalized = (result_status or "").strip().upper()
-    if normalized in {"OK", "FAILED", "BLOCKED"}:
+    if normalized in {"OK", "FAILED", "BLOCKED", "CANCELLED"}:
         return normalized.lower()
     return "pending"
 

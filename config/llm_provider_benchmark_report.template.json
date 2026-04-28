@@ -180,7 +180,7 @@
       "response_format_used": "json_schema",
       "schema_name": "bounded_local_utility_benchmark",
       "schema_enforced": true,
-      "model_requested": "qwen3.5-4b-mlx",
+      "model_requested": "qwen3.5-9b-mlx",
       "model_used": "",
       "http_status": 0,
       "exit_code": 0,

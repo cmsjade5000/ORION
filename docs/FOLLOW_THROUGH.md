@@ -50,6 +50,7 @@ Canonical delegated-job states:
 - `in_progress`
 - `pending_verification`
 - `blocked`
+- `cancelled`
 - `complete`
 
 ## Next Packet Contract

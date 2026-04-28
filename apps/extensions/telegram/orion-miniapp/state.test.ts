@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-const { extractApprovalFromText } = require("./state.cjs");
+const { extractApprovalFromText, persistQueueRequest, readQueueRequests, updateQueueRequestStatus } = require("./state.cjs");
 
 describe("mini app approval scanning", () => {
   it("extracts approve commands", () => {
@@ -15,5 +18,28 @@ describe("mini app approval scanning", () => {
       approvalId: "ff12aa90",
       suggestedDecision: "deny",
     });
+  });
+
+  it("persists and updates mini app queue requests", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "orion-miniapp-queue-"));
+    try {
+      const request = persistQueueRequest(root, {
+        jobId: "job-1",
+        status: "queued",
+        message: "Captured for POLARIS.",
+        intakePath: "tasks/INTAKE/example.md",
+        packetNumber: 5,
+        createdAt: "2026-04-28T13:00:00.000Z",
+      });
+
+      expect(readQueueRequests(root)).toEqual([request]);
+      expect(updateQueueRequestStatus(root, request.id, "refresh_delayed")).toMatchObject({
+        id: request.id,
+        status: "refresh_delayed",
+      });
+      expect(readQueueRequests(root)[0]).toMatchObject({ id: request.id, status: "refresh_delayed" });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

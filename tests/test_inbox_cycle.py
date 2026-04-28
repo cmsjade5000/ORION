@@ -118,6 +118,38 @@ class TestInboxCycle(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn("runner failed", stderr.getvalue())
 
+    def test_cycle_continues_when_email_reply_worker_fails(self):
+        root = Path("/tmp/orion-cycle-test")
+        calls = []
+
+        def _runner(argv, text, capture_output, check):
+            calls.append(argv)
+            if argv[1].endswith("run_inbox_packets.py"):
+                return SimpleNamespace(returncode=0, stdout="RUNNER_IDLE\n", stderr="")
+            if argv[1].endswith("email_reply_worker.py"):
+                return SimpleNamespace(returncode=1, stdout="EMAIL_REPLY_WORKER processed=0\n", stderr="EMAIL_REPLY_ERROR stale\n")
+            if argv[1].endswith("task_execution_loop.py"):
+                return SimpleNamespace(returncode=0, stdout="TASK_LOOP_OK stale=0 actions=1 apply=1\n", stderr="")
+            if argv[1].endswith("notify_inbox_results.py"):
+                return SimpleNamespace(returncode=0, stdout="NOTIFY_OK\n", stderr="")
+            if argv[1].endswith("archive_completed_inbox_packets.py"):
+                return SimpleNamespace(returncode=0, stdout='{"archived_count": 0, "older_than_hours": 48.0}\n', stderr="")
+            if argv[1].endswith("inbox_doctor.py"):
+                return SimpleNamespace(returncode=0, stdout='{"ok": true, "issues": []}\n', stderr="")
+            raise AssertionError(f"Unexpected argv: {argv}")
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(self.mod.subprocess, "run", side_effect=_runner):
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = self.mod.run(root, runner_max_packets=4, stale_hours=24.0, notify_max_per_run=8)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(calls), 6)
+        self.assertIn("EMAIL_REPLY_ERROR stale", stderr.getvalue())
+        self.assertTrue(any(argv[1].endswith("task_execution_loop.py") for argv in calls))
+        self.assertIn("INBOX_DOCTOR OK", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

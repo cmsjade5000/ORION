@@ -107,20 +107,78 @@ def _run_text_command(argv: list[str], *, cwd: Path, timeout: int = 20) -> tuple
     return True, (proc.stdout or "").strip()
 
 
+def _short_term_recall_audit_from_disk(root: Path) -> dict:
+    store_path = root / "memory" / ".dreams" / "short-term-recall.json"
+    if not store_path.exists():
+        return {
+            "exists": False,
+            "entryCount": 0,
+            "updatedAt": None,
+            "storePath": str(store_path),
+        }
+
+    entry_count = 0
+    updated_at = None
+    try:
+        raw = json.loads(store_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        raw = None
+
+    if isinstance(raw, list):
+        entry_count = len(raw)
+    elif isinstance(raw, dict):
+        updated_at = raw.get("updatedAt")
+        for key in ("entries", "items", "recalls", "records"):
+            value = raw.get(key)
+            if isinstance(value, list):
+                entry_count = len(value)
+                break
+            if isinstance(value, dict):
+                entry_count = len(value)
+                break
+
+    return {
+        "exists": True,
+        "entryCount": entry_count,
+        "updatedAt": updated_at,
+        "storePath": str(store_path),
+    }
+
+
+def _main_memory_sources_from_config(root: Path) -> list[str]:
+    agents_payload = run_json_command(["openclaw", "config", "get", "agents.list", "--json"], cwd=root, timeout=5)
+    if not isinstance(agents_payload, list):
+        return []
+    for item in agents_payload:
+        if not isinstance(item, dict) or item.get("id") != "main":
+            continue
+        memory_search = item.get("memorySearch") or {}
+        if not isinstance(memory_search, dict):
+            return []
+        sources = memory_search.get("sources") or []
+        return sources if isinstance(sources, list) else []
+    return []
+
+
 def _dreaming_status_payload(root: Path) -> dict:
     slot_ok, slot = _run_text_command(["openclaw", "config", "get", "plugins.slots.memory"], cwd=root)
     enabled_ok, enabled_raw = _run_text_command(
         ["openclaw", "config", "get", "plugins.entries.memory-core.config.dreaming.enabled"],
         cwd=root,
     )
-    memory_payload = run_json_command(["openclaw", "memory", "status", "--agent", "main", "--json"], cwd=root, timeout=45)
-
-    entry = memory_payload[0] if isinstance(memory_payload, list) and memory_payload else {}
-    status = entry.get("status") or {}
-    audit = entry.get("audit") or {}
+    sources = _main_memory_sources_from_config(root)
+    audit = _short_term_recall_audit_from_disk(root)
+    entry = {}
+    if not audit.get("exists") or not sources:
+        memory_payload = run_json_command(["openclaw", "memory", "status", "--agent", "main", "--json"], cwd=root, timeout=5)
+        entry = memory_payload[0] if isinstance(memory_payload, list) and memory_payload else {}
+        status = entry.get("status") or {}
+        status_audit = entry.get("audit") or {}
+        if status_audit.get("exists") or not audit.get("exists"):
+            audit = status_audit or audit
+        sources = sources or status.get("sources") or []
 
     enabled = enabled_raw.lower() == "true" if enabled_ok else None
-    sources = status.get("sources") or []
 
     return {
         "slot": slot if slot_ok else None,
@@ -160,8 +218,16 @@ def _render_dreaming_status(root: Path) -> str:
         lines.append("- Fix needed: dreaming requires the memory slot to be memory-core.")
     elif enabled is False:
         lines.append("- Fix needed: dreaming is disabled in runtime config.")
+    elif not payload["recall_exists"]:
+        lines.append(
+            "- Fix needed: dreaming is enabled, but the short-term recall store is missing; promotion cannot run yet."
+        )
+    elif payload["recall_entries"] <= 0:
+        lines.append(
+            "- Dreaming is enabled and the recall store exists, but no recall entries are staged yet."
+        )
     else:
-        lines.append("- Dreaming is active in runtime config and writing to the short-term recall store.")
+        lines.append("- Dreaming is active and the short-term recall store has staged recall entries.")
 
     return "\n".join(lines)
 

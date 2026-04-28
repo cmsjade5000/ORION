@@ -52,7 +52,7 @@ CANONICAL_CRON_LABELS = {
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
-RE_RESULT_STATUS = re.compile(r"^\s*-?\s*Status:\s*(OK|FAILED|BLOCKED)\b", re.IGNORECASE)
+RE_RESULT_STATUS = re.compile(r"^\s*-?\s*Status:\s*(OK|FAILED|BLOCKED|CANCELLED)\b", re.IGNORECASE)
 RE_TICKET_PATH = re.compile(r"(tasks/WORK/(?:backlog|in-progress|testing|done)/\d{4}-[a-z0-9][a-z0-9-]*\.md)")
 NEXT_PACKET_PREFIX = "Next Packet "
 
@@ -458,6 +458,16 @@ def _run_capture(argv: list[str]) -> CommandSnapshot:
 
 
 def _collect_openclaw_snapshot() -> OpenClawSnapshot:
+    if os.environ.get("ORION_TASK_LOOP_SKIP_OPENCLAW_SNAPSHOT") == "1":
+        skipped = CommandSnapshot(argv=[], returncode=0, stdout="", stderr="", data={})
+        return OpenClawSnapshot(
+            gateway_health=skipped,
+            gateway_status=skipped,
+            channels_status=skipped,
+            tasks_list=skipped,
+            tasks_audit=skipped,
+        )
+
     commands = {
         "gateway_health": ["openclaw", "gateway", "health"],
         "gateway_status": ["openclaw", "gateway", "status", "--json"],

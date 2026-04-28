@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 
@@ -29,6 +30,109 @@ function readJsonLines(filePath) {
   } catch {
     return [];
   }
+}
+
+function queueRequestsPath(workspaceRoot) {
+  const repoRoot = repoRootFromWorkspace(workspaceRoot);
+  return path.join(repoRoot, "tasks", "STATE", "miniapp_queue_requests.json");
+}
+
+function normalizeQueueRequest(row) {
+  if (!row || typeof row !== "object") return null;
+  const status = String(row.status || "").trim();
+  if (!["queued", "refresh_delayed", "failed"].includes(status)) return null;
+  const id = String(row.id || "").trim();
+  const jobId = String(row.jobId || row.job_id || "").trim();
+  const createdAt = String(row.createdAt || "").trim();
+  if (!id || !jobId || !createdAt) return null;
+  const packetNumber = Number(row.packetNumber || row.packet_number || 0);
+  return {
+    id,
+    jobId,
+    owner: "POLARIS",
+    status,
+    message: String(row.message || "").trim() || "Follow-up queued for POLARIS.",
+    intakePath: String(row.intakePath || row.intake_path || "").trim(),
+    ...(Number.isFinite(packetNumber) && packetNumber > 0 ? { packetNumber } : {}),
+    createdAt,
+  };
+}
+
+function readQueueRequests(workspaceRoot, limit = 20) {
+  const filePath = queueRequestsPath(workspaceRoot);
+  const payload = readJson(filePath, { requests: [] });
+  const rows = Array.isArray(payload) ? payload : Array.isArray(payload.requests) ? payload.requests : [];
+  return rows
+    .map(normalizeQueueRequest)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit);
+}
+
+function writeQueueRequests(workspaceRoot, requests) {
+  const filePath = queueRequestsPath(workspaceRoot);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const normalized = (Array.isArray(requests) ? requests : [])
+    .map(normalizeQueueRequest)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 40);
+  const payload = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    requests: normalized,
+  };
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fs.renameSync(tempPath, filePath);
+  return normalized;
+}
+
+function recentQueueRequestForJob(workspaceRoot, jobId, maxAgeMinutes = 10) {
+  const targetJobId = String(jobId || "").trim();
+  if (!targetJobId) return null;
+  const maxAgeMs = maxAgeMinutes * 60 * 1000;
+  const now = Date.now();
+  return (
+    readQueueRequests(workspaceRoot, 40).find((request) => {
+      const ageMs = now - Date.parse(request.createdAt);
+      return request.jobId === targetJobId && request.status !== "failed" && Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= maxAgeMs;
+    }) || null
+  );
+}
+
+function persistQueueRequest(workspaceRoot, input) {
+  const request = normalizeQueueRequest({
+    id: input.id || `qr_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`,
+    jobId: input.jobId,
+    owner: "POLARIS",
+    status: input.status || "queued",
+    message: input.message,
+    intakePath: input.intakePath,
+    packetNumber: input.packetNumber,
+    createdAt: input.createdAt || new Date().toISOString(),
+  });
+  if (!request) {
+    throw new Error("invalid queue request");
+  }
+  const existing = readQueueRequests(workspaceRoot, 40).filter((row) => row.id !== request.id);
+  writeQueueRequests(workspaceRoot, [request, ...existing]);
+  return request;
+}
+
+function updateQueueRequestStatus(workspaceRoot, requestId, status) {
+  const targetId = String(requestId || "").trim();
+  const nextStatus = String(status || "").trim();
+  if (!targetId || !["queued", "refresh_delayed", "failed"].includes(nextStatus)) return null;
+  let updated = null;
+  const requests = readQueueRequests(workspaceRoot, 40).map((request) => {
+    if (request.id !== targetId) return request;
+    updated = { ...request, status: nextStatus };
+    return updated;
+  });
+  if (!updated) return null;
+  writeQueueRequests(workspaceRoot, requests);
+  return updated;
 }
 
 async function runJsonCommand(command, argv, cwd, env = process.env) {
@@ -208,6 +312,7 @@ function inboxState(workspaceRoot) {
     jobs,
     blockedJobs,
     pendingVerificationJobs,
+    queueRequests: readQueueRequests(workspaceRoot, 20),
   };
 }
 
@@ -225,10 +330,15 @@ module.exports = {
   inboxState,
   jobsSummary,
   packetPreview,
+  persistQueueRequest,
+  queueRequestsPath,
   readJson,
   readJsonLines,
+  readQueueRequests,
   recentApprovalPrompts,
+  recentQueueRequestForJob,
   reviewState,
   runJsonCommand,
   runTextCommand,
+  updateQueueRequestStatus,
 };

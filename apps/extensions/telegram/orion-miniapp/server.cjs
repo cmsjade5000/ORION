@@ -5,11 +5,24 @@ const http = require("node:http");
 const { createChatManager } = require("./chat.cjs");
 const { publicConfig } = require("./config.cjs");
 const { validateInitData } = require("./auth.cjs");
-const { approvalSnapshot, findJobById, homeState, inboxState, packetPreview, reviewState, runJsonCommand } = require("./state.cjs");
+const {
+  approvalSnapshot,
+  findJobById,
+  homeState,
+  inboxState,
+  packetPreview,
+  persistQueueRequest,
+  readQueueRequests,
+  recentQueueRequestForJob,
+  reviewState,
+  runJsonCommand,
+  updateQueueRequestStatus,
+} = require("./state.cjs");
 
 const CONFIG = publicConfig();
 const PUBLIC_DIR = path.join(__dirname, "public");
 const chatManager = createChatManager({ workspaceRoot: CONFIG.workspaceRoot });
+const activeFollowupJobs = new Set();
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
@@ -34,6 +47,14 @@ function readBody(req) {
     req.on("end", () => resolve(body));
     req.on("error", reject);
   });
+}
+
+function publicApiError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/miniapp-auth:/i.test(message)) return message;
+  if (/job not found/i.test(message)) return "job not found";
+  if (/already queuing/i.test(message)) return "follow-up already queuing";
+  return "ORION could not complete that backend action.";
 }
 
 function initDataFromRequest(req) {
@@ -130,7 +151,7 @@ async function withAuth(req, res, handler) {
     await handler(validated.fields);
   } catch (error) {
     sendJson(res, 500, {
-      error: error instanceof Error ? error.message : String(error || "unknown error"),
+      error: publicApiError(error),
     });
   }
 }
@@ -173,6 +194,12 @@ async function routeApi(req, res, pathname) {
   if (pathname === "/api/inbox") {
     return withAuth(req, res, async () => {
       sendJson(res, 200, inboxState(CONFIG.workspaceRoot));
+    });
+  }
+
+  if (pathname === "/api/queue-requests" && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      sendJson(res, 200, { ok: true, queueRequests: readQueueRequests(CONFIG.workspaceRoot, 20) });
     });
   }
 
@@ -288,34 +315,81 @@ async function routeApi(req, res, pathname) {
   const followupMatch = pathname.match(/^\/api\/jobs\/([^/]+)\/followup$/i);
   if (followupMatch && req.method === "POST") {
     return withAuth(req, res, async () => {
-      const job = findJobById(CONFIG.workspaceRoot, followupMatch[1]);
+      const jobId = decodeURIComponent(followupMatch[1]);
+      const job = findJobById(CONFIG.workspaceRoot, jobId);
       if (!job) {
         sendJson(res, 404, { error: "job not found" });
         return;
       }
-      const inboxPath = job.inbox && job.inbox.path ? `${job.inbox.path}${job.inbox.line ? `:${job.inbox.line}` : ""}` : "n/a";
-      const captureText = [
-        "Follow up on delegated ORION work.",
-        `Owner: ${job.owner || "unknown"}`,
-        `State: ${job.state || "unknown"}`,
-        `Objective: ${job.objective || "(no objective)"}`,
-        `Inbox: ${inboxPath}`,
-      ].join("\n");
-      const payload = await runJsonCommand(
-        "python3",
-        [
-          "scripts/assistant_capture.py",
-          "--repo-root",
-          CONFIG.workspaceRoot,
-          "--text",
-          captureText,
-          "--notify",
-          "telegram",
-          "--json",
-        ],
-        CONFIG.workspaceRoot
-      );
-      sendJson(res, 200, payload || { message: "Follow-up queued for POLARIS." });
+      const lockKey = String(job.job_id || jobId);
+      if (activeFollowupJobs.has(lockKey)) {
+        sendJson(res, 409, { error: "follow-up already queuing" });
+        return;
+      }
+      const recentRequest = recentQueueRequestForJob(CONFIG.workspaceRoot, job.job_id);
+      if (recentRequest) {
+        sendJson(res, 200, {
+          ok: true,
+          duplicate: true,
+          message: recentRequest.message,
+          request: recentRequest,
+        });
+        return;
+      }
+      activeFollowupJobs.add(lockKey);
+      try {
+        const inboxPath = job.inbox && job.inbox.path ? `${job.inbox.path}${job.inbox.line ? `:${job.inbox.line}` : ""}` : "n/a";
+        const captureText = [
+          "Follow up on delegated ORION work.",
+          `Owner: ${job.owner || "unknown"}`,
+          `State: ${job.state || "unknown"}`,
+          `Objective: ${job.objective || "(no objective)"}`,
+          `Inbox: ${inboxPath}`,
+        ].join("\n");
+        const payload = await runJsonCommand(
+          "python3",
+          [
+            "scripts/assistant_capture.py",
+            "--repo-root",
+            CONFIG.workspaceRoot,
+            "--text",
+            captureText,
+            "--notify",
+            "telegram",
+            "--json",
+          ],
+          CONFIG.workspaceRoot
+        );
+        const request = persistQueueRequest(CONFIG.workspaceRoot, {
+          jobId: job.job_id,
+          owner: "POLARIS",
+          status: "queued",
+          message: payload && payload.message ? payload.message : "Follow-up queued for POLARIS.",
+          intakePath: payload && payload.intake_path ? payload.intake_path : "",
+          packetNumber: payload && payload.packet_number ? payload.packet_number : undefined,
+        });
+        sendJson(res, 200, {
+          ok: true,
+          message: request.message,
+          request,
+        });
+      } finally {
+        activeFollowupJobs.delete(lockKey);
+      }
+    });
+  }
+
+  const queueStatusMatch = pathname.match(/^\/api\/queue-requests\/([^/]+)\/status$/i);
+  if (queueStatusMatch && req.method === "PATCH") {
+    return withAuth(req, res, async () => {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const status = String(body.status || "").trim();
+      const request = updateQueueRequestStatus(CONFIG.workspaceRoot, decodeURIComponent(queueStatusMatch[1]), status);
+      if (!request) {
+        sendJson(res, 404, { error: "queue request not found" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, request });
     });
   }
 

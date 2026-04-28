@@ -213,14 +213,106 @@ class TestEmailReplyWorker(unittest.TestCase):
                 raise AssertionError(argv)
 
             with mock.patch.object(self.worker.subprocess, "run", side_effect=_runner):
-                with self.assertRaisesRegex(RuntimeError, "no sent message_id"):
-                    self.worker.process_replies(
-                        root,
-                        max_packets=1,
-                        from_inbox="orion_gatewaybot@agentmail.to",
-                        trusted_sender="cory.stoner@icloud.com",
-                    )
+                result = self.worker.process_replies(
+                    root,
+                    max_packets=1,
+                    from_inbox="orion_gatewaybot@agentmail.to",
+                    trusted_sender="cory.stoner@icloud.com",
+                )
+            self.assertEqual(result["failed_count"], 1)
+            self.assertIn("no sent message_id", result["failed"][0]["error"])
             self.assertNotIn("Result:\nStatus:", inbox.read_text(encoding="utf-8"))
+
+    def test_stale_non_latest_packet_is_blocked_without_send(self):
+        with self._root() as td:
+            root = Path(td)
+            inbox = self._write_inbox(
+                root,
+                overrides={
+                    "Message ID": "<old@icloud.com>",
+                    "Timestamp": "2026-04-11T16:42:08.000Z",
+                    "Subject": "Old reply",
+                    "Request Summary": "Subject: Old reply. Ask: Please reply.",
+                    "Idempotency Key": "old-key",
+                },
+            )
+
+            def _runner(argv, cwd, text, capture_output, check):
+                if argv[:3] == ["node", "skills/agentmail/cli.js", "list-messages"]:
+                    return SimpleNamespace(
+                        returncode=0,
+                        stdout=json.dumps(
+                            {
+                                "messages": [
+                                    {
+                                        "message_id": "<new@icloud.com>",
+                                        "from": "Cory Stoner <cory.stoner@icloud.com>",
+                                        "labels": ["received"],
+                                    }
+                                ]
+                            }
+                        ),
+                        stderr="",
+                    )
+                raise AssertionError(f"send/compose should not run for stale packet: {argv}")
+
+            with mock.patch.object(self.worker.subprocess, "run", side_effect=_runner):
+                result = self.worker.process_replies(
+                    root,
+                    max_packets=1,
+                    from_inbox="orion_gatewaybot@agentmail.to",
+                    trusted_sender="cory.stoner@icloud.com",
+                )
+
+            self.assertEqual(result["blocked_count"], 1)
+            text = inbox.read_text(encoding="utf-8")
+            self.assertIn("Result:\nStatus: BLOCKED", text)
+            self.assertIn("AgentMail reply-last would target a newer trusted message", text)
+
+    def test_duplicate_completed_packet_is_terminalized_without_duplicate_send(self):
+        with self._root() as td:
+            root = Path(td)
+            inbox = self._write_inbox(root)
+            inbox.write_text(
+                inbox.read_text(encoding="utf-8")
+                + "\nResult:\nStatus: OK\nWhat changed / what I found:\n"
+                + "  - Auto-sent low-risk AgentMail reply for trusted sender.\n"
+                + "  - Replied-to message id: <3AB951E4-A854-4DCB-8F02-D91DE5335824@icloud.com>\n"
+                + "  - Sent message id: <sent-1@email.amazonses.com>\n"
+                + "Next step (if any):\n  - None.\n\n",
+                encoding="utf-8",
+            )
+            inbox.write_text(
+                inbox.read_text(encoding="utf-8")
+                + "\nTASK_PACKET v1\n"
+                + "Owner: SCRIBE\nRequester: ORION\n"
+                + "Objective: Create a send-ready draft response from the inbound request context.\n"
+                + "Notify: telegram\nIdempotency Key: 4022ed2e1626dbabfe1a\n"
+                + "Inputs:\n"
+                + "- Message ID: <3AB951E4-A854-4DCB-8F02-D91DE5335824@icloud.com>\n"
+                + "- Timestamp: 2026-04-28T00:43:32.000Z\n"
+                + "- Sender: Cory Stoner <cory.stoner@icloud.com>\n"
+                + "- Sender Domain: icloud.com\n"
+                + "- Subject: Orion, reply\n"
+                + "- Request Summary: Subject: Orion, reply. Ask: Hi orion, This is a test.\n"
+                + "- Link Domains: (none)\n"
+                + "- Attachment Types: (none)\n"
+                + "Risks:\n- low\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(self.worker.subprocess, "run", side_effect=AssertionError("duplicate should not send")):
+                result = self.worker.process_replies(
+                    root,
+                    max_packets=1,
+                    from_inbox="orion_gatewaybot@agentmail.to",
+                    trusted_sender="cory.stoner@icloud.com",
+                )
+
+            self.assertEqual(result["deduped_count"], 1)
+            text = inbox.read_text(encoding="utf-8")
+            self.assertIn("Duplicate of already completed email reply packet.", text)
+            self.assertEqual(text.count("Sent message id: <sent-1@email.amazonses.com>"), 1)
 
     def test_stuck_alert_fires_once(self):
         with self._root() as td:
