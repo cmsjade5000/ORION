@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const { extractApprovalFromText, findJobById, isCompletedJob, packetPreview } = require("./state.cjs");
+const { extractApprovalFromText, jobDetail, persistQueueRequest, readQueueRequests, updateQueueRequestStatus } = require("./state.cjs");
 
 describe("mini app approval scanning", () => {
   it("extracts approve commands", () => {
@@ -19,44 +19,67 @@ describe("mini app approval scanning", () => {
       suggestedDecision: "deny",
     });
   });
-});
 
-describe("mini app delegated job preview", () => {
-  function withSummary(summary: object, run: (root: string) => void) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "orion-miniapp-state-"));
+  it("persists and updates mini app queue requests", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "orion-miniapp-queue-"));
     try {
-      const jobsDir = path.join(root, "tasks", "JOBS");
-      fs.mkdirSync(jobsDir, { recursive: true });
-      fs.writeFileSync(path.join(jobsDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
-      run(root);
+      const request = persistQueueRequest(root, {
+        jobId: "job-1",
+        status: "queued",
+        message: "Captured for POLARIS.",
+        intakePath: "tasks/INTAKE/example.md",
+        packetNumber: 5,
+        createdAt: "2026-04-28T13:00:00.000Z",
+      });
+
+      expect(readQueueRequests(root)).toEqual([request]);
+      expect(updateQueueRequestStatus(root, request.id, "refresh_delayed")).toMatchObject({
+        id: request.id,
+        status: "refresh_delayed",
+      });
+      expect(readQueueRequests(root)[0]).toMatchObject({ id: request.id, status: "refresh_delayed" });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
-  }
-
-  it("treats complete and ok-result jobs as completed", () => {
-    expect(isCompletedJob({ state: "complete", result: { status: "pending" } })).toBe(true);
-    expect(isCompletedJob({ state: "pending_verification", result: { status: "ok" } })).toBe(true);
-    expect(isCompletedJob({ state: "blocked", result: { status: "failed" } })).toBe(false);
-    expect(isCompletedJob({ state: "queued", result: { status: "pending" } })).toBe(false);
   });
 
-  it("omits completed jobs from active previews while preserving direct lookup", () => {
-    withSummary(
-      {
-        counts: { complete: 1, pending_verification: 1, queued: 1, blocked: 1 },
-        jobs: [
-          { job_id: "done-state", state: "complete", result: { status: "pending" } },
-          { job_id: "done-result", state: "pending_verification", result: { status: "ok" } },
-          { job_id: "queued", state: "queued", result: { status: "pending" } },
-          { job_id: "blocked", state: "blocked", result: { status: "failed" } },
-        ],
-      },
-      (root) => {
-        const preview = packetPreview(root);
-        expect(preview.jobs.map((job: { job_id: string }) => job.job_id)).toEqual(["queued", "blocked"]);
-        expect(findJobById(root, "done-result")).toMatchObject({ job_id: "done-result" });
-      }
-    );
+  it("builds readable mission detail from summary and inbox packet text", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "orion-miniapp-detail-"));
+    try {
+      fs.mkdirSync(path.join(root, "tasks", "JOBS"), { recursive: true });
+      fs.mkdirSync(path.join(root, "tasks", "INBOX"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, "tasks", "JOBS", "summary.json"),
+        JSON.stringify({
+          counts: { blocked: 1 },
+          jobs: [
+            {
+              job_id: "job-1",
+              state: "blocked",
+              state_reason: "waiting_on_context",
+              owner: "ATLAS",
+              objective: "Recover the queue.",
+              inbox: { path: "tasks/INBOX/ATLAS.md", line: 3 },
+              result: { preview_lines: ["Status: BLOCKED", "Need Cory context."] },
+            },
+          ],
+        }),
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(root, "tasks", "INBOX", "ATLAS.md"),
+        ["# ATLAS", "", "TASK_PACKET v1", "Owner: ATLAS", "Objective: Recover the queue.", "", "TASK_PACKET v1", "Owner: ATLAS"].join("\n"),
+        "utf8"
+      );
+
+      expect(jobDetail(root, "job-1")).toMatchObject({
+        needSummary: "Blocked: waiting_on_context",
+        nextStep: "Queue a follow-up so POLARIS can recover the blocked work with context.",
+        packetText: expect.stringContaining("Objective: Recover the queue."),
+        resultLines: ["Status: BLOCKED", "Need Cory context."],
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

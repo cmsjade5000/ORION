@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const { createChatManager, stableConversationId, stableSessionId, userFacingRuntimeError } = require("./chat.cjs");
+const { createChatManager, defaultExecuteTurn, stableConversationId, stableSessionId, userFacingRuntimeError } = require("./chat.cjs");
 
 describe("mini app chat manager", () => {
   it("creates stable bridge ids", () => {
@@ -36,5 +36,12 @@ describe("mini app chat manager", () => {
   it("normalizes runtime errors into bridge-friendly copy", () => {
     expect(userFacingRuntimeError("timed out after 180s")).toContain("too long");
     expect(userFacingRuntimeError("something awful happened")).toContain("runtime snag");
+  });
+
+  it("keeps default bridge turns on a bounded timeout", () => {
+    const source = defaultExecuteTurn.toString();
+    expect(source).toContain("ORION_MINIAPP_TURN_TIMEOUT_SECONDS");
+    expect(source).toContain('"90"');
+    expect(source).toContain("child.kill");
   });
 });

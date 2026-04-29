@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 
@@ -29,6 +30,109 @@ function readJsonLines(filePath) {
   } catch {
     return [];
   }
+}
+
+function queueRequestsPath(workspaceRoot) {
+  const repoRoot = repoRootFromWorkspace(workspaceRoot);
+  return path.join(repoRoot, "tasks", "STATE", "miniapp_queue_requests.json");
+}
+
+function normalizeQueueRequest(row) {
+  if (!row || typeof row !== "object") return null;
+  const status = String(row.status || "").trim();
+  if (!["queued", "refresh_delayed", "failed"].includes(status)) return null;
+  const id = String(row.id || "").trim();
+  const jobId = String(row.jobId || row.job_id || "").trim();
+  const createdAt = String(row.createdAt || "").trim();
+  if (!id || !jobId || !createdAt) return null;
+  const packetNumber = Number(row.packetNumber || row.packet_number || 0);
+  return {
+    id,
+    jobId,
+    owner: "POLARIS",
+    status,
+    message: String(row.message || "").trim() || "Follow-up queued for POLARIS.",
+    intakePath: String(row.intakePath || row.intake_path || "").trim(),
+    ...(Number.isFinite(packetNumber) && packetNumber > 0 ? { packetNumber } : {}),
+    createdAt,
+  };
+}
+
+function readQueueRequests(workspaceRoot, limit = 20) {
+  const filePath = queueRequestsPath(workspaceRoot);
+  const payload = readJson(filePath, { requests: [] });
+  const rows = Array.isArray(payload) ? payload : Array.isArray(payload.requests) ? payload.requests : [];
+  return rows
+    .map(normalizeQueueRequest)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, limit);
+}
+
+function writeQueueRequests(workspaceRoot, requests) {
+  const filePath = queueRequestsPath(workspaceRoot);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const normalized = (Array.isArray(requests) ? requests : [])
+    .map(normalizeQueueRequest)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 40);
+  const payload = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    requests: normalized,
+  };
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fs.renameSync(tempPath, filePath);
+  return normalized;
+}
+
+function recentQueueRequestForJob(workspaceRoot, jobId, maxAgeMinutes = 10) {
+  const targetJobId = String(jobId || "").trim();
+  if (!targetJobId) return null;
+  const maxAgeMs = maxAgeMinutes * 60 * 1000;
+  const now = Date.now();
+  return (
+    readQueueRequests(workspaceRoot, 40).find((request) => {
+      const ageMs = now - Date.parse(request.createdAt);
+      return request.jobId === targetJobId && request.status !== "failed" && Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= maxAgeMs;
+    }) || null
+  );
+}
+
+function persistQueueRequest(workspaceRoot, input) {
+  const request = normalizeQueueRequest({
+    id: input.id || `qr_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`,
+    jobId: input.jobId,
+    owner: "POLARIS",
+    status: input.status || "queued",
+    message: input.message,
+    intakePath: input.intakePath,
+    packetNumber: input.packetNumber,
+    createdAt: input.createdAt || new Date().toISOString(),
+  });
+  if (!request) {
+    throw new Error("invalid queue request");
+  }
+  const existing = readQueueRequests(workspaceRoot, 40).filter((row) => row.id !== request.id);
+  writeQueueRequests(workspaceRoot, [request, ...existing]);
+  return request;
+}
+
+function updateQueueRequestStatus(workspaceRoot, requestId, status) {
+  const targetId = String(requestId || "").trim();
+  const nextStatus = String(status || "").trim();
+  if (!targetId || !["queued", "refresh_delayed", "failed"].includes(nextStatus)) return null;
+  let updated = null;
+  const requests = readQueueRequests(workspaceRoot, 40).map((request) => {
+    if (request.id !== targetId) return request;
+    updated = { ...request, status: nextStatus };
+    return updated;
+  });
+  if (!updated) return null;
+  writeQueueRequests(workspaceRoot, requests);
+  return updated;
 }
 
 async function runJsonCommand(command, argv, cwd, env = process.env) {
@@ -69,21 +173,101 @@ function jobsSummary(workspaceRoot) {
   });
 }
 
-function isCompletedJob(job) {
-  const state = String(job && job.state ? job.state : "").toLowerCase();
-  const result = job && typeof job.result === "object" && job.result ? job.result : {};
-  const resultStatus = String(result.status || "").toLowerCase();
-  return state === "complete" || resultStatus === "ok";
-}
-
 function packetPreview(workspaceRoot) {
   const summary = jobsSummary(workspaceRoot);
-  const jobs = Array.isArray(summary.jobs) ? summary.jobs : [];
   return {
     counts: summary.counts || {},
     updatedTs: summary.updated_ts || null,
-    jobs: jobs.filter((job) => !isCompletedJob(job)).slice(0, 8),
+    jobs: Array.isArray(summary.jobs) ? summary.jobs.slice(0, 8) : [],
     workflows: Array.isArray(summary.workflows) ? summary.workflows.slice(0, 6) : [],
+  };
+}
+
+function safeWorkspacePath(workspaceRoot, relativePath) {
+  const repoRoot = repoRootFromWorkspace(workspaceRoot);
+  const clean = String(relativePath || "").trim();
+  if (!clean || path.isAbsolute(clean)) return null;
+  const resolved = path.resolve(repoRoot, clean);
+  if (resolved !== repoRoot && !resolved.startsWith(`${repoRoot}${path.sep}`)) return null;
+  return resolved;
+}
+
+function readPacketExcerpt(workspaceRoot, inbox) {
+  const filePath = safeWorkspacePath(workspaceRoot, inbox && inbox.path);
+  if (!filePath) return "";
+  let lines = [];
+  try {
+    lines = fs.readFileSync(filePath, "utf8").split("\n");
+  } catch {
+    return "";
+  }
+  if (!lines.length) return "";
+  const lineIndex = Math.max(0, Number(inbox && inbox.line ? inbox.line : 1) - 1);
+  let start = lineIndex;
+  while (start > 0 && !/^TASK_PACKET\b/.test(lines[start])) start -= 1;
+  if (!/^TASK_PACKET\b/.test(lines[start])) start = lineIndex;
+  let end = start + 1;
+  while (end < lines.length && !/^TASK_PACKET\b/.test(lines[end])) end += 1;
+  return lines.slice(start, end).join("\n").trim();
+}
+
+function approvalMatchesJob(approval, job) {
+  const haystack = [
+    approval && approval.summary,
+    approval && approval.label,
+    approval && approval.sessionKey,
+    approval && approval.sessionId,
+  ]
+    .join("\n")
+    .toLowerCase();
+  const jobId = String(job && job.job_id ? job.job_id : "").toLowerCase();
+  const workflowId = String(job && job.workflow_id ? job.workflow_id : "").toLowerCase();
+  const owner = String(job && job.owner ? job.owner : "").toLowerCase();
+  const objective = String(job && job.objective ? job.objective : "").toLowerCase();
+  if (jobId && haystack.includes(jobId)) return true;
+  if (workflowId && haystack.includes(workflowId)) return true;
+  if (owner && haystack.includes(owner) && objective) {
+    const tokens = objective
+      .split(/[^a-z0-9]+/i)
+      .filter((token) => token.length >= 6)
+      .slice(0, 6);
+    if (tokens.some((token) => haystack.includes(token))) return true;
+  }
+  return false;
+}
+
+function deriveNeedSummary(job, relatedApprovals) {
+  const state = String(job && job.state ? job.state : "").toLowerCase();
+  if (relatedApprovals.length) return "Approval is waiting. Review the request and choose Allow Once, Always, or Deny.";
+  if (state === "blocked") return job.state_reason ? `Blocked: ${job.state_reason}` : "Blocked and needs a follow-up or fresh input.";
+  if (state === "pending_verification") return "Work is back from the specialist and needs verification before it can be treated as done.";
+  if (state === "queued" || state === "running") return "Work is in motion. Inspect the packet and wait for a result before nudging it.";
+  return "No immediate action detected. Review the packet if this still looks stale.";
+}
+
+function deriveNextStep(job, relatedApprovals) {
+  const state = String(job && job.state ? job.state : "").toLowerCase();
+  if (relatedApprovals.length) return "Use the approval buttons below, or copy the displayed Telegram command if live approval context is unavailable.";
+  if (state === "blocked") return "Queue a follow-up so POLARIS can recover the blocked work with context.";
+  if (state === "pending_verification") return "Read the result evidence. If it is sufficient, handle completion outside this Mini App; otherwise queue a follow-up.";
+  return "Keep monitoring unless the packet has aged or looks wrong.";
+}
+
+function jobDetail(workspaceRoot, jobId) {
+  const job = findJobById(workspaceRoot, jobId);
+  if (!job) return null;
+  const relatedApprovals = recentApprovalPrompts().filter((approval) => approvalMatchesJob(approval, job));
+  const resultLines =
+    job.result && Array.isArray(job.result.preview_lines)
+      ? job.result.preview_lines.map((line) => String(line || "")).filter(Boolean)
+      : [];
+  return {
+    job,
+    needSummary: deriveNeedSummary(job, relatedApprovals),
+    nextStep: deriveNextStep(job, relatedApprovals),
+    packetText: readPacketExcerpt(workspaceRoot, job.inbox),
+    resultLines,
+    relatedApprovals,
   };
 }
 
@@ -216,12 +400,12 @@ function inboxState(workspaceRoot) {
     jobs,
     blockedJobs,
     pendingVerificationJobs,
+    queueRequests: readQueueRequests(workspaceRoot, 20),
   };
 }
 
 function findJobById(workspaceRoot, jobId) {
-  const summary = jobsSummary(workspaceRoot);
-  const jobs = Array.isArray(summary.jobs) ? summary.jobs : [];
+  const jobs = packetPreview(workspaceRoot).jobs || [];
   return jobs.find((job) => String(job.job_id || "") === String(jobId || "")) || null;
 }
 
@@ -230,15 +414,20 @@ module.exports = {
   assistantMessage,
   extractApprovalFromText,
   findJobById,
+  jobDetail,
   homeState,
   inboxState,
-  isCompletedJob,
   jobsSummary,
   packetPreview,
+  persistQueueRequest,
+  queueRequestsPath,
   readJson,
   readJsonLines,
+  readQueueRequests,
   recentApprovalPrompts,
+  recentQueueRequestForJob,
   reviewState,
   runJsonCommand,
   runTextCommand,
+  updateQueueRequestStatus,
 };

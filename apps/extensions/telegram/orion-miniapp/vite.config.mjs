@@ -7,6 +7,7 @@ export default defineConfig({
   root: path.resolve("apps/extensions/telegram/orion-miniapp"),
   publicDir: false,
   build: {
+    target: "es2018",
     outDir: path.resolve("apps/extensions/telegram/orion-miniapp/public"),
     emptyOutDir: true,
     sourcemap: false,
