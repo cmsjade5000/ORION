@@ -75,6 +75,15 @@ export type JobItem = {
   };
 };
 
+export type JobDetailPayload = {
+  job: JobItem;
+  needSummary: string;
+  nextStep: string;
+  packetText: string;
+  resultLines: string[];
+  relatedApprovals: ApprovalItem[];
+};
+
 export type QueueRequestStatus = "queued" | "refresh_delayed" | "failed";
 
 export type QueueRequest = {

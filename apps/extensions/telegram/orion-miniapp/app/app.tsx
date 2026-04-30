@@ -5,6 +5,7 @@ import type {
   ChatRunPayload,
   HomePayload,
   InboxPayload,
+  JobDetailPayload,
   JobItem,
   MiniAppScreen,
   QueueRequest,
@@ -27,6 +28,7 @@ type ApiClient = {
   home(): Promise<HomePayload>;
   review(): Promise<ReviewPayload>;
   inbox(): Promise<InboxPayload>;
+  fetchJobDetail(jobId: string): Promise<JobDetailPayload>;
   sendChat(input: { conversationId: string; message: string }): Promise<ChatRunPayload>;
   fetchRun(runId: string): Promise<ChatRunPayload>;
   streamRun(runId: string, onRun: (payload: ChatRunPayload) => void, onError: (message: string) => void): () => void;
@@ -43,6 +45,14 @@ type BridgeStatus = {
 type QueueRequestView = Omit<QueueRequest, "status"> & {
   status: QueueRequestStatus | "queuing";
 };
+
+function safeNative(action: () => void) {
+  try {
+    action();
+  } catch {
+    // Telegram native button APIs vary by client/version; keep the web UI alive.
+  }
+}
 
 function encodeInitDataForUrl(value: string): string {
   return btoa(unescape(encodeURIComponent(value)))
@@ -161,6 +171,7 @@ export function createApiClient(): ApiClient {
     home: () => jsonFetch("/api/home"),
     review: () => jsonFetch("/api/review"),
     inbox: () => jsonFetch("/api/inbox"),
+    fetchJobDetail: (jobId) => jsonFetch(`/api/inbox/jobs/${encodeURIComponent(jobId)}`),
     sendChat: (input) =>
       jsonFetch("/api/chat/runs", {
         method: "POST",
@@ -206,6 +217,8 @@ type MiniAppViewProps = {
   bridgeStatus: BridgeStatus;
   conversation: ChatConversation | null;
   inbox: InboxPayload | null;
+  selectedJobDetail: JobDetailPayload | null;
+  detailLoading: boolean;
   home: HomePayload | null;
   review: ReviewPayload | null;
   queueRequests: QueueRequestView[];
@@ -369,6 +382,12 @@ export function MiniAppView(props: MiniAppViewProps) {
                     props.inbox.jobs.map((job) => {
                       const queueRequest = requestForJob(props.queueRequests, job.job_id);
                       const queueLocked = queueRequest && ["queuing", "queued", "refresh_delayed"].includes(queueRequest.status);
+                      const hasApproval = props.inbox?.approvals.some((approval) =>
+                        [approval.summary, approval.label, approval.sessionKey, approval.sessionId]
+                          .join(" ")
+                          .toLowerCase()
+                          .includes(job.job_id.toLowerCase())
+                      );
                       return (
                         <article key={job.job_id} className={`list-card tone-${statusTone(job.state)}`}>
                           <div className="list-card__meta">
@@ -376,6 +395,11 @@ export function MiniAppView(props: MiniAppViewProps) {
                             <span>{job.state.replace(/_/g, " ")}</span>
                           </div>
                           <p>{job.objective}</p>
+                          <div className="mission-hints">
+                            {hasApproval ? <span className="hint-pill tone-warn">Approval needed</span> : null}
+                            {job.state_reason ? <span className="hint-pill">{job.state_reason.replace(/_/g, " ")}</span> : null}
+                            {job.result?.status ? <span className={`hint-pill tone-${statusTone(job.result.status)}`}>Result {job.result.status}</span> : null}
+                          </div>
                           {queueRequest ? (
                             <div className={`queue-chip tone-${queueStatusTone(queueRequest.status)}`}>
                               <strong>{queueStatusLabel(queueRequest)}</strong>
@@ -412,9 +436,23 @@ export function MiniAppView(props: MiniAppViewProps) {
                   (() => {
                     const queueRequest = requestForJob(props.queueRequests, selectedJob.job_id);
                     const queueLocked = queueRequest && ["queuing", "queued", "refresh_delayed"].includes(queueRequest.status);
+                    const detail = props.selectedJobDetail && props.selectedJobDetail.job.job_id === selectedJob.job_id ? props.selectedJobDetail : null;
                     return (
                       <>
                         <p className="detail-title">{selectedJob.objective}</p>
+                        {props.detailLoading ? <div className="empty-mini">Loading mission context...</div> : null}
+                        {detail ? (
+                          <div className="mission-brief">
+                            <section>
+                              <h4>What It Needs</h4>
+                              <p>{detail.needSummary}</p>
+                            </section>
+                            <section>
+                              <h4>Next Move</h4>
+                              <p>{detail.nextStep}</p>
+                            </section>
+                          </div>
+                        ) : null}
                         <dl className="detail-grid">
                           <div>
                             <dt>Owner</dt>
@@ -434,6 +472,48 @@ export function MiniAppView(props: MiniAppViewProps) {
                             <strong>{queueStatusLabel(queueRequest)}</strong>
                             {queueRequest.intakePath ? <span>{queueRequest.intakePath}</span> : null}
                           </div>
+                        ) : null}
+                        {detail?.relatedApprovals.length ? (
+                          <div className="approval-stack">
+                            <h4>Approval Actions</h4>
+                            {detail.relatedApprovals.map((approval) => (
+                              <article key={approval.approvalId} className="approval-card">
+                                <div className="list-card__meta">
+                                  <span>{approval.label}</span>
+                                  <span>{formatRelativeTime(approval.ageMs)}</span>
+                                </div>
+                                <p>{approval.summary}</p>
+                                <code>{`/approve ${approval.approvalId} ${approval.suggestedDecision}`}</code>
+                                <div className="action-row">
+                                  <button
+                                    type="button"
+                                    className="button button--primary"
+                                    onClick={() => props.onApproval(approval.approvalId, "allow-once")}
+                                  >
+                                    Allow Once
+                                  </button>
+                                  <button type="button" className="button" onClick={() => props.onApproval(approval.approvalId, "allow-always")}>
+                                    Always
+                                  </button>
+                                  <button type="button" className="button button--ghost" onClick={() => props.onApproval(approval.approvalId, "deny")}>
+                                    Deny
+                                  </button>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+                        {detail?.resultLines.length ? (
+                          <details className="detail-disclosure" open>
+                            <summary>Result Evidence</summary>
+                            <pre>{detail.resultLines.join("\n")}</pre>
+                          </details>
+                        ) : null}
+                        {detail?.packetText ? (
+                          <details className="detail-disclosure">
+                            <summary>Original Packet</summary>
+                            <pre>{detail.packetText}</pre>
+                          </details>
                         ) : null}
                         <div className="action-row">
                           {isFollowupActionable(selectedJob) ? (
@@ -565,6 +645,8 @@ export function MiniApp({ api }: { api?: ApiClient }) {
   const [sending, setSending] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobDetail, setSelectedJobDetail] = useState<JobDetailPayload | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [queueRequests, setQueueRequests] = useState<QueueRequestView[]>([]);
   const streamCleanupRef = useRef<(() => void) | null>(null);
   const followupInFlightRef = useRef(new Set<string>());
@@ -657,6 +739,7 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     }
     if (screen === "inbox" && selectedJobId) {
       setSelectedJobId(null);
+      setSelectedJobDetail(null);
       return;
     }
     setScreen("chat");
@@ -669,39 +752,39 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     const mainClick = () => mainButtonClickRef.current();
     const backClick = () => backButtonClickRef.current();
 
-    mainButton.offClick(mainClick);
-    backButton.offClick(backClick);
-    mainButton.hideProgress?.();
-    mainButton.hide();
-    backButton.hide();
+    safeNative(() => mainButton.offClick(mainClick));
+    safeNative(() => backButton.offClick(backClick));
+    safeNative(() => mainButton.hideProgress?.());
+    safeNative(() => mainButton.hide());
+    safeNative(() => backButton.hide());
 
     if (screen === "chat") {
-      mainButton.setText(sending ? "Sending..." : "Send to ORION");
+      safeNative(() => mainButton.setText(sending ? "Sending..." : "Send to ORION"));
       lastChatCanSendRef.current = null;
-      mainButton.show();
-      mainButton.onClick(mainClick);
+      safeNative(() => mainButton.show());
+      safeNative(() => mainButton.onClick(mainClick));
     }
     if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
       const isQueued = selectedQueueRequest && ["queued", "refresh_delayed"].includes(selectedQueueRequest.status);
-      mainButton.setText(isQueued ? "View Queue" : queueStatusLabel(selectedQueueRequest));
+      safeNative(() => mainButton.setText(isQueued ? "View Queue" : queueStatusLabel(selectedQueueRequest)));
       if (selectedQueueRequest?.status === "queuing") {
-        mainButton.disable?.();
-        mainButton.showProgress?.(true);
+        safeNative(() => mainButton.disable?.());
+        safeNative(() => mainButton.showProgress?.(true));
       } else {
-        mainButton.enable?.();
+        safeNative(() => mainButton.enable?.());
       }
-      mainButton.show();
-      mainButton.onClick(mainClick);
+      safeNative(() => mainButton.show());
+      safeNative(() => mainButton.onClick(mainClick));
     }
     if (screen !== "chat") {
-      backButton.show();
-      backButton.onClick(backClick);
+      safeNative(() => backButton.show());
+      safeNative(() => backButton.onClick(backClick));
     }
 
     return () => {
-      mainButton.hideProgress?.();
-      mainButton.offClick(mainClick);
-      backButton.offClick(backClick);
+      safeNative(() => mainButton.hideProgress?.());
+      safeNative(() => mainButton.offClick(mainClick));
+      safeNative(() => backButton.offClick(backClick));
     };
   }, [screen, selectedJobId, selectedJob, selectedQueueRequest, sending, tg]);
 
@@ -711,9 +794,9 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     if (lastChatCanSendRef.current === canSend) return;
     lastChatCanSendRef.current = canSend;
     if (canSend) {
-      tg.MainButton.enable?.();
+      safeNative(() => tg.MainButton?.enable?.());
     } else {
-      tg.MainButton.disable?.();
+      safeNative(() => tg.MainButton?.disable?.());
     }
   }, [composerText, conversation, screen, sending, tg]);
 
@@ -859,6 +942,22 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     }
   }
 
+  async function handleSelectJob(jobId: string | null) {
+    setSelectedJobId(jobId);
+    setSelectedJobDetail(null);
+    setError("");
+    if (!jobId) return;
+    setDetailLoading(true);
+    try {
+      const detail = await client.fetchJobDetail(jobId);
+      setSelectedJobDetail(detail);
+    } catch (detailError) {
+      setError(detailError instanceof Error ? detailError.message : "Mission detail could not load.");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
   useEffect(() => () => streamCleanupRef.current?.(), []);
 
   return (
@@ -869,6 +968,8 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       bridgeStatus={bridgeStatus}
       conversation={conversation}
       inbox={inbox}
+      selectedJobDetail={selectedJobDetail}
+      detailLoading={detailLoading}
       home={home}
       review={review}
       queueRequests={queueRequests}
@@ -882,16 +983,18 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       onScreenChange={(next) => {
         setScreen(next);
         setSelectedJobId(null);
+        setSelectedJobDetail(null);
         vibrateSelection(tg);
       }}
       onComposerChange={setComposerText}
       onComposerSubmit={() => void handleSubmit()}
       onApproval={(approvalId, decision) => void handleApproval(approvalId, decision)}
       onFollowup={(jobId) => void handleFollowup(jobId)}
-      onSelectJob={setSelectedJobId}
+      onSelectJob={(jobId) => void handleSelectJob(jobId)}
       onQueueCenter={() => {
         setScreen("queue");
         setSelectedJobId(null);
+        setSelectedJobDetail(null);
         vibrateSelection(tg);
       }}
     />

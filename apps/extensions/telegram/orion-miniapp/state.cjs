@@ -183,6 +183,94 @@ function packetPreview(workspaceRoot) {
   };
 }
 
+function safeWorkspacePath(workspaceRoot, relativePath) {
+  const repoRoot = repoRootFromWorkspace(workspaceRoot);
+  const clean = String(relativePath || "").trim();
+  if (!clean || path.isAbsolute(clean)) return null;
+  const resolved = path.resolve(repoRoot, clean);
+  if (resolved !== repoRoot && !resolved.startsWith(`${repoRoot}${path.sep}`)) return null;
+  return resolved;
+}
+
+function readPacketExcerpt(workspaceRoot, inbox) {
+  const filePath = safeWorkspacePath(workspaceRoot, inbox && inbox.path);
+  if (!filePath) return "";
+  let lines = [];
+  try {
+    lines = fs.readFileSync(filePath, "utf8").split("\n");
+  } catch {
+    return "";
+  }
+  if (!lines.length) return "";
+  const lineIndex = Math.max(0, Number(inbox && inbox.line ? inbox.line : 1) - 1);
+  let start = lineIndex;
+  while (start > 0 && !/^TASK_PACKET\b/.test(lines[start])) start -= 1;
+  if (!/^TASK_PACKET\b/.test(lines[start])) start = lineIndex;
+  let end = start + 1;
+  while (end < lines.length && !/^TASK_PACKET\b/.test(lines[end])) end += 1;
+  return lines.slice(start, end).join("\n").trim();
+}
+
+function approvalMatchesJob(approval, job) {
+  const haystack = [
+    approval && approval.summary,
+    approval && approval.label,
+    approval && approval.sessionKey,
+    approval && approval.sessionId,
+  ]
+    .join("\n")
+    .toLowerCase();
+  const jobId = String(job && job.job_id ? job.job_id : "").toLowerCase();
+  const workflowId = String(job && job.workflow_id ? job.workflow_id : "").toLowerCase();
+  const owner = String(job && job.owner ? job.owner : "").toLowerCase();
+  const objective = String(job && job.objective ? job.objective : "").toLowerCase();
+  if (jobId && haystack.includes(jobId)) return true;
+  if (workflowId && haystack.includes(workflowId)) return true;
+  if (owner && haystack.includes(owner) && objective) {
+    const tokens = objective
+      .split(/[^a-z0-9]+/i)
+      .filter((token) => token.length >= 6)
+      .slice(0, 6);
+    if (tokens.some((token) => haystack.includes(token))) return true;
+  }
+  return false;
+}
+
+function deriveNeedSummary(job, relatedApprovals) {
+  const state = String(job && job.state ? job.state : "").toLowerCase();
+  if (relatedApprovals.length) return "Approval is waiting. Review the request and choose Allow Once, Always, or Deny.";
+  if (state === "blocked") return job.state_reason ? `Blocked: ${job.state_reason}` : "Blocked and needs a follow-up or fresh input.";
+  if (state === "pending_verification") return "Work is back from the specialist and needs verification before it can be treated as done.";
+  if (state === "queued" || state === "running") return "Work is in motion. Inspect the packet and wait for a result before nudging it.";
+  return "No immediate action detected. Review the packet if this still looks stale.";
+}
+
+function deriveNextStep(job, relatedApprovals) {
+  const state = String(job && job.state ? job.state : "").toLowerCase();
+  if (relatedApprovals.length) return "Use the approval buttons below, or copy the displayed Telegram command if live approval context is unavailable.";
+  if (state === "blocked") return "Queue a follow-up so POLARIS can recover the blocked work with context.";
+  if (state === "pending_verification") return "Read the result evidence. If it is sufficient, handle completion outside this Mini App; otherwise queue a follow-up.";
+  return "Keep monitoring unless the packet has aged or looks wrong.";
+}
+
+function jobDetail(workspaceRoot, jobId) {
+  const job = findJobById(workspaceRoot, jobId);
+  if (!job) return null;
+  const relatedApprovals = recentApprovalPrompts().filter((approval) => approvalMatchesJob(approval, job));
+  const resultLines =
+    job.result && Array.isArray(job.result.preview_lines)
+      ? job.result.preview_lines.map((line) => String(line || "")).filter(Boolean)
+      : [];
+  return {
+    job,
+    needSummary: deriveNeedSummary(job, relatedApprovals),
+    nextStep: deriveNextStep(job, relatedApprovals),
+    packetText: readPacketExcerpt(workspaceRoot, job.inbox),
+    resultLines,
+    relatedApprovals,
+  };
+}
+
 function approvalRegexes() {
   return [
     /\/approve\s+([0-9a-f-]+)\s+(allow-once|allow-always|deny)/i,
@@ -326,6 +414,7 @@ module.exports = {
   assistantMessage,
   extractApprovalFromText,
   findJobById,
+  jobDetail,
   homeState,
   inboxState,
   jobsSummary,

@@ -416,6 +416,98 @@ pre {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.mission-hints,
+.approval-stack,
+.mission-brief {
+  display: grid;
+  gap: 10px;
+}
+
+.mission-hints {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.hint-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.15;
+}
+
+.mission-brief {
+  margin-top: 14px;
+}
+
+.mission-brief section,
+.approval-card,
+.detail-disclosure {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mission-brief section,
+.approval-card {
+  padding: 13px;
+}
+
+.mission-brief h4,
+.approval-stack h4 {
+  margin: 0 0 7px;
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.mission-brief p,
+.approval-card p {
+  margin: 0;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.approval-stack {
+  margin: 14px 0;
+}
+
+.approval-card code {
+  display: block;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(3, 10, 18, 0.72);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.detail-disclosure {
+  margin: 14px 0;
+  overflow: hidden;
+}
+
+.detail-disclosure summary {
+  min-height: 44px;
+  padding: 12px 14px;
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.detail-disclosure pre {
+  margin: 0;
+  padding: 0 14px 14px;
+}
+
 .queue-chip,
 .queue-detail {
   display: grid;

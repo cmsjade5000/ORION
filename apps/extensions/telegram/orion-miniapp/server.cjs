@@ -10,6 +10,7 @@ const {
   findJobById,
   homeState,
   inboxState,
+  jobDetail,
   packetPreview,
   persistQueueRequest,
   readQueueRequests,
@@ -34,6 +35,11 @@ function sendText(res, statusCode, payload, contentType = "text/plain; charset=u
   res.end(payload);
 }
 
+function logRequest(req, pathname) {
+  const userAgent = String(req.headers["user-agent"] || "").replace(/\s+/g, " ").slice(0, 240);
+  console.log(`[miniapp-request] method=${req.method} path=${pathname} ua=${userAgent}`);
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -47,6 +53,19 @@ function readBody(req) {
     req.on("end", () => resolve(body));
     req.on("error", reject);
   });
+}
+
+function logClientError(req, body) {
+  try {
+    const payload = JSON.parse(body || "{}");
+    const kind = String(payload.kind || "client-error").replace(/[^\w.-]/g, "_").slice(0, 64);
+    const detail = String(payload.detail || "").replace(/\s+/g, " ").slice(0, 500);
+    const userAgent = String(payload.userAgent || req.headers["user-agent"] || "").replace(/\s+/g, " ").slice(0, 240);
+    const href = String(payload.href || "").slice(0, 240);
+    console.error(`[miniapp-client-error] kind=${kind} detail=${detail} href=${href} ua=${userAgent}`);
+  } catch (error) {
+    console.error("[miniapp-client-error] unreadable payload");
+  }
 }
 
 function publicApiError(error) {
@@ -134,6 +153,32 @@ function serveStatic(req, res, fileName, contentType) {
   }
 }
 
+function staticVersion(fileName) {
+  try {
+    const stat = fs.statSync(path.join(PUBLIC_DIR, fileName));
+    return `${Math.round(stat.mtimeMs)}-${stat.size}`;
+  } catch {
+    return String(Date.now());
+  }
+}
+
+function serveIndex(req, res) {
+  const target = path.join(PUBLIC_DIR, "index.html");
+  try {
+    const payload = fs
+      .readFileSync(target, "utf8")
+      .replace(/\/app\.js(["'])/g, `/app.js?v=${staticVersion("app.js")}$1`)
+      .replace(/\/styles\.css(["'])/g, `/styles.css?v=${staticVersion("styles.css")}$1`);
+    sendText(res, 200, payload, "text/html; charset=utf-8", {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+  } catch {
+    sendText(res, 404, "not found");
+  }
+}
+
 async function withAuth(req, res, handler) {
   const rawInitData = initDataFromRequest(req);
   const validated = validateInitData(rawInitData, CONFIG.botToken, {
@@ -200,6 +245,18 @@ async function routeApi(req, res, pathname) {
   if (pathname === "/api/queue-requests" && req.method === "GET") {
     return withAuth(req, res, async () => {
       sendJson(res, 200, { ok: true, queueRequests: readQueueRequests(CONFIG.workspaceRoot, 20) });
+    });
+  }
+
+  const jobDetailMatch = pathname.match(/^\/api\/inbox\/jobs\/([^/]+)$/i);
+  if (jobDetailMatch && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      const detail = jobDetail(CONFIG.workspaceRoot, decodeURIComponent(jobDetailMatch[1]));
+      if (!detail) {
+        sendJson(res, 404, { error: "job not found" });
+        return;
+      }
+      sendJson(res, 200, detail);
     });
   }
 
@@ -405,18 +462,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (pathname === "/app.js") {
+    logRequest(req, pathname);
     serveStatic(req, res, "app.js", "application/javascript; charset=utf-8");
     return;
   }
   if (pathname === "/styles.css") {
+    logRequest(req, pathname);
     serveStatic(req, res, "styles.css", "text/css; charset=utf-8");
+    return;
+  }
+  if (pathname === "/client-error" && req.method === "POST") {
+    logRequest(req, pathname);
+    try {
+      logClientError(req, await readBody(req));
+    } catch {
+      console.error("[miniapp-client-error] failed to read payload");
+    }
+    sendJson(res, 200, { ok: true });
     return;
   }
   if (pathname.startsWith("/api/")) {
     await routeApi(req, res, pathname);
     return;
   }
-  serveStatic(req, res, "index.html", "text/html; charset=utf-8");
+  logRequest(req, pathname);
+  serveIndex(req, res);
 });
 
 if (require.main === module) {

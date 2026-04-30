@@ -85,6 +85,14 @@ describe("mini app view model", () => {
       home: vi.fn(async () => homePayload),
       review: vi.fn(async () => reviewPayload),
       inbox: vi.fn(async () => inboxPayload),
+      fetchJobDetail: vi.fn(async (jobId: string) => ({
+        job: inboxPayload.jobs.find((job) => job.job_id === jobId) || inboxPayload.jobs[0],
+        needSummary: "Blocked and needs a follow-up or fresh input.",
+        nextStep: "Queue a follow-up so POLARIS can recover the blocked work with context.",
+        packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
+        resultLines: ["Status: BLOCKED", "Needs fresh context."],
+        relatedApprovals: [],
+      })),
       sendChat: vi.fn(),
       fetchRun: vi.fn(),
       streamRun: vi.fn(() => vi.fn()),
@@ -152,6 +160,8 @@ describe("mini app view model", () => {
           ],
         }}
         inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
         home={null}
         review={null}
         queueRequests={[]}
@@ -187,6 +197,8 @@ describe("mini app view model", () => {
         bridgeStatus={bridgeStatus}
         conversation={conversation}
         inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
         home={null}
         review={null}
         queueRequests={[]}
@@ -218,6 +230,16 @@ describe("mini app view model", () => {
       if (pathname === "/api/home") return homePayload;
       if (pathname === "/api/review") return reviewPayload;
       if (pathname === "/api/inbox") return inboxPayload;
+      if (pathname.startsWith("/api/inbox/jobs/")) {
+        return {
+          job: inboxPayload.jobs[0],
+          needSummary: "Blocked and needs a follow-up or fresh input.",
+          nextStep: "Queue a follow-up so POLARIS can recover the blocked work with context.",
+          packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
+          resultLines: [],
+          relatedApprovals: [],
+        };
+      }
       return {};
     };
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -430,6 +452,8 @@ describe("mini app view model", () => {
         bridgeStatus={bridgeStatus}
         conversation={null}
         inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
         home={null}
         review={null}
         queueRequests={[]}
@@ -463,6 +487,8 @@ describe("mini app view model", () => {
         screenLabel="Mission Inbox"
         bridgeStatus={bridgeStatus}
         conversation={null}
+        selectedJobDetail={null}
+        detailLoading={false}
         inbox={{
           counts: { blocked: 1, pending_verification: 1 },
           updatedTs: Date.now(),
@@ -530,6 +556,8 @@ describe("mini app view model", () => {
         bridgeStatus={bridgeStatus}
         conversation={null}
         inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
         home={{
           today: "Open delegated work:\n- ATLAS: Check the queue.",
           review: "Review digest",
@@ -566,6 +594,65 @@ describe("mini app view model", () => {
     expect(screen.getByText(/Follow up with POLARIS/)).toBeInTheDocument();
   });
 
+  it("renders selected mission need, next step, approval actions, evidence, and packet text", () => {
+    const approve = vi.fn();
+    render(
+      <MiniAppView
+        appName="ORION"
+        screen="inbox"
+        screenLabel="Mission Inbox"
+        bridgeStatus={bridgeStatus}
+        conversation={null}
+        inbox={inboxPayload}
+        selectedJobDetail={{
+          job: inboxPayload.jobs[0],
+          needSummary: "Approval is waiting. Review the request and choose Allow Once, Always, or Deny.",
+          nextStep: "Use the approval buttons below.",
+          packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
+          resultLines: ["Status: BLOCKED", "Needs approval."],
+          relatedApprovals: [
+            {
+              approvalId: "abc",
+              suggestedDecision: "allow-once",
+              summary: "Approve job-1 to continue.",
+              label: "approval",
+              sessionId: "s1",
+              sessionKey: "job-1",
+              ts: Date.now(),
+              ageMs: 60000,
+            },
+          ],
+        }}
+        detailLoading={false}
+        home={null}
+        review={null}
+        queueRequests={[]}
+        loading={false}
+        error=""
+        composerText=""
+        sending={false}
+        hasNativeMainButton={false}
+        actionMessage=""
+        selectedJobId="job-1"
+        onScreenChange={vi.fn()}
+        onComposerChange={vi.fn()}
+        onComposerSubmit={vi.fn()}
+        onApproval={approve}
+        onFollowup={vi.fn()}
+        onSelectJob={vi.fn()}
+        onQueueCenter={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("What It Needs")).toBeInTheDocument();
+    expect(screen.getByText(/Approval is waiting/)).toBeInTheDocument();
+    expect(screen.getByText("Next Move")).toBeInTheDocument();
+    expect(screen.getByText("Result Evidence")).toBeInTheDocument();
+    expect(screen.getByText("Original Packet")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Allow Once" })[0]);
+    expect(approve).toHaveBeenCalledWith("abc", "allow-once");
+  });
+
   it("renders queue center records with intake details", () => {
     render(
       <MiniAppView
@@ -575,6 +662,8 @@ describe("mini app view model", () => {
         bridgeStatus={bridgeStatus}
         conversation={null}
         inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
         home={null}
         review={null}
         queueRequests={[
