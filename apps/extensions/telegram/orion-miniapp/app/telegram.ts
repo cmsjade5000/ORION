@@ -77,20 +77,44 @@ export function applySafeAreaInsets(tg: TelegramWebAppLike | null) {
 
 export async function prepareTelegramShell(tg: TelegramWebAppLike | null) {
   if (!tg) return;
-  tg.ready?.();
-  tg.expand?.();
-  applyTelegramTheme(tg);
-  applySafeAreaInsets(tg);
+  try {
+    tg.ready?.();
+  } catch {
+    // Telegram native shell calls should never prevent the web UI from loading.
+  }
+  try {
+    tg.expand?.();
+  } catch {
+    // Ignore unsupported native expansion surfaces.
+  }
+  try {
+    applyTelegramTheme(tg);
+    applySafeAreaInsets(tg);
+  } catch {
+    // Fall back to CSS safe-area defaults.
+  }
 }
 
 export function vibrateSelection(tg: TelegramWebAppLike | null) {
-  tg?.HapticFeedback?.selectionChanged?.();
+  try {
+    tg?.HapticFeedback?.selectionChanged?.();
+  } catch {
+    // Optional haptics.
+  }
 }
 
 export function vibrateImpact(tg: TelegramWebAppLike | null, style: "light" | "medium" | "heavy" = "light") {
-  tg?.HapticFeedback?.impactOccurred?.(style);
+  try {
+    tg?.HapticFeedback?.impactOccurred?.(style);
+  } catch {
+    // Optional haptics.
+  }
 }
 
 export function vibrateNotice(tg: TelegramWebAppLike | null, type: "error" | "success" | "warning") {
-  tg?.HapticFeedback?.notificationOccurred?.(type);
+  try {
+    tg?.HapticFeedback?.notificationOccurred?.(type);
+  } catch {
+    // Optional haptics.
+  }
 }

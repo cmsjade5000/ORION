@@ -5,11 +5,25 @@ const http = require("node:http");
 const { createChatManager } = require("./chat.cjs");
 const { publicConfig } = require("./config.cjs");
 const { validateInitData } = require("./auth.cjs");
-const { approvalSnapshot, findJobById, homeState, inboxState, packetPreview, reviewState, runJsonCommand } = require("./state.cjs");
+const {
+  approvalSnapshot,
+  findJobById,
+  homeState,
+  inboxState,
+  jobDetail,
+  packetPreview,
+  persistQueueRequest,
+  readQueueRequests,
+  recentQueueRequestForJob,
+  reviewState,
+  runJsonCommand,
+  updateQueueRequestStatus,
+} = require("./state.cjs");
 
 const CONFIG = publicConfig();
 const PUBLIC_DIR = path.join(__dirname, "public");
 const chatManager = createChatManager({ workspaceRoot: CONFIG.workspaceRoot });
+const activeFollowupJobs = new Set();
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
@@ -19,6 +33,11 @@ function sendJson(res, statusCode, payload) {
 function sendText(res, statusCode, payload, contentType = "text/plain; charset=utf-8", extraHeaders = {}) {
   res.writeHead(statusCode, { "Content-Type": contentType, ...extraHeaders });
   res.end(payload);
+}
+
+function logRequest(req, pathname) {
+  const userAgent = String(req.headers["user-agent"] || "").replace(/\s+/g, " ").slice(0, 240);
+  console.log(`[miniapp-request] method=${req.method} path=${pathname} ua=${userAgent}`);
 }
 
 function readBody(req) {
@@ -34,6 +53,27 @@ function readBody(req) {
     req.on("end", () => resolve(body));
     req.on("error", reject);
   });
+}
+
+function logClientError(req, body) {
+  try {
+    const payload = JSON.parse(body || "{}");
+    const kind = String(payload.kind || "client-error").replace(/[^\w.-]/g, "_").slice(0, 64);
+    const detail = String(payload.detail || "").replace(/\s+/g, " ").slice(0, 500);
+    const userAgent = String(payload.userAgent || req.headers["user-agent"] || "").replace(/\s+/g, " ").slice(0, 240);
+    const href = String(payload.href || "").slice(0, 240);
+    console.error(`[miniapp-client-error] kind=${kind} detail=${detail} href=${href} ua=${userAgent}`);
+  } catch (error) {
+    console.error("[miniapp-client-error] unreadable payload");
+  }
+}
+
+function publicApiError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/miniapp-auth:/i.test(message)) return message;
+  if (/job not found/i.test(message)) return "job not found";
+  if (/already queuing/i.test(message)) return "follow-up already queuing";
+  return "ORION could not complete that backend action.";
 }
 
 function initDataFromRequest(req) {
@@ -113,6 +153,32 @@ function serveStatic(req, res, fileName, contentType) {
   }
 }
 
+function staticVersion(fileName) {
+  try {
+    const stat = fs.statSync(path.join(PUBLIC_DIR, fileName));
+    return `${Math.round(stat.mtimeMs)}-${stat.size}`;
+  } catch {
+    return String(Date.now());
+  }
+}
+
+function serveIndex(req, res) {
+  const target = path.join(PUBLIC_DIR, "index.html");
+  try {
+    const payload = fs
+      .readFileSync(target, "utf8")
+      .replace(/\/app\.js(["'])/g, `/app.js?v=${staticVersion("app.js")}$1`)
+      .replace(/\/styles\.css(["'])/g, `/styles.css?v=${staticVersion("styles.css")}$1`);
+    sendText(res, 200, payload, "text/html; charset=utf-8", {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+  } catch {
+    sendText(res, 404, "not found");
+  }
+}
+
 async function withAuth(req, res, handler) {
   const rawInitData = initDataFromRequest(req);
   const validated = validateInitData(rawInitData, CONFIG.botToken, {
@@ -130,7 +196,7 @@ async function withAuth(req, res, handler) {
     await handler(validated.fields);
   } catch (error) {
     sendJson(res, 500, {
-      error: error instanceof Error ? error.message : String(error || "unknown error"),
+      error: publicApiError(error),
     });
   }
 }
@@ -173,6 +239,24 @@ async function routeApi(req, res, pathname) {
   if (pathname === "/api/inbox") {
     return withAuth(req, res, async () => {
       sendJson(res, 200, inboxState(CONFIG.workspaceRoot));
+    });
+  }
+
+  if (pathname === "/api/queue-requests" && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      sendJson(res, 200, { ok: true, queueRequests: readQueueRequests(CONFIG.workspaceRoot, 20) });
+    });
+  }
+
+  const jobDetailMatch = pathname.match(/^\/api\/inbox\/jobs\/([^/]+)$/i);
+  if (jobDetailMatch && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      const detail = jobDetail(CONFIG.workspaceRoot, decodeURIComponent(jobDetailMatch[1]));
+      if (!detail) {
+        sendJson(res, 404, { error: "job not found" });
+        return;
+      }
+      sendJson(res, 200, detail);
     });
   }
 
@@ -288,34 +372,81 @@ async function routeApi(req, res, pathname) {
   const followupMatch = pathname.match(/^\/api\/jobs\/([^/]+)\/followup$/i);
   if (followupMatch && req.method === "POST") {
     return withAuth(req, res, async () => {
-      const job = findJobById(CONFIG.workspaceRoot, followupMatch[1]);
+      const jobId = decodeURIComponent(followupMatch[1]);
+      const job = findJobById(CONFIG.workspaceRoot, jobId);
       if (!job) {
         sendJson(res, 404, { error: "job not found" });
         return;
       }
-      const inboxPath = job.inbox && job.inbox.path ? `${job.inbox.path}${job.inbox.line ? `:${job.inbox.line}` : ""}` : "n/a";
-      const captureText = [
-        "Follow up on delegated ORION work.",
-        `Owner: ${job.owner || "unknown"}`,
-        `State: ${job.state || "unknown"}`,
-        `Objective: ${job.objective || "(no objective)"}`,
-        `Inbox: ${inboxPath}`,
-      ].join("\n");
-      const payload = await runJsonCommand(
-        "python3",
-        [
-          "scripts/assistant_capture.py",
-          "--repo-root",
-          CONFIG.workspaceRoot,
-          "--text",
-          captureText,
-          "--notify",
-          "telegram",
-          "--json",
-        ],
-        CONFIG.workspaceRoot
-      );
-      sendJson(res, 200, payload || { message: "Follow-up queued for POLARIS." });
+      const lockKey = String(job.job_id || jobId);
+      if (activeFollowupJobs.has(lockKey)) {
+        sendJson(res, 409, { error: "follow-up already queuing" });
+        return;
+      }
+      const recentRequest = recentQueueRequestForJob(CONFIG.workspaceRoot, job.job_id);
+      if (recentRequest) {
+        sendJson(res, 200, {
+          ok: true,
+          duplicate: true,
+          message: recentRequest.message,
+          request: recentRequest,
+        });
+        return;
+      }
+      activeFollowupJobs.add(lockKey);
+      try {
+        const inboxPath = job.inbox && job.inbox.path ? `${job.inbox.path}${job.inbox.line ? `:${job.inbox.line}` : ""}` : "n/a";
+        const captureText = [
+          "Follow up on delegated ORION work.",
+          `Owner: ${job.owner || "unknown"}`,
+          `State: ${job.state || "unknown"}`,
+          `Objective: ${job.objective || "(no objective)"}`,
+          `Inbox: ${inboxPath}`,
+        ].join("\n");
+        const payload = await runJsonCommand(
+          "python3",
+          [
+            "scripts/assistant_capture.py",
+            "--repo-root",
+            CONFIG.workspaceRoot,
+            "--text",
+            captureText,
+            "--notify",
+            "telegram",
+            "--json",
+          ],
+          CONFIG.workspaceRoot
+        );
+        const request = persistQueueRequest(CONFIG.workspaceRoot, {
+          jobId: job.job_id,
+          owner: "POLARIS",
+          status: "queued",
+          message: payload && payload.message ? payload.message : "Follow-up queued for POLARIS.",
+          intakePath: payload && payload.intake_path ? payload.intake_path : "",
+          packetNumber: payload && payload.packet_number ? payload.packet_number : undefined,
+        });
+        sendJson(res, 200, {
+          ok: true,
+          message: request.message,
+          request,
+        });
+      } finally {
+        activeFollowupJobs.delete(lockKey);
+      }
+    });
+  }
+
+  const queueStatusMatch = pathname.match(/^\/api\/queue-requests\/([^/]+)\/status$/i);
+  if (queueStatusMatch && req.method === "PATCH") {
+    return withAuth(req, res, async () => {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const status = String(body.status || "").trim();
+      const request = updateQueueRequestStatus(CONFIG.workspaceRoot, decodeURIComponent(queueStatusMatch[1]), status);
+      if (!request) {
+        sendJson(res, 404, { error: "queue request not found" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, request });
     });
   }
 
@@ -331,18 +462,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (pathname === "/app.js") {
+    logRequest(req, pathname);
     serveStatic(req, res, "app.js", "application/javascript; charset=utf-8");
     return;
   }
   if (pathname === "/styles.css") {
+    logRequest(req, pathname);
     serveStatic(req, res, "styles.css", "text/css; charset=utf-8");
+    return;
+  }
+  if (pathname === "/client-error" && req.method === "POST") {
+    logRequest(req, pathname);
+    try {
+      logClientError(req, await readBody(req));
+    } catch {
+      console.error("[miniapp-client-error] failed to read payload");
+    }
+    sendJson(res, 200, { ok: true });
     return;
   }
   if (pathname.startsWith("/api/")) {
     await routeApi(req, res, pathname);
     return;
   }
-  serveStatic(req, res, "index.html", "text/html; charset=utf-8");
+  logRequest(req, pathname);
+  serveIndex(req, res);
 });
 
 if (require.main === module) {

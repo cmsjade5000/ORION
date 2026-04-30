@@ -5,8 +5,11 @@ import type {
   ChatRunPayload,
   HomePayload,
   InboxPayload,
+  JobDetailPayload,
   JobItem,
   MiniAppScreen,
+  QueueRequest,
+  QueueRequestStatus,
   ReviewPayload,
 } from "./types";
 import {
@@ -25,12 +28,31 @@ type ApiClient = {
   home(): Promise<HomePayload>;
   review(): Promise<ReviewPayload>;
   inbox(): Promise<InboxPayload>;
+  fetchJobDetail(jobId: string): Promise<JobDetailPayload>;
   sendChat(input: { conversationId: string; message: string }): Promise<ChatRunPayload>;
   fetchRun(runId: string): Promise<ChatRunPayload>;
   streamRun(runId: string, onRun: (payload: ChatRunPayload) => void, onError: (message: string) => void): () => void;
   resolveApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny"): Promise<{ message: string; closesWebApp?: boolean }>;
-  createFollowup(jobId: string): Promise<{ message: string }>;
+  createFollowup(jobId: string): Promise<{ message: string; request?: QueueRequest; duplicate?: boolean }>;
+  updateQueueRequestStatus(requestId: string, status: QueueRequestStatus): Promise<{ request: QueueRequest }>;
 };
+
+type BridgeStatus = {
+  label: string;
+  tone: "good" | "warn" | "alert";
+};
+
+type QueueRequestView = Omit<QueueRequest, "status"> & {
+  status: QueueRequestStatus | "queuing";
+};
+
+function safeNative(action: () => void) {
+  try {
+    action();
+  } catch {
+    // Telegram native button APIs vary by client/version; keep the web UI alive.
+  }
+}
 
 function encodeInitDataForUrl(value: string): string {
   return btoa(unescape(encodeURIComponent(value)))
@@ -70,12 +92,86 @@ function jsonFetch<T>(url: string, options?: RequestInit): Promise<T> {
   });
 }
 
+function friendlyPanelError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/Command failed:|assistant_status\.py|usage:|invalid choice/i.test(message)) {
+    return "ORION queued the action, but the status panel refresh hit a backend command mismatch.";
+  }
+  if (/miniapp-auth:/i.test(message)) {
+    return "Telegram bridge auth drifted. Close the Mini App and reopen it from Telegram.";
+  }
+  if (/job not found/i.test(message)) {
+    return "That work item is no longer in the active queue.";
+  }
+  if (/already queuing/i.test(message)) {
+    return "That follow-up is already being queued.";
+  }
+  return fallback;
+}
+
+function mergeQueueRequests(current: QueueRequestView[], incoming: QueueRequestView[]): QueueRequestView[] {
+  const byId = new Map<string, QueueRequestView>();
+  [...incoming, ...current].forEach((request) => {
+    byId.set(request.id, request);
+  });
+  return [...byId.values()]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 20);
+}
+
+function requestForJob(queueRequests: QueueRequestView[], jobId: string): QueueRequestView | null {
+  return (
+    queueRequests.find((request) => request.jobId === jobId && ["queuing", "queued", "refresh_delayed"].includes(request.status)) ||
+    queueRequests.find((request) => request.jobId === jobId && request.status === "failed") ||
+    null
+  );
+}
+
+function queueStatusLabel(request: QueueRequestView | null): string {
+  if (!request) return "Queue Follow-Up";
+  if (request.status === "queuing") return "Queuing...";
+  if (request.status === "queued") return "Follow-Up Queued";
+  if (request.status === "refresh_delayed") return "Queued; Refresh Delayed";
+  return "Retry Follow-Up";
+}
+
+function queueStatusTone(status?: string): "good" | "warn" | "alert" | "neutral" {
+  if (status === "queued") return "good";
+  if (status === "queuing" || status === "refresh_delayed") return "warn";
+  if (status === "failed") return "alert";
+  return "neutral";
+}
+
+function formatQueueRequestTime(value: string): string {
+  const ts = Date.parse(value);
+  if (!Number.isFinite(ts)) return "recently";
+  return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function deriveBridgeStatus(input: {
+  loading: boolean;
+  error: string;
+  sending: boolean;
+  conversation: ChatConversation | null;
+  home: HomePayload | null;
+  review: ReviewPayload | null;
+  inbox: InboxPayload | null;
+}): BridgeStatus {
+  if (input.error) return { label: "Bridge offline", tone: "alert" };
+  if (input.loading) return { label: "Bridge checking", tone: "warn" };
+  if (input.sending) return { label: "Bridge sending", tone: "warn" };
+  if (!input.conversation) return { label: "Bridge unavailable", tone: "alert" };
+  if (!input.home || !input.review || !input.inbox) return { label: "Bridge partial", tone: "warn" };
+  return { label: "Bridge online", tone: "good" };
+}
+
 export function createApiClient(): ApiClient {
   return {
     bootstrap: () => jsonFetch("/api/bootstrap"),
     home: () => jsonFetch("/api/home"),
     review: () => jsonFetch("/api/review"),
     inbox: () => jsonFetch("/api/inbox"),
+    fetchJobDetail: (jobId) => jsonFetch(`/api/inbox/jobs/${encodeURIComponent(jobId)}`),
     sendChat: (input) =>
       jsonFetch("/api/chat/runs", {
         method: "POST",
@@ -106,6 +202,11 @@ export function createApiClient(): ApiClient {
       jsonFetch(`/api/jobs/${encodeURIComponent(jobId)}/followup`, {
         method: "POST",
       }),
+    updateQueueRequestStatus: (requestId, status) =>
+      jsonFetch(`/api/queue-requests/${encodeURIComponent(requestId)}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
   };
 }
 
@@ -113,16 +214,19 @@ type MiniAppViewProps = {
   appName: string;
   screen: MiniAppScreen;
   screenLabel: string;
-  connectionPill: string;
+  bridgeStatus: BridgeStatus;
   conversation: ChatConversation | null;
   inbox: InboxPayload | null;
+  selectedJobDetail: JobDetailPayload | null;
+  detailLoading: boolean;
   home: HomePayload | null;
   review: ReviewPayload | null;
+  queueRequests: QueueRequestView[];
   loading: boolean;
   error: string;
   composerText: string;
   sending: boolean;
-  activityText: string;
+  hasNativeMainButton: boolean;
   actionMessage: string;
   selectedJobId: string | null;
   onScreenChange(screen: MiniAppScreen): void;
@@ -131,6 +235,7 @@ type MiniAppViewProps = {
   onApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny"): void;
   onFollowup(jobId: string): void;
   onSelectJob(jobId: string | null): void;
+  onQueueCenter(): void;
 };
 
 export function MiniAppView(props: MiniAppViewProps) {
@@ -139,18 +244,21 @@ export function MiniAppView(props: MiniAppViewProps) {
     props.selectedJobId && props.inbox
       ? props.inbox.jobs.find((job) => job.job_id === props.selectedJobId) || null
       : null;
+  const latestQueueRequest = props.queueRequests[0] || null;
 
   return (
     <div className="starship-shell">
       <div className="starfield" aria-hidden="true" />
       <header className="hero">
-        <div className="hero__eyebrow">Starship Console</div>
         <div className="hero__row">
           <div>
             <h1>{props.appName}</h1>
             <p className="hero__lede">A friendly bridge into ORION: chat up front, mission inbox on deck, today in view.</p>
           </div>
-          <div className="signal-pill">{props.connectionPill}</div>
+          <div className={`bridge-status tone-${props.bridgeStatus.tone}`} aria-live="polite">
+            <span className="bridge-status__light" aria-hidden="true" />
+            <span>{props.bridgeStatus.label}</span>
+          </div>
         </div>
       </header>
 
@@ -176,10 +284,8 @@ export function MiniAppView(props: MiniAppViewProps) {
           <section className="panel panel--chat">
             <div className="panel__header">
               <div>
-                <p className="panel__eyebrow">Primary Surface</p>
                 <h2>{props.screenLabel}</h2>
               </div>
-              <div className={`status-dot tone-${statusTone(props.sending ? "pending" : "complete")}`}>{props.activityText}</div>
             </div>
             <div className="transcript">
               {props.loading ? <div className="empty-state">Booting the bridge console...</div> : null}
@@ -212,13 +318,15 @@ export function MiniAppView(props: MiniAppViewProps) {
                 placeholder="Message ORION from the bridge..."
                 disabled={props.sending || !props.conversation}
               />
-              <button
-                type="submit"
-                className="button button--primary"
-                disabled={props.sending || !props.conversation || !props.composerText.trim()}
-              >
-                {props.sending ? "Sending..." : "Send to ORION"}
-              </button>
+              {!props.hasNativeMainButton ? (
+                <button
+                  type="submit"
+                  className="button button--primary"
+                  disabled={props.sending || !props.conversation || !props.composerText.trim()}
+                >
+                  {props.sending ? "Sending..." : "Send to ORION"}
+                </button>
+              ) : null}
             </form>
           </section>
         ) : null}
@@ -227,7 +335,6 @@ export function MiniAppView(props: MiniAppViewProps) {
           <section className="panel panel--inbox">
             <div className="panel__header">
               <div>
-                <p className="panel__eyebrow">Actionable Queue</p>
                 <h2>Mission Inbox</h2>
               </div>
               <div className="cluster-pills">
@@ -272,25 +379,51 @@ export function MiniAppView(props: MiniAppViewProps) {
                 <section className="subpanel">
                   <h3>Work Queue</h3>
                   {props.inbox?.jobs.length ? (
-                    props.inbox.jobs.map((job) => (
-                      <article key={job.job_id} className={`list-card tone-${statusTone(job.state)}`}>
-                        <div className="list-card__meta">
-                          <span>{job.owner}</span>
-                          <span>{job.state.replace(/_/g, " ")}</span>
-                        </div>
-                        <p>{job.objective}</p>
-                        <div className="action-row">
-                          <button type="button" className="button" onClick={() => props.onSelectJob(job.job_id)}>
-                            Inspect
-                          </button>
-                          {isFollowupActionable(job) ? (
-                            <button type="button" className="button button--primary" onClick={() => props.onFollowup(job.job_id)}>
-                              Queue Follow-Up
-                            </button>
+                    props.inbox.jobs.map((job) => {
+                      const queueRequest = requestForJob(props.queueRequests, job.job_id);
+                      const queueLocked = queueRequest && ["queuing", "queued", "refresh_delayed"].includes(queueRequest.status);
+                      const hasApproval = props.inbox?.approvals.some((approval) =>
+                        [approval.summary, approval.label, approval.sessionKey, approval.sessionId]
+                          .join(" ")
+                          .toLowerCase()
+                          .includes(job.job_id.toLowerCase())
+                      );
+                      return (
+                        <article key={job.job_id} className={`list-card tone-${statusTone(job.state)}`}>
+                          <div className="list-card__meta">
+                            <span>{job.owner}</span>
+                            <span>{job.state.replace(/_/g, " ")}</span>
+                          </div>
+                          <p>{job.objective}</p>
+                          <div className="mission-hints">
+                            {hasApproval ? <span className="hint-pill tone-warn">Approval needed</span> : null}
+                            {job.state_reason ? <span className="hint-pill">{job.state_reason.replace(/_/g, " ")}</span> : null}
+                            {job.result?.status ? <span className={`hint-pill tone-${statusTone(job.result.status)}`}>Result {job.result.status}</span> : null}
+                          </div>
+                          {queueRequest ? (
+                            <div className={`queue-chip tone-${queueStatusTone(queueRequest.status)}`}>
+                              <strong>{queueStatusLabel(queueRequest)}</strong>
+                              {queueRequest.status === "failed" ? <span>{queueRequest.message}</span> : null}
+                            </div>
                           ) : null}
-                        </div>
-                      </article>
-                    ))
+                          <div className="action-row">
+                            <button type="button" className="button" onClick={() => props.onSelectJob(job.job_id)}>
+                              Inspect
+                            </button>
+                            {isFollowupActionable(job) ? (
+                              <button
+                                type="button"
+                                className="button button--primary"
+                                disabled={Boolean(queueLocked)}
+                                onClick={() => props.onFollowup(job.job_id)}
+                              >
+                                {queueStatusLabel(queueRequest)}
+                              </button>
+                            ) : null}
+                          </div>
+                        </article>
+                      );
+                    })
                   ) : (
                     <div className="empty-mini">Nothing is clogging the queue right now.</div>
                   )}
@@ -300,33 +433,111 @@ export function MiniAppView(props: MiniAppViewProps) {
               <aside className="subpanel subpanel--detail">
                 <h3>{selectedJob ? "Selected Work Item" : "Queue Notes"}</h3>
                 {selectedJob ? (
-                  <>
-                    <p className="detail-title">{selectedJob.objective}</p>
-                    <dl className="detail-grid">
-                      <div>
-                        <dt>Owner</dt>
-                        <dd>{selectedJob.owner}</dd>
-                      </div>
-                      <div>
-                        <dt>State</dt>
-                        <dd>{selectedJob.state}</dd>
-                      </div>
-                      <div>
-                        <dt>Inbox</dt>
-                        <dd>{selectedJob.inbox?.path || "n/a"}</dd>
-                      </div>
-                    </dl>
-                    <div className="action-row">
-                      {isFollowupActionable(selectedJob) ? (
-                        <button type="button" className="button button--primary" onClick={() => props.onFollowup(selectedJob.job_id)}>
-                          Queue Follow-Up
-                        </button>
-                      ) : null}
-                      <button type="button" className="button button--ghost" onClick={() => props.onSelectJob(null)}>
-                        Close
-                      </button>
-                    </div>
-                  </>
+                  (() => {
+                    const queueRequest = requestForJob(props.queueRequests, selectedJob.job_id);
+                    const queueLocked = queueRequest && ["queuing", "queued", "refresh_delayed"].includes(queueRequest.status);
+                    const detail = props.selectedJobDetail && props.selectedJobDetail.job.job_id === selectedJob.job_id ? props.selectedJobDetail : null;
+                    return (
+                      <>
+                        <p className="detail-title">{selectedJob.objective}</p>
+                        {props.detailLoading ? <div className="empty-mini">Loading mission context...</div> : null}
+                        {detail ? (
+                          <div className="mission-brief">
+                            <section>
+                              <h4>What It Needs</h4>
+                              <p>{detail.needSummary}</p>
+                            </section>
+                            <section>
+                              <h4>Next Move</h4>
+                              <p>{detail.nextStep}</p>
+                            </section>
+                          </div>
+                        ) : null}
+                        <dl className="detail-grid">
+                          <div>
+                            <dt>Owner</dt>
+                            <dd>{selectedJob.owner}</dd>
+                          </div>
+                          <div>
+                            <dt>State</dt>
+                            <dd>{selectedJob.state}</dd>
+                          </div>
+                          <div>
+                            <dt>Inbox</dt>
+                            <dd>{selectedJob.inbox?.path || "n/a"}</dd>
+                          </div>
+                        </dl>
+                        {queueRequest ? (
+                          <div className={`queue-detail tone-${queueStatusTone(queueRequest.status)}`}>
+                            <strong>{queueStatusLabel(queueRequest)}</strong>
+                            {queueRequest.intakePath ? <span>{queueRequest.intakePath}</span> : null}
+                          </div>
+                        ) : null}
+                        {detail?.relatedApprovals.length ? (
+                          <div className="approval-stack">
+                            <h4>Approval Actions</h4>
+                            {detail.relatedApprovals.map((approval) => (
+                              <article key={approval.approvalId} className="approval-card">
+                                <div className="list-card__meta">
+                                  <span>{approval.label}</span>
+                                  <span>{formatRelativeTime(approval.ageMs)}</span>
+                                </div>
+                                <p>{approval.summary}</p>
+                                <code>{`/approve ${approval.approvalId} ${approval.suggestedDecision}`}</code>
+                                <div className="action-row">
+                                  <button
+                                    type="button"
+                                    className="button button--primary"
+                                    onClick={() => props.onApproval(approval.approvalId, "allow-once")}
+                                  >
+                                    Allow Once
+                                  </button>
+                                  <button type="button" className="button" onClick={() => props.onApproval(approval.approvalId, "allow-always")}>
+                                    Always
+                                  </button>
+                                  <button type="button" className="button button--ghost" onClick={() => props.onApproval(approval.approvalId, "deny")}>
+                                    Deny
+                                  </button>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
+                        {detail?.resultLines.length ? (
+                          <details className="detail-disclosure" open>
+                            <summary>Result Evidence</summary>
+                            <pre>{detail.resultLines.join("\n")}</pre>
+                          </details>
+                        ) : null}
+                        {detail?.packetText ? (
+                          <details className="detail-disclosure">
+                            <summary>Original Packet</summary>
+                            <pre>{detail.packetText}</pre>
+                          </details>
+                        ) : null}
+                        <div className="action-row">
+                          {isFollowupActionable(selectedJob) ? (
+                            <button
+                              type="button"
+                              className="button button--primary"
+                              disabled={Boolean(queueLocked)}
+                              onClick={() => props.onFollowup(selectedJob.job_id)}
+                            >
+                              {queueStatusLabel(queueRequest)}
+                            </button>
+                          ) : null}
+                          {queueRequest ? (
+                            <button type="button" className="button" onClick={props.onQueueCenter}>
+                              View Queue
+                            </button>
+                          ) : null}
+                          <button type="button" className="button button--ghost" onClick={() => props.onSelectJob(null)}>
+                            Close
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()
                 ) : (
                   <div className="empty-mini">
                     <p>Select a work item to inspect the packet context.</p>
@@ -335,6 +546,58 @@ export function MiniAppView(props: MiniAppViewProps) {
                 )}
               </aside>
             </div>
+            <button type="button" className="queue-activity" onClick={props.onQueueCenter}>
+              <span>
+                {latestQueueRequest
+                  ? `${queueStatusLabel(latestQueueRequest)} · ${formatQueueRequestTime(latestQueueRequest.createdAt)}`
+                  : "Queue activity"}
+              </span>
+              <strong>{props.queueRequests.length ? `${props.queueRequests.length} recent` : "Open"}</strong>
+            </button>
+          </section>
+        ) : null}
+
+        {props.screen === "queue" ? (
+          <section className="panel panel--queue">
+            <div className="panel__header">
+              <div>
+                <h2>Queue Center</h2>
+                <p className="panel__note">Recent POLARIS follow-up requests from this Mini App.</p>
+              </div>
+              <button type="button" className="button" onClick={() => props.onScreenChange("inbox")}>
+                Mission Inbox
+              </button>
+            </div>
+            <div className="queue-list">
+              {props.queueRequests.length ? (
+                props.queueRequests.map((request) => (
+                  <article key={request.id} className={`list-card queue-card tone-${queueStatusTone(request.status)}`}>
+                    <div className="list-card__meta">
+                      <span>{request.owner}</span>
+                      <span>{formatQueueRequestTime(request.createdAt)}</span>
+                    </div>
+                    <h3>{queueStatusLabel(request)}</h3>
+                    <p>{request.message}</p>
+                    <dl className="detail-grid">
+                      <div>
+                        <dt>Job</dt>
+                        <dd>{request.jobId}</dd>
+                      </div>
+                      <div>
+                        <dt>Intake</dt>
+                        <dd>{request.intakePath || "pending"}</dd>
+                      </div>
+                      <div>
+                        <dt>Packet</dt>
+                        <dd>{request.packetNumber ? `#${request.packetNumber}` : "pending"}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))
+              ) : (
+                <div className="empty-mini">No queue requests have been created from this Mini App yet.</div>
+              )}
+            </div>
           </section>
         ) : null}
 
@@ -342,7 +605,6 @@ export function MiniAppView(props: MiniAppViewProps) {
           <section className="panel panel--today">
             <div className="panel__header">
               <div>
-                <p className="panel__eyebrow">Orientation</p>
                 <h2>Today</h2>
               </div>
             </div>
@@ -367,7 +629,9 @@ export function MiniAppView(props: MiniAppViewProps) {
   );
 }
 
-export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
+export function MiniApp({ api }: { api?: ApiClient }) {
+  const defaultApi = useMemo(() => createApiClient(), []);
+  const client = api ?? defaultApi;
   const tg = useMemo(() => getTelegramWebApp(), []);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
@@ -381,8 +645,17 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
   const [sending, setSending] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [activityText, setActivityText] = useState("Bridge stable");
+  const [selectedJobDetail, setSelectedJobDetail] = useState<JobDetailPayload | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [queueRequests, setQueueRequests] = useState<QueueRequestView[]>([]);
   const streamCleanupRef = useRef<(() => void) | null>(null);
+  const followupInFlightRef = useRef(new Set<string>());
+  const mainButtonClickRef = useRef<() => void>(() => undefined);
+  const backButtonClickRef = useRef<() => void>(() => undefined);
+  const lastChatCanSendRef = useRef<boolean | null>(null);
+  const selectedJob = selectedJobId && inbox ? inbox.jobs.find((job) => job.job_id === selectedJobId) || null : null;
+  const selectedQueueRequest = selectedJob ? requestForJob(queueRequests, selectedJob.job_id) : null;
+  const bridgeStatus = deriveBridgeStatus({ loading, error, sending, conversation, home, review, inbox });
 
   useEffect(() => {
     prepareTelegramShell(tg);
@@ -405,7 +678,7 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api
+    client
       .bootstrap()
       .then((bootstrapPayload) => {
         if (cancelled) return;
@@ -414,7 +687,7 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
         setScreen(screenFromStartapp(bootstrapPayload.startapp));
         setError("");
 
-        return Promise.allSettled([api.home(), api.review(), api.inbox()]).then((results) => {
+        return Promise.allSettled([client.home(), client.review(), client.inbox()]).then((results) => {
           if (cancelled) return;
           const [homeResult, reviewResult, inboxResult] = results;
           if (homeResult.status === "fulfilled") {
@@ -425,6 +698,7 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
           }
           if (inboxResult.status === "fulfilled") {
             setInbox(inboxResult.value);
+            setQueueRequests((current) => mergeQueueRequests(current, inboxResult.value.queueRequests || []));
           }
           if (results.some((result) => result.status === "rejected")) {
             setActionMessage("Bridge chat is live. One of the side panels is still warming up.");
@@ -442,58 +716,92 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [client]);
+
+  mainButtonClickRef.current = () => {
+    if (screen === "chat" && !sending) {
+      void handleSubmit();
+      return;
+    }
+    if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
+      if (selectedQueueRequest?.status === "queuing") return;
+      if (selectedQueueRequest && ["queued", "refresh_delayed"].includes(selectedQueueRequest.status)) {
+        setScreen("queue");
+        return;
+      }
+      void handleFollowup(selectedJob.job_id);
+    }
+  };
+  backButtonClickRef.current = () => {
+    if (screen === "queue") {
+      setScreen("inbox");
+      return;
+    }
+    if (screen === "inbox" && selectedJobId) {
+      setSelectedJobId(null);
+      setSelectedJobDetail(null);
+      return;
+    }
+    setScreen("chat");
+  };
 
   useEffect(() => {
     if (!tg?.MainButton || !tg?.BackButton) return;
     const mainButton = tg.MainButton;
     const backButton = tg.BackButton;
-    const mainClick = () => {
-      if (!sending) {
-        void handleSubmit();
-      }
-    };
-    const backClick = () => {
-      if (screen === "inbox" && selectedJobId) {
-        setSelectedJobId(null);
-        return;
-      }
-        setScreen("chat");
-    };
+    const mainClick = () => mainButtonClickRef.current();
+    const backClick = () => backButtonClickRef.current();
 
-    mainButton.offClick(mainClick);
-    backButton.offClick(backClick);
-    mainButton.hide();
-    backButton.hide();
+    safeNative(() => mainButton.offClick(mainClick));
+    safeNative(() => backButton.offClick(backClick));
+    safeNative(() => mainButton.hideProgress?.());
+    safeNative(() => mainButton.hide());
+    safeNative(() => backButton.hide());
 
     if (screen === "chat") {
-      mainButton.setText(sending ? "Sending..." : "Send to ORION");
-      if (composerText.trim() && conversation && !sending) {
-        mainButton.enable?.();
+      safeNative(() => mainButton.setText(sending ? "Sending..." : "Send to ORION"));
+      lastChatCanSendRef.current = null;
+      safeNative(() => mainButton.show());
+      safeNative(() => mainButton.onClick(mainClick));
+    }
+    if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
+      const isQueued = selectedQueueRequest && ["queued", "refresh_delayed"].includes(selectedQueueRequest.status);
+      safeNative(() => mainButton.setText(isQueued ? "View Queue" : queueStatusLabel(selectedQueueRequest)));
+      if (selectedQueueRequest?.status === "queuing") {
+        safeNative(() => mainButton.disable?.());
+        safeNative(() => mainButton.showProgress?.(true));
       } else {
-        mainButton.disable?.();
+        safeNative(() => mainButton.enable?.());
       }
-      mainButton.show();
-      mainButton.onClick(mainClick);
+      safeNative(() => mainButton.show());
+      safeNative(() => mainButton.onClick(mainClick));
     }
-    if (screen === "inbox" && selectedJobId) {
-      backButton.show();
-      backButton.onClick(backClick);
-    }
-    if (screen === "today") {
-      backButton.show();
-      backButton.onClick(backClick);
+    if (screen !== "chat") {
+      safeNative(() => backButton.show());
+      safeNative(() => backButton.onClick(backClick));
     }
 
     return () => {
-      mainButton.offClick(mainClick);
-      backButton.offClick(backClick);
+      safeNative(() => mainButton.hideProgress?.());
+      safeNative(() => mainButton.offClick(mainClick));
+      safeNative(() => backButton.offClick(backClick));
     };
-  }, [screen, selectedJobId, sending, tg, composerText]);
+  }, [screen, selectedJobId, selectedJob, selectedQueueRequest, sending, tg]);
+
+  useEffect(() => {
+    if (!tg?.MainButton || screen !== "chat") return;
+    const canSend = Boolean(composerText.trim() && conversation && !sending);
+    if (lastChatCanSendRef.current === canSend) return;
+    lastChatCanSendRef.current = canSend;
+    if (canSend) {
+      safeNative(() => tg.MainButton?.enable?.());
+    } else {
+      safeNative(() => tg.MainButton?.disable?.());
+    }
+  }, [composerText, conversation, screen, sending, tg]);
 
   function applyRun(run: ChatRunPayload) {
     setConversation(run.conversation);
-    setActivityText(run.status === "completed" ? "Bridge stable" : run.status.replace(/_/g, " "));
     if (run.status === "completed") {
       setSending(false);
       vibrateNotice(tg, "success");
@@ -506,10 +814,11 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
   }
 
   async function refreshPanels() {
-    const [homePayload, reviewPayload, inboxPayload] = await Promise.all([api.home(), api.review(), api.inbox()]);
+    const [homePayload, reviewPayload, inboxPayload] = await Promise.all([client.home(), client.review(), client.inbox()]);
     setHome(homePayload);
     setReview(reviewPayload);
     setInbox(inboxPayload);
+    setQueueRequests((current) => mergeQueueRequests(current, inboxPayload.queueRequests || []));
   }
 
   async function handleSubmit() {
@@ -518,7 +827,6 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
     setSending(true);
     setError("");
     setActionMessage("");
-    setActivityText("Routing to ORION...");
     vibrateImpact(tg, "medium");
 
     const optimisticMessage = {
@@ -535,13 +843,13 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
     setComposerText("");
 
     try {
-      const run = await api.sendChat({
+      const run = await client.sendChat({
         conversationId: conversation.conversationId,
         message: text,
       });
       applyRun(run);
       streamCleanupRef.current?.();
-      streamCleanupRef.current = api.streamRun(
+      streamCleanupRef.current = client.streamRun(
         run.runId,
         (payload) => {
           applyRun(payload);
@@ -561,7 +869,7 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
   async function handleApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny") {
     setActionMessage("");
     try {
-      const payload = await api.resolveApproval(approvalId, decision);
+      const payload = await client.resolveApproval(approvalId, decision);
       setActionMessage(payload.message);
       await refreshPanels();
       vibrateNotice(tg, "success");
@@ -576,14 +884,77 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
 
   async function handleFollowup(jobId: string) {
     setActionMessage("");
+    setError("");
+    if (followupInFlightRef.current.has(jobId)) return;
+    const existing = requestForJob(queueRequests, jobId);
+    if (existing && ["queuing", "queued", "refresh_delayed"].includes(existing.status)) {
+      setScreen("queue");
+      return;
+    }
+    followupInFlightRef.current.add(jobId);
+    const pendingRequest: QueueRequestView = {
+      id: `pending-${jobId}`,
+      jobId,
+      owner: "POLARIS",
+      status: "queuing",
+      message: "Queuing follow-up for POLARIS.",
+      intakePath: "",
+      createdAt: new Date().toISOString(),
+    };
+    setQueueRequests((current) => mergeQueueRequests(current.filter((request) => request.id !== pendingRequest.id), [pendingRequest]));
     try {
-      const payload = await api.createFollowup(jobId);
-      setActionMessage(payload.message);
-      await refreshPanels();
+      const payload = await client.createFollowup(jobId);
+      const queuedRequest: QueueRequestView =
+        payload.request || {
+          id: `local-${Date.now()}`,
+          jobId,
+          owner: "POLARIS",
+          status: "queued",
+          message: payload.message || "Follow-up queued for POLARIS.",
+          intakePath: "",
+          createdAt: new Date().toISOString(),
+        };
+      setQueueRequests((current) => mergeQueueRequests(current.filter((request) => request.id !== pendingRequest.id), [queuedRequest]));
+      try {
+        await refreshPanels();
+      } catch (refreshError) {
+        const delayedRequest: QueueRequestView = { ...queuedRequest, status: "refresh_delayed" };
+        setQueueRequests((current) =>
+          mergeQueueRequests(
+            current.filter((request) => request.id !== pendingRequest.id && request.id !== queuedRequest.id),
+            [delayedRequest]
+          )
+        );
+        void client.updateQueueRequestStatus(queuedRequest.id, "refresh_delayed").catch(() => undefined);
+      }
       vibrateNotice(tg, "success");
     } catch (followupError) {
-      setError(followupError instanceof Error ? followupError.message : "Follow-up action failed.");
+      const failedMessage = friendlyPanelError(followupError, "Follow-up action failed.");
+      setQueueRequests((current) =>
+        mergeQueueRequests(
+          current.filter((request) => request.id !== pendingRequest.id),
+          [{ ...pendingRequest, status: "failed", message: failedMessage }]
+        )
+      );
       vibrateNotice(tg, "error");
+    } finally {
+      followupInFlightRef.current.delete(jobId);
+    }
+  }
+
+  async function handleSelectJob(jobId: string | null) {
+    setSelectedJobId(jobId);
+    setSelectedJobDetail(null);
+    setError("");
+    if (!jobId) return;
+    setDetailLoading(true);
+    try {
+      const detail = await client.fetchJobDetail(jobId);
+      setSelectedJobDetail(detail);
+    } catch (detailError) {
+      setError(detailError instanceof Error ? detailError.message : "Mission detail could not load.");
+    } finally {
+      setDetailLoading(false);
     }
   }
 
@@ -594,28 +965,38 @@ export function MiniApp({ api = createApiClient() }: { api?: ApiClient }) {
       appName={bootstrap?.appName || "ORION"}
       screen={screen}
       screenLabel={screenTitle(screen)}
-      connectionPill={sending ? "Live link active" : "Bridge ready"}
+      bridgeStatus={bridgeStatus}
       conversation={conversation}
       inbox={inbox}
+      selectedJobDetail={selectedJobDetail}
+      detailLoading={detailLoading}
       home={home}
       review={review}
+      queueRequests={queueRequests}
       loading={loading}
       error={error}
       composerText={composerText}
       sending={sending}
-      activityText={activityText}
+      hasNativeMainButton={Boolean(tg?.MainButton)}
       actionMessage={actionMessage}
       selectedJobId={selectedJobId}
       onScreenChange={(next) => {
         setScreen(next);
         setSelectedJobId(null);
+        setSelectedJobDetail(null);
         vibrateSelection(tg);
       }}
       onComposerChange={setComposerText}
       onComposerSubmit={() => void handleSubmit()}
       onApproval={(approvalId, decision) => void handleApproval(approvalId, decision)}
       onFollowup={(jobId) => void handleFollowup(jobId)}
-      onSelectJob={setSelectedJobId}
+      onSelectJob={(jobId) => void handleSelectJob(jobId)}
+      onQueueCenter={() => {
+        setScreen("queue");
+        setSelectedJobId(null);
+        setSelectedJobDetail(null);
+        vibrateSelection(tg);
+      }}
     />
   );
 }

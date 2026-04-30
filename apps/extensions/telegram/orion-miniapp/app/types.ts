@@ -1,4 +1,4 @@
-export type MiniAppScreen = "chat" | "inbox" | "today";
+export type MiniAppScreen = "chat" | "inbox" | "today" | "queue";
 
 export type ChatMessage = {
   id: string;
@@ -75,6 +75,28 @@ export type JobItem = {
   };
 };
 
+export type JobDetailPayload = {
+  job: JobItem;
+  needSummary: string;
+  nextStep: string;
+  packetText: string;
+  resultLines: string[];
+  relatedApprovals: ApprovalItem[];
+};
+
+export type QueueRequestStatus = "queued" | "refresh_delayed" | "failed";
+
+export type QueueRequest = {
+  id: string;
+  jobId: string;
+  owner: "POLARIS";
+  status: QueueRequestStatus;
+  message: string;
+  intakePath: string;
+  packetNumber?: number;
+  createdAt: string;
+};
+
 export type InboxPayload = {
   counts: Record<string, number>;
   updatedTs: number | null;
@@ -82,6 +104,7 @@ export type InboxPayload = {
   jobs: JobItem[];
   blockedJobs: JobItem[];
   pendingVerificationJobs: JobItem[];
+  queueRequests: QueueRequest[];
 };
 
 export type HomePayload = {

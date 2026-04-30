@@ -253,6 +253,8 @@ function createChatManager(options = {}) {
 
 function defaultExecuteTurn({ workspaceRoot, sessionId, message }) {
   return new Promise((resolve) => {
+    const timeoutSeconds = Math.max(15, Number.parseInt(process.env.ORION_MINIAPP_TURN_TIMEOUT_SECONDS || "90", 10) || 90);
+    let settled = false;
     const child = spawn(
       "python3",
       [
@@ -268,7 +270,7 @@ function defaultExecuteTurn({ workspaceRoot, sessionId, message }) {
         "--thinking",
         "medium",
         "--timeout",
-        "180",
+        String(timeoutSeconds),
         "--message",
         message,
       ],
@@ -281,6 +283,20 @@ function defaultExecuteTurn({ workspaceRoot, sessionId, message }) {
 
     let stdout = "";
     let stderr = "";
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      resolve(result);
+    };
+    const watchdog = setTimeout(() => {
+      child.kill("SIGTERM");
+      setTimeout(() => {
+        if (!settled) child.kill("SIGKILL");
+      }, 3000).unref?.();
+      finish({ ok: false, error: `timed out after ${timeoutSeconds}s`, text: "" });
+    }, (timeoutSeconds + 5) * 1000);
+    watchdog.unref?.();
     child.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
@@ -288,14 +304,14 @@ function defaultExecuteTurn({ workspaceRoot, sessionId, message }) {
       stderr += String(chunk);
     });
     child.on("error", (error) => {
-      resolve({ ok: false, error: error.message, text: "" });
+      finish({ ok: false, error: error.message, text: "" });
     });
     child.on("close", (code) => {
       if (code === 0) {
-        resolve({ ok: true, text: String(stdout || "").trim(), error: "" });
+        finish({ ok: true, text: String(stdout || "").trim(), error: "" });
         return;
       }
-      resolve({ ok: false, error: String(stderr || stdout || "").trim(), text: "" });
+      finish({ ok: false, error: String(stderr || stdout || "").trim(), text: "" });
     });
   });
 }

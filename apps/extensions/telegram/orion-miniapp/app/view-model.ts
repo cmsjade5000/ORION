@@ -2,15 +2,17 @@ import type { InboxPayload, JobItem, MiniAppScreen } from "./types";
 
 export function screenFromStartapp(startapp?: string): MiniAppScreen {
   const value = String(startapp || "").trim().toLowerCase();
+  if (["queue", "queue-center", "activity"].includes(value)) return "queue";
   if (["approvals", "approval", "work", "inbox"].includes(value)) return "inbox";
   if (["today", "review"].includes(value)) return "today";
   return "chat";
 }
 
 export function screenTitle(screen: MiniAppScreen): string {
+  if (screen === "queue") return "Queue Center";
   if (screen === "inbox") return "Mission Inbox";
   if (screen === "today") return "Today";
-  return "Bridge Chat";
+  return "Chat";
 }
 
 export function formatRelativeTime(ageMs: number): string {
