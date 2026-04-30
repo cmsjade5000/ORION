@@ -914,7 +914,7 @@ def main() -> int:
                     task_id,
                     base_url=(os.getenv("LOCAL_LLM_BASE_URL") or "http://127.0.0.1:1234/v1").strip(),
                     api_key=(os.getenv("LOCAL_LLM_API_KEY") or "local").strip(),
-                    model=(os.getenv("LOCAL_LLM_MODEL") or "qwen3.5-4b-mlx").strip(),
+                    model=(os.getenv("LOCAL_LLM_MODEL") or "qwen3.5-9b-mlx").strip(),
                     request_surface="openai-compatible-local-chat-completions",
                 )
             if row["pass_fail"] not in ALLOWED_PASS_FAIL:

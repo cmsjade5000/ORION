@@ -61,6 +61,7 @@ class LlmProviderArtifactsTest(unittest.TestCase):
 
     def test_local_lane_stays_bounded(self) -> None:
         local = next(item for item in self.registry["providers"] if item["provider_id"] == "local-bounded-runtime")
+        self.assertIn("qwen3.5-9b-mlx", local["models"])
         self.assertIn("summarization", local["allowed_tasks"])
         self.assertIn("specialist_orchestration", local["forbidden_tasks"])
         self.assertFalse(local["requires_hitl"])

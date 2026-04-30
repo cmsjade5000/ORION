@@ -24,141 +24,112 @@ class TestArchiveCompletedInboxPackets(unittest.TestCase):
     def setUpClass(cls):
         cls.mod = _load_module()
 
-    def test_dry_run_finds_complete_but_does_not_edit(self):
+    def _write_fixture(self, root: Path, *, notified_at: float) -> str:
+        inbox = root / "tasks" / "INBOX" / "ATLAS.md"
+        jobs = root / "tasks" / "JOBS"
+        inbox.parent.mkdir(parents=True, exist_ok=True)
+        jobs.mkdir(parents=True, exist_ok=True)
+        complete_before_result = [
+            "TASK_PACKET v1",
+            "Owner: ATLAS",
+            "Requester: ORION",
+            "Notify: telegram",
+            "Objective: Complete archival candidate.",
+        ]
+        queued_block = [
+            "TASK_PACKET v1",
+            "Owner: ATLAS",
+            "Requester: ORION",
+            "Notify: telegram",
+            "Objective: Still active.",
+        ]
+        complete_block = complete_before_result + [
+            "Result:",
+            "Status: OK",
+            "Summary: Done.",
+        ]
+        inbox.write_text("\n".join(complete_block + [""] + queued_block) + "\n", encoding="utf-8")
+        digest = self.mod.sha256_lines(complete_before_result)
+        summary = {
+            "jobs": [
+                {
+                    "state": "complete",
+                    "owner": "ATLAS",
+                    "objective": "Complete archival candidate.",
+                    "queued_digest": digest,
+                    "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 1},
+                    "result": {"status": "ok"},
+                    "notification_delivery": {
+                        "result": {
+                            "status": "delivered",
+                            "channels": {
+                                "telegram": {
+                                    "status": "delivered",
+                                    "attempts": 1,
+                                    "last_ts": notified_at,
+                                    "last_error": "",
+                                }
+                            },
+                        }
+                    },
+                }
+            ]
+        }
+        (jobs / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+        return digest
+
+    def test_dry_run_reports_archive_without_mutating_files(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            inbox = root / "tasks" / "INBOX" / "ATLAS.md"
-            jobs = root / "tasks" / "JOBS"
-            inbox.parent.mkdir(parents=True)
-            jobs.mkdir(parents=True)
-            inbox.write_text(
-                "\n".join(
-                    [
-                        "# ATLAS Inbox",
-                        "",
-                        "## Packets",
-                        "",
-                        "TASK_PACKET v1",
-                        "Owner: ATLAS",
-                        "Requester: ORION",
-                        "Objective: Done work.",
-                        "Result:",
-                        "Status: OK",
-                        "",
-                        "TASK_PACKET v1",
-                        "Owner: ATLAS",
-                        "Requester: ORION",
-                        "Objective: Still active.",
-                    ]
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            (jobs / "summary.json").write_text(
-                json.dumps(
-                    {
-                        "jobs": [
-                            {
-                                "job_id": "done",
-                                "state": "complete",
-                                "result": {"status": "ok"},
-                                "result_digest": "digest-done",
-                                "notify_channels": [],
-                                "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 5},
-                            },
-                            {
-                                "job_id": "queued",
-                                "state": "queued",
-                                "result": {"status": "pending"},
-                                "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 12},
-                            },
-                        ]
-                    }
-                ),
-                encoding="utf-8",
+            self._write_fixture(root, notified_at=1_000.0)
+            before = (root / "tasks" / "INBOX" / "ATLAS.md").read_text(encoding="utf-8")
+
+            report = self.mod.archive_completed_packets(
+                repo_root=root,
+                older_than_hours=48.0,
+                apply=False,
+                now_ts=1_000.0 + (49 * 3600.0),
             )
 
-            candidates = self.mod.find_candidates(
-                root,
-                state_path=root / "tmp" / "missing.json",
-                min_age_hours=0,
-                include_result_ok=False,
-                now_ts=9999999999,
-            )
-            result = self.mod.archive_candidates(root, candidates, apply=False)
-
-            self.assertEqual(len(candidates), 1)
-            self.assertEqual(result["archived"], [{"path": "tasks/INBOX/ATLAS.md", "line": 5, "reason": "state_complete"}])
-            self.assertIn("Done work.", inbox.read_text(encoding="utf-8"))
+            self.assertEqual(report["mode"], "dry-run")
+            self.assertEqual(report["archived_count"], 1)
+            self.assertEqual((root / "tasks" / "INBOX" / "ATLAS.md").read_text(encoding="utf-8"), before)
             self.assertFalse((root / "tasks" / "INBOX" / "archive").exists())
 
-    def test_apply_archives_result_ok_when_explicitly_included(self):
+    def test_apply_archives_only_terminal_completed_packets_older_than_threshold(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            inbox = root / "tasks" / "INBOX" / "SCRIBE.md"
-            jobs = root / "tasks" / "JOBS"
-            state_path = root / "tmp" / "inbox_notify_state.json"
-            inbox.parent.mkdir(parents=True)
-            jobs.mkdir(parents=True)
-            state_path.parent.mkdir(parents=True)
-            inbox.write_text(
-                "\n".join(
-                    [
-                        "# SCRIBE Inbox",
-                        "",
-                        "## Packets",
-                        "",
-                        "TASK_PACKET v1",
-                        "Owner: SCRIBE",
-                        "Requester: ORION",
-                        "Objective: Completed looking work.",
-                        "Result:",
-                        "Status: OK",
-                        "",
-                        "TASK_PACKET v1",
-                        "Owner: SCRIBE",
-                        "Requester: ORION",
-                        "Objective: Keep this one.",
-                    ]
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            state_path.write_text(json.dumps({"telegram:result:delivered:digest-ok": 100.0}), encoding="utf-8")
-            (jobs / "summary.json").write_text(
-                json.dumps(
-                    {
-                        "jobs": [
-                            {
-                                "job_id": "ok",
-                                "state": "pending_verification",
-                                "result": {"status": "ok"},
-                                "result_digest": "digest-ok",
-                                "notify_channels": ["telegram"],
-                                "inbox": {"path": "tasks/INBOX/SCRIBE.md", "line": 5},
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
+            self._write_fixture(root, notified_at=1_000.0)
+
+            report = self.mod.archive_completed_packets(
+                repo_root=root,
+                older_than_hours=48.0,
+                apply=True,
+                now_ts=1_000.0 + (49 * 3600.0),
             )
 
-            candidates = self.mod.find_candidates(
-                root,
-                state_path=state_path,
-                min_age_hours=1,
-                include_result_ok=True,
-                now_ts=3700.0,
-            )
-            result = self.mod.archive_candidates(root, candidates, apply=True)
+            self.assertEqual(report["archived_count"], 1)
+            active = (root / "tasks" / "INBOX" / "ATLAS.md").read_text(encoding="utf-8")
+            self.assertNotIn("Complete archival candidate.", active)
+            self.assertIn("Still active.", active)
+            archive_text = Path(str(report["archive_path"])).read_text(encoding="utf-8")
+            self.assertIn("Complete archival candidate.", archive_text)
 
-            self.assertEqual(result["archived"], [{"path": "tasks/INBOX/SCRIBE.md", "line": 5, "reason": "result_ok"}])
-            active = inbox.read_text(encoding="utf-8")
-            self.assertNotIn("Completed looking work.", active)
-            self.assertIn("Keep this one.", active)
-            archived_files = list((root / "tasks" / "INBOX" / "archive").glob("*/*.md"))
-            self.assertEqual(len(archived_files), 1)
-            self.assertIn("Completed looking work.", archived_files[0].read_text(encoding="utf-8"))
+    def test_recent_completed_packet_stays_active(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_fixture(root, notified_at=10_000.0)
+
+            report = self.mod.archive_completed_packets(
+                repo_root=root,
+                older_than_hours=48.0,
+                apply=True,
+                now_ts=10_000.0 + (47 * 3600.0),
+            )
+
+            self.assertEqual(report["archived_count"], 0)
+            active = (root / "tasks" / "INBOX" / "ATLAS.md").read_text(encoding="utf-8")
+            self.assertIn("Complete archival candidate.", active)
 
 
 if __name__ == "__main__":

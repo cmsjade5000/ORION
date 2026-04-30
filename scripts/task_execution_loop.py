@@ -52,7 +52,7 @@ CANONICAL_CRON_LABELS = {
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
-RE_RESULT_STATUS = re.compile(r"^\s*-?\s*Status:\s*(OK|FAILED|BLOCKED)\b", re.IGNORECASE)
+RE_RESULT_STATUS = re.compile(r"^\s*-?\s*Status:\s*(OK|FAILED|BLOCKED|CANCELLED)\b", re.IGNORECASE)
 RE_TICKET_PATH = re.compile(r"(tasks/WORK/(?:backlog|in-progress|testing|done)/\d{4}-[a-z0-9][a-z0-9-]*\.md)")
 NEXT_PACKET_PREFIX = "Next Packet "
 
@@ -300,9 +300,27 @@ def _load_tickets(repo_root: Path) -> dict[str, Ticket]:
     return by_name
 
 
+def _packet_identity(packet_fields: dict[str, str], packet_id: str, pending_key: str) -> tuple[str, str]:
+    idem_key = (packet_fields.get("Idempotency Key", "") or "").strip()
+    if idem_key:
+        return ("idempotency-key", idem_key)
+    if packet_id:
+        return ("packet-id", packet_id)
+    return ("content-hash", pending_key)
+
+
+def _prefer_packet(candidate: Packet, current: Packet) -> bool:
+    if len(candidate.lines) != len(current.lines):
+        return len(candidate.lines) > len(current.lines)
+    if candidate.inbox_path != current.inbox_path:
+        return str(candidate.inbox_path) > str(current.inbox_path)
+    return candidate.start_line > current.start_line
+
+
 def _load_packets(repo_root: Path) -> list[Packet]:
     inbox_dir = repo_root / "tasks" / "INBOX"
     out: list[Packet] = []
+    seen: dict[tuple[str, str], tuple[int, Packet]] = {}
     if not inbox_dir.exists():
         return out
 
@@ -332,24 +350,33 @@ def _load_packets(repo_root: Path) -> list[Packet]:
             fp = sha256_lines(before)
             result_status = _packet_result_status(pkt_lines)
             next_fields, next_sections = _packet_next_spec(pkt_lines)
-            out.append(
-                Packet(
-                    inbox_path=inbox,
-                    display_path=display,
-                    start_line=start_line,
-                    fields=_packet_fields(pkt_lines),
-                    lines=pkt_lines,
-                    pending_key=f"pending:{fp}",
-                    result_status=result_status,
-                    ticket_refs=_extract_ticket_refs(pkt_lines),
-                    next_packet_fields=next_fields,
-                    next_packet_sections=next_sections,
-                    packet_id=_packet_id(_packet_fields(pkt_lines), before),
-                    parent_packet_id=_packet_fields(pkt_lines).get("Parent Packet ID", "").strip(),
-                    root_packet_id=_packet_fields(pkt_lines).get("Root Packet ID", "").strip() or _packet_id(_packet_fields(pkt_lines), before),
-                    workflow_id=_packet_fields(pkt_lines).get("Workflow ID", "").strip() or _packet_fields(pkt_lines).get("Root Packet ID", "").strip() or _packet_id(_packet_fields(pkt_lines), before),
-                )
+            fields = _packet_fields(pkt_lines)
+            packet_id = _packet_id(fields, before)
+            packet = Packet(
+                inbox_path=inbox,
+                display_path=display,
+                start_line=start_line,
+                fields=fields,
+                lines=pkt_lines,
+                pending_key=f"pending:{fp}",
+                result_status=result_status,
+                ticket_refs=_extract_ticket_refs(pkt_lines),
+                next_packet_fields=next_fields,
+                next_packet_sections=next_sections,
+                packet_id=packet_id,
+                parent_packet_id=fields.get("Parent Packet ID", "").strip(),
+                root_packet_id=fields.get("Root Packet ID", "").strip() or packet_id,
+                workflow_id=fields.get("Workflow ID", "").strip() or fields.get("Root Packet ID", "").strip() or packet_id,
             )
+            key = _packet_identity(fields, packet.packet_id, packet.pending_key)
+            if key not in seen:
+                seen[key] = (len(out), packet)
+                out.append(packet)
+                continue
+            existing_idx, existing = seen[key]
+            if _prefer_packet(packet, existing):
+                out[existing_idx] = packet
+                seen[key] = (existing_idx, packet)
 
     return out
 
@@ -431,6 +458,16 @@ def _run_capture(argv: list[str]) -> CommandSnapshot:
 
 
 def _collect_openclaw_snapshot() -> OpenClawSnapshot:
+    if os.environ.get("ORION_TASK_LOOP_SKIP_OPENCLAW_SNAPSHOT") == "1":
+        skipped = CommandSnapshot(argv=[], returncode=0, stdout="", stderr="", data={})
+        return OpenClawSnapshot(
+            gateway_health=skipped,
+            gateway_status=skipped,
+            channels_status=skipped,
+            tasks_list=skipped,
+            tasks_audit=skipped,
+        )
+
     commands = {
         "gateway_health": ["openclaw", "gateway", "health"],
         "gateway_status": ["openclaw", "gateway", "status", "--json"],

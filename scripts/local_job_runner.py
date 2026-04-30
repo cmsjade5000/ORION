@@ -45,13 +45,6 @@ def _assistant_agenda_refresh(root: Path) -> None:
     _run(["/usr/bin/python3", "scripts/assistant_status.py", "--cmd", "refresh", "--json"], cwd=root)
 
 
-def _assistant_task_loop(root: Path) -> None:
-    _run(
-        ["/usr/bin/python3", "scripts/inbox_cycle.py", "--repo-root", ".", "--runner-max-packets", "4", "--stale-hours", "24", "--notify-max-per-run", "8"],
-        cwd=root,
-    )
-
-
 def _orion_error_review(root: Path) -> None:
     _run(
         [
@@ -102,7 +95,6 @@ def _orion_ops_bundle(root: Path) -> None:
 
 JOBS: list[Job] = [
     Job("assistant-agenda-refresh", {"type": "interval", "minutes": 15}, _assistant_agenda_refresh),
-    Job("assistant-task-loop", {"type": "interval", "minutes": 5}, _assistant_task_loop),
     Job("orion-error-review", {"type": "daily", "times": [(2, 15)]}, _orion_error_review),
     Job("orion-session-maintenance", {"type": "daily", "times": [(2, 45)]}, _orion_session_maintenance),
     Job("orion-ops-bundle", {"type": "daily", "times": [(3, 30)]}, _orion_ops_bundle),

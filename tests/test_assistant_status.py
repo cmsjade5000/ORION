@@ -313,6 +313,74 @@ class TestAssistantStatus(unittest.TestCase):
             self.assertIn("Dreaming config: enabled", message)
             self.assertIn("ORION memory sources: memory, sessions", message)
             self.assertIn("Recall entries: 3", message)
+            self.assertIn("short-term recall store has staged recall entries", message)
+
+    def test_dreaming_status_reports_missing_recall_store_as_fix_needed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            with mock.patch.object(
+                self.mod,
+                "_run_text_command",
+                side_effect=[
+                    (True, "memory-core"),
+                    (True, "true"),
+                ],
+            ), mock.patch.object(
+                self.mod,
+                "run_json_command",
+                return_value=[
+                    {
+                        "status": {"sources": ["memory", "sessions"]},
+                        "audit": {
+                            "exists": False,
+                            "entryCount": 0,
+                            "storePath": "/tmp/short-term-recall.json",
+                        },
+                    }
+                ],
+            ):
+                message = self.mod._render_dreaming_status(root)
+
+            self.assertIn("Short-term recall store: missing", message)
+            self.assertIn("Fix needed: dreaming is enabled", message)
+            self.assertNotIn("writing to the short-term recall store", message)
+
+    def test_dreaming_status_uses_disk_recall_store_when_status_api_misses_it(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            recall_path = root / "memory" / ".dreams" / "short-term-recall.json"
+            recall_path.parent.mkdir(parents=True, exist_ok=True)
+            recall_path.write_text(
+                json.dumps(
+                    {
+                        "updatedAt": "2026-04-28T17:09:15.755Z",
+                        "entries": {
+                            "one": {"snippet": "one"},
+                            "two": {"snippet": "two"},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                self.mod,
+                "_run_text_command",
+                side_effect=[
+                    (True, "memory-core"),
+                    (True, "true"),
+                ],
+            ), mock.patch.object(
+                self.mod,
+                "run_json_command",
+                return_value=[],
+            ):
+                message = self.mod._render_dreaming_status(root)
+
+            self.assertIn("Short-term recall store: present", message)
+            self.assertIn("Recall entries: 2", message)
+            self.assertIn("Recall updated: 2026-04-28T17:09:15.755Z", message)
 
     def test_dreaming_toggle_reports_restart_requirement(self):
         with tempfile.TemporaryDirectory() as td:

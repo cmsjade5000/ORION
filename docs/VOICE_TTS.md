@@ -44,9 +44,16 @@ List voices:
 node skills/elevenlabs-tts/cli.js list-voices
 ```
 
+List named ORION voice personas:
+
+```bash
+node skills/elevenlabs-tts/cli.js list-personas
+```
+
 ## Default Voice (Recommended)
 
 To avoid specifying a voice every time, set one of:
+- `ELEVENLABS_DEFAULT_PERSONA`
 - `ELEVENLABS_DEFAULT_VOICE_ID`
 - `ELEVENLABS_DEFAULT_VOICE_NAME`
 
@@ -57,6 +64,7 @@ If no default is configured and no voice is specified, the skill falls back to t
 Because the gateway runs as a LaunchAgent, your shell env vars may not carry over reliably. The most reliable way to persist non-secret defaults is `~/.openclaw/openclaw.json`:
 
 - `env.vars.ELEVENLABS_DEFAULT_VOICE_ID`
+- `env.vars.ELEVENLABS_DEFAULT_PERSONA` (optional, recommended for ORION)
 - `env.vars.ELEVENLABS_DEFAULT_PRESET` (optional)
 
 Helper script:
@@ -64,6 +72,18 @@ Helper script:
 ```bash
 ./scripts/elevenlabs_set_default_voice.sh --voice-name "River" --preset narration
 openclaw gateway restart
+```
+
+Current ORION personas use the same liked ORION ElevenLabs voice with different delivery settings:
+- `orion` — balanced default; warm, direct, lightly wry
+- `orion-warm` — softer and steadier
+- `orion-dry` — a little more texture and wryness
+- `orion-calm` — low-energy and grounded
+
+Example:
+
+```bash
+node skills/elevenlabs-tts/cli.js speak --persona orion --text "This is ORION speaking."
 ```
 
 ## Speaking Presets
@@ -128,7 +148,7 @@ Key/value form:
 AEGIS alert. Simulated. Please check status.
 ```
 
-Supported keys: `preset`, `voice_id`, `voice_name` (also accepts `voice` as alias for `voice_name`).
+Supported keys: `persona`, `preset`, `voice_id`, `voice_name` (also accepts `voice` as alias for `voice_name`).
 
 ## Supportive / Calming Audio: Intended Flow
 

@@ -156,7 +156,7 @@
       "api_path": "openai-compatible://lmstudio-or-ollama-or-vllm",
       "api_surface": "OpenAI-compatible local server",
       "models": [
-        "qwen3.5-4b-mlx",
+        "qwen3.5-9b-mlx",
         "ollama:<bounded-model>",
         "vllm:<bounded-model>"
       ],
