@@ -33,6 +33,7 @@ type ApiClient = {
   fetchRun(runId: string): Promise<ChatRunPayload>;
   streamRun(runId: string, onRun: (payload: ChatRunPayload) => void, onError: (message: string) => void): () => void;
   resolveApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny"): Promise<{ message: string; closesWebApp?: boolean }>;
+  resolveTaskPacketApproval(jobId: string, decision: "approve-once" | "deny"): Promise<{ message: string; duplicate?: boolean }>;
   createFollowup(jobId: string): Promise<{ message: string; request?: QueueRequest; duplicate?: boolean }>;
   updateQueueRequestStatus(requestId: string, status: QueueRequestStatus): Promise<{ request: QueueRequest }>;
 };
@@ -45,6 +46,24 @@ type BridgeStatus = {
 type QueueRequestView = Omit<QueueRequest, "status"> & {
   status: QueueRequestStatus | "queuing";
 };
+
+const ACTIVE_QUEUE_STATUSES = ["queuing", "queued", "refresh_delayed"] as const;
+
+function normalizeQueueStatus(status?: string): string {
+  return String(status || "").trim().toLowerCase();
+}
+
+function isActionableQueueStatus(status?: string): boolean {
+  return ACTIVE_QUEUE_STATUSES.includes(normalizeQueueStatus(status) as (typeof ACTIVE_QUEUE_STATUSES)[number]);
+}
+
+function isAcknowledgableQueueStatus(status?: string): boolean {
+  return ["completed", "failed", "refresh_delayed"].includes(normalizeQueueStatus(status));
+}
+
+function queueAcknowledgeLabel(): string {
+  return "Acknowledge";
+}
 
 function safeNative(action: () => void) {
   try {
@@ -121,24 +140,29 @@ function mergeQueueRequests(current: QueueRequestView[], incoming: QueueRequestV
 
 function requestForJob(queueRequests: QueueRequestView[], jobId: string): QueueRequestView | null {
   return (
-    queueRequests.find((request) => request.jobId === jobId && ["queuing", "queued", "refresh_delayed"].includes(request.status)) ||
+    queueRequests.find((request) => request.jobId === jobId && isActionableQueueStatus(request.status)) ||
     queueRequests.find((request) => request.jobId === jobId && request.status === "failed") ||
+    queueRequests.find((request) => request.jobId === jobId && request.status === "completed") ||
     null
   );
 }
 
 function queueStatusLabel(request: QueueRequestView | null): string {
-  if (!request) return "Queue Follow-Up";
+  if (!request) return "Ask POLARIS to Rework";
   if (request.status === "queuing") return "Queuing...";
-  if (request.status === "queued") return "Follow-Up Queued";
+  if (request.status === "queued") return "Rework Queued";
   if (request.status === "refresh_delayed") return "Queued; Refresh Delayed";
-  return "Retry Follow-Up";
+  if (request.status === "completed") return "Rework Completed";
+  if (request.status === "acknowledged") return "Acknowledged";
+  return "Retry Rework Request";
 }
 
 function queueStatusTone(status?: string): "good" | "warn" | "alert" | "neutral" {
   if (status === "queued") return "good";
   if (status === "queuing" || status === "refresh_delayed") return "warn";
   if (status === "failed") return "alert";
+  if (status === "completed") return "good";
+  if (status === "acknowledged") return "neutral";
   return "neutral";
 }
 
@@ -198,6 +222,11 @@ export function createApiClient(): ApiClient {
         method: "POST",
         body: JSON.stringify({ decision }),
       }),
+    resolveTaskPacketApproval: (jobId, decision) =>
+      jsonFetch(`/api/jobs/${encodeURIComponent(jobId)}/task-approval`, {
+        method: "POST",
+        body: JSON.stringify({ decision }),
+      }),
     createFollowup: (jobId) =>
       jsonFetch(`/api/jobs/${encodeURIComponent(jobId)}/followup`, {
         method: "POST",
@@ -233,18 +262,21 @@ type MiniAppViewProps = {
   onComposerChange(text: string): void;
   onComposerSubmit(): void;
   onApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny"): void;
+  onTaskPacketApproval?(jobId: string, decision: "approve-once" | "deny"): void;
   onFollowup(jobId: string): void;
+  onAcknowledgeQueueRequest(requestId: string): void;
   onSelectJob(jobId: string | null): void;
   onQueueCenter(): void;
 };
 
 export function MiniAppView(props: MiniAppViewProps) {
   const sections = props.inbox ? buildInboxSections(props.inbox) : [];
+  const visibleQueueRequests = props.queueRequests.filter((request) => request.status !== "acknowledged");
   const selectedJob =
     props.selectedJobId && props.inbox
       ? props.inbox.jobs.find((job) => job.job_id === props.selectedJobId) || null
       : null;
-  const latestQueueRequest = props.queueRequests[0] || null;
+  const latestQueueRequest = visibleQueueRequests[0] || null;
 
   return (
     <div className="starship-shell">
@@ -268,6 +300,7 @@ export function MiniAppView(props: MiniAppViewProps) {
             key={screen}
             type="button"
             className={`nav-chip ${props.screen === screen ? "is-active" : ""}`}
+            aria-label={`Open ${screenTitle(screen)}`}
             onClick={() => props.onScreenChange(screen)}
           >
             <span className="nav-chip__eyebrow">{screen === "chat" ? "Bridge" : screen === "inbox" ? "Mission" : "Status"}</span>
@@ -381,7 +414,7 @@ export function MiniAppView(props: MiniAppViewProps) {
                   {props.inbox?.jobs.length ? (
                     props.inbox.jobs.map((job) => {
                       const queueRequest = requestForJob(props.queueRequests, job.job_id);
-                      const queueLocked = queueRequest && ["queuing", "queued", "refresh_delayed"].includes(queueRequest.status);
+                      const queueLocked = queueRequest && isActionableQueueStatus(queueRequest.status);
                       const hasApproval = props.inbox?.approvals.some((approval) =>
                         [approval.summary, approval.label, approval.sessionKey, approval.sessionId]
                           .join(" ")
@@ -420,6 +453,15 @@ export function MiniAppView(props: MiniAppViewProps) {
                                 {queueStatusLabel(queueRequest)}
                               </button>
                             ) : null}
+                            {queueRequest && isAcknowledgableQueueStatus(queueRequest.status) ? (
+                              <button
+                                type="button"
+                                className="button button--ghost"
+                                onClick={() => props.onAcknowledgeQueueRequest(queueRequest.id)}
+                              >
+                                {queueAcknowledgeLabel()}
+                              </button>
+                            ) : null}
                           </div>
                         </article>
                       );
@@ -435,7 +477,7 @@ export function MiniAppView(props: MiniAppViewProps) {
                 {selectedJob ? (
                   (() => {
                     const queueRequest = requestForJob(props.queueRequests, selectedJob.job_id);
-                    const queueLocked = queueRequest && ["queuing", "queued", "refresh_delayed"].includes(queueRequest.status);
+                    const queueLocked = queueRequest && isActionableQueueStatus(queueRequest.status);
                     const detail = props.selectedJobDetail && props.selectedJobDetail.job.job_id === selectedJob.job_id ? props.selectedJobDetail : null;
                     return (
                       <>
@@ -473,9 +515,20 @@ export function MiniAppView(props: MiniAppViewProps) {
                             {queueRequest.intakePath ? <span>{queueRequest.intakePath}</span> : null}
                           </div>
                         ) : null}
+                        {queueRequest && isAcknowledgableQueueStatus(queueRequest.status) ? (
+                          <div className="action-row">
+                            <button
+                              type="button"
+                              className="button button--ghost"
+                              onClick={() => props.onAcknowledgeQueueRequest(queueRequest.id)}
+                            >
+                              {queueAcknowledgeLabel()} and Close
+                            </button>
+                          </div>
+                        ) : null}
                         {detail?.relatedApprovals.length ? (
                           <div className="approval-stack">
-                            <h4>Approval Actions</h4>
+                            <h4>Command Approval</h4>
                             {detail.relatedApprovals.map((approval) => (
                               <article key={approval.approvalId} className="approval-card">
                                 <div className="list-card__meta">
@@ -503,6 +556,55 @@ export function MiniAppView(props: MiniAppViewProps) {
                             ))}
                           </div>
                         ) : null}
+                        {detail?.taskPacketApproval?.latestDecision ? (
+                          <div className="approval-stack">
+                            <h4>Task Packet Decision</h4>
+                            <article className="approval-card">
+                              <div className="list-card__meta">
+                                <span>
+                                  {detail.taskPacketApproval.latestDecision.decision === "approve_once"
+                                    ? "Approved Once"
+                                    : "Denied"}
+                                </span>
+                                <span>{detail.taskPacketApproval.latestDecision.createdAt}</span>
+                              </div>
+                              <p>{detail.taskPacketApproval.reason}</p>
+                              {detail.taskPacketApproval.followupJob ? (
+                                <div className="queue-chip tone-good">
+                                  <strong>Owner Follow-Up Queued</strong>
+                                  <span>
+                                    {detail.taskPacketApproval.followupJob.owner} · {detail.taskPacketApproval.followupJob.state.replace(/_/g, " ")} ·{" "}
+                                    {detail.taskPacketApproval.followupJob.job_id}
+                                  </span>
+                                </div>
+                              ) : null}
+                            </article>
+                          </div>
+                        ) : null}
+                        {detail?.taskPacketApproval?.eligible ? (
+                          <div className="approval-stack">
+                            <h4>Task Packet Decision</h4>
+                            <article className="approval-card">
+                              <p>{detail.taskPacketApproval.reason}</p>
+                              <div className="action-row">
+                                <button
+                                  type="button"
+                                  className="button button--primary"
+                                  onClick={() => props.onTaskPacketApproval?.(selectedJob.job_id, "approve-once")}
+                                >
+                                  Approve Once
+                                </button>
+                                <button
+                                  type="button"
+                                  className="button button--ghost"
+                                  onClick={() => props.onTaskPacketApproval?.(selectedJob.job_id, "deny")}
+                                >
+                                  Deny
+                                </button>
+                              </div>
+                            </article>
+                          </div>
+                        ) : null}
                         {detail?.resultLines.length ? (
                           <details className="detail-disclosure" open>
                             <summary>Result Evidence</summary>
@@ -519,7 +621,7 @@ export function MiniAppView(props: MiniAppViewProps) {
                           {isFollowupActionable(selectedJob) ? (
                             <button
                               type="button"
-                              className="button button--primary"
+                              className={detail?.taskPacketApproval?.eligible ? "button" : "button button--primary"}
                               disabled={Boolean(queueLocked)}
                               onClick={() => props.onFollowup(selectedJob.job_id)}
                             >
@@ -552,7 +654,7 @@ export function MiniAppView(props: MiniAppViewProps) {
                   ? `${queueStatusLabel(latestQueueRequest)} · ${formatQueueRequestTime(latestQueueRequest.createdAt)}`
                   : "Queue activity"}
               </span>
-              <strong>{props.queueRequests.length ? `${props.queueRequests.length} recent` : "Open"}</strong>
+              <strong>{visibleQueueRequests.length ? `${visibleQueueRequests.length} recent` : "Open"}</strong>
             </button>
           </section>
         ) : null}
@@ -562,15 +664,15 @@ export function MiniAppView(props: MiniAppViewProps) {
             <div className="panel__header">
               <div>
                 <h2>Queue Center</h2>
-                <p className="panel__note">Recent POLARIS follow-up requests from this Mini App.</p>
+                <p className="panel__note">Recent POLARIS rework requests from this Mini App.</p>
               </div>
               <button type="button" className="button" onClick={() => props.onScreenChange("inbox")}>
                 Mission Inbox
               </button>
             </div>
             <div className="queue-list">
-              {props.queueRequests.length ? (
-                props.queueRequests.map((request) => (
+              {visibleQueueRequests.length ? (
+                visibleQueueRequests.map((request) => (
                   <article key={request.id} className={`list-card queue-card tone-${queueStatusTone(request.status)}`}>
                     <div className="list-card__meta">
                       <span>{request.owner}</span>
@@ -592,10 +694,21 @@ export function MiniAppView(props: MiniAppViewProps) {
                         <dd>{request.packetNumber ? `#${request.packetNumber}` : "pending"}</dd>
                       </div>
                     </dl>
+                    {isAcknowledgableQueueStatus(request.status) ? (
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="button button--primary"
+                          onClick={() => props.onAcknowledgeQueueRequest(request.id)}
+                        >
+                          {queueAcknowledgeLabel()} and Close
+                        </button>
+                      </div>
+                    ) : null}
                   </article>
                 ))
               ) : (
-                <div className="empty-mini">No queue requests have been created from this Mini App yet.</div>
+                <div className="empty-mini">No active queue requests have been created from this Mini App yet.</div>
               )}
             </div>
           </section>
@@ -639,6 +752,7 @@ export function MiniApp({ api }: { api?: ApiClient }) {
   const [review, setReview] = useState<ReviewPayload | null>(null);
   const [inbox, setInbox] = useState<InboxPayload | null>(null);
   const [screen, setScreen] = useState<MiniAppScreen>("chat");
+  const [routeStack, setRouteStack] = useState<MiniAppScreen[]>(["chat"]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [composerText, setComposerText] = useState("");
@@ -652,9 +766,16 @@ export function MiniApp({ api }: { api?: ApiClient }) {
   const followupInFlightRef = useRef(new Set<string>());
   const mainButtonClickRef = useRef<() => void>(() => undefined);
   const backButtonClickRef = useRef<() => void>(() => undefined);
+  const mainButtonListenerRef = useRef<() => void>(() => {
+    mainButtonClickRef.current();
+  });
+  const backButtonListenerRef = useRef<() => void>(() => {
+    backButtonClickRef.current();
+  });
   const lastChatCanSendRef = useRef<boolean | null>(null);
   const selectedJob = selectedJobId && inbox ? inbox.jobs.find((job) => job.job_id === selectedJobId) || null : null;
   const selectedQueueRequest = selectedJob ? requestForJob(queueRequests, selectedJob.job_id) : null;
+  const hasBackDestination = selectedJobId !== null || routeStack.length > 1;
   const bridgeStatus = deriveBridgeStatus({ loading, error, sending, conversation, home, review, inbox });
 
   useEffect(() => {
@@ -684,7 +805,9 @@ export function MiniApp({ api }: { api?: ApiClient }) {
         if (cancelled) return;
         setBootstrap(bootstrapPayload);
         setConversation(bootstrapPayload.conversation);
-        setScreen(screenFromStartapp(bootstrapPayload.startapp));
+        const startScreen = screenFromStartapp(bootstrapPayload.startapp);
+        setScreen(startScreen);
+        setRouteStack([startScreen]);
         setError("");
 
         return Promise.allSettled([client.home(), client.review(), client.inbox()]).then((results) => {
@@ -718,6 +841,57 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     };
   }, [client]);
 
+  function goToRootScreen(next: MiniAppScreen) {
+    if (next === screen) {
+      setSelectedJobId(null);
+      setSelectedJobDetail(null);
+      return;
+    }
+    setScreen(next);
+    setSelectedJobId(null);
+    setSelectedJobDetail(null);
+    setRouteStack([next]);
+  }
+
+  function openQueueCenter() {
+    if (screen === "inbox") {
+      setSelectedJobId(null);
+      setSelectedJobDetail(null);
+      setScreen("queue");
+      setRouteStack((current) => {
+        if (current[current.length - 1] === "queue") return current;
+        return [...current, "queue"];
+      });
+      return;
+    }
+
+    setScreen("queue");
+    setRouteStack((current) => {
+      if (current[current.length - 1] === "queue") return current;
+      return [...current, "queue"];
+    });
+  }
+
+  function goBack() {
+    if (screen === "inbox" && selectedJobId) {
+      setSelectedJobId(null);
+      setSelectedJobDetail(null);
+      return;
+    }
+
+    if (routeStack.length <= 1) {
+      return;
+    }
+
+    setRouteStack((current) => {
+      if (current.length <= 1) return current;
+      const nextStack = current.slice(0, -1);
+      const nextScreen = nextStack[nextStack.length - 1];
+      setScreen(nextScreen || "chat");
+      return nextStack;
+    });
+  }
+
   mainButtonClickRef.current = () => {
     if (screen === "chat" && !sending) {
       void handleSubmit();
@@ -725,32 +899,23 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     }
     if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
       if (selectedQueueRequest?.status === "queuing") return;
-      if (selectedQueueRequest && ["queued", "refresh_delayed"].includes(selectedQueueRequest.status)) {
-        setScreen("queue");
+      if (selectedQueueRequest && isActionableQueueStatus(selectedQueueRequest.status)) {
+        openQueueCenter();
         return;
       }
       void handleFollowup(selectedJob.job_id);
     }
   };
   backButtonClickRef.current = () => {
-    if (screen === "queue") {
-      setScreen("inbox");
-      return;
-    }
-    if (screen === "inbox" && selectedJobId) {
-      setSelectedJobId(null);
-      setSelectedJobDetail(null);
-      return;
-    }
-    setScreen("chat");
+    goBack();
   };
 
   useEffect(() => {
     if (!tg?.MainButton || !tg?.BackButton) return;
     const mainButton = tg.MainButton;
     const backButton = tg.BackButton;
-    const mainClick = () => mainButtonClickRef.current();
-    const backClick = () => backButtonClickRef.current();
+    const mainClick = mainButtonListenerRef.current;
+    const backClick = backButtonListenerRef.current;
 
     safeNative(() => mainButton.offClick(mainClick));
     safeNative(() => backButton.offClick(backClick));
@@ -765,7 +930,7 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       safeNative(() => mainButton.onClick(mainClick));
     }
     if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
-      const isQueued = selectedQueueRequest && ["queued", "refresh_delayed"].includes(selectedQueueRequest.status);
+      const isQueued = selectedQueueRequest && isActionableQueueStatus(selectedQueueRequest.status);
       safeNative(() => mainButton.setText(isQueued ? "View Queue" : queueStatusLabel(selectedQueueRequest)));
       if (selectedQueueRequest?.status === "queuing") {
         safeNative(() => mainButton.disable?.());
@@ -776,9 +941,12 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       safeNative(() => mainButton.show());
       safeNative(() => mainButton.onClick(mainClick));
     }
-    if (screen !== "chat") {
+    if (hasBackDestination) {
       safeNative(() => backButton.show());
       safeNative(() => backButton.onClick(backClick));
+    } else {
+      safeNative(() => backButton.offClick(backClick));
+      safeNative(() => backButton.hide());
     }
 
     return () => {
@@ -786,7 +954,7 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       safeNative(() => mainButton.offClick(mainClick));
       safeNative(() => backButton.offClick(backClick));
     };
-  }, [screen, selectedJobId, selectedJob, selectedQueueRequest, sending, tg]);
+  }, [screen, selectedJobId, selectedJob, selectedQueueRequest, sending, hasBackDestination, tg]);
 
   useEffect(() => {
     if (!tg?.MainButton || screen !== "chat") return;
@@ -882,12 +1050,29 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     }
   }
 
+  async function handleTaskPacketApproval(jobId: string, decision: "approve-once" | "deny") {
+    setActionMessage("");
+    setError("");
+    try {
+      const payload = await client.resolveTaskPacketApproval(jobId, decision);
+      setActionMessage(payload.message);
+      await refreshPanels();
+      if (selectedJobId === jobId) {
+        setSelectedJobDetail(await client.fetchJobDetail(jobId));
+      }
+      vibrateNotice(tg, "success");
+    } catch (approvalError) {
+      setError(approvalError instanceof Error ? approvalError.message : "Task Packet approval failed.");
+      vibrateNotice(tg, "error");
+    }
+  }
+
   async function handleFollowup(jobId: string) {
     setActionMessage("");
     setError("");
     if (followupInFlightRef.current.has(jobId)) return;
     const existing = requestForJob(queueRequests, jobId);
-    if (existing && ["queuing", "queued", "refresh_delayed"].includes(existing.status)) {
+    if (existing && isActionableQueueStatus(existing.status)) {
       setScreen("queue");
       return;
     }
@@ -897,7 +1082,7 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       jobId,
       owner: "POLARIS",
       status: "queuing",
-      message: "Queuing follow-up for POLARIS.",
+      message: "Asking POLARIS to rework this packet.",
       intakePath: "",
       createdAt: new Date().toISOString(),
     };
@@ -910,7 +1095,7 @@ export function MiniApp({ api }: { api?: ApiClient }) {
           jobId,
           owner: "POLARIS",
           status: "queued",
-          message: payload.message || "Follow-up queued for POLARIS.",
+          message: payload.message || "Rework request queued for POLARIS.",
           intakePath: "",
           createdAt: new Date().toISOString(),
         };
@@ -939,6 +1124,21 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       vibrateNotice(tg, "error");
     } finally {
       followupInFlightRef.current.delete(jobId);
+    }
+  }
+
+  async function handleAcknowledgeQueueRequest(requestId: string) {
+    setActionMessage("");
+    setError("");
+    try {
+      const payload = await client.updateQueueRequestStatus(requestId, "acknowledged");
+      setQueueRequests((current) => mergeQueueRequests(current, [payload.request]));
+      await refreshPanels();
+      setActionMessage("Queue packet acknowledged.");
+      vibrateNotice(tg, "success");
+    } catch (ackError) {
+      setError(ackError instanceof Error ? ackError.message : "Queue packet could not be acknowledged.");
+      vibrateNotice(tg, "error");
     }
   }
 
@@ -981,20 +1181,18 @@ export function MiniApp({ api }: { api?: ApiClient }) {
       actionMessage={actionMessage}
       selectedJobId={selectedJobId}
       onScreenChange={(next) => {
-        setScreen(next);
-        setSelectedJobId(null);
-        setSelectedJobDetail(null);
+        goToRootScreen(next);
         vibrateSelection(tg);
       }}
       onComposerChange={setComposerText}
       onComposerSubmit={() => void handleSubmit()}
       onApproval={(approvalId, decision) => void handleApproval(approvalId, decision)}
+      onTaskPacketApproval={(jobId, decision) => void handleTaskPacketApproval(jobId, decision)}
       onFollowup={(jobId) => void handleFollowup(jobId)}
+      onAcknowledgeQueueRequest={(requestId) => void handleAcknowledgeQueueRequest(requestId)}
       onSelectJob={(jobId) => void handleSelectJob(jobId)}
       onQueueCenter={() => {
-        setScreen("queue");
-        setSelectedJobId(null);
-        setSelectedJobDetail(null);
+        openQueueCenter();
         vibrateSelection(tg);
       }}
     />

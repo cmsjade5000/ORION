@@ -916,8 +916,18 @@ def main() -> int:
     new_results_tg: list[PacketResult] = [r for r in results_tg if not _state_has_seen(state, channel="telegram", kind="result", digest=r.result_hash)]
     new_results_dc: list[PacketResult] = [r for r in results_dc if not _state_has_seen(state, channel="discord", kind="result", digest=r.result_hash)]
 
-    new_alerts_tg = [item for item in workflow_alerts if not _state_has_seen(state, channel="telegram", kind="workflow", digest=item.alert_hash)]
-    new_alerts_dc = [item for item in workflow_alerts if not _state_has_seen(state, channel="discord", kind="workflow", digest=item.alert_hash)]
+    include_telegram_alerts = not args.require_notify_discord
+    include_discord_alerts = not args.require_notify_telegram or args.require_notify_discord
+    new_alerts_tg = [
+        item
+        for item in workflow_alerts
+        if include_telegram_alerts and not _state_has_seen(state, channel="telegram", kind="workflow", digest=item.alert_hash)
+    ]
+    new_alerts_dc = [
+        item
+        for item in workflow_alerts
+        if include_discord_alerts and not _state_has_seen(state, channel="discord", kind="workflow", digest=item.alert_hash)
+    ]
 
     if not new_queued_tg and not new_results_tg and not new_queued_dc and not new_results_dc and not new_alerts_tg and not new_alerts_dc:
         print("NOTIFY_IDLE")

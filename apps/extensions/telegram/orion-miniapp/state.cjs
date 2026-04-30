@@ -40,7 +40,7 @@ function queueRequestsPath(workspaceRoot) {
 function normalizeQueueRequest(row) {
   if (!row || typeof row !== "object") return null;
   const status = String(row.status || "").trim();
-  if (!["queued", "refresh_delayed", "failed"].includes(status)) return null;
+  if (!["queued", "refresh_delayed", "failed", "completed", "acknowledged"].includes(status)) return null;
   const id = String(row.id || "").trim();
   const jobId = String(row.jobId || row.job_id || "").trim();
   const createdAt = String(row.createdAt || "").trim();
@@ -96,7 +96,13 @@ function recentQueueRequestForJob(workspaceRoot, jobId, maxAgeMinutes = 10) {
   return (
     readQueueRequests(workspaceRoot, 40).find((request) => {
       const ageMs = now - Date.parse(request.createdAt);
-      return request.jobId === targetJobId && request.status !== "failed" && Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= maxAgeMs;
+      return (
+        request.jobId === targetJobId &&
+        ["queued", "refresh_delayed", "completed"].includes(request.status) &&
+        Number.isFinite(ageMs) &&
+        ageMs >= 0 &&
+        ageMs <= maxAgeMs
+      );
     }) || null
   );
 }
@@ -123,7 +129,7 @@ function persistQueueRequest(workspaceRoot, input) {
 function updateQueueRequestStatus(workspaceRoot, requestId, status) {
   const targetId = String(requestId || "").trim();
   const nextStatus = String(status || "").trim();
-  if (!targetId || !["queued", "refresh_delayed", "failed"].includes(nextStatus)) return null;
+  if (!targetId || !["queued", "refresh_delayed", "failed", "completed", "acknowledged"].includes(nextStatus)) return null;
   let updated = null;
   const requests = readQueueRequests(workspaceRoot, 40).map((request) => {
     if (request.id !== targetId) return request;
@@ -183,6 +189,35 @@ function packetPreview(workspaceRoot) {
   };
 }
 
+function taskPacketApprovalRecords(workspaceRoot) {
+  const repoRoot = repoRootFromWorkspace(workspaceRoot);
+  const filePath = path.join(repoRoot, "tasks", "APPROVALS", "task-packet-approvals.jsonl");
+  return readJsonLines(filePath)
+    .filter((row) => row && typeof row === "object" && row.job_id && row.decision)
+    .sort((a, b) => Date.parse(String(b.created_at || "")) - Date.parse(String(a.created_at || "")));
+}
+
+function latestTaskPacketApproval(workspaceRoot, jobId) {
+  const target = String(jobId || "").trim();
+  if (!target) return null;
+  return taskPacketApprovalRecords(workspaceRoot).find((row) => String(row.job_id || "") === target) || null;
+}
+
+function approvedFollowupJob(workspaceRoot, job) {
+  const workflowId = String(job && (job.workflow_id || job.job_id) ? job.workflow_id || job.job_id : "");
+  const jobId = String(job && job.job_id ? job.job_id : "");
+  if (!workflowId) return null;
+  const summary = jobsSummary(workspaceRoot);
+  const jobs = Array.isArray(summary.jobs) ? summary.jobs : [];
+  return (
+    jobs.find((candidate) => {
+      if (String(candidate.job_id || "") === jobId) return false;
+      if (String(candidate.workflow_id || "") !== workflowId) return false;
+      return /approved task packet|continue the approved/i.test(String(candidate.objective || ""));
+    }) || null
+  );
+}
+
 function safeWorkspacePath(workspaceRoot, relativePath) {
   const repoRoot = repoRootFromWorkspace(workspaceRoot);
   const clean = String(relativePath || "").trim();
@@ -236,38 +271,92 @@ function approvalMatchesJob(approval, job) {
   return false;
 }
 
-function deriveNeedSummary(job, relatedApprovals) {
+function deriveNeedSummary(job, relatedApprovals, taskPacketApproval) {
   const state = String(job && job.state ? job.state : "").toLowerCase();
   if (relatedApprovals.length) return "Approval is waiting. Review the request and choose Allow Once, Always, or Deny.";
-  if (state === "blocked") return job.state_reason ? `Blocked: ${job.state_reason}` : "Blocked and needs a follow-up or fresh input.";
+  if (taskPacketApproval && taskPacketApproval.latestDecision) {
+    return taskPacketApproval.latestDecision.decision === "approve_once"
+      ? "Approved once. A scoped owner follow-up packet has been queued."
+      : "Denied. The decision is recorded and no owner follow-up was queued.";
+  }
+  if (state === "blocked") return job.state_reason ? `Blocked: ${job.state_reason}` : "Blocked and eligible for a Task Packet approval decision.";
   if (state === "pending_verification") return "Work is back from the specialist and needs verification before it can be treated as done.";
   if (state === "queued" || state === "running") return "Work is in motion. Inspect the packet and wait for a result before nudging it.";
   return "No immediate action detected. Review the packet if this still looks stale.";
 }
 
-function deriveNextStep(job, relatedApprovals) {
+function deriveNextStep(job, relatedApprovals, taskPacketApproval) {
   const state = String(job && job.state ? job.state : "").toLowerCase();
   if (relatedApprovals.length) return "Use the approval buttons below, or copy the displayed Telegram command if live approval context is unavailable.";
-  if (state === "blocked") return "Queue a follow-up so POLARIS can recover the blocked work with context.";
+  if (taskPacketApproval && taskPacketApproval.latestDecision) {
+    if (taskPacketApproval.latestDecision.decision === "approve_once" && taskPacketApproval.followupJob) {
+      return `Watch the queued owner follow-up: ${taskPacketApproval.followupJob.job_id}.`;
+    }
+    if (taskPacketApproval.latestDecision.decision === "approve_once") {
+      return "Watch the owner inbox for the approved follow-up packet.";
+    }
+    return "No execution will run from this packet unless a new approval is created later.";
+  }
+  if (state === "blocked") return "Approve it once, deny it, or ask POLARIS to rework the packet if the request itself is wrong.";
   if (state === "pending_verification") return "Read the result evidence. If it is sufficient, handle completion outside this Mini App; otherwise queue a follow-up.";
   return "Keep monitoring unless the packet has aged or looks wrong.";
+}
+
+function taskPacketApprovalState(workspaceRoot, job) {
+  const state = String(job && job.state ? job.state : "").toLowerCase();
+  const latest = latestTaskPacketApproval(workspaceRoot, job && job.job_id);
+  const followupJob = approvedFollowupJob(workspaceRoot, job);
+  if (latest) {
+    return {
+      eligible: false,
+      reason:
+        latest.decision === "approve_once"
+          ? "Approved once. A scoped follow-up packet was queued for the owner."
+          : "Denied. This packet will not run from the Mini App decision path.",
+      latestDecision: {
+        id: String(latest.id || ""),
+        decision: String(latest.decision || ""),
+        createdAt: String(latest.created_at || ""),
+        actor: String(latest.actor || ""),
+        queuedPacket: String(latest.queued_packet || ""),
+      },
+      followupJob: followupJob
+        ? {
+            job_id: String(followupJob.job_id || ""),
+            state: String(followupJob.state || ""),
+            owner: String(followupJob.owner || ""),
+            objective: String(followupJob.objective || ""),
+          }
+        : null,
+    };
+  }
+  if (state !== "blocked") {
+    return { eligible: false, reason: "Only blocked Task Packets can be approved here." };
+  }
+  return {
+    eligible: true,
+    reason: "Approve Once queues a scoped follow-up packet for the listed owner. Deny records the decision without queueing work.",
+    decisions: ["approve-once", "deny"],
+  };
 }
 
 function jobDetail(workspaceRoot, jobId) {
   const job = findJobById(workspaceRoot, jobId);
   if (!job) return null;
   const relatedApprovals = recentApprovalPrompts().filter((approval) => approvalMatchesJob(approval, job));
+  const taskPacketApproval = taskPacketApprovalState(workspaceRoot, job);
   const resultLines =
     job.result && Array.isArray(job.result.preview_lines)
       ? job.result.preview_lines.map((line) => String(line || "")).filter(Boolean)
       : [];
   return {
     job,
-    needSummary: deriveNeedSummary(job, relatedApprovals),
-    nextStep: deriveNextStep(job, relatedApprovals),
+    needSummary: deriveNeedSummary(job, relatedApprovals, taskPacketApproval),
+    nextStep: deriveNextStep(job, relatedApprovals, taskPacketApproval),
     packetText: readPacketExcerpt(workspaceRoot, job.inbox),
     resultLines,
     relatedApprovals,
+    taskPacketApproval,
   };
 }
 
@@ -429,5 +518,6 @@ module.exports = {
   reviewState,
   runJsonCommand,
   runTextCommand,
+  taskPacketApprovalRecords,
   updateQueueRequestStatus,
 };

@@ -36,6 +36,24 @@ def _validate_packets(repo_root: Path) -> dict[str, object]:
     return {"ok": rc == 0, "returncode": rc, "output": (stdout + stderr).strip()}
 
 
+def _packet_audit(repo_root: Path) -> dict[str, object]:
+    rc, stdout, stderr = _run(["python3", "scripts/packet_audit.py", "--repo-root", str(repo_root), "--json"], cwd=repo_root)
+    try:
+        payload = json.loads(stdout)
+    except Exception:
+        payload = {}
+    counts = payload.get("counts", {}) if isinstance(payload, dict) else {}
+    issues = payload.get("issues", []) if isinstance(payload, dict) else []
+    return {
+        "ok": rc == 0 and bool(payload.get("ok", False)) if isinstance(payload, dict) else False,
+        "returncode": rc,
+        "issue_count": int(payload.get("issue_count", 0) or 0) if isinstance(payload, dict) else 0,
+        "counts": counts if isinstance(counts, dict) else {},
+        "issues": issues if isinstance(issues, list) else [],
+        "output": (stderr or "").strip(),
+    }
+
+
 def _summary_health(repo_root: Path, *, max_age_seconds: int) -> dict[str, object]:
     path = repo_root / "tasks" / "JOBS" / "summary.json"
     payload = _load_json(path, {})
@@ -178,6 +196,7 @@ def _load_json_from_text(text: str, default: Any) -> Any:
 def run_doctor(repo_root: Path, *, skip_runtime: bool = False, max_summary_age_seconds: int = 900) -> dict[str, object]:
     checks = {
         "packet_validation": _validate_packets(repo_root),
+        "packet_audit": _packet_audit(repo_root),
         "jobs_summary": _summary_health(repo_root, max_age_seconds=max_summary_age_seconds),
         "dead_letters": _dead_letters(repo_root),
         "notify_state": _notify_state(repo_root),
@@ -198,11 +217,13 @@ def _render_text(report: dict[str, object]) -> str:
     dead = checks.get("dead_letters", {}) if isinstance(checks.get("dead_letters"), dict) else {}
     runtime = checks.get("runtime", {}) if isinstance(checks.get("runtime"), dict) else {}
     email = checks.get("email_reply_queue", {}) if isinstance(checks.get("email_reply_queue"), dict) else {}
+    audit = checks.get("packet_audit", {}) if isinstance(checks.get("packet_audit"), dict) else {}
     return "\n".join(
         [
             f"INBOX_DOCTOR {'OK' if report.get('ok') else 'WARN'}",
             f"issues: {', '.join(report.get('issues', [])) if report.get('issues') else 'none'}",
             f"queue: {summary.get('counts', {})}",
+            f"packet_audit: issues={audit.get('issue_count', 0)} errors={audit.get('counts', {}).get('error', 0) if isinstance(audit.get('counts'), dict) else 0}",
             f"email_reply_queue: queued={email.get('queued_count', 0)} stuck={email.get('stuck_count', 0)}",
             f"summary_age_seconds: {summary.get('age_seconds')}",
             f"dead_letters: {dead.get('count', 0)}",

@@ -34,7 +34,7 @@ NEXT_PACKET_PREFIX = "Next Packet "
 
 ATLAS_DIRECTED_SUBAGENTS = {"NODE", "PULSE", "STRATUS"}
 ALLOWED_NOTIFY_CHANNELS = {"telegram", "discord", "none"}
-ALLOWED_APPROVAL_GATES = {"LEDGER_RESULT_REQUIRED"}
+ALLOWED_APPROVAL_GATES = {"CORY_MINIAPP_APPROVED", "LEDGER_RESULT_REQUIRED"}
 ALLOWED_NEXT_PACKET_RESULTS = {"OK", "FAILED", "BLOCKED", "ANY"}
 RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ROUTING_OVERRIDE_FIELDS = ("Routing Override Rationale",)
@@ -291,6 +291,12 @@ def _validate_packet_fields(
                 errors.append(
                     f"{path}:{start_line}: {packet_label} {packet_num}: Gate Evidence must reference LEDGER when "
                     f"Approval Gate is LEDGER_RESULT_REQUIRED"
+                )
+        if approval_gate == "CORY_MINIAPP_APPROVED":
+            if gate_evidence and "task-packet-approvals.jsonl" not in gate_evidence:
+                errors.append(
+                    f"{path}:{start_line}: {packet_label} {packet_num}: Gate Evidence must reference "
+                    f"task-packet-approvals.jsonl when Approval Gate is CORY_MINIAPP_APPROVED"
                 )
 
     if expected_owner == "POLARIS":

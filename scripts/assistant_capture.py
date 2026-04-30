@@ -27,6 +27,13 @@ def _next_intake_path(root: Path, text: str) -> Path:
     return root / "tasks" / "INTAKE" / f"{stamp}-{slug}.md"
 
 
+def _format_capture_input(text: str) -> str:
+    lines = text.strip().splitlines() or [""]
+    formatted = ["- Capture text:"]
+    formatted.extend(f"  {line}" if line else "  " for line in lines)
+    return "\n".join(formatted)
+
+
 def _append_polaris_packet(root: Path, intake_rel: str, text: str, notify: str) -> int:
     inbox_path = root / "tasks" / "INBOX" / "POLARIS.md"
     current = inbox_path.read_text(encoding="utf-8")
@@ -52,7 +59,7 @@ def _append_polaris_packet(root: Path, intake_rel: str, text: str, notify: str) 
         "- Keep all changes local to repo artifacts unless ORION relays approval.\n"
         "Inputs:\n"
         f"- {intake_rel}\n"
-        f"- Capture text: {text.strip()}\n"
+        f"{_format_capture_input(text)}\n"
         "Risks:\n"
         "- low\n"
         "Stop Gates:\n"

@@ -79,6 +79,18 @@ Output Format:
 - What changed / what I found:
 - Next step (if any):
 
+Result:
+Status: BLOCKED
+What changed / what I found:
+- Risk preflight completed from packet metadata only.
+- Sender: Cory Stoner <cory.stoner@icloud.com>; sender domain `icloud.com` matches the claimed requester.
+- Link domains: none.
+- Attachment types: none.
+- Requested action is to send a reply email with a brief poem, which is an outbound side effect.
+- Per packet constraints and stop gates, outbound email requires explicit Cory approval via ORION before execution.
+Next step (if any):
+- Wait for ORION to provide explicit Cory approval, then draft/send the brief poem reply through the approved email path.
+
 
 TASK_PACKET v1
 Owner: ATLAS
@@ -110,4 +122,212 @@ Output Format:
 - Result:
 - Status: OK | FAILED | BLOCKED
 - What changed / what I found:
+- Next step (if any):
+
+Result:
+Status: BLOCKED
+What changed / what I found:
+- Risk preflight completed from packet metadata only.
+- Sender: Cory Stoner <cory.stoner@icloud.com>; sender domain `icloud.com` matches the claimed requester.
+- Link domains: none.
+- Attachment types: none.
+- Requested action is `restart the gateway`, which is a side-effecting operational change, not a read-only check.
+- Per packet constraints, side effects require explicit Cory approval via ORION before execution.
+Next step (if any):
+- Wait for ORION to provide explicit Cory approval, then execute the gateway restart through the first-class restart path and report verification.
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Notify: telegram
+Idempotency Key: miniapp-approval-test-dry-run-20260430
+Objective: TEST APPROVAL: confirm Mini App approval flow for a dry-run ATLAS packet.
+Success Criteria:
+- The Mini App shows this blocked packet as eligible for Cory approval.
+- Cory can tap Approve Once or Deny without any external side effects.
+Constraints:
+- Test packet only.
+- Do not run external commands, send messages, edit credentials, or change live services from this packet.
+Inputs:
+- This is a safe approval-flow smoke test. Approving it should only queue the approved follow-up packet; no external side effects are required.
+Risks:
+- Low; this packet exists only to exercise the approval UI.
+Stop Gates:
+- Any non-test side effect.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Next step (if any):
+
+Result:
+Status: BLOCKED
+What changed / what I found:
+- This is a safe approval-flow smoke test. Approving it should only queue the approved follow-up packet; no external side effects are required.
+Next step (if any):
+- Await Cory's Mini App approval decision.
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Notify: telegram
+Idempotency Key: miniapp-approval-test-deny-path-20260430
+Objective: TEST APPROVAL: confirm Mini App deny path for a Task Packet.
+Success Criteria:
+- The Mini App shows this blocked packet as eligible for Cory approval.
+- Cory can tap Approve Once or Deny without any external side effects.
+Constraints:
+- Test packet only.
+- Do not run external commands, send messages, edit credentials, or change live services from this packet.
+Inputs:
+- This is a safe deny-flow smoke test. Denying it should write the approval decision log and queue no follow-up packet.
+Risks:
+- Low; this packet exists only to exercise the approval UI.
+Stop Gates:
+- Any non-test side effect.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Next step (if any):
+
+Result:
+Status: BLOCKED
+What changed / what I found:
+- This is a safe deny-flow smoke test. Denying it should write the approval decision log and queue no follow-up packet.
+Next step (if any):
+- Await Cory's Mini App approval decision.
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Notify: telegram
+Idempotency Key: task-approval-tpa-52f0d0017bca4a24
+Workflow ID: ik-b1e1ebdfe55dd651
+Approval Gate: CORY_MINIAPP_APPROVED
+Gate Evidence: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-52f0d0017bca4a24
+Execution Mode: direct
+Tool Scope: write
+Objective: Continue the approved Task Packet exactly once: TEST APPROVAL: confirm Mini App approval flow for a dry-run ATLAS packet.
+Success Criteria:
+- Re-check the original packet, stop gates, and current state before any action.
+- Execute only the work covered by Cory's Mini App approval record.
+- Report command/path proof and verification in the Result block.
+Constraints:
+- Approval scope is this exact packet only; do not generalize it to future packets.
+- Preserve every stop gate from the original packet unless the approval record explicitly covers it.
+- Do not perform credential, payment, destructive, or broad external-delivery work unless the original packet and approval both authorize it.
+Inputs:
+- Approval record: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-52f0d0017bca4a24
+- Original job id: ik-b1e1ebdfe55dd651
+- Original inbox: tasks/INBOX/ATLAS.md:139
+- Actor: telegram:8471523294 Cory
+Risks:
+- Approval could be misapplied to adjacent work; mitigate by matching the original job id and inbox pointer.
+Stop Gates:
+- If the original packet is missing, changed materially, or no longer blocked on Cory approval, stop and return BLOCKED.
+- If execution would exceed the original packet scope, stop and ask ORION for a new approval packet.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Verification:
+- Next step (if any):
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Notify: telegram
+Idempotency Key: miniapp-approval-test-visible-approve-20260430b
+Objective: TEST APPROVAL: verify visible approved-state feedback in the Mini App.
+Success Criteria:
+- The Mini App shows this blocked packet as eligible for Cory approval.
+- Cory can tap Approve Once or Deny without any external side effects.
+Constraints:
+- Test packet only.
+- Do not run external commands, send messages, edit credentials, or change live services from this packet.
+Inputs:
+- This is a safe approval-feedback smoke test. Approving it should show an approved decision and a queued owner follow-up in the detail panel.
+Risks:
+- Low; this packet exists only to exercise the approval UI.
+Stop Gates:
+- Any non-test side effect.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Next step (if any):
+
+Result:
+Status: BLOCKED
+What changed / what I found:
+- This is a safe approval-feedback smoke test. Approving it should show an approved decision and a queued owner follow-up in the detail panel.
+Next step (if any):
+- Await Cory's Mini App approval decision.
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Notify: telegram
+Idempotency Key: miniapp-approval-test-visible-deny-20260430b
+Objective: TEST APPROVAL: verify visible denied-state feedback in the Mini App.
+Success Criteria:
+- The Mini App shows this blocked packet as eligible for Cory approval.
+- Cory can tap Approve Once or Deny without any external side effects.
+Constraints:
+- Test packet only.
+- Do not run external commands, send messages, edit credentials, or change live services from this packet.
+Inputs:
+- This is a safe denial-feedback smoke test. Denying it should show a denied decision in the detail panel and queue no owner follow-up.
+Risks:
+- Low; this packet exists only to exercise the approval UI.
+Stop Gates:
+- Any non-test side effect.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Next step (if any):
+
+Result:
+Status: BLOCKED
+What changed / what I found:
+- This is a safe denial-feedback smoke test. Denying it should show a denied decision in the detail panel and queue no owner follow-up.
+Next step (if any):
+- Await Cory's Mini App approval decision.
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Notify: telegram
+Idempotency Key: task-approval-tpa-024a33e4d4b67421
+Workflow ID: ik-c71e7aca34542b7f
+Approval Gate: CORY_MINIAPP_APPROVED
+Gate Evidence: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-024a33e4d4b67421
+Execution Mode: direct
+Tool Scope: write
+Objective: Continue the approved Task Packet exactly once: TEST APPROVAL: verify visible approved-state feedback in the Mini App.
+Success Criteria:
+- Re-check the original packet, stop gates, and current state before any action.
+- Execute only the work covered by Cory's Mini App approval record.
+- Report command/path proof and verification in the Result block.
+Constraints:
+- Approval scope is this exact packet only; do not generalize it to future packets.
+- Preserve every stop gate from the original packet unless the approval record explicitly covers it.
+- Do not perform credential, payment, destructive, or broad external-delivery work unless the original packet and approval both authorize it.
+Inputs:
+- Approval record: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-024a33e4d4b67421
+- Original job id: ik-c71e7aca34542b7f
+- Original inbox: tasks/INBOX/ATLAS.md:237
+- Actor: telegram:8471523294 Cory
+Risks:
+- Approval could be misapplied to adjacent work; mitigate by matching the original job id and inbox pointer.
+Stop Gates:
+- If the original packet is missing, changed materially, or no longer blocked on Cory approval, stop and return BLOCKED.
+- If execution would exceed the original packet scope, stop and ask ORION for a new approval packet.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Verification:
 - Next step (if any):

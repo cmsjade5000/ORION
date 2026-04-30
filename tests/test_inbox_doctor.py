@@ -30,6 +30,7 @@ class TestInboxDoctor(unittest.TestCase):
             root = Path(td)
             with (
                 mock.patch.object(self.mod, "_validate_packets", return_value={"ok": True}),
+                mock.patch.object(self.mod, "_packet_audit", return_value={"ok": True, "issue_count": 0, "counts": {}}),
                 mock.patch.object(self.mod, "_summary_health", return_value={"ok": True, "counts": {"queued": 0}}),
                 mock.patch.object(self.mod, "_dead_letters", return_value={"ok": True, "count": 0}),
                 mock.patch.object(self.mod, "_notify_state", return_value={"ok": True, "outcomes": {}}),
@@ -47,6 +48,7 @@ class TestInboxDoctor(unittest.TestCase):
             root = Path(td)
             with (
                 mock.patch.object(self.mod, "_validate_packets", return_value={"ok": True}),
+                mock.patch.object(self.mod, "_packet_audit", return_value={"ok": True, "issue_count": 0, "counts": {}}),
                 mock.patch.object(self.mod, "_summary_health", return_value={"ok": True, "counts": {"queued": 0}}),
                 mock.patch.object(self.mod, "_dead_letters", return_value={"ok": False, "count": 1}),
                 mock.patch.object(self.mod, "_notify_state", return_value={"ok": True, "outcomes": {}}),
@@ -58,6 +60,24 @@ class TestInboxDoctor(unittest.TestCase):
 
             self.assertFalse(report["ok"])
             self.assertIn("dead_letters", report["issues"])
+
+    def test_doctor_reports_packet_audit_issue(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            with (
+                mock.patch.object(self.mod, "_validate_packets", return_value={"ok": True}),
+                mock.patch.object(self.mod, "_packet_audit", return_value={"ok": False, "issue_count": 1, "counts": {"error": 1}}),
+                mock.patch.object(self.mod, "_summary_health", return_value={"ok": True, "counts": {"queued": 0}}),
+                mock.patch.object(self.mod, "_dead_letters", return_value={"ok": True, "count": 0}),
+                mock.patch.object(self.mod, "_notify_state", return_value={"ok": True, "outcomes": {}}),
+                mock.patch.object(self.mod, "_email_reply_queue", return_value={"ok": True, "queued_count": 0, "stuck_count": 0}),
+                mock.patch.object(self.mod, "_runtime", return_value={"ok": True, "skipped": True}),
+                mock.patch.object(self.mod, "_cron_overlap", return_value={"ok": True, "enabled_legacy": []}),
+            ):
+                report = self.mod.run_doctor(root, skip_runtime=True)
+
+            self.assertFalse(report["ok"])
+            self.assertIn("packet_audit", report["issues"])
 
     def test_doctor_warns_on_stuck_email_reply_queue(self):
         with tempfile.TemporaryDirectory() as td:

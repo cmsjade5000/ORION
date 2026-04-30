@@ -18,6 +18,7 @@ except Exception:  # pragma: no cover
 REQUIRED_PACKETS_HEADER = "## Packets"
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
 RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
+RE_RESULT_STATUS = re.compile(r"^\s*-?\s*Status:\s*(OK|FAILED|BLOCKED|CANCELLED)\b", re.IGNORECASE)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -25,6 +26,19 @@ class PacketIdentity:
     idempotency_key: str
     packet_id: str
     content_hash: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ParsedPacket:
+    inbox_path: Path
+    display_path: str
+    start_line: int
+    end_line: int
+    lines: list[str]
+    fields: dict[str, str]
+    before_result: list[str]
+    identity: PacketIdentity
+    result_status: str | None
 
 
 def packet_identity(*, fields: dict[str, str], packet_before_result: list[str]) -> PacketIdentity:
@@ -112,6 +126,93 @@ def _packet_before_result(packet_lines: list[str]) -> list[str]:
             break
         out.append(line)
     return out
+
+
+def packet_result_status(packet_lines: list[str]) -> str | None:
+    in_result = False
+    for line in packet_lines:
+        if line.strip() == "Result:":
+            in_result = True
+            continue
+        if not in_result:
+            continue
+        match = RE_RESULT_STATUS.match(line.strip())
+        if match:
+            return match.group(1).upper()
+    return None
+
+
+def split_packet_blocks(lines: list[str], *, start_line_offset: int = 0) -> list[tuple[int, int, list[str]]]:
+    packets: list[tuple[int, int, list[str]]] = []
+    in_fence = False
+    cur: list[str] | None = None
+    cur_start: int | None = None
+
+    for idx, raw in enumerate(lines, start=1 + start_line_offset):
+        line = raw.rstrip("\n")
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        if not in_fence and RE_PACKET_HEADER.match(line):
+            if cur is not None and cur_start is not None:
+                packets.append((cur_start, idx - 1, cur))
+            cur = [line]
+            cur_start = idx
+            continue
+        if cur is not None:
+            cur.append(line)
+
+    if cur is not None and cur_start is not None:
+        packets.append((cur_start, cur_start + len(cur) - 1, cur))
+    return packets
+
+
+def parse_packet_lines(
+    *,
+    inbox_path: Path,
+    display_path: str,
+    start_line: int,
+    lines: list[str],
+) -> ParsedPacket:
+    fields = _packet_fields(lines)
+    before_result = _packet_before_result(lines)
+    return ParsedPacket(
+        inbox_path=inbox_path,
+        display_path=display_path,
+        start_line=start_line,
+        end_line=start_line + len(lines) - 1,
+        lines=lines,
+        fields=fields,
+        before_result=before_result,
+        identity=packet_identity(fields=fields, packet_before_result=before_result),
+        result_status=packet_result_status(lines),
+    )
+
+
+def parse_inbox_packets(path: Path, *, repo_root: Path | None = None) -> list[ParsedPacket]:
+    if not path.exists() or path.name.upper() == "README.MD":
+        return []
+    all_lines = path.read_text(encoding="utf-8").splitlines()
+    packets_header_idx = next((idx for idx, line in enumerate(all_lines) if line.strip() == REQUIRED_PACKETS_HEADER), None)
+    if packets_header_idx is None:
+        return []
+    try:
+        display = str(path.relative_to(repo_root)) if repo_root is not None else str(path)
+    except Exception:
+        display = path.resolve().as_posix()
+    packets: list[ParsedPacket] = []
+    for start_line, _end_line, packet_lines in split_packet_blocks(
+        all_lines[packets_header_idx + 1 :],
+        start_line_offset=packets_header_idx + 1,
+    ):
+        packets.append(
+            parse_packet_lines(
+                inbox_path=path,
+                display_path=display,
+                start_line=start_line,
+                lines=packet_lines,
+            )
+        )
+    return packets
 
 
 def append_packet_if_absent(

@@ -339,6 +339,58 @@ class TestValidateTaskPackets(unittest.TestCase):
         td.cleanup()
         self.assertEqual(errs, [])
 
+    def test_cory_miniapp_gate_requires_approval_log_reference(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Approval Gate: CORY_MINIAPP_APPROVED\n"
+            "Gate Evidence: tasks/INBOX/ATLAS.md packet@line 10\n"
+            "Objective: Continue approved work.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Scope is exact packet only.\n"
+            "Inputs:\n"
+            "- Approval record.\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any scope expansion.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("task-packet-approvals.jsonl" in e for e in errs), errs)
+
+    def test_cory_miniapp_gate_valid_packet(self):
+        pkt = (
+            "TASK_PACKET v1\n"
+            "Owner: ATLAS\n"
+            "Requester: ORION\n"
+            "Approval Gate: CORY_MINIAPP_APPROVED\n"
+            "Gate Evidence: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-123\n"
+            "Objective: Continue approved work.\n"
+            "Success Criteria:\n"
+            "- It worked.\n"
+            "Constraints:\n"
+            "- Scope is exact packet only.\n"
+            "Inputs:\n"
+            "- Approval record.\n"
+            "Risks:\n"
+            "- low\n"
+            "Stop Gates:\n"
+            "- Any scope expansion.\n"
+            "Output Format:\n"
+            "- Short checklist.\n"
+        )
+        path, td = self._write_inbox("ATLAS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertEqual(errs, [])
+
     def test_polaris_requires_opened_and_due(self):
         pkt = VALID_PACKET.format(owner="POLARIS", requester="ORION")
         path, td = self._write_inbox("POLARIS", pkt)

@@ -82,9 +82,32 @@ export type JobDetailPayload = {
   packetText: string;
   resultLines: string[];
   relatedApprovals: ApprovalItem[];
+  taskPacketApproval?: {
+    eligible: boolean;
+    reason: string;
+    decisions?: Array<"approve-once" | "deny">;
+    latestDecision?: {
+      id: string;
+      decision: string;
+      createdAt: string;
+      actor: string;
+      queuedPacket?: string;
+    };
+    followupJob?: {
+      job_id: string;
+      state: string;
+      owner: string;
+      objective: string;
+    } | null;
+  };
 };
 
-export type QueueRequestStatus = "queued" | "refresh_delayed" | "failed";
+export type QueueRequestStatus =
+  | "queued"
+  | "refresh_delayed"
+  | "failed"
+  | "completed"
+  | "acknowledged";
 
 export type QueueRequest = {
   id: string;

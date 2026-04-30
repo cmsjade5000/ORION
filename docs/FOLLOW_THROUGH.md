@@ -107,8 +107,11 @@ To prevent packet/ticket drift, run:
 
 Doctor and archive checks:
 
+- `python3 scripts/packet_audit.py --repo-root .`
+  - Read-only global consistency audit for duplicate packet identities, generated-packet lineage, dangling parents, active descendants of terminal roots, route mismatches, and summary drift.
+  - Use `--json` for dashboards or CI; add `--strict` when warnings should fail the run.
 - `python3 scripts/inbox_doctor.py --repo-root .`
-  - Read-only health check for packet validation, queue counts, summary freshness, notifier state, dead letters, LaunchAgent status, and legacy cron overlap.
+  - Read-only health check for packet validation, packet audit, queue counts, summary freshness, notifier state, dead letters, LaunchAgent status, and legacy cron overlap.
   - Use `--json` for dashboards or CI.
 - `python3 scripts/archive_completed_inbox_packets.py --repo-root .`
   - Dry-run by default.

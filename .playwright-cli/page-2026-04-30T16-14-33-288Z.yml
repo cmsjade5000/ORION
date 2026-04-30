@@ -1,0 +1,24 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "ORION" [level=1] [ref=e7]
+        - paragraph [ref=e8]: "A friendly bridge into ORION: chat up front, mission inbox on deck, today in view."
+      - generic [ref=e11]: Bridge offline
+  - navigation "ORION mini app sections" [ref=e12]:
+    - button "Open Chat" [ref=e13]:
+      - generic [ref=e14]: Bridge
+      - generic [ref=e15]: Chat
+    - button "Open Mission Inbox" [ref=e16]:
+      - generic [ref=e17]: Mission
+      - generic [ref=e18]: Mission Inbox
+    - button "Open Today" [ref=e19]:
+      - generic [ref=e20]: Status
+      - generic [ref=e21]: Today
+  - generic [ref=e22]: Telegram bridge auth drifted. Close the Mini App and reopen it from Telegram.
+  - main [ref=e23]:
+    - generic [ref=e24]:
+      - heading "Chat" [level=2] [ref=e27]
+      - generic [ref=e29]:
+        - textbox "Message ORION from the bridge..." [disabled] [ref=e30]
+        - button "Send to ORION" [disabled] [ref=e31]

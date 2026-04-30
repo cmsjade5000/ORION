@@ -17,6 +17,7 @@ const {
   recentQueueRequestForJob,
   reviewState,
   runJsonCommand,
+  runTextCommand,
   updateQueueRequestStatus,
 } = require("./state.cjs");
 
@@ -72,8 +73,17 @@ function publicApiError(error) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (/miniapp-auth:/i.test(message)) return message;
   if (/job not found/i.test(message)) return "job not found";
+  if (/job is not blocked/i.test(message)) return message;
   if (/already queuing/i.test(message)) return "follow-up already queuing";
   return "ORION could not complete that backend action.";
+}
+
+function actorFromTelegram(fields) {
+  const user = fields && fields.user ? fields.user : {};
+  const id = user && user.id ? String(user.id) : "unknown";
+  const username = user && user.username ? ` @${String(user.username)}` : "";
+  const firstName = user && user.first_name ? ` ${String(user.first_name)}` : "";
+  return `telegram:${id}${username}${firstName}`.trim();
 }
 
 function initDataFromRequest(req) {
@@ -433,6 +443,50 @@ async function routeApi(req, res, pathname) {
       } finally {
         activeFollowupJobs.delete(lockKey);
       }
+    });
+  }
+
+  const taskApprovalMatch = pathname.match(/^\/api\/jobs\/([^/]+)\/task-approval$/i);
+  if (taskApprovalMatch && req.method === "POST") {
+    return withAuth(req, res, async (fields) => {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const rawDecision = String(body.decision || "").trim().toLowerCase();
+      const decision = rawDecision === "approve-once" ? "approve_once" : rawDecision;
+      if (!["approve_once", "deny"].includes(decision)) {
+        sendJson(res, 400, { error: "unsupported task packet approval decision" });
+        return;
+      }
+      const payload = await runJsonCommand(
+        "python3",
+        [
+          "scripts/task_packet_approvals.py",
+          "--repo-root",
+          CONFIG.workspaceRoot,
+          "--json",
+          "decide",
+          "--job-id",
+          decodeURIComponent(taskApprovalMatch[1]),
+          "--decision",
+          decision,
+          "--actor",
+          actorFromTelegram(fields),
+        ],
+        CONFIG.workspaceRoot
+      );
+      if (!payload || payload.ok === false) {
+        sendJson(res, 500, { error: payload && payload.error ? payload.error : "task packet approval failed" });
+        return;
+      }
+      try {
+        payload.reconcile = await runTextCommand(
+          "python3",
+          ["scripts/task_execution_loop.py", "--repo-root", CONFIG.workspaceRoot, "--apply", "--stale-hours", "24"],
+          CONFIG.workspaceRoot
+        );
+      } catch (error) {
+        payload.reconcileError = error instanceof Error ? error.message : String(error || "reconcile failed");
+      }
+      sendJson(res, 200, payload);
     });
   }
 

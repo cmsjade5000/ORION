@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { act } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MiniApp, MiniAppView } from "./app";
 import type { BootstrapPayload, ChatConversation, HomePayload, InboxPayload, ReviewPayload } from "./types";
@@ -87,8 +87,8 @@ describe("mini app view model", () => {
       inbox: vi.fn(async () => inboxPayload),
       fetchJobDetail: vi.fn(async (jobId: string) => ({
         job: inboxPayload.jobs.find((job) => job.job_id === jobId) || inboxPayload.jobs[0],
-        needSummary: "Blocked and needs a follow-up or fresh input.",
-        nextStep: "Queue a follow-up so POLARIS can recover the blocked work with context.",
+        needSummary: "Blocked and eligible for a Task Packet approval decision.",
+        nextStep: "Approve it once, deny it, or ask POLARIS to rework the packet if the request itself is wrong.",
         packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
         resultLines: ["Status: BLOCKED", "Needs fresh context."],
         relatedApprovals: [],
@@ -97,6 +97,7 @@ describe("mini app view model", () => {
       fetchRun: vi.fn(),
       streamRun: vi.fn(() => vi.fn()),
       resolveApproval: vi.fn(),
+      resolveTaskPacketApproval: vi.fn(),
       createFollowup: vi.fn(),
       updateQueueRequestStatus: vi.fn(),
     };
@@ -177,6 +178,7 @@ describe("mini app view model", () => {
         onComposerSubmit={vi.fn()}
         onApproval={vi.fn()}
         onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={vi.fn()}
         onQueueCenter={vi.fn()}
       />
@@ -214,6 +216,7 @@ describe("mini app view model", () => {
         onComposerSubmit={vi.fn()}
         onApproval={vi.fn()}
         onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={vi.fn()}
         onQueueCenter={vi.fn()}
       />
@@ -233,8 +236,8 @@ describe("mini app view model", () => {
       if (pathname.startsWith("/api/inbox/jobs/")) {
         return {
           job: inboxPayload.jobs[0],
-          needSummary: "Blocked and needs a follow-up or fresh input.",
-          nextStep: "Queue a follow-up so POLARIS can recover the blocked work with context.",
+          needSummary: "Blocked and eligible for a Task Packet approval decision.",
+          nextStep: "Approve it once, deny it, or ask POLARIS to rework the packet if the request itself is wrong.",
           packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
           resultLines: [],
           relatedApprovals: [],
@@ -281,15 +284,16 @@ describe("mini app view model", () => {
     render(<MiniApp api={api} />);
 
     expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: /Today/ }));
 
     expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(1);
+    expect(backButton.callbacks.size).toBe(0);
     expect(mainButton.callbacks.size).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
     expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(1);
+    expect(backButton.callbacks.size).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
     expect(screen.getByRole("heading", { name: "Selected Work Item" })).toBeInTheDocument();
@@ -300,16 +304,46 @@ describe("mini app view model", () => {
     });
     expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Queue Notes" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(1);
+    await waitFor(() => {
+      expect(backButton.callbacks.size).toBe(0);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: /Today/ }));
     expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(1);
+    expect(backButton.callbacks.size).toBe(0);
+  });
 
+  it("only enables back navigation for real nested destinations", async () => {
+    const api = createApi();
+    const mainButton = createTelegramButtonStub();
+    const backButton = createTelegramButtonStub();
+    window.Telegram = {
+      WebApp: {
+        MainButton: mainButton,
+        BackButton: backButton,
+        ready: vi.fn(),
+        expand: vi.fn(),
+        HapticFeedback: { selectionChanged: vi.fn(), notificationOccurred: vi.fn(), impactOccurred: vi.fn() },
+      },
+    };
+
+    render(<MiniApp api={api} />);
+
+    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
+    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
+    expect(screen.getByRole("heading", { name: "Selected Work Item" })).toBeInTheDocument();
+
+    expect(backButton.callbacks.size).toBe(1);
     act(() => {
       backButton.trigger();
     });
-    expect(screen.getByRole("heading", { name: "Chat" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Queue Notes" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Today/ }));
+    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     expect(backButton.callbacks.size).toBe(0);
   });
 
@@ -384,7 +418,7 @@ describe("mini app view model", () => {
     fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
     fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
 
-    expect(mainButton.setText).toHaveBeenLastCalledWith("Queue Follow-Up");
+    expect(mainButton.setText).toHaveBeenLastCalledWith("Ask POLARIS to Rework");
     act(() => {
       mainButton.trigger();
       mainButton.trigger();
@@ -396,10 +430,10 @@ describe("mini app view model", () => {
       await followup.promise;
     });
 
-    expect(await screen.findAllByText("Follow-Up Queued")).not.toHaveLength(0);
+    expect(await screen.findAllByText("Rework Queued")).not.toHaveLength(0);
     expect(api.createFollowup).toHaveBeenCalledTimes(1);
 
-    const queuedButtons = screen.getAllByRole("button", { name: "Follow-Up Queued" });
+    const queuedButtons = screen.getAllByRole("button", { name: "Rework Queued" });
     fireEvent.click(queuedButtons[0]);
     expect(api.createFollowup).toHaveBeenCalledTimes(1);
   });
@@ -412,7 +446,7 @@ describe("mini app view model", () => {
 
     expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Queue Follow-Up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask POLARIS to Rework" }));
 
     expect(await screen.findByText("Follow-up action failed.")).toBeInTheDocument();
     expect(screen.queryByText(/ENOENT/)).not.toBeInTheDocument();
@@ -436,7 +470,7 @@ describe("mini app view model", () => {
 
     expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Queue Follow-Up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask POLARIS to Rework" }));
 
     expect(await screen.findAllByText(/Queued; Refresh Delayed/)).not.toHaveLength(0);
     expect(screen.queryByText(/Command failed:/)).not.toBeInTheDocument();
@@ -469,6 +503,7 @@ describe("mini app view model", () => {
         onComposerSubmit={vi.fn()}
         onApproval={vi.fn()}
         onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={vi.fn()}
         onQueueCenter={vi.fn()}
       />
@@ -539,6 +574,7 @@ describe("mini app view model", () => {
         onComposerSubmit={noop}
         onApproval={noop}
         onFollowup={noop}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={noop}
         onQueueCenter={noop}
       />
@@ -546,7 +582,7 @@ describe("mini app view model", () => {
 
     expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Allow Once" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Queue Follow-Up" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask POLARIS to Rework" })).toBeInTheDocument();
 
     rerender(
       <MiniAppView
@@ -585,6 +621,7 @@ describe("mini app view model", () => {
         onComposerSubmit={noop}
         onApproval={noop}
         onFollowup={noop}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={noop}
         onQueueCenter={noop}
       />
@@ -622,6 +659,11 @@ describe("mini app view model", () => {
               ageMs: 60000,
             },
           ],
+          taskPacketApproval: {
+            eligible: true,
+            reason: "Approve Once queues a scoped follow-up packet for the listed owner. Deny records the decision without queueing work.",
+            decisions: ["approve-once", "deny"],
+          },
         }}
         detailLoading={false}
         home={null}
@@ -638,7 +680,9 @@ describe("mini app view model", () => {
         onComposerChange={vi.fn()}
         onComposerSubmit={vi.fn()}
         onApproval={approve}
+        onTaskPacketApproval={approve}
         onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={vi.fn()}
         onQueueCenter={vi.fn()}
       />
@@ -651,6 +695,8 @@ describe("mini app view model", () => {
     expect(screen.getByText("Original Packet")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Allow Once" })[0]);
     expect(approve).toHaveBeenCalledWith("abc", "allow-once");
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    expect(approve).toHaveBeenCalledWith("job-1", "approve-once");
   });
 
   it("renders queue center records with intake details", () => {
@@ -690,6 +736,7 @@ describe("mini app view model", () => {
         onComposerSubmit={vi.fn()}
         onApproval={vi.fn()}
         onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
         onSelectJob={vi.fn()}
         onQueueCenter={vi.fn()}
       />
@@ -698,5 +745,101 @@ describe("mini app view model", () => {
     expect(screen.getByRole("heading", { name: "Queue Center" })).toBeInTheDocument();
     expect(screen.getByText("Captured for POLARIS.")).toBeInTheDocument();
     expect(screen.getByText("tasks/INTAKE/example.md")).toBeInTheDocument();
+  });
+
+  it("triggers acknowledge callback for completed queue packets", () => {
+    const acknowledge = vi.fn();
+    render(
+      <MiniAppView
+        appName="ORION"
+        screen="queue"
+        screenLabel="Queue Center"
+        bridgeStatus={bridgeStatus}
+        conversation={null}
+        inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
+        home={null}
+        review={null}
+        queueRequests={[
+          {
+            id: "qr-completed",
+            jobId: "job-1",
+            owner: "POLARIS",
+            status: "completed",
+            message: "Follow-up completed for POLARIS.",
+            intakePath: "tasks/INTAKE/example.md",
+            packetNumber: 9,
+            createdAt: "2026-04-28T13:01:00.000Z",
+          },
+        ]}
+        loading={false}
+        error=""
+        composerText=""
+        sending={false}
+        hasNativeMainButton={false}
+        actionMessage=""
+        selectedJobId={null}
+        onScreenChange={vi.fn()}
+        onComposerChange={vi.fn()}
+        onComposerSubmit={vi.fn()}
+        onApproval={vi.fn()}
+        onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={acknowledge}
+        onSelectJob={vi.fn()}
+        onQueueCenter={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and Close" }));
+    expect(acknowledge).toHaveBeenCalledWith("qr-completed");
+  });
+
+  it("shows acknowledge action for failed queue packets to allow close", () => {
+    const acknowledge = vi.fn();
+    render(
+      <MiniAppView
+        appName="ORION"
+        screen="queue"
+        screenLabel="Queue Center"
+        bridgeStatus={bridgeStatus}
+        conversation={null}
+        inbox={null}
+        selectedJobDetail={null}
+        detailLoading={false}
+        home={null}
+        review={null}
+        queueRequests={[
+          {
+            id: "qr-failed",
+            jobId: "job-1",
+            owner: "POLARIS",
+            status: "failed",
+            message: "Follow-up failed for POLARIS.",
+            intakePath: "tasks/INTAKE/example.md",
+            packetNumber: 11,
+            createdAt: "2026-04-28T13:02:00.000Z",
+          },
+        ]}
+        loading={false}
+        error=""
+        composerText=""
+        sending={false}
+        hasNativeMainButton={false}
+        actionMessage=""
+        selectedJobId={null}
+        onScreenChange={vi.fn()}
+        onComposerChange={vi.fn()}
+        onComposerSubmit={vi.fn()}
+        onApproval={vi.fn()}
+        onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={acknowledge}
+        onSelectJob={vi.fn()}
+        onQueueCenter={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and Close" }));
+    expect(acknowledge).toHaveBeenCalledWith("qr-failed");
   });
 });

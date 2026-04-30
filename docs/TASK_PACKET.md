@@ -83,7 +83,7 @@ Output Format:
 - `Incident:` incident id when an emergency bypass is used (see `tasks/INCIDENTS.md`)
 - `Opened:` `YYYY-MM-DD` packet open date (required for POLARIS inbox packets)
 - `Due:` `YYYY-MM-DD` target completion date (required for POLARIS inbox packets)
-- `Approval Gate:` optional explicit policy gate (example: `LEDGER_RESULT_REQUIRED`)
+- `Approval Gate:` optional explicit policy gate (examples: `LEDGER_RESULT_REQUIRED`, `CORY_MINIAPP_APPROVED`)
 - `Gate Evidence:` short pointer to the gating result/source (example: `tasks/INBOX/LEDGER.md packet@line ...`)
 - Device-control fields when relevant:
   - `Device Target:` for example `managed-browser`, `personal-browser`, `macos-node`
@@ -318,6 +318,7 @@ Validation rules:
 - `Approval Gate` must be one of the allowlisted values.
 - When `Approval Gate` is present, `Gate Evidence` is required.
 - For `Approval Gate: LEDGER_RESULT_REQUIRED`, packet `Owner` must be `ATLAS` or `ORION`, and `Gate Evidence` must reference `LEDGER`.
+- For `Approval Gate: CORY_MINIAPP_APPROVED`, `Gate Evidence` must reference `tasks/APPROVALS/task-packet-approvals.jsonl`.
 
 ## Validation (Recommended)
 
@@ -326,3 +327,11 @@ Validate inbox packets stay structured:
 ```bash
 python3 scripts/validate_task_packets.py
 ```
+
+Audit global packet-system consistency:
+
+```bash
+python3 scripts/packet_audit.py --repo-root .
+```
+
+Validation checks the shape of each packet. Audit checks cross-packet invariants such as duplicate identities, missing generated lineage, dangling parents, active descendants of terminal roots, route mismatches, and summary drift.

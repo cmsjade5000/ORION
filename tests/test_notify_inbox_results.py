@@ -343,6 +343,56 @@ class TestNotifyInboxResults(unittest.TestCase):
             self.assertIn("state=blocked owners=ATLAS, NODE jobs=2", r.stdout)
             self.assertIn("workflow: wf-123", r.stdout)
 
+    def test_telegram_required_workflow_alerts_do_not_emit_discord_copy(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_jobs_summary(
+                root,
+                {
+                    "version": 1,
+                    "jobs": [],
+                    "workflows": [
+                        {
+                            "workflow_id": "wf-telegram-only",
+                            "state": "blocked",
+                            "owners": ["ATLAS"],
+                            "job_count": 1,
+                        }
+                    ],
+                },
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("TELEGRAM:", r.stdout)
+            self.assertIn("workflow: wf-telegram-only", r.stdout)
+            self.assertNotIn("DISCORD:", r.stdout)
+            state = json.loads((root / "tmp" / "state.json").read_text(encoding="utf-8"))
+            self.assertTrue(any(key.startswith("telegram:workflow:") for key in state))
+            self.assertFalse(any(key.startswith("discord:workflow:") for key in state))
+            self.assertTrue(any(key.startswith("workflow:telegram:") for key in state))
+            self.assertFalse(any(key.startswith("workflow:discord:") for key in state))
+
     def test_dry_run_prefers_job_summary_artifacts_without_inbox_scan(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
