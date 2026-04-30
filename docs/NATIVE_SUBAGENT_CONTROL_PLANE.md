@@ -14,6 +14,11 @@ Purpose: define the default ORION-core control flow for active delegated session
   - optional `subagents kill`
 - Task Packets remain the durable record for intent, constraints, evidence, and recovery.
 - ACPX stays a bounded ATLAS-owned pilot for coding/review isolation and is not the default specialist delegation path.
+- Codex MultiAgentV2 controls are runtime tuning knobs, not a new ownership model:
+  - thread caps bound fanout
+  - wait-time controls bound idle/stall handling
+  - root/subagent hints improve context handoff
+  - v2 depth handling must not make non-ATLAS specialists recursive orchestrators
 
 ## Control flow
 
@@ -38,6 +43,7 @@ Purpose: define the default ORION-core control flow for active delegated session
 - If the child is salvageable, use one bounded `subagents steer` correction rather than re-spawning immediately.
 - If the child is no longer safe or useful, use `subagents kill`, record the cancellation in status notes or job tracking, and decide whether to re-spawn from the same Task Packet.
 - If work must survive beyond the current session, rely on the Task Packet and repo-backed reconcile loop rather than assuming session-native state is durable enough on its own.
+- If Codex `/goal` is used by an operator during active work, mirror any durable decision back into the Task Packet or job artifact. `/goal` state is not an ORION source of truth.
 
 ## Validation posture
 

@@ -1,7 +1,27 @@
 {
   "version": 1,
-  "updatedAt": "2026-04-30T17:01:00.547Z",
+  "updatedAt": "2026-04-30T19:52:34.055Z",
   "requests": [
+    {
+      "id": "qr_molwhssn_d88ee020",
+      "jobId": "ik-65ed39ff98adf9c3",
+      "owner": "POLARIS",
+      "status": "queued",
+      "message": "Captured for POLARIS.\n- Intake: tasks/INTAKE/2026-04-30-155234-follow-up-on-delegated-orion-work-owner-atlas-st.md\n- POLARIS packet queued: #6\n- Next step: POLARIS will classify it and prepare the safest follow-through path.",
+      "intakePath": "tasks/INTAKE/2026-04-30-155234-follow-up-on-delegated-orion-work-owner-atlas-st.md",
+      "packetNumber": 6,
+      "createdAt": "2026-04-30T19:52:34.055Z"
+    },
+    {
+      "id": "qr_molwhsai_3c97d092",
+      "jobId": "ik-6ce2f270396ac54e",
+      "owner": "POLARIS",
+      "status": "queued",
+      "message": "Captured for POLARIS.\n- Intake: tasks/INTAKE/2026-04-30-155233-follow-up-on-delegated-orion-work-owner-atlas-st.md\n- POLARIS packet queued: #5\n- Next step: POLARIS will classify it and prepare the safest follow-through path.",
+      "intakePath": "tasks/INTAKE/2026-04-30-155233-follow-up-on-delegated-orion-work-owner-atlas-st.md",
+      "packetNumber": 5,
+      "createdAt": "2026-04-30T19:52:33.402Z"
+    },
     {
       "id": "qr_molqd69v_45204add",
       "jobId": "ik-c71e7aca34542b7f",

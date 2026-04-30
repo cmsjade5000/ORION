@@ -153,6 +153,30 @@ Codex `0.114.x` introduced runtime behaviors that matter to ORION-style orchestr
 
 This repo keeps those changes backwards-tolerant by treating them as additive runtime capabilities, not permission relaxations.
 
+## Codex 0.128.0 Compatibility Notes
+
+Latest local verification (2026-04-30): `codex-cli 0.128.0`.
+
+Codex `0.128.0` adds runtime features that are useful to ORION operators, but they are additive controls only. They do not replace ORION's durable state model, provider policy, or specialist ownership rules.
+
+- Persisted `/goal` workflows can help an operator plan, pause, resume, and clear longer Codex-side work. For ORION follow-through, treat `/goal` as a planning/resume primitive only. Task Packets remain the durable delegation contract, `tasks/INBOX/*` remains the append-only packet surface, and `tasks/JOBS/summary.json` remains the delegated-work read model.
+- Permission profiles should map to ORION task risk rather than relaxing repo policy. Default to local/read-only validation, escalate only when the Task Packet or user request explicitly needs broader access, and keep `SECURITY.md` plus `TOOLS.md` authoritative.
+- Plugin marketplace installation, remote plugin caching/uninstall, plugin-bundled hooks, and persisted hook enablement are operator conveniences. Do not add plugin or hook surfaces to ORION core without the same allowlist, trust-boundary, and rollback review used for existing pilots.
+- External agent session import is useful for operator review and continuity. Imported sessions are evidence inputs, not authoritative ORION state, and should be summarized into Task Packets or job artifacts before they affect follow-through.
+- MultiAgentV2 thread caps, wait-time controls, root/subagent hints, and depth handling can improve active Codex orchestration. In ORION core, they remain bounded by the native subagent control plane: ORION is ingress, ATLAS is the only recursive orchestrator, and non-trivial work still needs a Task Packet.
+- `codex update` is an operator maintenance shortcut. It does not change the ORION runtime upgrade path, OpenClaw gateway verification, or the requirement to prove operational changes before claiming them done.
+- GPT-5.5 and other premium Codex/OpenAI lanes are escalation-only for this workspace. Do not make them ambient defaults, do not add automatic paid smoke turns, and do not run provider benchmarks unless Cory explicitly opts in or a bounded low-cost attempt has failed.
+
+Permission-profile mapping for ORION work:
+
+| ORION task class | Default Codex posture | Escalation rule |
+| --- | --- | --- |
+| Read-only audit, planning, docs review | read-only/local | Stay local unless current external facts are required and WIRE-style retrieval is requested |
+| Repo-write implementation | workspace-write/local | Require scoped files, targeted tests, and no live provider probes by default |
+| Live/network probe | network-enabled explicit escalation | Use only when local evidence is insufficient or Cory opts in |
+| External delivery or user-facing messaging | explicit approval path | Require Task Packet evidence, delivery surface, and proof before claiming sent/done |
+| Destructive/reset/persistent system change | confirmation-gated | Ask for explicit approval and prefer dry-run/backup/list first |
+
 ## Compatibility Note (OpenClaw 2026.3.x): `gateway.auth.mode`
 
 As of OpenClaw `2026.3.x`, runtime config requires explicit `gateway.auth.mode` when both auth

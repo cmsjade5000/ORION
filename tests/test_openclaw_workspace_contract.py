@@ -54,6 +54,9 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.telegram_topic_routing = (cls.repo / "docs" / "TELEGRAM_TOPIC_ROUTING.md").read_text(
             encoding="utf-8"
         )
+        cls.native_subagent_control = (
+            cls.repo / "docs" / "NATIVE_SUBAGENT_CONTROL_PLANE.md"
+        ).read_text(encoding="utf-8")
 
     def test_examples_pin_tools_profile(self):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
@@ -241,6 +244,44 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("premium OpenAI/Codex lanes", self.low_cost_mode)
         self.assertIn("do not run automatic `openclaw models status --probe`", self.low_cost_mode)
         self.assertIn("models.pricing.enabled = false", self.low_cost_mode)
+
+    def test_codex_0128_compatibility_keeps_orion_guardrails(self):
+        self.assertIn("Codex 0.128.0 Compatibility Notes", self.migration)
+        self.assertIn("codex-cli 0.128.0", self.migration)
+        self.assertIn("Persisted `/goal` workflows", self.migration)
+        self.assertIn("planning/resume primitive only", self.migration)
+        self.assertIn("Task Packets remain the durable delegation contract", self.migration)
+        self.assertIn("`tasks/INBOX/*` remains the append-only packet surface", self.migration)
+        self.assertIn("tasks/JOBS/summary.json", self.migration)
+        self.assertIn("Permission profiles should map to ORION task risk", self.migration)
+        self.assertIn("`SECURITY.md` plus `TOOLS.md` authoritative", self.migration)
+        self.assertIn("GPT-5.5 and other premium Codex/OpenAI lanes are escalation-only", self.migration)
+        self.assertIn("Do not make them ambient defaults", self.migration)
+
+    def test_codex_0128_permission_profile_mapping_is_bounded(self):
+        for needle in (
+            "Read-only audit, planning, docs review",
+            "Repo-write implementation",
+            "Live/network probe",
+            "External delivery or user-facing messaging",
+            "Destructive/reset/persistent system change",
+            "workspace-write/local",
+            "network-enabled explicit escalation",
+            "confirmation-gated",
+        ):
+            self.assertIn(needle, self.migration)
+
+    def test_multiagent_v2_does_not_replace_native_control_plane(self):
+        for needle in (
+            "Codex MultiAgentV2 controls are runtime tuning knobs",
+            "thread caps bound fanout",
+            "root/subagent hints improve context handoff",
+            "must not make non-ATLAS specialists recursive orchestrators",
+            "ATLAS is the only recursive orchestrator",
+            "Task Packets remain the durable record",
+            "`/goal` state is not an ORION source of truth",
+        ):
+            self.assertIn(needle, self.native_subagent_control)
 
     def test_telegram_topic_crons_require_thread_id_guidance(self):
         self.assertIn("openclaw cron add", self.telegram_topic_routing)

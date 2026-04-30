@@ -211,3 +211,84 @@ Approval gate:
 - Required before any external send, calendar write, reminder write, or destructive edit.
 Evidence:
 - Intake: tasks/INTAKE/2026-04-30-130100-follow-up-on-delegated-orion-work-owner-atlas-st.md
+TASK_PACKET v1
+Owner: POLARIS
+Requester: ORION
+Notify: telegram
+Opened: 2026-04-30
+Due: 2026-05-02
+Execution Mode: direct
+Tool Scope: read-only
+Objective: Triage and file Cory's captured admin item into the correct assistant workflow.
+Success Criteria:
+- The capture is classified (reminder, note, follow-up, agenda item, or email-prep).
+- The next safe step is identified without taking external side effects.
+- ORION can follow up with a concise status update.
+Constraints:
+- Prepare/draft first; do not create external records without explicit approval.
+- Keep all changes local to repo artifacts unless ORION relays approval.
+Inputs:
+- tasks/INTAKE/2026-04-30-155233-follow-up-on-delegated-orion-work-owner-atlas-st.md
+- Capture text:
+  Follow up on delegated ORION work.
+  Owner: ATLAS
+  State: blocked
+  Objective: TEST APPROVAL: verify visible denied-state feedback in the Mini App.
+  Inbox: tasks/INBOX/ATLAS.md:268
+Risks:
+- low
+Stop Gates:
+- Any external send, calendar write, reminder write, or destructive edit.
+Output Format:
+- Result block with classification, proposed next step, and any approval gate.
+
+Result:
+Status: OK
+Classification: email-prep
+Proposed next step:
+- Prepare a draft or approval question only; do not send email until ORION has explicit approval and send proof.
+Approval gate:
+- Required before any external send, calendar write, reminder write, or destructive edit.
+Evidence:
+- Intake: tasks/INTAKE/2026-04-30-155233-follow-up-on-delegated-orion-work-owner-atlas-st.md
+
+TASK_PACKET v1
+Owner: POLARIS
+Requester: ORION
+Notify: telegram
+Opened: 2026-04-30
+Due: 2026-05-02
+Execution Mode: direct
+Tool Scope: read-only
+Objective: Triage and file Cory's captured admin item into the correct assistant workflow.
+Success Criteria:
+- The capture is classified (reminder, note, follow-up, agenda item, or email-prep).
+- The next safe step is identified without taking external side effects.
+- ORION can follow up with a concise status update.
+Constraints:
+- Prepare/draft first; do not create external records without explicit approval.
+- Keep all changes local to repo artifacts unless ORION relays approval.
+Inputs:
+- tasks/INTAKE/2026-04-30-155234-follow-up-on-delegated-orion-work-owner-atlas-st.md
+- Capture text:
+  Follow up on delegated ORION work.
+  Owner: ATLAS
+  State: blocked
+  Objective: Translate inbound ops request into a safe execution plan with explicit stop gates.
+  Inbox: tasks/INBOX/ATLAS.md:50
+Risks:
+- low
+Stop Gates:
+- Any external send, calendar write, reminder write, or destructive edit.
+Output Format:
+- Result block with classification, proposed next step, and any approval gate.
+
+Result:
+Status: OK
+Classification: email-prep
+Proposed next step:
+- Prepare a draft or approval question only; do not send email until ORION has explicit approval and send proof.
+Approval gate:
+- Required before any external send, calendar write, reminder write, or destructive edit.
+Evidence:
+- Intake: tasks/INTAKE/2026-04-30-155234-follow-up-on-delegated-orion-work-owner-atlas-st.md
