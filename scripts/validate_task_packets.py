@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import os
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 
 RE_PACKET_HEADER = re.compile(r"^TASK_PACKET v1\s*$")
@@ -35,6 +37,7 @@ ALLOWED_NOTIFY_CHANNELS = {"telegram", "discord", "none"}
 ALLOWED_APPROVAL_GATES = {"LEDGER_RESULT_REQUIRED"}
 ALLOWED_NEXT_PACKET_RESULTS = {"OK", "FAILED", "BLOCKED", "ANY"}
 RE_YYYY_MM_DD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ROUTING_OVERRIDE_FIELDS = ("Routing Override Rationale",)
 
 
 @dataclass
@@ -45,6 +48,60 @@ class Packet:
 
 def _is_yyyy_mm_dd(value: str) -> bool:
     return bool(RE_YYYY_MM_DD.match(value))
+
+
+def _load_route_owners() -> set[str]:
+    path = Path(__file__).resolve().parents[1] / "src" / "core" / "shared" / "orion_routing_contract.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    routes = payload.get("routes", []) if isinstance(payload, dict) else []
+    return {
+        str(route.get("owner") or "").strip().upper()
+        for route in routes
+        if isinstance(route, dict) and str(route.get("owner") or "").strip()
+    }
+
+
+CONTRACT_OWNERS = _load_route_owners() | {"ATLAS", "POLARIS", "SCRIBE"}
+
+
+def _routing_text(fields: dict[str, str], sections: dict[str, list[str]]) -> str:
+    parts = [
+        fields.get("Objective", ""),
+        fields.get("Scope", ""),
+        fields.get("Context", ""),
+        " ".join(sections.get("Inputs", [])),
+    ]
+    return " ".join(parts).lower()
+
+
+def infer_expected_owner(fields: dict[str, str], sections: dict[str, list[str]]) -> str | None:
+    text = _routing_text(fields, sections)
+    if not text.strip():
+        return None
+    if any(token in text for token in ("crisis", "panic", "distress", "safety-first support", "grounding response")):
+        return "EMBER"
+    if any(token in text for token in ("money", "budget", "spending", "tradeoff", "tradeoffs", "risk parameter")):
+        return "LEDGER"
+    if any(token in text for token in ("retrieve sources", "source-backed", "latest", "current external", "news")):
+        return "WIRE"
+    if any(token in text for token in ("send-ready draft", "draft response", "email draft", "reply draft")):
+        return "SCRIBE"
+    if any(token in text for token in ("cron", "reminder", "schedule", "gateway", "host health", "deploy", "recover stale", "implementation", "browser-led", "device-node")):
+        return "ATLAS"
+    if any(token in text for token in ("admin", "calendar", "inbox triage", "follow-through", "contact registry", "coordinate the inbound")):
+        return "POLARIS"
+    if any(token in text for token in ("tool scouting", "discovery", "options research")):
+        return "PIXEL"
+    if "gaming" in text:
+        return "QUEST"
+    return None
+
+
+def _has_routing_override(fields: dict[str, str]) -> bool:
+    return any(fields.get(key, "").strip() for key in ROUTING_OVERRIDE_FIELDS)
 
 
 def _expected_owner_from_path(path: str) -> str | None:
@@ -259,6 +316,13 @@ def _validate_packet_fields(
     if emergency == "ATLAS_UNAVAILABLE" and not incident:
         errors.append(
             f"{path}:{start_line}: {packet_label} {packet_num}: Emergency ATLAS_UNAVAILABLE requires non-empty 'Incident:' field"
+        )
+
+    inferred_owner = infer_expected_owner(fields, sections)
+    if inferred_owner and inferred_owner in CONTRACT_OWNERS and owner and owner.upper() != inferred_owner and not _has_routing_override(fields):
+        errors.append(
+            f"{path}:{start_line}: {packet_label} {packet_num}: routing decision expects Owner {inferred_owner!r} "
+            f"for this objective (got {owner!r}); add 'Routing Override Rationale:' if this is intentional"
         )
 
 

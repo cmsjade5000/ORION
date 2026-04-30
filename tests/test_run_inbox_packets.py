@@ -22,10 +22,22 @@ def _load_runner_module():
     return mod
 
 
+def _load_file_ops_module():
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "inbox_file_ops.py"
+    spec = importlib.util.spec_from_file_location("inbox_file_ops", script_path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+    return mod
+
+
 class TestRunInboxPackets(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.runner = _load_runner_module()
+        cls.file_ops = _load_file_ops_module()
 
     def _write_inbox(self, root: Path, agent: str, packet_body: str) -> Path:
         inbox_dir = root / "tasks" / "INBOX"
@@ -214,6 +226,39 @@ class TestRunInboxPackets(unittest.TestCase):
             self.assertTrue(artifact.exists())
             artifact_text = artifact.read_text(encoding="utf-8")
             self.assertIn("command timed out after 120.0s", artifact_text)
+
+    def test_append_packet_if_absent_blocks_duplicate_idempotency_and_packet_id(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            inbox = self._write_inbox(root, "ORION", "")
+            first = [
+                "TASK_PACKET v1",
+                "Owner: ORION",
+                "Requester: ORION",
+                "Idempotency Key: same-work",
+                "Packet ID: pkt-one",
+                "Objective: Validate append guard.",
+            ]
+            duplicate_idem = [
+                "TASK_PACKET v1",
+                "Owner: ORION",
+                "Requester: ORION",
+                "Idempotency Key: same-work",
+                "Packet ID: pkt-two",
+                "Objective: Same idempotency should not append.",
+            ]
+            duplicate_packet_id = [
+                "TASK_PACKET v1",
+                "Owner: ORION",
+                "Requester: ORION",
+                "Packet ID: pkt-one",
+                "Objective: Same packet id should not append.",
+            ]
+
+            self.assertTrue(self.file_ops.append_packet_if_absent(inbox, owner="ORION", packet_lines=first))
+            self.assertFalse(self.file_ops.append_packet_if_absent(inbox, owner="ORION", packet_lines=duplicate_idem))
+            self.assertFalse(self.file_ops.append_packet_if_absent(inbox, owner="ORION", packet_lines=duplicate_packet_id))
+            self.assertEqual(inbox.read_text(encoding="utf-8").count("TASK_PACKET v1"), 1)
 
 
 if __name__ == "__main__":

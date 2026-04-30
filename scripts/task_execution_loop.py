@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from inbox_state import load_kv_state, save_kv_state, sha256_lines
 from delegated_job_state import write_job_artifacts
 from delegated_job_state import packet_content_id
-from inbox_file_ops import atomic_write_text, ensure_packets_header, locked_file
+from inbox_file_ops import append_packet_if_absent, atomic_write_text, ensure_packets_header, locked_file, strong_packet_identity
 
 
 LANES = ("backlog", "in-progress", "testing", "done")
@@ -307,6 +307,10 @@ def _packet_identity(packet_fields: dict[str, str], packet_id: str, pending_key:
     if packet_id:
         return ("packet-id", packet_id)
     return ("content-hash", pending_key)
+
+
+def _packet_lookup_identity(packet: Packet) -> tuple[str, str]:
+    return strong_packet_identity(fields=packet.fields, packet_before_result=_packet_before_result(packet.lines))
 
 
 def _prefer_packet(candidate: Packet, current: Packet) -> bool:
@@ -732,24 +736,8 @@ def _append_next_packet_if_needed(repo_root: Path, packet: Packet) -> Action | N
         return None
     target = repo_root / "tasks" / "INBOX" / f"{owner}.md"
     handoff_source = f"Handoff Source: {packet.display_path}:{packet.start_line}"
-    generated_key = next((line.split(":", 1)[1].strip() for line in lines if line.startswith("Idempotency Key:")), "")
-    dedupe_marker = f"Idempotency Key: {generated_key}" if generated_key else ""
-    lock_path = target.with_suffix(target.suffix + ".lock")
-
-    with locked_file(lock_path):
-        if target.exists():
-            existing_lines = target.read_text(encoding="utf-8").splitlines()
-        else:
-            existing_lines = ensure_packets_header([], owner=owner)
-        existing_lines = ensure_packets_header(existing_lines, owner=owner)
-        existing = "\n".join(existing_lines).rstrip() + "\n"
-        if handoff_source in existing:
-            return None
-        if dedupe_marker and dedupe_marker in existing:
-            return None
-
-        content = existing.rstrip() + "\n\n" + "\n".join(lines).rstrip() + "\n"
-        atomic_write_text(target, content)
+    if not append_packet_if_absent(target, owner=owner, packet_lines=lines, source_markers=[handoff_source]):
+        return None
     return Action(
         kind="next-packet",
         ticket=owner,
@@ -805,27 +793,78 @@ def _append_stale_recovery_packet_if_needed(repo_root: Path, packet: Packet, *, 
     target = repo_root / "tasks" / "INBOX" / f"{owner}.md"
     lines = _stale_recovery_packet_lines(packet, age_h=age_h)
     source_marker = f"Recovery Source: {packet.display_path}:{packet.start_line}"
-    idem_line = next((line for line in lines if line.startswith("Idempotency Key: ")), "")
-    lock_path = target.with_suffix(target.suffix + ".lock")
-
-    with locked_file(lock_path):
-        if target.exists():
-            existing_lines = target.read_text(encoding="utf-8").splitlines()
-        else:
-            existing_lines = ensure_packets_header([], owner=owner)
-        existing_lines = ensure_packets_header(existing_lines, owner=owner)
-        existing = "\n".join(existing_lines).rstrip() + "\n"
-        if source_marker in existing:
-            return None
-        if idem_line and idem_line in existing:
-            return None
-        content = existing.rstrip() + "\n\n" + "\n".join(lines + [source_marker]).rstrip() + "\n"
-        atomic_write_text(target, content)
+    if not append_packet_if_absent(target, owner=owner, packet_lines=lines + [source_marker], source_markers=[source_marker]):
+        return None
     return Action(
         kind="stale-escalation",
         ticket=owner,
         detail=f"appended recovery packet for {packet.display_path}:{packet.start_line}",
     )
+
+
+def _packet_has_non_empty_result(packet_lines: list[str]) -> bool:
+    start = None
+    for idx, line in enumerate(packet_lines):
+        if line.strip() == "Result:":
+            start = idx
+            break
+    return start is not None and any(line.strip() for line in packet_lines[start + 1 :])
+
+
+def _should_cancel_superseded_packet(packet: Packet, terminal_by_id: dict[str, Packet], terminal_roots: set[str]) -> Packet | None:
+    if packet.result_status is not None:
+        return None
+    parent = packet.parent_packet_id.strip()
+    root = packet.root_packet_id.strip()
+    source = terminal_by_id.get(parent)
+    if source is None and root and root in terminal_roots:
+        source = terminal_by_id.get(root)
+    if source is None:
+        return None
+    idem = (packet.fields.get("Idempotency Key", "") or "").strip().lower()
+    objective = (packet.fields.get("Objective", "") or "").strip().lower()
+    if idem.startswith("recovery:") or "recover stale" in objective or "triage" in objective:
+        return source
+    return None
+
+
+def _append_superseded_result(repo_root: Path, packet: Packet, source: Packet) -> bool:
+    identity = _packet_lookup_identity(packet)
+    lock_path = packet.inbox_path.with_suffix(packet.inbox_path.suffix + ".lock")
+    result_lines = [
+        "",
+        "Result:",
+        "Status: CANCELLED",
+        "Reason: superseded_by_terminal_source",
+        f"Source Packet: {source.display_path}:{source.start_line}",
+        f"Source Status: {source.result_status}",
+        "Next step (if any):",
+        "  - None.",
+        "",
+    ]
+    with locked_file(lock_path):
+        file_lines = ensure_packets_header(
+            packet.inbox_path.read_text(encoding="utf-8").splitlines()
+            if packet.inbox_path.exists()
+            else [],
+            owner=packet.inbox_path.stem.upper(),
+        )
+        packets_header_idx = next((idx for idx, line in enumerate(file_lines) if line.strip() == "## Packets"), None)
+        if packets_header_idx is None:
+            return False
+        packet_blocks = _split_packets(file_lines[packets_header_idx + 1 :], start_line_offset=packets_header_idx + 1)
+        for start_line, pkt_lines in packet_blocks:
+            fields = _packet_fields(pkt_lines)
+            candidate_identity = strong_packet_identity(fields=fields, packet_before_result=_packet_before_result(pkt_lines))
+            if candidate_identity != identity:
+                continue
+            if _packet_has_non_empty_result(pkt_lines):
+                return False
+            packet_start_idx = start_line - 1
+            packet_end_idx = packet_start_idx + len(pkt_lines)
+            atomic_write_text(packet.inbox_path, "\n".join(file_lines[:packet_end_idx] + result_lines + file_lines[packet_end_idx:]).rstrip() + "\n")
+            return True
+    return False
 
 
 def _write_status_md(
@@ -1082,7 +1121,31 @@ def run(
                 )
         actions.append(action)
 
+    terminal_by_id: dict[str, Packet] = {}
+    terminal_roots: set[str] = set()
+    for pkt in terminal_packets:
+        if pkt.packet_id:
+            terminal_by_id[pkt.packet_id] = pkt
+        if pkt.root_packet_id:
+            terminal_roots.add(pkt.root_packet_id)
+
+    for pkt in list(pending_packets):
+        source = _should_cancel_superseded_packet(pkt, terminal_by_id, terminal_roots)
+        if source is None:
+            continue
+        actions.append(
+            Action(
+                kind="terminal-propagation",
+                ticket=pkt.fields.get("Owner", pkt.inbox_path.stem.upper()),
+                detail=f"{pkt.display_path}:{pkt.start_line} superseded by {source.display_path}:{source.start_line}",
+            )
+        )
+        if apply_changes:
+            _append_superseded_result(repo_root, pkt, source)
+
     for pkt, age_h in sorted(stale_pending, key=lambda item: item[1], reverse=True):
+        if _should_cancel_superseded_packet(pkt, terminal_by_id, terminal_roots) is not None:
+            continue
         if (pkt.fields.get("Idempotency Key", "") or "").strip().startswith("recovery:"):
             continue
         target_owner, _ = _stale_recovery_target(pkt)

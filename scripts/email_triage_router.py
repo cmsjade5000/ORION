@@ -24,6 +24,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+try:
+    from inbox_file_ops import append_packet_if_absent
+except Exception:  # pragma: no cover
+    from scripts.inbox_file_ops import append_packet_if_absent  # type: ignore
+
 RE_EMAIL = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 RE_ANGLE_EMAIL = re.compile(r"<([^>]+@[^>]+)>")
 RE_URL = re.compile(r"https?://[^\s<>()\[\]{}\"']+", re.IGNORECASE)
@@ -589,12 +594,10 @@ def _ensure_inbox(path: Path) -> None:
         raise RuntimeError(f"inbox file missing '## Packets' header: {path}")
 
 
-def append_packet(path: Path, packet: str) -> None:
+def append_packet(path: Path, packet: str) -> bool:
     _ensure_inbox(path)
-    with path.open("a", encoding="utf-8") as f:
-        f.write("\n\n")
-        f.write(packet.rstrip("\n"))
-        f.write("\n")
+    owner = path.stem.upper()
+    return append_packet_if_absent(path, owner=owner, packet_lines=packet.rstrip("\n").splitlines())
 
 
 def _load_state(path: Path) -> dict[str, Any]:
@@ -753,7 +756,10 @@ def main(argv: list[str] | None = None) -> int:
     applied = []
     for triage, packet_key, packet in new_triage:
         inbox = _inbox_path(triage.owner)
-        append_packet(inbox, packet)
+        appended = append_packet(inbox, packet)
+        if not appended:
+            written_keys.add(packet_key)
+            continue
         processed_ids.add(triage.message_id)
         written_keys.add(packet_key)
         applied.append({

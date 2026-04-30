@@ -751,6 +751,61 @@ class TestTaskExecutionLoop(unittest.TestCase):
             self.assertEqual(stale_entry["state"], "blocked")
             self.assertEqual(stale_entry["state_reason"], "stale_pending")
 
+    def test_terminal_source_cancels_pending_recovery_descendant(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            self._write_inbox(
+                root,
+                "ATLAS",
+                "\n".join(
+                    [
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Idempotency Key: source-work",
+                        "Packet ID: pkt-source",
+                        "Objective: Complete source workflow.",
+                        "Result:",
+                        "Status: OK",
+                        "Summary: source complete",
+                        "",
+                        "TASK_PACKET v1",
+                        "Owner: ATLAS",
+                        "Requester: ORION",
+                        "Idempotency Key: recovery:stale:pkt-source",
+                        "Packet ID: pkt-recovery",
+                        "Parent Packet ID: pkt-source",
+                        "Root Packet ID: pkt-source",
+                        "Workflow ID: pkt-source",
+                        "Objective: Recover stale delegated workflow for completed source.",
+                        "Success Criteria:",
+                        "- Recovery closes cleanly.",
+                        "Constraints:",
+                        "- Read-only.",
+                        "Inputs:",
+                        "- Source packet: tasks/INBOX/ATLAS.md:4",
+                        "Risks:",
+                        "- low",
+                        "Stop Gates:",
+                        "- Any destructive command.",
+                        "Output Format:",
+                        "- Short checklist.",
+                    ]
+                ),
+            )
+
+            rc = self._run_with_fixed_time(root, apply=True, strict=False, stale_seconds=86400)
+            self.assertEqual(rc, 0)
+
+            atlas_text = (root / "tasks" / "INBOX" / "ATLAS.md").read_text(encoding="utf-8")
+            self.assertIn("Status: CANCELLED", atlas_text)
+            self.assertIn("Reason: superseded_by_terminal_source", atlas_text)
+            jobs_summary = json.loads((root / "tasks" / "JOBS" / "summary.json").read_text(encoding="utf-8"))
+            recovery = next(item for item in jobs_summary["jobs"] if item["objective"] == "Recover stale delegated workflow for completed source.")
+            self.assertEqual(recovery["state"], "cancelled")
+            self.assertEqual(recovery["state_reason"], "result_cancelled")
+
     def test_notify_script_can_send_from_job_artifacts_after_loop_write(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

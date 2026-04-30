@@ -507,3 +507,36 @@ class TestValidateTaskPackets(unittest.TestCase):
         errs = self.v.validate_inbox_file(path)
         td.cleanup()
         self.assertTrue(any("On Result must be one of" in e for e in errs), errs)
+
+    def test_routing_gate_rejects_atlas_work_in_polaris_without_override(self):
+        pkt = VALID_POLARIS_PACKET.replace(
+            "Objective: Do a thing.",
+            "Objective: Execute cron reminder workflow and verify it.",
+        )
+        path, td = self._write_inbox("POLARIS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertTrue(any("routing decision expects Owner 'ATLAS'" in e for e in errs), errs)
+
+    def test_routing_gate_accepts_override_rationale(self):
+        pkt = VALID_POLARIS_PACKET.replace(
+            "Objective: Do a thing.",
+            "Objective: Execute cron reminder workflow and verify it.\nRouting Override Rationale: POLARIS is doing intake only before ATLAS execution.",
+        )
+        path, td = self._write_inbox("POLARIS", pkt)
+        errs = self.v.validate_inbox_file(path)
+        td.cleanup()
+        self.assertEqual(errs, [])
+
+    def test_routing_gate_accepts_polaris_atlas_and_scribe_decisions(self):
+        cases = [
+            ("POLARIS", VALID_POLARIS_PACKET.replace("Objective: Do a thing.", "Objective: Coordinate the inbound admin request into an actionable plan.")),
+            ("ATLAS", VALID_PACKET.format(owner="ATLAS", requester="ORION").replace("Objective: Do a thing.", "Objective: Recover stale delegated workflow for gateway work.")),
+            ("SCRIBE", VALID_PACKET.format(owner="SCRIBE", requester="ORION").replace("Objective: Do a thing.", "Objective: Create a send-ready draft response from the inbound request context.")),
+        ]
+        for owner, pkt in cases:
+            with self.subTest(owner=owner):
+                path, td = self._write_inbox(owner, pkt)
+                errs = self.v.validate_inbox_file(path)
+                td.cleanup()
+                self.assertEqual(errs, [])

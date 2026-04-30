@@ -72,6 +72,7 @@ Output Format:
 - `Parent Packet ID:` optional lineage pointer for follow-on or recovery packets.
 - `Root Packet ID:` optional root lineage pointer across multi-hop workflows.
 - `Workflow ID:` optional workflow identity for grouping related packets and job artifacts.
+- `Routing Override Rationale:` required when a packet intentionally assigns an owner that differs from the deterministic routing contract.
 - Retry policy (used by `scripts/run_inbox_packets.py` for allowlisted read-only packets):
   - `Retry Max Attempts:` integer (default `1`, meaning no retries)
   - `Retry Backoff Seconds:` number (default `60`)
@@ -245,6 +246,19 @@ Inbox files are append-only queues of Task Packets.
 
 - ORION assigns by appending a new Task Packet to `tasks/INBOX/<AGENT>.md`.
 - Specialist marks completion by adding a short `Result:` block under the packet.
+- Terminal result states are `OK`, `FAILED`, `BLOCKED`, and `CANCELLED`.
+  - `OK` means the requested work is complete or ready for the next verification lane.
+  - `FAILED` means execution was attempted and did not succeed.
+  - `BLOCKED` means work cannot proceed without a concrete external input or approval.
+  - `CANCELLED` means the packet is intentionally closed because the source task became obsolete or terminal.
+- Packet appenders must enforce duplicate suppression before writing:
+  - compare `Idempotency Key` first,
+  - then `Packet ID`,
+  - then the pre-`Result:` content hash.
+  Matching packets must not be appended again, whether the existing copy is active or terminal.
+- Follow-on, recovery, and triage packets must carry lineage (`Parent Packet ID`, `Root Packet ID`, and `Workflow ID`) when generated automatically.
+- When a source/root packet becomes terminal, generated recovery or triage descendants should be terminalized with `Status: CANCELLED` and `Reason: superseded_by_terminal_source` instead of lingering as active queue work.
+- Packet owner selection is decision-driven: validate the objective/input against `src/core/shared/orion_routing_contract.json` and `docs/AGENT_OWNERSHIP_MATRIX.md`; use `Routing Override Rationale:` when intentionally assigning a different owner.
 - Do not pre-create an empty `Result:` placeholder. Leave the `Result:` block for the specialist/runner.
 - If the packet included `Notify: telegram`, ORION may notify Cory automatically for result/workflow milestones (see `scripts/notify_inbox_results.py` + `HEARTBEAT.md`).
 - For allowlisted read-only packets, `scripts/run_inbox_packets.py` can execute the `Commands to run:` section and write the `Result:` block.
