@@ -209,6 +209,10 @@
   "models": {
     "_comment": "Optional: custom provider config for NVIDIA Build and local LM Studio. Store provider secrets in ~/.openclaw/.env and reference them via SecretRef where possible.",
     "mode": "merge",
+    "pricing": {
+      "_comment": "Low-cost/offline default: skip startup pricing catalog fetches unless an operator intentionally wants live pricing refreshes.",
+      "enabled": false
+    },
     "providers": {
       "nvidia-build": {
         "api": "openai-completions",

@@ -217,10 +217,6 @@ def _agent_text_from_json(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
     if isinstance(payload, dict):
-        for key in ("text", "message", "output", "summary", "response"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
         content = payload.get("content")
         if isinstance(content, list):
             parts = []
@@ -241,9 +237,24 @@ def _agent_text_from_json(payload: Any) -> str:
                     parts.append(item)
             if parts:
                 return "\n".join(parts)
+        for key in ("finalAssistantVisibleText", "finalAssistantRawText"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
         result = payload.get("result")
         if result is not None:
-            return _agent_text_from_json(result)
+            text = _agent_text_from_json(result)
+            if text.strip():
+                return text
+        meta = payload.get("meta")
+        if isinstance(meta, dict):
+            text = _agent_text_from_json(meta)
+            if text.strip():
+                return text
+        for key in ("text", "message", "output", "response", "summary"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
     return ""
 
 
@@ -290,7 +301,10 @@ def _compose_prompt(pref: PacketRef) -> str:
     return "\n".join(
         [
             "You are SCRIBE. Produce only the email reply body, with no preamble.",
-            "Keep it short, natural, and safe. Do not mention internal routing or Task Packets.",
+            "Draft in ORION's email voice: warm, direct, and human; calm, pragmatic, lightly personal when appropriate.",
+            "Keep it concise, but make it feel like ORION wrote it, not sterile status text.",
+            "Do not mention internal routing, Task Packets, agents, tools, or automation.",
+            "Do not use markdown unless the email genuinely needs structure.",
             "",
             f"Sender: {fields.get('Sender', '')}",
             f"Subject: {_subject(fields)}",

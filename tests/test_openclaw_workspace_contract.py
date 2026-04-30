@@ -51,6 +51,9 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.compat_0114 = (cls.repo / "docs" / "CODEX_0114_COMPATIBILITY_REPORT.md").read_text(
             encoding="utf-8"
         )
+        cls.telegram_topic_routing = (cls.repo / "docs" / "TELEGRAM_TOPIC_ROUTING.md").read_text(
+            encoding="utf-8"
+        )
 
     def test_examples_pin_tools_profile(self):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
@@ -91,8 +94,11 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertEqual(model_defaults["primary"], "openrouter/openrouter/free")
         self.assertIn("openai/gpt-oss-20b:free", model_defaults["fallbacks"])
         self.assertIn("minimax/MiniMax-M2.7-highspeed", model_defaults["fallbacks"])
+        self.assertFalse(self.json_example["models"]["pricing"]["enabled"])
         self.assertIn("openrouter/openrouter/free", self.readme)
         self.assertIn("primary: openrouter/openrouter/free", self.yaml_example)
+        self.assertIn("pricing:", self.yaml_example)
+        self.assertIn("enabled: false", self.yaml_example)
 
     def test_examples_include_cooldowns_codex_search_and_exec_approvals(self):
         cooldowns = self.json_example["auth"]["cooldowns"]
@@ -199,7 +205,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
-        self.assertIn("OpenClaw 2026.4.21", self.readme)
+        self.assertIn("OpenClaw 2026.4.27", self.readme)
         self.assertIn("ORION_RUNTIME_BASELINE_2026_04_07.md", self.readme)
         self.assertIn("ORION_EXTENSION_SURFACES.md", self.readme)
         self.assertIn("REPO_HYGIENE.md", self.readme)
@@ -234,6 +240,13 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
             self.assertIn("low-cost mode", text)
         self.assertIn("premium OpenAI/Codex lanes", self.low_cost_mode)
         self.assertIn("do not run automatic `openclaw models status --probe`", self.low_cost_mode)
+        self.assertIn("models.pricing.enabled = false", self.low_cost_mode)
+
+    def test_telegram_topic_crons_require_thread_id_guidance(self):
+        self.assertIn("openclaw cron add", self.telegram_topic_routing)
+        self.assertIn("openclaw cron edit", self.telegram_topic_routing)
+        self.assertIn("--thread-id", self.telegram_topic_routing)
+        self.assertIn("Do not rely on bare chat delivery", self.telegram_topic_routing)
 
     def test_live_docs_use_src_workspace_path(self):
         live_texts = (

@@ -1,6 +1,6 @@
 # ORION Runtime Baseline 2026-04-07
 
-Status: historical baseline memo, superseded by the 2026-04-22 runtime verification in `README.md`  
+Status: historical baseline memo, superseded by the 2026-04-29 runtime verification in `README.md`
 Scope: repo-grounded and runtime-grounded April 2026 posture refresh
 
 ## Summary
@@ -15,9 +15,10 @@ Key current-state facts at the time of this memo:
 - `browser` and `firecrawl` exist as bundled runtime surfaces but are not allowlisted in the active runtime.
 - Checked-in templates remain conservative and should stay separate from live runtime facts.
 
-Current note from 2026-04-22:
-- The live runtime has since moved to `OpenClaw 2026.4.21`.
-- The live gateway is healthy on `2026.4.21`, Discord and Telegram are both configured in runtime, and the machine now carries the newer session-pruning, stricter owner-command auth, and cron `jobs-state.json` behavior from `2026.4.20` and `2026.4.21`.
+Current note from 2026-04-29:
+- The live runtime has since moved to `OpenClaw 2026.4.27`.
+- The live gateway is healthy on `2026.4.27`, Telegram is the active user-facing channel, Discord is intentionally disabled, and the machine carries the newer session-pruning, stricter owner-command auth, cron `jobs-state.json`, Telegram topic-cron reliability, plugin-registry hygiene, and low-cost pricing-catalog controls from the `2026.4.x` line.
+- ORION should adopt `models.pricing.enabled=false`, keep Task Packets as the durable async contract, and defer DeepInfra, Yuanbao, QQBot, Matrix, Slack, Docker GPU passthrough, and mobile node presence unless a concrete use case appears.
 
 ## Documented vs Runtime vs Recommended
 

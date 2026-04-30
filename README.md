@@ -47,24 +47,26 @@ openclaw models status
 ```
 
 Latest local/runtime baseline:
-- Runtime verified on 2026-04-22 against `OpenClaw 2026.4.21`.
+- Runtime verified on 2026-04-29 against `OpenClaw 2026.4.27`.
 - Historical upgrade note remains in `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`.
 - Current sweep baseline and follow-on decisions live in:
   - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
   - `docs/ORION_TOOL_PILOTS_2026_04.md`
   - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
 
-Current verification snapshot (2026-04-22):
-- `openclaw --version` returned `OpenClaw 2026.4.21`.
+Current verification snapshot (2026-04-29):
+- `openclaw --version` returned `OpenClaw 2026.4.27`.
 - `openclaw config validate --json` returned `{"valid":true,...}`.
-- `openclaw gateway status --json` returned a healthy loopback LaunchAgent and `openclaw gateway call status --json` reported `runtimeVersion: 2026.4.21`.
+- `openclaw gateway status --json` returned a healthy loopback LaunchAgent and `openclaw gateway call status --json` reported the current `2026.4.x` runtime.
 - Live runtime plugin entries include `acpx`, `bluebubbles`, `discord`, `memory-core`, `minimax`, `open-prose`, `openai`, `openrouter`, `slack`, and `telegram`.
 - Live runtime memory slot is `memory-core`, and dreaming is enabled in runtime.
 - ACPX is enabled in the live runtime for bounded specialist execution.
 - ACPX live usage is pinned to ATLAS-owned bounded work with `permissionMode=approve-reads`, `nonInteractivePermissions=fail`, and `pluginToolsMcpBridge=false`.
 - Firecrawl remains disabled in the live runtime because `FIRECRAWL_API_KEY` is not configured.
 - Checked-in templates still keep `memory-lancedb` as the conservative default while the live runtime uses `memory-core` with dreaming enabled.
-- OpenClaw `2026.4.20` and `2026.4.21` add stricter owner-command auth, startup/health-reporting improvements, session pruning by default, cron runtime-state splitting (`jobs-state.json` beside `jobs.json`), and better doctor/plugin dependency repair paths.
+- OpenClaw `2026.4.20` and `2026.4.21` added stricter owner-command auth, startup/health-reporting improvements, session pruning by default, cron runtime-state splitting (`jobs-state.json` beside `jobs.json`), and better doctor/plugin dependency repair paths.
+- OpenClaw `2026.4.27` adds ORION-relevant Telegram startup/send/topic-cron fixes, plugin registry/startup hygiene, strict model fallback behavior, and `models.pricing.enabled` for low-cost/offline startup.
+- Deferred `2026.4.27` surfaces: DeepInfra, Yuanbao, QQBot, Matrix, Slack, Docker GPU passthrough, and mobile node presence.
 - The older `OPENCLAW_GATEWAY_TOKEN` LaunchAgent audit warning from `2026.4.14` is not the current verified state on this machine; the current LaunchAgent config audit is clean, but still verify after reinstalls.
 - The bundled Discord runtime dependency stack required a local npm rebuild after the `2026.4.21` upgrade; gateway and Telegram recovered cleanly afterward.
 - `openclaw skills list` confirms ClawHub-backed skill discovery is available in the local runtime.

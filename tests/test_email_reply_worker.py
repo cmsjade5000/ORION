@@ -125,6 +125,38 @@ class TestEmailReplyWorker(unittest.TestCase):
             )
         raise AssertionError(f"unexpected argv: {argv}")
 
+    def test_openclaw_json_prefers_visible_result_over_run_summary(self):
+        payload = {
+            "runId": "run-1",
+            "status": "ok",
+            "summary": "completed",
+            "result": {
+                "payloads": [
+                    {
+                        "text": "Good evening Cory,\n\nI got your email and read it.\n\n- ORION",
+                        "mediaUrl": None,
+                    }
+                ],
+                "finalAssistantVisibleText": "fallback visible text",
+            },
+        }
+
+        text = self.worker._agent_text_from_json(payload)
+
+        self.assertEqual(text, "Good evening Cory,\n\nI got your email and read it.\n\n- ORION")
+
+    def test_compose_prompt_preserves_orion_email_voice(self):
+        with self._root() as td:
+            root = Path(td)
+            self._write_inbox(root)
+            pref = self.worker._iter_packets(root)[0]
+
+            prompt = self.worker._compose_prompt(pref)
+
+            self.assertIn("ORION's email voice", prompt)
+            self.assertIn("warm, direct, and human", prompt)
+            self.assertIn("not sterile status text", prompt)
+
     def test_low_risk_cory_packet_is_sent_and_completed(self):
         with self._root() as td:
             root = Path(td)

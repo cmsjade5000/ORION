@@ -98,6 +98,12 @@ hooks:
 # This is a template only; actual runtime config lives at ~/.openclaw/openclaw.json.
 # Store provider secrets in ~/.openclaw/.env (see KEEP.md), not in Git.
 #
+models:
+  # Low-cost/offline default: skip startup pricing catalog fetches unless an
+  # operator intentionally wants live pricing refreshes.
+  pricing:
+    enabled: false
+
 # models:
 #   mode: merge
 #   providers:

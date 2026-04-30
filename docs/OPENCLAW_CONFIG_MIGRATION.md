@@ -13,6 +13,7 @@ This migration moved schema-supported settings from `openclaw.yaml` into runtime
 ## Migrated To Runtime
 
 - `tools.profile = "coding"` (pin ORION to a local workspace posture; as of OpenClaw `2026.3.x`, new local installs default to `messaging` when unset)
+- `models.pricing.enabled = false` (low-cost/offline default; avoid startup pricing catalog fetches unless intentionally enabled)
 - `agents.defaults.model.primary = "openrouter/openrouter/free"` (low-cost default)
 - `agents.defaults.model.fallbacks = ["openai/gpt-oss-20b:free","minimax/MiniMax-M2.7-highspeed","minimax/MiniMax-M2.7"]` (cheap/free-first)
 - `agents.defaults.workspace = "/Users/corystoner/src/ORION"`
@@ -71,9 +72,9 @@ openclaw agents bindings --json
 openclaw config get 'agents.defaults.subagents'
 ```
 
-## Operational Notes (OpenClaw 2026.4.21)
+## Operational Notes (OpenClaw 2026.4.27)
 
-Latest local upgrade verification: 2026-04-22 on ORION's Mac runtime.
+Latest local upgrade verification: 2026-04-29 on ORION's Mac runtime.
 
 Important upstream behavior changes for this workspace:
 
@@ -85,6 +86,10 @@ Important upstream behavior changes for this workspace:
 - OpenClaw `2026.4.20` enforces session-store pruning by default and can split cron runtime execution state into `~/.openclaw/cron/jobs-state.json` while keeping `jobs.json` stable for definitions.
 - OpenClaw `2026.4.20` and `2026.4.21` keep bundled Codex provider support, Active Memory, and `commands.list`, while materially improving plugin loading, memory/dreaming reliability, and doctor/plugin dependency repair behavior.
 - OpenClaw `2026.4.21` tightens owner-command auth: owner-enforced commands now require a real owner identity or `operator.admin`, not just permissive channel fallback.
+- OpenClaw `2026.4.27` materially helps ORION's Telegram-first posture: Telegram startup/token failures are clearer, Bot API calls are bounded, topic-targeted cron jobs can use explicit `--thread-id`, and topic-derived cron delivery avoids stale topic leakage.
+- OpenClaw `2026.4.27` improves plugin registry/startup and model-catalog paths. For ORION, treat this as hygiene and startup-performance work, not permission to enable new provider/channel surfaces.
+- OpenClaw `2026.4.27` adds `models.pricing.enabled`; ORION keeps it `false` by default so startup does not need external pricing-catalog fetches in low-cost mode.
+- Deferred `2026.4.27` surfaces: DeepInfra, Yuanbao, QQBot, Matrix, Slack, Docker GPU passthrough, and mobile node presence.
 - The older `gateway-token-embedded` LaunchAgent warning from `2026.4.14` is not the current verified state on this machine; the current LaunchAgent config audit is clean after the `2026.4.21` upgrade.
 - This host needed a post-upgrade local npm rebuild inside `dist/extensions/discord` to restore the bundled Discord runtime dependencies. Treat that as a packaged-runtime repair note, not a repo-config change.
 
@@ -106,9 +111,9 @@ Practical rule:
   interpolation is the portable runtime pattern here rather than a `SecretRef`
   object.
 
-## Dreaming Pilot Note (OpenClaw 2026.4.21)
+## Dreaming Pilot Note (OpenClaw 2026.4.27)
 
-OpenClaw `2026.4.21` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
+OpenClaw `2026.4.27` continues to expose dreaming under `plugins.entries.memory-core.config.dreaming`.
 
 Practical ORION rule:
 - The live runtime is already on `memory-core` with dreaming enabled, but keep the checked-in template conservative unless the repo intentionally decides to make that the default for new installs.
@@ -200,6 +205,11 @@ scripts/telegram_topic_bindings_bootstrap.sh \
   --apply
 ```
 
+For scheduled Telegram forum-topic announcements on OpenClaw `2026.4.27` or
+newer, use `openclaw cron add ... --thread-id <topicId>` or
+`openclaw cron edit ... --thread-id <topicId>`. Do not rely on bare chat
+delivery for topic cron jobs.
+
 ## Telegram Draft Streaming (March 2, 2026)
 
 Telegram Bot API now includes `sendMessageDraft` for real-time draft streaming.
@@ -240,6 +250,7 @@ openclaw config get 'agents.list[0].subagents.allowAgents'
 openclaw config get 'agents.list[1].subagents.allowAgents'
 openclaw config get 'hooks.internal.enabled'
 openclaw config get 'plugins.slots.memory'
+openclaw config get 'models.pricing.enabled'
 openclaw config get channels.telegram
 openclaw sessions cleanup --agent main --dry-run --fix-missing --json
 openclaw agents bindings --json

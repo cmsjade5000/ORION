@@ -17,6 +17,7 @@ The goal is simple: ORION is a side project, so the default path should minimize
 - Checked-in OpenClaw templates default ORION to `openrouter/openrouter/free`.
 - Default fallbacks stay in the cheap/free lane first.
 - Provider-native Codex web search stays disabled by default.
+- OpenClaw model pricing catalog refreshes stay disabled by default with `models.pricing.enabled = false` so startup does not depend on external pricing lookups.
 - Kimi and premium OpenAI/Codex lanes remain available only as intentional escalation paths.
 
 ## Planning And Code Modifications

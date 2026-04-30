@@ -85,6 +85,37 @@ and ensures topic-scoped agent bindings:
 
 - `openclaw agents bind --agent <agent> --bind telegram:<chatId>:topic:<topicId>`
 
+## Scheduled Topic Delivery
+
+OpenClaw `2026.4.27` adds explicit `--thread-id` support to `openclaw cron add`
+and `openclaw cron edit`. Use it for Telegram forum-topic announcements.
+
+For topic-targeted scheduled announcements:
+
+```bash
+openclaw cron add \
+  --name "example-topic-announcement" \
+  --cron "0 9 * * 1-5" \
+  --tz "America/New_York" \
+  --agent main \
+  --session isolated \
+  --deliver telegram:<chatId> \
+  --thread-id <topicId> \
+  --message "TASK_PACKET v1..."
+```
+
+For existing jobs:
+
+```bash
+openclaw cron edit <job-id> \
+  --deliver telegram:<chatId> \
+  --thread-id <topicId>
+```
+
+Do not rely on bare chat delivery for forum-topic cron jobs; include the
+thread/topic id explicitly so scheduled announcements stay in the intended
+Telegram topic.
+
 ## Verification
 
 ```bash
