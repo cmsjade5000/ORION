@@ -251,6 +251,160 @@ class TestAssistantStatus(unittest.TestCase):
             payload = json.loads(proc.stdout)
             self.assertIn("Prepare today's agenda from summary.", payload["message"])
 
+    def test_status_accepts_json_command_and_surfaces_anomaly_only_counts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            jobs_dir = root / "tasks" / "JOBS"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            (jobs_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "updated_ts": 1777576026.0,
+                        "job_count": 3,
+                        "counts": {"queued": 1, "blocked": 1, "complete": 1},
+                        "jobs": [
+                            {
+                                "job_id": "pkt-queued",
+                                "state": "queued",
+                                "owner": "POLARIS",
+                                "objective": "Prepare today's agenda.",
+                                "notification_delivery": {
+                                    "queued": {"status": "pending", "channels": {}},
+                                    "result": {"status": "not-requested", "channels": {}},
+                                },
+                                "result": {"status": "pending", "present": False},
+                                "inbox": {"path": "tasks/INBOX/POLARIS.md", "line": 4},
+                            },
+                            {
+                                "job_id": "pkt-blocked",
+                                "state": "blocked",
+                                "state_reason": "result_blocked",
+                                "owner": "ATLAS",
+                                "objective": "Repair stuck follow-through.",
+                                "notification_delivery": {
+                                    "queued": {"status": "delivered", "channels": {}},
+                                    "result": {"status": "delivered", "channels": {}},
+                                },
+                                "result": {"status": "blocked", "present": True},
+                                "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 9},
+                            },
+                            {
+                                "job_id": "pkt-complete",
+                                "state": "complete",
+                                "owner": "SCRIBE",
+                                "objective": "Draft a completed update.",
+                                "notification_delivery": {
+                                    "queued": {"status": "delivered", "channels": {}},
+                                    "result": {"status": "delivered", "channels": {}},
+                                },
+                                "result": {"status": "ok", "present": True},
+                                "inbox": {"path": "tasks/INBOX/SCRIBE.md", "line": 14},
+                            },
+                        ],
+                        "workflows": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "status", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            message = payload["message"]
+
+            self.assertIn("ORION status", message)
+            self.assertIn("total=3", message)
+            self.assertIn("queued=1", message)
+            self.assertIn("blocked=1", message)
+            self.assertIn("complete=1", message)
+            self.assertIn("ATLAS: Repair stuck follow-through.", message)
+            self.assertNotIn("POLARIS: Prepare today's agenda.", message)
+            self.assertNotIn("SCRIBE: Draft a completed update.", message)
+
+    def test_status_reports_failed_notification_delivery(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            jobs_dir = root / "tasks" / "JOBS"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            (jobs_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "updated_ts": 1777576026.0,
+                        "job_count": 1,
+                        "counts": {"complete": 1},
+                        "jobs": [
+                            {
+                                "job_id": "pkt-delivery",
+                                "state": "complete",
+                                "owner": "POLARIS",
+                                "objective": "Send milestone status.",
+                                "notification_delivery": {
+                                    "queued": {"status": "delivered", "channels": {}},
+                                    "result": {
+                                        "status": "failed-to-deliver",
+                                        "channels": {
+                                            "telegram": {
+                                                "status": "failed-to-deliver",
+                                                "attempts": 2,
+                                                "last_error": "timeout",
+                                            }
+                                        },
+                                    },
+                                },
+                                "result": {"status": "ok", "present": True},
+                                "inbox": {"path": "tasks/INBOX/POLARIS.md", "line": 12},
+                            }
+                        ],
+                        "workflows": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "status", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            message = json.loads(proc.stdout)["message"]
+
+            self.assertIn("POLARIS: Send milestone status.", message)
+            self.assertIn("result notification failed-to-deliver", message)
+            self.assertIn("Follow-through:", message)
+            self.assertIn("Notification issues: 1", message)
+
+    def test_status_missing_summary_uses_fallback_without_crashing(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "status", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            message = json.loads(proc.stdout)["message"]
+
+            self.assertIn("ORION status", message)
+            self.assertIn("summary missing", message)
+            self.assertIn("fallback", message)
+            self.assertIn("Last updated:", message)
+
     def test_review_includes_recent_memory_matches(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

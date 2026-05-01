@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import time
 from pathlib import Path
 
 from assistant_common import (
@@ -31,6 +32,8 @@ from delegation_delivery_rules import blocked_direct_telegram_delivery
 
 AGENDA_PATH = Path("tasks/NOTES/assistant-agenda.md")
 DREAMING_COMMANDS = ["dreaming-status", "dreaming-help", "dreaming-on", "dreaming-off"]
+STATUS_ATTENTION_LIMIT = 6
+SUMMARY_STALE_HOURS = 24
 
 
 def _load_job_summary(root: Path) -> dict[str, object]:
@@ -86,6 +89,173 @@ def _summary_jobs(root: Path) -> list[dict[str, object]]:
 def _summary_workflows(root: Path) -> list[dict[str, object]]:
     workflows = _load_job_summary(root).get("workflows", [])
     return [item for item in workflows if isinstance(item, dict)] if isinstance(workflows, list) else []
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _counts_from_jobs(jobs: list[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for job in jobs:
+        state = str(job.get("state") or "unknown").strip().lower() or "unknown"
+        counts[state] = counts.get(state, 0) + 1
+    return counts
+
+
+def _summary_counts(summary: dict[str, object], jobs: list[dict[str, object]]) -> dict[str, int]:
+    raw_counts = summary.get("counts")
+    if isinstance(raw_counts, dict) and raw_counts:
+        return {str(key): _safe_int(value) for key, value in raw_counts.items()}
+    return _counts_from_jobs(jobs)
+
+
+def _job_delivery_status(job: dict[str, object], phase: str) -> str:
+    delivery = job.get("notification_delivery")
+    if not isinstance(delivery, dict):
+        return "unknown"
+    phase_payload = delivery.get(phase)
+    if not isinstance(phase_payload, dict):
+        return "unknown"
+    return str(phase_payload.get("status") or "unknown").strip().lower() or "unknown"
+
+
+def _is_terminal_job(job: dict[str, object]) -> bool:
+    state = str(job.get("state") or "").strip().lower()
+    if state in {"blocked", "cancelled", "complete", "pending_verification"}:
+        return True
+    result = job.get("result")
+    if not isinstance(result, dict):
+        return False
+    return bool(result.get("present")) or str(result.get("status") or "").strip().lower() in {"ok", "failed", "blocked"}
+
+
+def _status_job_label(job: dict[str, object]) -> str:
+    owner = str(job.get("owner") or "UNKNOWN").strip() or "UNKNOWN"
+    objective = str(job.get("objective") or "(no objective)").strip() or "(no objective)"
+    return f"{owner}: {objective}"
+
+
+def _status_attention_items(summary: dict[str, object], jobs: list[dict[str, object]], workflows: list[dict[str, object]]) -> list[tuple[int, str]]:
+    items: list[tuple[int, str]] = []
+
+    if not summary:
+        items.append((0, "Job summary missing; using inbox fallback."))
+    else:
+        updated_ts = _safe_float(summary.get("updated_ts"))
+        if updated_ts is None:
+            items.append((0, "Job summary timestamp unavailable."))
+        else:
+            age_hours = max(0.0, (time.time() - updated_ts) / 3600.0)
+            if age_hours > SUMMARY_STALE_HOURS:
+                items.append((0, f"Job summary stale ({age_hours:.1f}h old)."))
+
+    for job in jobs:
+        label = _status_job_label(job)
+        result_delivery = _job_delivery_status(job, "result")
+        if result_delivery == "failed-to-deliver":
+            items.append((1, f"{label} (result notification failed-to-deliver)"))
+            continue
+        if _is_terminal_job(job) and result_delivery == "pending":
+            items.append((2, f"{label} (result notification pending)"))
+            continue
+
+        state = str(job.get("state") or "").strip().lower()
+        if state == "blocked":
+            reason = str(job.get("state_reason") or "blocked").strip() or "blocked"
+            items.append((3, f"{label} ({reason})"))
+        elif state == "pending_verification":
+            items.append((4, f"{label} (pending verification)"))
+
+    for workflow in workflows:
+        state = str(workflow.get("state") or "").strip().lower()
+        if state not in {"manual_required", "unsupported"}:
+            continue
+        workflow_id = str(workflow.get("workflow_id") or "(unknown)").strip() or "(unknown)"
+        owners = workflow.get("owners")
+        owner_text = ", ".join(str(owner).strip() for owner in owners if str(owner).strip()) if isinstance(owners, list) else "unknown"
+        if not owner_text:
+            owner_text = "unknown"
+        items.append((5, f"workflow {workflow_id} requires {state} handling (owners={owner_text})"))
+
+    return sorted(items, key=lambda item: (item[0], item[1]))
+
+
+def _format_status_updated_at(summary: dict[str, object]) -> str:
+    updated_ts = _safe_float(summary.get("updated_ts"))
+    if updated_ts is None:
+        return "unknown"
+    try:
+        return time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(updated_ts))
+    except (OSError, OverflowError, ValueError):
+        return "unknown"
+
+
+def _render_status(root: Path) -> tuple[str, str]:
+    summary = _load_job_summary(root)
+    jobs = _summary_jobs(root)
+    workflows = _summary_workflows(root)
+    counts = _summary_counts(summary, jobs)
+    job_count = _safe_int(summary.get("job_count"), len(jobs)) if summary else len(jobs)
+    notification_issue_count = sum(
+        1
+        for job in jobs
+        if _job_delivery_status(job, "queued") == "failed-to-deliver"
+        or _job_delivery_status(job, "result") == "failed-to-deliver"
+    )
+    pending_result_delivery_count = sum(
+        1
+        for job in jobs
+        if _is_terminal_job(job) and _job_delivery_status(job, "result") == "pending"
+    )
+    source = "tasks/JOBS/summary.json" if summary else "inbox fallback (summary missing)"
+    count_parts = [f"total={job_count}"]
+    for state in ("queued", "in_progress", "pending_verification", "blocked", "complete", "cancelled"):
+        if counts.get(state, 0):
+            count_parts.append(f"{state}={counts[state]}")
+
+    attention_items = _status_attention_items(summary, jobs, workflows)
+    visible_attention = attention_items[:STATUS_ATTENTION_LIMIT]
+
+    lines = [
+        "ORION status",
+        "",
+        "Delegated work:",
+        f"- {' '.join(count_parts)}",
+        "",
+        "Attention needed:",
+    ]
+    if visible_attention:
+        lines.extend(f"- {text}" for _, text in visible_attention)
+        if len(attention_items) > STATUS_ATTENTION_LIMIT:
+            lines.append(f"- +{len(attention_items) - STATUS_ATTENTION_LIMIT} more attention items")
+    else:
+        lines.append("- No attention items.")
+
+    lines.extend(
+        [
+            "",
+            "Follow-through:",
+            f"- Summary source: {source}",
+            f"- Notification issues: {notification_issue_count}",
+            f"- Pending result notifications: {pending_result_delivery_count}",
+            "",
+            "Last updated:",
+            f"- {_format_status_updated_at(summary)}",
+        ]
+    )
+    message = "\n".join(lines).strip()
+    return message, message
 
 
 def _run_text_command(argv: list[str], *, cwd: Path, timeout: int = 20) -> tuple[bool, str]:
@@ -489,6 +659,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     root = repo_root(args.repo_root)
     if args.cmd == "today":
         message, _ = _render_today(root)
+    elif args.cmd == "status":
+        message, _ = _render_status(root)
     elif args.cmd == "followups":
         message, _ = _render_followups(root)
     elif args.cmd == "review":
@@ -520,7 +692,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cmd",
         required=True,
-        choices=["today", "followups", "review", "refresh", *DREAMING_COMMANDS],
+        choices=["today", "status", "followups", "review", "refresh", *DREAMING_COMMANDS],
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     parser.set_defaults(func=cmd_status)

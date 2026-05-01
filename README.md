@@ -98,6 +98,7 @@ Primary assistant posture:
 
 Deterministic assistant commands:
 - `/today` -> agenda from calendar + reminders + delegated work + open tickets
+- `/status` -> compact anomaly-only ORION follow-through status
 - `/capture <text>` -> quick admin capture queued to POLARIS
 - `/followups` -> waiting-on items and POLARIS queue
 - `/review` -> concise daily review / next actions
@@ -143,7 +144,7 @@ Standard operator health bundle:
 ## Core Boundary
 
 ORION core owns:
-- admin-copilot Telegram commands (`/today`, `/capture`, `/followups`, `/review`)
+- admin-copilot Telegram commands (`/today`, `/status`, `/capture`, `/followups`, `/review`)
 - the private ORION Telegram Main Mini App (`/orion`)
 - task packets, delegated-job state, and core maintenance loops
 - routing, retrieval, drafting, safety, and proof-driven execution
@@ -162,6 +163,7 @@ Non-core surfaces now live behind explicit extension seams. See:
 
 Primary Telegram commands in ORION DM:
 - `/today` for agenda from calendar + reminders + delegated work + open tickets
+- `/status` for compact anomaly-only ORION follow-through status
 - `/capture <text>` for quick capture queued to POLARIS
 - `/followups` for waiting-on items and POLARIS queue
 - `/review` for concise daily review / next actions
