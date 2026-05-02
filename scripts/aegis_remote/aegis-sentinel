@@ -430,6 +430,10 @@ files=(
   /etc/systemd/system/aegis-monitor-orion.timer
   /etc/systemd/system/aegis-sentinel.service
   /etc/systemd/system/aegis-sentinel.timer
+  /etc/systemd/system/aegis-maintenance-orion.service
+  /etc/systemd/system/aegis-maintenance-orion.timer
+  /etc/systemd/system/aegis-openclaw-update.service
+  /etc/systemd/system/aegis-openclaw-update.timer
 )
 
 hash_file="$STATE_DIR/config_hashes.sha256"

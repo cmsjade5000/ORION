@@ -59,6 +59,8 @@ printf '%s\n' "$@" > "${MOCK_SSH_LOG:?}"
             encoding="utf-8"
         )
         self.assertIn("/etc/aegis-monitor.env", script)
+        self.assertIn("/etc/systemd/system/aegis-maintenance-orion.service", script)
+        self.assertIn("/etc/systemd/system/aegis-openclaw-update.service", script)
         self.assertIn('cp "$current_tmp" "$drift_tmp"', script)
         self.assertIn("baseline unchanged pending review", script)
         self.assertIn('drift_fingerprint_file="$STATE_DIR/config_hashes.drift.fingerprint"', script)
@@ -70,6 +72,18 @@ printf '%s\n' "$@" > "${MOCK_SSH_LOG:?}"
         drift_section = script.split('if ! cmp -s "$hash_file" "$current_tmp"; then', 1)[1]
         drift_section = drift_section.split("\nfi\n\n# 5) Tailscale peer changes", 1)[0]
         self.assertNotIn('cp "$current_tmp" "$hash_file"', drift_section)
+
+    def test_monitor_debounces_orion_health_before_restart_or_notify(self):
+        script = (self._repo_root() / "scripts" / "aegis_remote" / "aegis-monitor-orion").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("AEGIS_ORION_CONFIRM_FAILURE_SEC:=180", script)
+        self.assertIn('outage_first_seen_file="$STATE_DIR/orion_outage_first_seen_epoch"', script)
+        self.assertIn("SUSPECT: ORION health failed but not confirmed yet", script)
+        self.assertIn('exit 0', script.split("SUSPECT: ORION health failed but not confirmed yet", 1)[1])
+        self.assertIn("wait_for_health_after_restart", script)
+        self.assertIn("AEGIS_ORION_POST_RESTART_WAIT_SEC:=180", script)
+        self.assertIn("transient ORION health failure self-corrected before external alert", script)
 
 
 if __name__ == "__main__":

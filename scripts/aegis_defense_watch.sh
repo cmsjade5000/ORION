@@ -10,6 +10,8 @@ set -euo pipefail
 #   AEGIS_SSH_USER (default root)
 #   ORION_TELEGRAM_CHAT_ID (preferred). If unset, falls back to AEGIS_TELEGRAM_CHAT_ID from /etc/aegis-monitor.env on Hetzner.
 #   STATE_FILE (default: <repo>/tmp/aegis_defense_plans.seen)
+#   BACKOFF_FILE (default: <repo>/tmp/aegis_defense_watch.backoff)
+#   AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC (default: 3600)
 #   DRY_RUN=1 (do not send; just print what would happen)
 #
 # Uses:
@@ -24,6 +26,15 @@ run_with_timeout() {
   local timeout_sec="${1:-30}"
   shift
   local cmd=("$@")
+
+  kill_tree() {
+    local root_pid="$1"
+    local child
+    for child in $(pgrep -P "$root_pid" 2>/dev/null || true); do
+      kill_tree "$child"
+    done
+    kill -TERM "$root_pid" 2>/dev/null || true
+  }
   
   # Run the command in background
   "${cmd[@]}" &
@@ -34,7 +45,9 @@ run_with_timeout() {
     sleep "$timeout_sec"
     if kill -0 "$cmd_pid" 2>/dev/null; then
       echo "run_with_timeout: killing ${cmd[*]} after ${timeout_sec}s" >&2
-      kill -TERM "$cmd_pid" 2>/dev/null || kill -KILL "$cmd_pid" 2>/dev/null
+      kill_tree "$cmd_pid"
+      sleep 1
+      kill -KILL "$cmd_pid" 2>/dev/null || true
     fi
   ) &
   local timer_pid=$!
@@ -55,10 +68,39 @@ AEGIS_SSH_USER="${AEGIS_SSH_USER:-root}"
 AEGIS_SSH_STRICT_HOST_KEY_CHECKING="${AEGIS_SSH_STRICT_HOST_KEY_CHECKING:-yes}"
 AEGIS_SSH_KNOWN_HOSTS="${AEGIS_SSH_KNOWN_HOSTS:-${HOME}/.ssh/known_hosts}"
 STATE_FILE="${STATE_FILE:-${repo_root}/tmp/aegis_defense_plans.seen}"
+BACKOFF_FILE="${BACKOFF_FILE:-${repo_root}/tmp/aegis_defense_watch.backoff}"
+AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC="${AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC:-3600}"
 DRY_RUN="${DRY_RUN:-0}"
 
 mkdir -p "${repo_root}/tmp"
 touch "${STATE_FILE}"
+
+case "${AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC}" in
+  ''|*[!0-9]*) AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC=3600 ;;
+esac
+
+backoff_active() {
+  local now last
+  [[ -s "${BACKOFF_FILE}" ]] || return 1
+  now="$(date +%s)"
+  last="$(cat "${BACKOFF_FILE}" 2>/dev/null || echo 0)"
+  case "${last}" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [[ $((now - last)) -lt "${AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC}" ]]
+}
+
+mark_backoff() {
+  date +%s >"${BACKOFF_FILE}"
+}
+
+clear_backoff() {
+  rm -f "${BACKOFF_FILE}" 2>/dev/null || true
+}
+
+if backoff_active; then
+  exit 0
+fi
 
 get_chat_id() {
   if [[ -n "${ORION_TELEGRAM_CHAT_ID:-}" ]]; then
@@ -81,14 +123,16 @@ get_chat_id() {
   echo "${val}"
 }
 
-chat_id="$(get_chat_id)"
-if [[ -z "${chat_id}" ]]; then
-  echo "aegis_defense_watch: missing chat id (set ORION_TELEGRAM_CHAT_ID)" >&2
+# Fetch plans with a timeout to prevent SSH hangs. If Tailscale SSH is gated,
+# back off for a while instead of generating a fresh auth prompt every 2 minutes.
+plans_rc=0
+plans="$(run_with_timeout 30 "${repo_root}/scripts/aegis_defense.sh" list 2>/dev/null)" || plans_rc=$?
+if [[ "${plans_rc}" -ne 0 ]]; then
+  echo "aegis_defense_watch: remote plan list unavailable; backing off for ${AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC}s" >&2
+  mark_backoff
   exit 0
 fi
-
-# Fetch plans with a timeout to prevent SSH hang
-plans="$(run_with_timeout 30 "${repo_root}/scripts/aegis_defense.sh" list 2>/dev/null || true)"
+clear_backoff
 if [[ -z "${plans}" ]]; then
   exit 0
 fi
@@ -104,6 +148,13 @@ while IFS= read -r id; do
 done <<< "${plans}"
 
 if [[ "${#new_ids[@]}" -eq 0 ]]; then
+  exit 0
+fi
+
+chat_id="$(get_chat_id)"
+if [[ -z "${chat_id}" ]]; then
+  echo "aegis_defense_watch: missing chat id (set ORION_TELEGRAM_CHAT_ID); backing off for ${AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC}s" >&2
+  mark_backoff
   exit 0
 fi
 

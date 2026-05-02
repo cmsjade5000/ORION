@@ -28,6 +28,16 @@ class TestInstallOrionAegisDefenseWatchLaunchAgent(unittest.TestCase):
         self.assertNotIn('<string>-lc</string>', self.plist)
         self.assertNotIn('"/bin/bash -lc', self.plist)
 
+    def test_watch_script_backs_off_remote_auth_failures(self):
+        text = self.script.read_text(encoding="utf-8")
+        self.assertIn("AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC", text)
+        self.assertIn("backoff_active", text)
+        self.assertIn("mark_backoff", text)
+        self.assertIn("remote plan list unavailable; backing off", text)
+        list_pos = text.index('scripts/aegis_defense.sh" list')
+        chat_pos = text.index('chat_id="$(get_chat_id)"')
+        self.assertLess(list_pos, chat_pos)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -102,6 +102,9 @@ fi
 # avoid restarting ORION on a single blip.
 : "${AEGIS_ORION_HEALTH_RETRIES:=2}"            # additional retries after the first attempt
 : "${AEGIS_ORION_HEALTH_RETRY_SLEEP_SEC:=3}"    # base sleep between retries (backoff is linear)
+: "${AEGIS_ORION_CONFIRM_FAILURE_SEC:=180}"     # require sustained non-transport failure before restart/notify
+: "${AEGIS_ORION_POST_RESTART_WAIT_SEC:=180}"   # wait for slow OpenClaw startup before declaring restart outcome
+: "${AEGIS_ORION_POST_RESTART_POLL_SEC:=10}"
 
 post_slack() {
   local text="$1"
@@ -299,6 +302,42 @@ health_ok_with_retries() {
 }
 
 outage_id_file="$STATE_DIR/orion_outage_id"
+outage_first_seen_file="$STATE_DIR/orion_outage_first_seen_epoch"
+outage_notified_file="$STATE_DIR/orion_outage_notified"
+
+outage_elapsed_sec() {
+  local now first
+  now=$(date +%s)
+  if [ ! -f "$outage_first_seen_file" ]; then
+    echo "$now" >"$outage_first_seen_file"
+    echo 0
+    return 0
+  fi
+  first=$(cat "$outage_first_seen_file" 2>/dev/null || echo "$now")
+  case "$first" in
+    ''|*[!0-9]*) first="$now" ;;
+  esac
+  echo $((now - first))
+}
+
+mark_outage_notified() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' >"$outage_notified_file"
+}
+
+wait_for_health_after_restart() {
+  local deadline now
+  deadline=$(($(date +%s) + AEGIS_ORION_POST_RESTART_WAIT_SEC))
+  while true; do
+    if health_ok_with_retries; then
+      return 0
+    fi
+    now=$(date +%s)
+    if [ "$now" -ge "$deadline" ]; then
+      return 1
+    fi
+    sleep "$AEGIS_ORION_POST_RESTART_POLL_SEC"
+  done
+}
 
 # Note: `ssh` exits 255 for transport/auth failures (host down, network, key problems).
 # Treat those as "unreachable" and do NOT burn restart attempts or trip the anti-flap guard.
@@ -310,13 +349,19 @@ if health_ok_with_retries; then
   if [ -f "$outage_id_file" ]; then
     incident="$(cat "$outage_id_file" 2>/dev/null || true)"
     rm -f "$outage_id_file" || true
+    rm -f "$outage_first_seen_file" || true
     log "RECOVERED: ORION health restored"
-    # If ORION recovered without a successful AEGIS restart, still log the close.
-    if throttle_ok "orion_recovered_incident" 900; then
-      incident_append "$incident" "P1" "ORION_RECOVERED" "ORION recovered after failing health checks." "No action required." "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    fi
-    if throttle_ok "orion_recovered" 900; then
-      notify "$(msg_ok "ORION is back online." "ORION was failing health checks earlier." "No action needed." "$incident")"
+    if [ -f "$outage_notified_file" ]; then
+      rm -f "$outage_notified_file" || true
+      # If AEGIS already alerted externally, close the loop once.
+      if throttle_ok "orion_recovered_incident" 900; then
+        incident_append "$incident" "P1" "ORION_RECOVERED" "ORION recovered after failing health checks." "No action required." "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      fi
+      if throttle_ok "orion_recovered" 900; then
+        notify "$(msg_ok "ORION is back online." "ORION was failing health checks earlier." "No action needed." "$incident")"
+      fi
+    else
+      log "INFO: transient ORION health failure self-corrected before external alert"
     fi
   else
     log "OK: ORION health"
@@ -350,6 +395,7 @@ if [ "$health_rc" -eq 255 ]; then
       "open"
   fi
   if throttle_ok "orion_unreachable" 900; then
+    mark_outage_notified
     notify "$(msg_fail \
       "ORION is unreachable." \
       "SSH transport failed (host down, network, or auth issue)." \
@@ -358,6 +404,12 @@ if [ "$health_rc" -eq 255 ]; then
       "$incident_id")"
   fi
   exit 2
+fi
+
+elapsed="$(outage_elapsed_sec)"
+if [ "$elapsed" -lt "$AEGIS_ORION_CONFIRM_FAILURE_SEC" ]; then
+  log "SUSPECT: ORION health failed but not confirmed yet ($incident_id) elapsed=${elapsed}s threshold=${AEGIS_ORION_CONFIRM_FAILURE_SEC}s (health_first_line=${HEALTH_LAST_LINE:-unknown})"
+  exit 0
 fi
 
 # Restart loop guard.
@@ -373,6 +425,7 @@ if ! restart_allowed_or_lock; then
       "open"
   fi
   if throttle_ok "orion_restart_guard" 900; then
+    mark_outage_notified
     notify "$(msg_fail \
       "ORION is offline (restart guard active)." \
       "Health checks failed, but restart guard blocked automatic restarts." \
@@ -400,6 +453,7 @@ if [ "$restart_rc" -eq 255 ]; then
       "open"
   fi
   if throttle_ok "orion_restart_unreachable" 900; then
+    mark_outage_notified
     notify "$(msg_fail \
       "ORION is unreachable during restart." \
       "Health checks failed, then SSH transport failed while attempting restart." \
@@ -410,22 +464,23 @@ if [ "$restart_rc" -eq 255 ]; then
   exit 2
 fi
 record_restart_attempt
-sleep 3
 
-if health_ok_with_retries; then
+if wait_for_health_after_restart; then
   mark_ok
   log "RECOVERED: ORION restart succeeded"
   incident_append "$incident_id" "P1" "ORION_GATEWAY_RESTART" "ORION health failed; gateway restart succeeded." "Restarted ORION OpenClaw gateway." "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   if throttle_ok "orion_restart_succeeded" 900; then
+    mark_outage_notified
     notify "$(msg_warn "ORION was unresponsive (fixed)." "Health checks failed." "Restarted the ORION OpenClaw gateway." "No action needed unless this repeats." "$incident_id")"
   fi
-  rm -f "$outage_id_file" || true
+  rm -f "$outage_id_file" "$outage_first_seen_file" || true
   exit 0
 fi
 
 log "ALERT: ORION still unhealthy after restart ($incident_id)"
 incident_append "$incident_id" "P0" "ORION_GATEWAY_RESTART" "ORION health failed; gateway restart did not recover." "Restarted ORION OpenClaw gateway, but health still fails." "open"
 if throttle_ok "orion_down" 900; then
+  mark_outage_notified
   notify "$(msg_fail "ORION is still offline." "Health checks failed and ORION did not recover." "Restarted the ORION OpenClaw gateway, but the health check still fails." "Please check the Mac mini: OpenClaw gateway logs and system status." "$incident_id")"
 fi
 exit 2

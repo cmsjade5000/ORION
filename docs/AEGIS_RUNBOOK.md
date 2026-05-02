@@ -307,6 +307,7 @@ If you want ORION to proactively DM you in Telegram when a new defense plan appe
   - `scripts/install_orion_aegis_defense_watch_launchagent.sh /Users/corystoner/src/ORION`
 - It polls `aegis-defend list` on Hetzner every ~2 minutes and sends a private DM when it sees a new plan.
 - To force the DM target chat id, set env var `ORION_TELEGRAM_CHAT_ID` for the LaunchAgent (recommended). Otherwise it will fall back to `AEGIS_TELEGRAM_CHAT_ID` from `/etc/aegis-monitor.env` on Hetzner.
+- If Tailscale SSH is gated or unavailable, the watcher writes `tmp/aegis_defense_watch.backoff` and suppresses repeat attempts for `AEGIS_WATCH_REMOTE_FAILURE_BACKOFF_SEC` (default 3600 seconds) so it does not create auth-prompt/log noise every launchd tick.
 
 ## ORION Restart Loop Guard (Anti-Flap)
 
@@ -315,12 +316,16 @@ AEGIS will attempt to restart ORION when ORION fails health checks, but it inclu
 Defaults (configurable via `/etc/aegis-monitor.env`):
 - `AEGIS_ORION_RESTART_MAX=2`
 - `AEGIS_ORION_RESTART_WINDOW_SEC=900` (15 minutes)
+- `AEGIS_ORION_CONFIRM_FAILURE_SEC=180` (sustained non-transport health failure required before AEGIS restarts ORION or sends Telegram/Slack)
+- `AEGIS_ORION_POST_RESTART_WAIT_SEC=180` (readiness wait after restart before declaring success/failure)
+- `AEGIS_ORION_POST_RESTART_POLL_SEC=10`
 
 Tip:
 - If you want AEGIS to keep trying longer during extended ORION outages, increase `AEGIS_ORION_RESTART_MAX` (for example `6` or `10`) and/or increase `AEGIS_ORION_RESTART_WINDOW_SEC` to reduce flapping.
 
 Behavior:
-- If ORION is unhealthy and AEGIS has already attempted `AEGIS_ORION_RESTART_MAX` restarts inside the window, AEGIS:
+- If ORION has a one-off health miss but recovers before `AEGIS_ORION_CONFIRM_FAILURE_SEC`, AEGIS logs it as suspect/transient and stays quiet.
+- If ORION is unhealthy after the confirm window and AEGIS has already attempted `AEGIS_ORION_RESTART_MAX` restarts inside the window, AEGIS:
   - Creates a guard lock file: `/var/lib/aegis-monitor/orion_restart_guard.lock`
   - Switches to **alert-only** (no more automatic restarts) until the rolling window cools down
   - Automatically clears the lock once enough time passes that the restart-attempt count in the window drops below the limit
