@@ -71,6 +71,33 @@ def reindex_memory(agent: str) -> subprocess.CompletedProcess[str]:
     return run_cmd(["openclaw", "memory", "index", "--agent", agent, "--force"])
 
 
+def dreaming_enabled(root: Path) -> bool:
+    proc = run_cmd(["openclaw", "config", "get", "plugins.entries.memory-core.config.dreaming.enabled"])
+    if proc.returncode != 0:
+        return False
+    return (proc.stdout or "").strip().lower() == "true"
+
+
+def recall_store_missing(root: Path) -> bool:
+    return not (root / "memory" / ".dreams" / "short-term-recall.json").exists()
+
+
+def stage_dreaming_recall(root: Path, agent: str) -> subprocess.CompletedProcess[str]:
+    return run_cmd(
+        [
+            "openclaw",
+            "memory",
+            "rem-backfill",
+            "--agent",
+            agent,
+            "--path",
+            str(root / "memory"),
+            "--stage-short-term",
+            "--json",
+        ]
+    )
+
+
 def consolidate_preview(root: Path) -> tuple[dict[str, Any], subprocess.CompletedProcess[str]]:
     script_path = Path(__file__).resolve().parent / "consolidate_session_memory.py"
     proc = run_cmd(
@@ -132,6 +159,7 @@ def write_report(
     apply_reason: str,
     applied: bool,
     reindex_required: bool,
+    dreaming_recall_result: subprocess.CompletedProcess[str] | None,
     apply_result: dict[str, Any] | None,
     post_preview: dict[str, Any] | None,
     reindex_result: subprocess.CompletedProcess[str] | None,
@@ -180,6 +208,26 @@ def write_report(
         )
         stdout = (reindex_result.stdout or "").strip()
         stderr = (reindex_result.stderr or "").strip()
+        if stdout:
+            lines.append(f"- stdout: `{stdout}`")
+        if stderr:
+            lines.append(f"- stderr: `{stderr}`")
+    lines.extend(
+        [
+            "",
+            "## Dreaming Recall Store",
+            f"- seeded: `{str(dreaming_recall_result is not None).lower()}`",
+        ]
+    )
+    if dreaming_recall_result is not None:
+        lines.extend(
+            [
+                f"- exit_code: `{dreaming_recall_result.returncode}`",
+                f"- ok: `{str(dreaming_recall_result.returncode == 0).lower()}`",
+            ]
+        )
+        stdout = (dreaming_recall_result.stdout or "").strip()
+        stderr = (dreaming_recall_result.stderr or "").strip()
         if stdout:
             lines.append(f"- stdout: `{stdout}`")
         if stderr:
@@ -273,13 +321,20 @@ def main() -> int:
     doctor_result: subprocess.CompletedProcess[str] | None = None
     consolidation_result: dict[str, Any] | None = None
     reindex_result: subprocess.CompletedProcess[str] | None = None
+    dreaming_recall_result: subprocess.CompletedProcess[str] | None = None
     reindex_required = False
     maintenance_ok = True
+    recall_seed_required = dreaming_enabled(root) and recall_store_missing(root)
 
     if args.apply and apply_allowed:
         consolidation_result, _ = consolidate_apply(root)
         consolidation_apply_result = consolidation_result.get("result") or {}
         reindex_required = int(consolidation_apply_result.get("merged") or 0) > 0
+        if recall_seed_required:
+            dreaming_recall_result = stage_dreaming_recall(root, args.agent)
+            if dreaming_recall_result.returncode != 0:
+                maintenance_ok = False
+            reindex_required = True
         if reindex_required:
             reindex_result = reindex_memory(args.agent)
             if reindex_result.returncode != 0:
@@ -294,6 +349,15 @@ def main() -> int:
     else:
         post_preview = preview
 
+    if args.apply and recall_seed_required and dreaming_recall_result is None:
+        dreaming_recall_result = stage_dreaming_recall(root, args.agent)
+        if dreaming_recall_result.returncode != 0:
+            maintenance_ok = False
+        reindex_required = True
+        reindex_result = reindex_memory(args.agent)
+        if reindex_result.returncode != 0:
+            maintenance_ok = False
+
     write_report(
         report_path,
         agent=args.agent,
@@ -304,6 +368,7 @@ def main() -> int:
         apply_reason=apply_reason,
         applied=applied,
         reindex_required=reindex_required,
+        dreaming_recall_result=dreaming_recall_result,
         apply_result=apply_result,
         post_preview=post_preview,
         reindex_result=reindex_result,
@@ -333,6 +398,23 @@ def main() -> int:
             if reindex_result is not None
             else {
                 "required": reindex_required,
+                "ok": None,
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "",
+            }
+        ),
+        "dreaming_recall": (
+            {
+                "required": recall_seed_required,
+                "ok": dreaming_recall_result.returncode == 0,
+                "exit_code": dreaming_recall_result.returncode,
+                "stdout": (dreaming_recall_result.stdout or "").strip(),
+                "stderr": (dreaming_recall_result.stderr or "").strip(),
+            }
+            if dreaming_recall_result is not None
+            else {
+                "required": recall_seed_required,
                 "ok": None,
                 "exit_code": None,
                 "stdout": "",

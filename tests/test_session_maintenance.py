@@ -20,6 +20,7 @@ class TestSessionMaintenance(unittest.TestCase):
         after: int,
         reindex_exit_code: int = 0,
         reindex_stdout: str = "Memory index updated (main).",
+        dreaming_enabled: bool = True,
     ) -> None:
         command_log = root / "command-log.txt"
         fake = root / "openclaw"
@@ -47,6 +48,20 @@ if [[ "$1 $2" == "memory index" ]]; then
   shift 2
   echo "{reindex_stdout}"
   exit {reindex_exit_code}
+fi
+if [[ "${{1:-}} ${{2:-}} ${{3:-}}" == "config get plugins.entries.memory-core.config.dreaming.enabled" ]]; then
+  echo "{str(dreaming_enabled).lower()}"
+  exit 0
+fi
+if [[ "$1 $2" == "memory rem-backfill" ]]; then
+  mkdir -p "{root}/memory/.dreams"
+  cat > "{root}/memory/.dreams/short-term-recall.json" <<'JSON'
+{{"updatedAt":"2026-05-02T16:02:55.185Z","entries":[{{"key":"daily:2026-04-06"}}]}}
+JSON
+  cat <<'JSON'
+{{"writtenEntries":1,"stagedShortTermEntries":1}}
+JSON
+  exit 0
 fi
 if [[ "$1" == "doctor" ]]; then
   echo "doctor ok"
@@ -91,12 +106,18 @@ exit 2
             self.assertTrue((root / "tasks" / "NOTES" / "session-maintenance.md").exists())
             command_log = (root / "command-log.txt").read_text(encoding="utf-8")
             self.assertNotIn("memory index", command_log)
+            self.assertNotIn("memory rem-backfill", command_log)
 
     def test_apply_requires_auto_ok_and_runs_when_thresholds_met(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "tasks" / "NOTES").mkdir(parents=True, exist_ok=True)
             (root / "memory").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / ".dreams").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / ".dreams" / "short-term-recall.json").write_text(
+                '{"entries":[]}\n',
+                encoding="utf-8",
+            )
             (root / "memory" / "2026-04-06-gateway-update.md").write_text("# Session\n\nhello\n", encoding="utf-8")
             self._write_fake_openclaw(root, missing=120, before=200, after=50)
             env = dict(os.environ)
@@ -141,6 +162,7 @@ exit 2
             self.assertIn("Memory index updated (main).", report)
             command_log = (root / "command-log.txt").read_text(encoding="utf-8").splitlines()
             self.assertIn("memory index --agent main --force", command_log)
+            self.assertFalse(any("memory rem-backfill" in item for item in command_log))
             self.assertLess(
                 command_log.index("memory index --agent main --force"),
                 command_log.index("doctor --non-interactive"),
@@ -151,6 +173,11 @@ exit 2
             root = Path(td)
             (root / "tasks" / "NOTES").mkdir(parents=True, exist_ok=True)
             (root / "memory").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / ".dreams").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / ".dreams" / "short-term-recall.json").write_text(
+                '{"entries":[]}\n',
+                encoding="utf-8",
+            )
             self._write_fake_openclaw(root, missing=120, before=200, after=50)
             env = dict(os.environ)
             env["PATH"] = f"{root}:{env.get('PATH', '')}"
@@ -180,6 +207,59 @@ exit 2
             self.assertIsNone(payload["memory_reindex"]["ok"])
             command_log = (root / "command-log.txt").read_text(encoding="utf-8")
             self.assertNotIn("memory index --agent main --force", command_log)
+            self.assertNotIn("memory rem-backfill", command_log)
+
+    def test_apply_seeds_missing_dreaming_recall_even_below_cleanup_thresholds(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "tasks" / "NOTES").mkdir(parents=True, exist_ok=True)
+            (root / "memory").mkdir(parents=True, exist_ok=True)
+            self._write_fake_openclaw(root, missing=1, before=20, after=19)
+            env = dict(os.environ)
+            env["PATH"] = f"{root}:{env.get('PATH', '')}"
+            env["AUTO_OK"] = "1"
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--agent",
+                    "main",
+                    "--fix-missing",
+                    "--apply",
+                    "--min-missing",
+                    "50",
+                    "--min-reclaim",
+                    "25",
+                    "--json",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertFalse(payload["apply_allowed"])
+            self.assertFalse(payload["applied"])
+            self.assertTrue(payload["dreaming_recall"]["required"])
+            self.assertTrue(payload["dreaming_recall"]["ok"])
+            self.assertTrue(payload["memory_reindex"]["required"])
+            self.assertTrue(payload["memory_reindex"]["ok"])
+            command_log = (root / "command-log.txt").read_text(encoding="utf-8").splitlines()
+            expected_backfill = (
+                f"memory rem-backfill --agent main --path {root.resolve() / 'memory'} --stage-short-term --json"
+            )
+            self.assertIn(
+                expected_backfill,
+                command_log,
+            )
+            self.assertIn("memory index --agent main --force", command_log)
+            report = (root / "tasks" / "NOTES" / "session-maintenance.md").read_text(encoding="utf-8")
+            self.assertIn("## Dreaming Recall Store", report)
+            self.assertIn("- seeded: `true`", report)
 
     def test_reindex_failure_is_reported_and_not_silent(self):
         with tempfile.TemporaryDirectory() as td:

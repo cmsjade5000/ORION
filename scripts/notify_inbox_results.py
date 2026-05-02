@@ -53,6 +53,7 @@ SEND_READY_HEADERS = {
     "EMAIL_SUBJECT:",
     "INTERNAL:",
 }
+MAX_INLINE_DIGEST_ITEMS = 4
 
 
 @dataclasses.dataclass(frozen=True)
@@ -649,41 +650,48 @@ def _format_message(
         return _clip_message(msg, max_len=max_len)
 
     lines: list[str] = []
-    lines.append("Inbox update:")
+    lines.append("ORION update:")
     lines.append("")
 
     if queued:
-        lines.append("Queued:")
-        for i, it in enumerate(queued, start=1):
+        lines.append(f"Queued: {len(queued)}")
+        for i, it in enumerate(queued[:MAX_INLINE_DIGEST_ITEMS], start=1):
             lines.append(f"{i}. [{it.owner}] {it.objective}")
-            lines.append(f"file: {it.display_path}:{it.packet_start_line}")
+        if len(queued) > MAX_INLINE_DIGEST_ITEMS:
+            lines.append(f"... {len(queued) - MAX_INLINE_DIGEST_ITEMS} more in ORION status.")
         lines.append("")
 
     if results:
-        lines.append("Results:")
+        needs_review = sum(1 for it in results if not _result_status_is_ok(it))
+        if needs_review:
+            lines.append(f"Results: {len(results)} ({needs_review} need review)")
+        else:
+            lines.append(f"Results: {len(results)}")
         lines.append("")
-        for i, it in enumerate(results, start=1):
+        for i, it in enumerate(results[:MAX_INLINE_DIGEST_ITEMS], start=1):
             send_ready_body = _extract_send_ready_telegram_message(it.result_preview_lines)
             if send_ready_body is not None:
                 lines.extend(send_ready_body.splitlines())
                 lines.append("")
                 continue
 
-            head = f"{i}. [{it.owner}] {it.objective}"
-            lines.append(head)
-            for pl in it.result_preview_lines:
-                lines.append(pl)
-            lines.append(f"file: {it.display_path}:{it.packet_start_line}")
+            lines.extend(_format_result_digest_item(i, it))
+            lines.append("")
+        if len(results) > MAX_INLINE_DIGEST_ITEMS:
+            lines.append(f"... {len(results) - MAX_INLINE_DIGEST_ITEMS} more in ORION status.")
             lines.append("")
 
     if workflow_alerts:
-        lines.append("Workflow alerts:")
-        for i, item in enumerate(workflow_alerts, start=1):
+        lines.append(f"Workflow alerts: {len(workflow_alerts)}")
+        for i, item in enumerate(workflow_alerts[:MAX_INLINE_DIGEST_ITEMS], start=1):
             owners = ", ".join(item.owners) if item.owners else "unknown"
-            lines.append(f"{i}. state={item.state} owners={owners} jobs={item.job_count}")
+            lines.append(f"{i}. {item.state} - {owners} ({item.job_count} jobs)")
             if item.state_reasons:
-                lines.append(f"reasons: {', '.join(item.state_reasons)}")
-            lines.append(f"workflow: {item.workflow_id}")
+                lines.append(f"   Reason: {', '.join(item.state_reasons)}")
+            if item.workflow_id:
+                lines.append(f"   Workflow: {item.workflow_id}")
+        if len(workflow_alerts) > MAX_INLINE_DIGEST_ITEMS:
+            lines.append(f"... {len(workflow_alerts) - MAX_INLINE_DIGEST_ITEMS} more in ORION status.")
         lines.append("")
 
     msg = "\n".join(lines).rstrip() + "\n"
@@ -691,6 +699,102 @@ def _format_message(
         return msg
 
     return _clip_message(msg, max_len=max_len)
+
+
+def _format_result_digest_item(index: int, it: PacketResult) -> list[str]:
+    lines = [f"{index}. [{it.owner}] {it.objective}"]
+    status = _extract_preview_value(it.result_preview_lines, "Status")
+    classification = _extract_preview_value(it.result_preview_lines, "Classification")
+    next_step = _extract_preview_section_line(it.result_preview_lines, "Proposed next step")
+    if not next_step:
+        next_step = _extract_preview_section_line(it.result_preview_lines, "Next step")
+
+    meta: list[str] = []
+    if status and status.upper() != "OK":
+        meta.append(f"Status: {status}")
+    if classification:
+        meta.append(f"Type: {classification}")
+    if meta:
+        lines.append(f"   {'; '.join(meta)}")
+
+    if next_step:
+        lines.append(f"   Next: {_strip_bullet(next_step)}")
+    elif status and status.upper() == "OK":
+        lines.append("   Done.")
+    else:
+        for line in _compact_result_preview(it.result_preview_lines):
+            lines.append(f"   {line}")
+
+    if status and status.lower() in {"failed", "fail", "blocked"}:
+        lines.append(f"   Detail: {it.display_path}:{it.packet_start_line}")
+    return lines
+
+
+def _result_status_is_ok(it: PacketResult) -> bool:
+    status = _extract_preview_value(it.result_preview_lines, "Status")
+    return bool(status) and status.upper() == "OK"
+
+
+def _extract_preview_value(preview_lines: list[str], label: str) -> str:
+    prefix = f"{label}:"
+    for raw in preview_lines:
+        line = raw.strip()
+        if line.lower().startswith(prefix.lower()):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def _extract_preview_section_line(preview_lines: list[str], label: str) -> str:
+    label_lower = label.lower()
+    for idx, raw in enumerate(preview_lines):
+        current = raw.strip().lower()
+        if not (current == f"{label_lower}:" or current.startswith(f"{label_lower} ")):
+            continue
+        for nxt in preview_lines[idx + 1:]:
+            stripped = nxt.strip()
+            if not stripped:
+                continue
+            if stripped.endswith(":") and not stripped.startswith("-"):
+                break
+            return stripped
+    return ""
+
+
+def _strip_bullet(line: str) -> str:
+    return re.sub(r"^\s*[-*]\s+", "", line).strip()
+
+
+def _compact_result_preview(preview_lines: list[str], *, max_lines: int = 1) -> list[str]:
+    skip_exact = {
+        "approval gate:",
+        "evidence:",
+        "proposed next step:",
+        "next step:",
+        "next step (if any):",
+        "what changed / what i found:",
+        "verification:",
+    }
+    skip_prefixes = (
+        "status:",
+        "- intake:",
+        "file:",
+        "classification:",
+        "- required before any external send",
+    )
+    out: list[str] = []
+    for raw in preview_lines:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower()
+        if lower in skip_exact:
+            continue
+        if any(lower.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        out.append(_strip_bullet(stripped))
+        if len(out) >= max_lines:
+            break
+    return out or ["Done; details are in ORION status."]
 
 
 def _clip_message(msg: str, *, max_len: int) -> str:

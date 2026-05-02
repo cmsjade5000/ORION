@@ -340,8 +340,8 @@ class TestNotifyInboxResults(unittest.TestCase):
 
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("Workflow alerts:", r.stdout)
-            self.assertIn("state=blocked owners=ATLAS, NODE jobs=2", r.stdout)
-            self.assertIn("workflow: wf-123", r.stdout)
+            self.assertIn("blocked - ATLAS, NODE (2 jobs)", r.stdout)
+            self.assertIn("Workflow: wf-123", r.stdout)
 
     def test_telegram_required_workflow_alerts_do_not_emit_discord_copy(self):
         with tempfile.TemporaryDirectory() as td:
@@ -385,7 +385,7 @@ class TestNotifyInboxResults(unittest.TestCase):
 
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("TELEGRAM:", r.stdout)
-            self.assertIn("workflow: wf-telegram-only", r.stdout)
+            self.assertIn("Workflow: wf-telegram-only", r.stdout)
             self.assertNotIn("DISCORD:", r.stdout)
             state = json.loads((root / "tmp" / "state.json").read_text(encoding="utf-8"))
             self.assertTrue(any(key.startswith("telegram:workflow:") for key in state))
@@ -612,3 +612,71 @@ class TestNotifyInboxResults(unittest.TestCase):
             self.assertNotIn("[SCRIBE] Draft a Telegram message", r.stdout)
             self.assertNotIn("TELEGRAM_MESSAGE:", r.stdout)
             self.assertNotIn("file: tasks/INBOX/SCRIBE.md:9", r.stdout)
+
+    def test_dry_run_summarizes_polaris_results_without_evidence_wall(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_jobs_summary(
+                root,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "job_id": "pkt-polaris",
+                            "workflow_id": "wf-polaris",
+                            "state": "pending_verification",
+                            "owner": "POLARIS",
+                            "objective": "Triage and file Cory's captured admin item into the correct assistant workflow.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "result_digest": "digest-polaris",
+                            "result": {
+                                "status": "ok",
+                                "present": True,
+                                "preview_lines": [
+                                    "Status: OK",
+                                    "Classification: email-prep",
+                                    "Proposed next step:",
+                                    "- Prepare a draft or approval question only; do not send email until ORION has explicit approval and send proof.",
+                                    "Approval gate:",
+                                    "- Required before any external send, calendar write, reminder write, or destructive edit.",
+                                    "Evidence:",
+                                    "- Intake: tasks/INTAKE/2026-04-30-155234-follow-up-on-delegated-orion-work-owner-atlas-st.md",
+                                ],
+                            },
+                            "inbox": {"path": "tasks/INBOX/POLARIS.md", "line": 255},
+                        },
+                    ],
+                    "workflows": [],
+                },
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("ORION update:", r.stdout)
+            self.assertIn("Type: email-prep", r.stdout)
+            self.assertIn("Next: Prepare a draft or approval question only", r.stdout)
+            self.assertNotIn("Approval gate:", r.stdout)
+            self.assertNotIn("Evidence:", r.stdout)
+            self.assertNotIn("tasks/INTAKE/2026-04-30-155234", r.stdout)
+            self.assertNotIn("file: tasks/INBOX/POLARIS.md:255", r.stdout)
