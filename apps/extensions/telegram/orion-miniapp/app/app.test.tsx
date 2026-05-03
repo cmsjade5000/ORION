@@ -1,34 +1,73 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { act } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MiniApp, MiniAppView } from "./app";
-import type { BootstrapPayload, ChatConversation, HomePayload, InboxPayload, ReviewPayload } from "./types";
-import { screenFromStartapp } from "./view-model";
+import type { BootstrapPayload, ChatConversation, HomePayload, InboxPayload, QueueRequest, ReviewPayload } from "./types";
+import { parseTaskIdFromStartapp, screenFromStartapp } from "./view-model";
 
-describe("mini app view model", () => {
-  const bridgeStatus = { label: "Bridge online", tone: "good" as const };
+type TelegramButtonStub = {
+  callbacks: Set<() => void>;
+  show: () => void;
+  hide: () => void;
+  enable: () => void;
+  disable: () => void;
+  setText: (text: string) => void;
+  showProgress?: (leaveActive?: boolean) => void;
+  hideProgress?: () => void;
+  onClick: (callback: () => void) => void;
+  offClick: (callback: () => void) => void;
+  trigger: () => void;
+};
 
-  const conversation: ChatConversation = {
-    conversationId: "miniapp-1-main",
-    sessionId: "miniapp-session-1",
-    updatedAt: Date.now(),
-    messages: [{ id: "m1", role: "assistant", text: "Ready on the bridge.", createdAt: Date.now() }],
-  };
+function createTelegramButtonStub() {
+  const callbacks = new Set<() => void>();
+  return {
+    callbacks,
+    show: vi.fn(),
+    hide: vi.fn(),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    setText: vi.fn(),
+    showProgress: vi.fn((leaveActive?: boolean) => leaveActive),
+    hideProgress: vi.fn(),
+    onClick: vi.fn((callback: () => void) => {
+      callbacks.add(callback);
+    }),
+    offClick: vi.fn((callback: () => void) => {
+      callbacks.delete(callback);
+    }),
+    trigger: () => {
+      callbacks.forEach((callback) => callback());
+    },
+  } as TelegramButtonStub;
+}
 
+function createApi() {
   const bootstrapPayload: BootstrapPayload = {
     appName: "ORION",
     startapp: "home",
     user: { id: 1, first_name: "Cory" },
     hasQueryId: false,
     operatorIdsConfigured: true,
-    conversation,
+    conversation: {
+      conversationId: "miniapp-1-main",
+      sessionId: "miniapp-session-1",
+      updatedAt: Date.now(),
+      messages: [
+        {
+          id: "m1",
+          role: "assistant",
+          text: "Ready on the bridge.",
+          createdAt: Date.now(),
+        },
+      ],
+    },
   };
 
   const homePayload: HomePayload = {
-    today: "Open delegated work:\n- ATLAS: Check the queue.",
+    today: "Ready on bridge.",
     review: "Review digest",
     approvalsCount: 1,
     pendingApprovals: [],
@@ -39,18 +78,18 @@ describe("mini app view model", () => {
 
   const reviewPayload: ReviewPayload = {
     today: "Today digest",
-    followups: "Follow up with POLARIS",
+    followups: "Need follow-ups",
     review: "Review digest",
   };
 
   const inboxPayload: InboxPayload = {
-    counts: { blocked: 1, pending_verification: 1 },
+    counts: { blocked: 1, pending_verification: 0 },
     updatedTs: Date.now(),
     approvals: [
       {
         approvalId: "abc",
         suggestedDecision: "allow-once",
-        summary: "Need approval for a bounded action.",
+        summary: "Need approval for bounded action.",
         label: "approval",
         sessionId: "s1",
         sessionKey: "k1",
@@ -61,785 +100,709 @@ describe("mini app view model", () => {
     jobs: [
       {
         job_id: "job-1",
+        state: "running",
+        owner: "POLARIS",
+        objective: "Check ORION queue depth.",
+        inbox: { path: "tasks/INBOX/POLARIS.md", line: 3 },
+      },
+      {
+        job_id: "job-2",
         state: "blocked",
-        owner: "ATLAS",
-        objective: "Check the queue.",
-        inbox: { path: "tasks/INBOX/ATLAS.md", line: 12 },
+        owner: "POLARIS",
+        objective: "Needs human input on policy selection.",
       },
     ],
     blockedJobs: [
       {
-        job_id: "job-1",
+        job_id: "job-2",
         state: "blocked",
-        owner: "ATLAS",
-        objective: "Check the queue.",
+        owner: "POLARIS",
+        objective: "Needs human input on policy selection.",
       },
     ],
     pendingVerificationJobs: [],
-    queueRequests: [],
-  };
-
-  function createApi() {
-    return {
-      bootstrap: vi.fn(async () => bootstrapPayload),
-      home: vi.fn(async () => homePayload),
-      review: vi.fn(async () => reviewPayload),
-      inbox: vi.fn(async () => inboxPayload),
-      fetchJobDetail: vi.fn(async (jobId: string) => ({
-        job: inboxPayload.jobs.find((job) => job.job_id === jobId) || inboxPayload.jobs[0],
-        needSummary: "Blocked and eligible for a Task Packet approval decision.",
-        nextStep: "Approve it once, deny it, or ask POLARIS to rework the packet if the request itself is wrong.",
-        packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
-        resultLines: ["Status: BLOCKED", "Needs fresh context."],
-        relatedApprovals: [],
-      })),
-      sendChat: vi.fn(),
-      fetchRun: vi.fn(),
-      streamRun: vi.fn(() => vi.fn()),
-      resolveApproval: vi.fn(),
-      resolveTaskPacketApproval: vi.fn(),
-      createFollowup: vi.fn(),
-      updateQueueRequestStatus: vi.fn(),
-    };
-  }
-
-  function createTelegramButtonStub() {
-    const callbacks = new Set<() => void>();
-    return {
-      callbacks,
-      show: vi.fn(),
-      hide: vi.fn(),
-      enable: vi.fn(),
-      disable: vi.fn(),
-      setText: vi.fn(),
-      showProgress: vi.fn(),
-      hideProgress: vi.fn(),
-      onClick: vi.fn((callback: () => void) => callbacks.add(callback)),
-      offClick: vi.fn((callback: () => void) => callbacks.delete(callback)),
-      trigger: () => {
-        callbacks.forEach((callback) => callback());
-      },
-    };
-  }
-
-  function deferred<T>() {
-    let resolve!: (value: T) => void;
-    let reject!: (reason?: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  }
-
-  afterEach(() => {
-    cleanup();
-    vi.restoreAllMocks();
-    delete window.Telegram;
-  });
-
-  it("maps legacy startapp values onto the new screens", () => {
-    expect(screenFromStartapp("home")).toBe("chat");
-    expect(screenFromStartapp("approvals")).toBe("inbox");
-    expect(screenFromStartapp("review")).toBe("today");
-  });
-
-  it("renders the chat transcript and composer state", () => {
-    render(
-      <MiniAppView
-        appName="ORION"
-        screen="chat"
-        screenLabel="Chat"
-        bridgeStatus={bridgeStatus}
-        conversation={{
-          conversationId: "miniapp-1-main",
-          sessionId: "miniapp-session-1",
-          updatedAt: Date.now(),
-          messages: [
-            { id: "m1", role: "assistant", text: "Ready on the bridge.", createdAt: Date.now() },
-            { id: "m2", role: "user", text: "Summarize my queue.", createdAt: Date.now() },
-          ],
-        }}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
-        home={null}
-        review={null}
-        queueRequests={[]}
-        loading={false}
-        error=""
-        composerText="Draft prompt"
-        sending={true}
-        hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={vi.fn()}
-        onComposerChange={vi.fn()}
-        onComposerSubmit={vi.fn()}
-        onApproval={vi.fn()}
-        onFollowup={vi.fn()}
-        onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
-    );
-
-    expect(screen.getByText("Ready on the bridge.")).toBeInTheDocument();
-    expect(screen.getByText("Summarize my queue.")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Draft prompt")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Sending..." })).toBeDisabled();
-  });
-
-  it("hides the in-app chat send button when Telegram MainButton is available", () => {
-    render(
-      <MiniAppView
-        appName="ORION"
-        screen="chat"
-        screenLabel="Chat"
-        bridgeStatus={bridgeStatus}
-        conversation={conversation}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
-        home={null}
-        review={null}
-        queueRequests={[]}
-        loading={false}
-        error=""
-        composerText="Send this"
-        sending={false}
-        hasNativeMainButton={true}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={vi.fn()}
-        onComposerChange={vi.fn()}
-        onComposerSubmit={vi.fn()}
-        onApproval={vi.fn()}
-        onFollowup={vi.fn()}
-        onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
-    );
-
-    expect(screen.getByDisplayValue("Send this")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send to ORION" })).not.toBeInTheDocument();
-  });
-
-  it("keeps normal in-app navigation from re-running bootstrap back to home", async () => {
-    const fetchCalls: string[] = [];
-    const responseFor = (pathname: string) => {
-      if (pathname === "/api/bootstrap") return bootstrapPayload;
-      if (pathname === "/api/home") return homePayload;
-      if (pathname === "/api/review") return reviewPayload;
-      if (pathname === "/api/inbox") return inboxPayload;
-      if (pathname.startsWith("/api/inbox/jobs/")) {
-        return {
-          job: inboxPayload.jobs[0],
-          needSummary: "Blocked and eligible for a Task Packet approval decision.",
-          nextStep: "Approve it once, deny it, or ask POLARIS to rework the packet if the request itself is wrong.",
-          packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
-          resultLines: [],
-          relatedApprovals: [],
-        };
-      }
-      return {};
-    };
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
-      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      const pathname = new URL(rawUrl, "http://localhost").pathname;
-      fetchCalls.push(pathname);
-      return new Response(JSON.stringify(responseFor(pathname)), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }) as unknown as typeof fetch;
-
-    render(<MiniApp />);
-
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    expect(fetchCalls.filter((path) => path === "/api/bootstrap")).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole("button", { name: /Today/ }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(fetchCalls.filter((path) => path === "/api/bootstrap")).toHaveLength(1);
-  });
-
-  it("keeps Telegram BackButton handling separate from normal app buttons", async () => {
-    const api = createApi();
-    const mainButton = createTelegramButtonStub();
-    const backButton = createTelegramButtonStub();
-    window.Telegram = {
-      WebApp: {
-        MainButton: mainButton,
-        BackButton: backButton,
-        ready: vi.fn(),
-        expand: vi.fn(),
-        HapticFeedback: { selectionChanged: vi.fn(), notificationOccurred: vi.fn(), impactOccurred: vi.fn() },
-      },
-    };
-
-    render(<MiniApp api={api} />);
-
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(0);
-    fireEvent.click(screen.getByRole("button", { name: /Today/ }));
-
-    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(0);
-    expect(mainButton.callbacks.size).toBe(0);
-
-    fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
-    expect(screen.getByRole("heading", { name: "Selected Work Item" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(1);
-
-    act(() => {
-      backButton.trigger();
-    });
-    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Queue Notes" })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(backButton.callbacks.size).toBe(0);
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Today/ }));
-    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(0);
-  });
-
-  it("only enables back navigation for real nested destinations", async () => {
-    const api = createApi();
-    const mainButton = createTelegramButtonStub();
-    const backButton = createTelegramButtonStub();
-    window.Telegram = {
-      WebApp: {
-        MainButton: mainButton,
-        BackButton: backButton,
-        ready: vi.fn(),
-        expand: vi.fn(),
-        HapticFeedback: { selectionChanged: vi.fn(), notificationOccurred: vi.fn(), impactOccurred: vi.fn() },
-      },
-    };
-
-    render(<MiniApp api={api} />);
-
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
-    expect(screen.getByRole("heading", { name: "Selected Work Item" })).toBeInTheDocument();
-
-    expect(backButton.callbacks.size).toBe(1);
-    act(() => {
-      backButton.trigger();
-    });
-    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Queue Notes" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Today/ }));
-    expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
-    expect(backButton.callbacks.size).toBe(0);
-  });
-
-  it("does not re-register the Telegram MainButton while typing", async () => {
-    const api = createApi();
-    const mainButton = createTelegramButtonStub();
-    const backButton = createTelegramButtonStub();
-    window.Telegram = {
-      WebApp: {
-        MainButton: mainButton,
-        BackButton: backButton,
-        ready: vi.fn(),
-        expand: vi.fn(),
-        HapticFeedback: { selectionChanged: vi.fn(), notificationOccurred: vi.fn(), impactOccurred: vi.fn() },
-      },
-    };
-
-    render(<MiniApp api={api} />);
-
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    const setTextCalls = mainButton.setText.mock.calls.length;
-    const showCalls = mainButton.show.mock.calls.length;
-    const hideCalls = mainButton.hide.mock.calls.length;
-    const onClickCalls = mainButton.onClick.mock.calls.length;
-    const offClickCalls = mainButton.offClick.mock.calls.length;
-
-    const composer = screen.getByPlaceholderText("Message ORION from the bridge...");
-    fireEvent.change(composer, { target: { value: "H" } });
-    fireEvent.change(composer, { target: { value: "He" } });
-    fireEvent.change(composer, { target: { value: "Hey" } });
-
-    expect(mainButton.setText).toHaveBeenCalledTimes(setTextCalls);
-    expect(mainButton.show).toHaveBeenCalledTimes(showCalls);
-    expect(mainButton.hide).toHaveBeenCalledTimes(hideCalls);
-    expect(mainButton.onClick).toHaveBeenCalledTimes(onClickCalls);
-    expect(mainButton.offClick).toHaveBeenCalledTimes(offClickCalls);
-    expect(mainButton.enable).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses Telegram MainButton to queue a selected work item once", async () => {
-    const api = createApi();
-    const mainButton = createTelegramButtonStub();
-    const backButton = createTelegramButtonStub();
-    const followup = deferred<Awaited<ReturnType<typeof api.createFollowup>>>();
-    api.createFollowup.mockReturnValue(followup.promise);
-    const followupPayload = {
-      message: "Captured for POLARIS.",
-      request: {
+    queueRequests: [
+      {
         id: "qr-1",
         jobId: "job-1",
         owner: "POLARIS",
-        status: "queued",
-        message: "Captured for POLARIS.",
-        intakePath: "tasks/INTAKE/example.md",
-        packetNumber: 5,
-        createdAt: "2026-04-28T13:00:00.000Z",
+        status: "completed",
+        message: "Initial request complete.",
+        intakePath: "tasks/INTAKE/one.md",
+        packetNumber: 1,
+        createdAt: new Date().toISOString(),
       },
-    };
+    ],
+  };
+
+  return {
+    bootstrap: vi.fn(async () => bootstrapPayload),
+    home: vi.fn(async () => homePayload),
+    review: vi.fn(async () => reviewPayload),
+    inbox: vi.fn(async () => inboxPayload),
+    fetchJobDetail: vi.fn(async (jobId: string) => ({
+      job: inboxPayload.jobs.find((job) => job.job_id === jobId) || inboxPayload.jobs[0],
+      needSummary: "Approval waiting on an external signal.",
+      nextStep: "Wait for approval or provide follow-up.",
+      packetText: "TASK_PACKET v1",
+      resultLines: ["Status: BLOCKED", "Needs input."],
+      relatedApprovals: inboxPayload.approvals,
+      taskPacketApproval: {
+        eligible: true,
+        reason: "Approve once to continue this request.",
+        decisions: ["approve-once", "deny"] as Array<"approve-once" | "deny">,
+      },
+    })),
+    sendChat: vi.fn(async () => ({
+      runId: "run-1",
+      conversationId: "miniapp-1-main",
+      sessionId: "miniapp-session-1",
+      status: "completed",
+      createdAt: Date.now(),
+      conversation: {
+        conversationId: "miniapp-1-main",
+        sessionId: "miniapp-session-1",
+        updatedAt: Date.now(),
+        messages: [
+          {
+            id: "m2",
+            role: "user",
+            text: "Hello Orion",
+            createdAt: Date.now(),
+          },
+        ],
+      },
+      events: [],
+    } as any)),
+    fetchRun: vi.fn(async () => ({
+      runId: "run-1",
+      conversationId: "miniapp-1-main",
+      sessionId: "miniapp-session-1",
+      status: "completed",
+      createdAt: Date.now(),
+      conversation: {
+        conversationId: "miniapp-1-main",
+        sessionId: "miniapp-session-1",
+        updatedAt: Date.now(),
+        messages: [
+          {
+            id: "m2",
+            role: "user",
+            text: "Hello Orion",
+            createdAt: Date.now(),
+          },
+        ],
+      },
+      events: [],
+    } as any)),
+    streamRun: vi.fn(() => vi.fn()),
+    resolveApproval: vi.fn(async () => ({ message: "Approval recorded" })),
+    resolveTaskPacketApproval: vi.fn(async () => ({ message: "Decision applied" })),
+    createFollowup: vi.fn(async () => {
+      const request: QueueRequest = {
+        id: `qr-${Date.now()}`,
+        jobId: "job-2",
+        owner: "POLARIS",
+        status: "queued",
+        message: "Rework queued.",
+        intakePath: "tasks/INTAKE/rework.md",
+        packetNumber: 2,
+        createdAt: new Date().toISOString(),
+      };
+      return { message: "Rework queued", request };
+    }),
+    updateQueueRequestStatus: vi.fn(async (requestId: string) => {
+      const request: QueueRequest = {
+        id: requestId,
+        jobId: "job-1",
+        owner: "POLARIS",
+        status: "acknowledged",
+        message: "Queue packet acknowledged.",
+        intakePath: "tasks/INTAKE/one.md",
+        createdAt: new Date().toISOString(),
+      };
+      return { request };
+    }),
+  };
+}
+
+function makeConversation(): ChatConversation {
+  return {
+    conversationId: "miniapp-1-main",
+    sessionId: "miniapp-session-1",
+    updatedAt: Date.now(),
+    messages: [{ id: "m1", role: "assistant", text: "Ready.", createdAt: Date.now() }],
+  };
+}
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  delete window.Telegram;
+});
+
+describe("ORION Relay Console route model", () => {
+  it("maps deep-link screens through screenFromStartapp", () => {
+    expect(screenFromStartapp("home")).toBe("home");
+    expect(screenFromStartapp("queue")).toBe("queue");
+    expect(screenFromStartapp("compose")).toBe("compose");
+    expect(screenFromStartapp("activity")).toBe("activity");
+    expect(screenFromStartapp("feed")).toBe("activity");
+    expect(screenFromStartapp("settings")).toBe("settings");
+    expect(screenFromStartapp("task/job-1")).toBe("task");
+    expect(screenFromStartapp("status")).toBe("status");
+  });
+
+  it("preserves task-id casing when parsing startapp task links", () => {
+    expect(parseTaskIdFromStartapp("task:AbC123")).toBe("AbC123");
+    expect(parseTaskIdFromStartapp("task/Ab-C_123")).toBe("Ab-C_123");
+  });
+
+  it("renders the command-center and quick request cards", () => {
+    render(
+      <MiniAppView
+        appName="ORION"
+        route={{ screen: "home" }}
+        routeDepth={1}
+        bridgeStatus={{ label: "Bridge online", tone: "good" }}
+        canGoBack={false}
+        loading={false}
+        error=""
+        actionMessage=""
+        conversation={makeConversation()}
+        inbox={null}
+        home={null}
+        review={null}
+        tasks={[]}
+        queueFilter="active"
+        queueRequests={[]}
+        activity={[]}
+        systemStatus={{
+          api: "online",
+          queue: "healthy",
+          worker: "healthy",
+          updatedAt: new Date().toISOString(),
+          message: "Live state is available.",
+        }}
+        selectedJobDetail={null}
+        detailLoading={false}
+        composerText=""
+        sending={false}
+        hasNativeMainButton={false}
+        onNavigate={vi.fn()}
+        onBack={vi.fn()}
+        onComposerChange={vi.fn()}
+        onComposerSubmit={vi.fn()}
+        onApproval={vi.fn()}
+        onTaskPacketApproval={vi.fn()}
+        onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
+        onOpenTask={vi.fn()}
+        onClearError={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("What is Orion doing right now?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New Request" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "System Health" })).toBeInTheDocument();
+  });
+
+  it("renders compose as the primary request path", () => {
+    render(
+      <MiniAppView
+        appName="ORION"
+        route={{ screen: "compose" }}
+        routeDepth={1}
+        bridgeStatus={{ label: "Bridge online", tone: "good" }}
+        canGoBack={false}
+        loading={false}
+        error=""
+        actionMessage=""
+        conversation={makeConversation()}
+        inbox={null}
+        home={null}
+        review={null}
+        tasks={[]}
+        queueFilter="active"
+        queueRequests={[]}
+        activity={[]}
+        systemStatus={{
+          api: "online",
+          queue: "healthy",
+          worker: "healthy",
+          updatedAt: new Date().toISOString(),
+          message: "Live state is available.",
+        }}
+        selectedJobDetail={null}
+        detailLoading={false}
+        composerText=""
+        sending={false}
+        hasNativeMainButton={false}
+        onNavigate={vi.fn()}
+        onBack={vi.fn()}
+        onComposerChange={vi.fn()}
+        onComposerSubmit={vi.fn()}
+        onApproval={vi.fn()}
+        onTaskPacketApproval={vi.fn()}
+        onFollowup={vi.fn()}
+        onAcknowledgeQueueRequest={vi.fn()}
+        onOpenTask={vi.fn()}
+        onClearError={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Compose Request" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send to ORION" })).toBeInTheDocument();
+  });
+
+  it("does not bind back behavior to non-navigation buttons", async () => {
+    const api = createApi();
+    const mainButton = createTelegramButtonStub();
+    const backButton = createTelegramButtonStub();
+
     window.Telegram = {
       WebApp: {
         MainButton: mainButton,
         BackButton: backButton,
         ready: vi.fn(),
         expand: vi.fn(),
-        HapticFeedback: { selectionChanged: vi.fn(), notificationOccurred: vi.fn(), impactOccurred: vi.fn() },
+        HapticFeedback: {
+          selectionChanged: vi.fn(),
+          notificationOccurred: vi.fn(),
+          impactOccurred: vi.fn(),
+        },
       },
     };
 
     render(<MiniApp api={api} />);
 
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
+    expect(await screen.findByText("ORION")).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(0);
+    expect(backButton.hide).toHaveBeenCalled();
+    expect(backButton.show).not.toHaveBeenCalled();
 
-    expect(mainButton.setText).toHaveBeenLastCalledWith("Ask POLARIS to Rework");
+    fireEvent.click(screen.getByRole("button", { name: "Task Queue" }));
+
+    expect(await screen.findByRole("button", { name: "Open Task", hidden: false })).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Needs Input" }));
+    await waitFor(() => {
+      expect(backButton.callbacks.size).toBe(1);
+    });
+    expect(screen.getByRole("button", { name: "Open Task" })).toBeInTheDocument();
+
     act(() => {
-      mainButton.trigger();
-      mainButton.trigger();
+      backButton.trigger();
     });
-    expect(api.createFollowup).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      followup.resolve(followupPayload);
-      await followup.promise;
-    });
-
-    expect(await screen.findAllByText("Rework Queued")).not.toHaveLength(0);
-    expect(api.createFollowup).toHaveBeenCalledTimes(1);
-
-    const queuedButtons = screen.getAllByRole("button", { name: "Rework Queued" });
-    fireEvent.click(queuedButtons[0]);
-    expect(api.createFollowup).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Open Task" })).not.toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(0);
   });
 
-  it("keeps raw follow-up backend errors out of the queue UI", async () => {
+  it("shows Telegram back only on nested route stack and returns to previous context", async () => {
     const api = createApi();
-    api.createFollowup.mockRejectedValueOnce(new Error("ENOENT: open /Users/corystoner/.openclaw/secrets/raw-token"));
+    const mainButton = createTelegramButtonStub();
+    const backButton = createTelegramButtonStub();
+
+    window.Telegram = {
+      WebApp: {
+        MainButton: mainButton,
+        BackButton: backButton,
+        ready: vi.fn(),
+        expand: vi.fn(),
+        HapticFeedback: {
+          selectionChanged: vi.fn(),
+          notificationOccurred: vi.fn(),
+          impactOccurred: vi.fn(),
+        },
+      },
+    };
 
     render(<MiniApp api={api} />);
 
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Ask POLARIS to Rework" }));
+    expect(await screen.findByText("What is Orion doing right now?" )).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(0);
+    expect(backButton.hide).toHaveBeenCalled();
 
-    expect(await screen.findByText("Follow-up action failed.")).toBeInTheDocument();
-    expect(screen.queryByText(/ENOENT/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/raw-token/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Task Queue" }));
+    expect(await screen.findByRole("button", { name: "Open Task", hidden: false })).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(1);
+    expect(backButton.show).toHaveBeenCalled();
+
+    const taskButton = screen.getByText("Open Task");
+    fireEvent.click(taskButton);
+
+    expect(await screen.findByText("Task Detail")).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(1);
+
+    act(() => {
+      backButton.trigger();
+    });
+
+    expect(await screen.findByRole("button", { name: "Open Task", hidden: false })).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(1);
+
+    act(() => {
+      backButton.trigger();
+    });
+    expect(await screen.findByText("What is Orion doing right now?")).toBeInTheDocument();
+    expect(backButton.callbacks.size).toBe(0);
   });
 
-  it("keeps follow-up success visible when the follow-up refresh fails", async () => {
+  it("uses root navigation for top-level tabs so back exits nested root context only", async () => {
     const api = createApi();
-    api.home
-      .mockResolvedValueOnce(homePayload)
-      .mockRejectedValueOnce(
-        new Error(
-          "Command failed: python3 scripts/assistant_status.py --repo-root /Users/corystoner/src/ORION --cmd routing --json"
-        )
-      );
-    api.createFollowup.mockResolvedValueOnce({
-      message: "Captured for POLARIS.\n- Intake: tasks/INTAKE/example.md\n- POLARIS packet queued: #5",
-    });
+    const mainButton = createTelegramButtonStub();
+    const backButton = createTelegramButtonStub();
+
+    window.Telegram = {
+      WebApp: {
+        MainButton: mainButton,
+        BackButton: backButton,
+        ready: vi.fn(),
+        expand: vi.fn(),
+        HapticFeedback: {
+          selectionChanged: vi.fn(),
+          notificationOccurred: vi.fn(),
+          impactOccurred: vi.fn(),
+        },
+      },
+    };
 
     render(<MiniApp api={api} />);
 
-    expect(await screen.findByRole("heading", { name: "Chat" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Mission Inbox/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Ask POLARIS to Rework" }));
+    expect(await screen.findByRole("heading", { name: "What is Orion doing right now?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Task Queue" }));
+    expect(await screen.findByRole("button", { name: "Open Task", hidden: false })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "System Status" }));
+    expect(await screen.findByRole("heading", { name: "System Status" })).toBeInTheDocument();
 
-    expect(await screen.findAllByText(/Queued; Refresh Delayed/)).not.toHaveLength(0);
-    expect(screen.queryByText(/Command failed:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/assistant_status\.py/)).not.toBeInTheDocument();
+    act(() => {
+      backButton.trigger();
+    });
+
+    expect(await screen.findByRole("heading", { name: "What is Orion doing right now?" })).toBeInTheDocument();
   });
 
-  it("disables the composer when chat bootstrap has not produced a conversation", () => {
+  it("maps last request from home and opens it in one tap", async () => {
+    const api = createApi();
+
+    render(<MiniApp api={api} />);
+
+    expect(await screen.findByText("Last request")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Last Request" }));
+
+    expect(await screen.findByText("Task Detail")).toBeInTheDocument();
+    expect(screen.getByText("Approval waiting on an external signal." )).toBeInTheDocument();
+  });
+
+  it("renders empty queue and error states", async () => {
+    const api = createApi();
+    api.home.mockResolvedValueOnce({ today: "", review: "", approvalsCount: 0, pendingApprovals: [], jobCounts: {}, jobs: [], updatedTs: Date.now() });
+    api.review.mockResolvedValueOnce({ today: "", followups: "", review: "" });
+    api.inbox.mockResolvedValueOnce({ counts: {}, updatedTs: Date.now(), approvals: [], jobs: [], blockedJobs: [], pendingVerificationJobs: [], queueRequests: [] });
+
     render(
       <MiniAppView
         appName="ORION"
-        screen="chat"
-        screenLabel="Chat"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
-        home={null}
-        review={null}
-        queueRequests={[]}
+        route={{ screen: "queue" }}
+        routeDepth={2}
+        bridgeStatus={{ label: "Bridge online", tone: "good" }}
+        canGoBack={false}
         loading={false}
         error=""
-        composerText="Hello?"
+        actionMessage=""
+        conversation={makeConversation()}
+        inbox={null}
+        home={null}
+        review={null}
+        tasks={[]}
+        queueFilter="active"
+        queueRequests={[]}
+        activity={[]}
+        systemStatus={{ api: "partial", queue: "healthy", worker: "healthy", updatedAt: new Date().toISOString(), message: "partial" }}
+        selectedJobDetail={null}
+        detailLoading={false}
+        composerText=""
         sending={false}
         hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={vi.fn()}
+        onNavigate={vi.fn()}
+        onBack={vi.fn()}
         onComposerChange={vi.fn()}
         onComposerSubmit={vi.fn()}
         onApproval={vi.fn()}
+        onTaskPacketApproval={vi.fn()}
         onFollowup={vi.fn()}
         onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
+        onOpenTask={vi.fn()}
+        onClearError={vi.fn()}
+      />,
     );
 
-    expect(screen.getByDisplayValue("Hello?")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Send to ORION" })).toBeDisabled();
+    expect(screen.getByText("No tasks match this filter.")).toBeInTheDocument();
+
+    render(
+      <MiniApp
+        api={{
+          ...api,
+          bootstrap: async () => ({
+            ...(await api.bootstrap()),
+            startapp: "home",
+          }),
+        }}
+      />,
+    );
+
+    expect(await screen.findByText("What is Orion doing right now?")).toBeInTheDocument();
   });
 
-  it("renders inbox actions and today panels", () => {
-    const noop = vi.fn();
-    const { rerender } = render(
+  it("shows queue packet acknowledge action for terminal states", async () => {
+    const api = createApi();
+    const acknowledge = vi.spyOn(api, "updateQueueRequestStatus");
+
+    render(
       <MiniAppView
         appName="ORION"
-        screen="inbox"
-        screenLabel="Mission Inbox"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        selectedJobDetail={null}
-        detailLoading={false}
+        route={{ screen: "task", taskId: "job-1" }}
+        routeDepth={2}
+        bridgeStatus={{ label: "Bridge online", tone: "good" }}
+        canGoBack={true}
+        loading={false}
+        error=""
+        actionMessage=""
+        conversation={makeConversation()}
         inbox={{
-          counts: { blocked: 1, pending_verification: 1 },
+          counts: {},
           updatedTs: Date.now(),
-          approvals: [
-            {
-              approvalId: "abc",
-              suggestedDecision: "allow-once",
-              summary: "Need approval for a bounded action.",
-              label: "approval",
-              sessionId: "s1",
-              sessionKey: "k1",
-              ts: Date.now(),
-              ageMs: 120000,
-            },
-          ],
+          approvals: [],
           jobs: [
             {
               job_id: "job-1",
-              state: "blocked",
-              owner: "ATLAS",
-              objective: "Check the queue.",
-              inbox: { path: "tasks/INBOX/ATLAS.md", line: 12 },
+              state: "completed",
+              owner: "POLARIS",
+              objective: "Check queue.",
             },
           ],
-          blockedJobs: [
-            {
-              job_id: "job-1",
-              state: "blocked",
-              owner: "ATLAS",
-              objective: "Check the queue.",
-            },
-          ],
+          blockedJobs: [],
           pendingVerificationJobs: [],
-          queueRequests: [],
+          queueRequests: [
+            {
+              id: "qr-1",
+              jobId: "job-1",
+              owner: "POLARIS",
+              status: "completed",
+              message: "Task completed.",
+              intakePath: "tasks/INTAKE/one.md",
+              createdAt: new Date().toISOString(),
+            },
+          ],
         }}
         home={null}
         review={null}
-        queueRequests={[]}
-        loading={false}
-        error=""
-        composerText=""
-        sending={false}
-        hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={noop}
-        onComposerChange={noop}
-        onComposerSubmit={noop}
-        onApproval={noop}
-        onFollowup={noop}
-        onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={noop}
-        onQueueCenter={noop}
-      />
-    );
-
-    expect(screen.getByRole("heading", { name: "Mission Inbox" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Allow Once" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ask POLARIS to Rework" })).toBeInTheDocument();
-
-    rerender(
-      <MiniAppView
-        appName="ORION"
-        screen="today"
-        screenLabel="Today"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
-        home={{
-          today: "Open delegated work:\n- ATLAS: Check the queue.",
-          review: "Review digest",
-          approvalsCount: 1,
-          pendingApprovals: [],
-          jobCounts: {},
-          jobs: [],
-          updatedTs: Date.now(),
-        }}
-        review={{
-          today: "Today digest",
-          followups: "Follow up with POLARIS",
-          review: "Review digest",
-        }}
-        queueRequests={[]}
-        loading={false}
-        error=""
-        composerText=""
-        sending={false}
-        hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={noop}
-        onComposerChange={noop}
-        onComposerSubmit={noop}
-        onApproval={noop}
-        onFollowup={noop}
-        onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={noop}
-        onQueueCenter={noop}
-      />
-    );
-
-    expect(screen.getByText("Follow-Ups")).toBeInTheDocument();
-    expect(screen.getByText(/Follow up with POLARIS/)).toBeInTheDocument();
-  });
-
-  it("renders selected mission need, next step, approval actions, evidence, and packet text", () => {
-    const approve = vi.fn();
-    render(
-      <MiniAppView
-        appName="ORION"
-        screen="inbox"
-        screenLabel="Mission Inbox"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        inbox={inboxPayload}
+        tasks={[
+          {
+            id: "job-1",
+            owner: "POLARIS",
+            objective: "Check queue.",
+            state: "done",
+            status: "done",
+          },
+        ]}
+        queueFilter="active"
+        queueRequests={[
+          {
+            id: "qr-1",
+            jobId: "job-1",
+            owner: "POLARIS",
+            status: "completed",
+            message: "Task completed.",
+            intakePath: "tasks/INTAKE/one.md",
+            createdAt: new Date().toISOString(),
+          },
+        ]}
+        activity={[]}
+        systemStatus={{ api: "online", queue: "healthy", worker: "healthy", updatedAt: new Date().toISOString(), message: "all good" }}
         selectedJobDetail={{
-          job: inboxPayload.jobs[0],
-          needSummary: "Approval is waiting. Review the request and choose Allow Once, Always, or Deny.",
-          nextStep: "Use the approval buttons below.",
-          packetText: "TASK_PACKET v1\nOwner: ATLAS\nObjective: Check the queue.",
-          resultLines: ["Status: BLOCKED", "Needs approval."],
-          relatedApprovals: [
-            {
-              approvalId: "abc",
-              suggestedDecision: "allow-once",
-              summary: "Approve job-1 to continue.",
-              label: "approval",
-              sessionId: "s1",
-              sessionKey: "job-1",
-              ts: Date.now(),
-              ageMs: 60000,
-            },
-          ],
+          job: {
+            job_id: "job-1",
+            state: "completed",
+            owner: "POLARIS",
+            objective: "Check queue",
+          },
+          needSummary: "Done",
+          nextStep: "No next step.",
+          packetText: "TASK",
+          resultLines: ["done"],
+          relatedApprovals: [],
           taskPacketApproval: {
-            eligible: true,
-            reason: "Approve Once queues a scoped follow-up packet for the listed owner. Deny records the decision without queueing work.",
-            decisions: ["approve-once", "deny"],
+            eligible: false,
+            reason: "No action",
+            decisions: ["deny", "approve-once"] as Array<"approve-once" | "deny">,
           },
         }}
         detailLoading={false}
-        home={null}
-        review={null}
-        queueRequests={[]}
-        loading={false}
-        error=""
         composerText=""
         sending={false}
         hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId="job-1"
-        onScreenChange={vi.fn()}
+        onNavigate={vi.fn()}
+        onBack={vi.fn()}
         onComposerChange={vi.fn()}
         onComposerSubmit={vi.fn()}
-        onApproval={approve}
-        onTaskPacketApproval={approve}
+        onApproval={vi.fn()}
+        onTaskPacketApproval={vi.fn()}
         onFollowup={vi.fn()}
-        onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
+        onAcknowledgeQueueRequest={acknowledge}
+        onOpenTask={vi.fn()}
+        onClearError={vi.fn()}
+      />,
     );
 
-    expect(screen.getByText("What It Needs")).toBeInTheDocument();
-    expect(screen.getByText(/Approval is waiting/)).toBeInTheDocument();
-    expect(screen.getByText("Next Move")).toBeInTheDocument();
-    expect(screen.getByText("Result Evidence")).toBeInTheDocument();
-    expect(screen.getByText("Original Packet")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Allow Once" })[0]);
-    expect(approve).toHaveBeenCalledWith("abc", "allow-once");
-    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
-    expect(approve).toHaveBeenCalledWith("job-1", "approve-once");
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge Packet" }));
+    expect(acknowledge).toHaveBeenCalledWith("qr-1");
   });
 
-  it("renders queue center records with intake details", () => {
+  it("does not treat task-packet approval taps as back navigation", async () => {
+    const onBack = vi.fn();
+    const onTaskPacketApproval = vi.fn();
+
     render(
       <MiniAppView
         appName="ORION"
-        screen="queue"
-        screenLabel="Queue Center"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
+        route={{ screen: "task", taskId: "job-1" }}
+        routeDepth={2}
+        bridgeStatus={{ label: "Bridge online", tone: "good" }}
+        canGoBack={true}
+        loading={false}
+        error=""
+        actionMessage=""
+        conversation={makeConversation()}
+        inbox={{
+          counts: {},
+          updatedTs: Date.now(),
+          approvals: [],
+          jobs: [
+            {
+              job_id: "job-1",
+              state: "running",
+              owner: "POLARIS",
+              objective: "Check ORION queue depth.",
+            },
+          ],
+          blockedJobs: [],
+          pendingVerificationJobs: [],
+          queueRequests: [
+            {
+              id: "qr-1",
+              jobId: "job-1",
+              owner: "POLARIS",
+              status: "queued",
+              message: "Needs review.",
+              intakePath: "tasks/INBOX/POLARIS.md",
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }}
         home={null}
         review={null}
+        tasks={[
+          {
+            id: "job-1",
+            owner: "POLARIS",
+            objective: "Check ORION queue depth.",
+            state: "running",
+            status: "running",
+          },
+        ]}
+        queueFilter="active"
         queueRequests={[
           {
             id: "qr-1",
             jobId: "job-1",
             owner: "POLARIS",
             status: "queued",
-            message: "Captured for POLARIS.",
-            intakePath: "tasks/INTAKE/example.md",
-            packetNumber: 5,
-            createdAt: "2026-04-28T13:00:00.000Z",
+            message: "Needs review.",
+            intakePath: "tasks/INBOX/POLARIS.md",
+            createdAt: new Date().toISOString(),
           },
         ]}
-        loading={false}
-        error=""
+        activity={[]}
+        systemStatus={{ api: "online", queue: "healthy", worker: "healthy", updatedAt: new Date().toISOString(), message: "all good" }}
+        selectedJobDetail={{
+          job: {
+            job_id: "job-1",
+            state: "running",
+            owner: "POLARIS",
+            objective: "Check ORION queue depth.",
+          },
+          needSummary: "Waiting for action.",
+          nextStep: "Use the approval button to continue.",
+          packetText: "TASK_PACKET v1",
+          resultLines: [],
+          relatedApprovals: [],
+          taskPacketApproval: {
+            eligible: true,
+            reason: "Approve once to continue.",
+            decisions: ["approve-once", "deny"] as Array<"approve-once" | "deny">,
+          },
+        }}
+        detailLoading={false}
         composerText=""
         sending={false}
         hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={vi.fn()}
+        onNavigate={vi.fn()}
+        onBack={onBack}
         onComposerChange={vi.fn()}
         onComposerSubmit={vi.fn()}
         onApproval={vi.fn()}
+        onTaskPacketApproval={onTaskPacketApproval}
         onFollowup={vi.fn()}
         onAcknowledgeQueueRequest={vi.fn()}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
+        onOpenTask={vi.fn()}
+        onClearError={vi.fn()}
+      />,
     );
 
-    expect(screen.getByRole("heading", { name: "Queue Center" })).toBeInTheDocument();
-    expect(screen.getByText("Captured for POLARIS.")).toBeInTheDocument();
-    expect(screen.getByText("tasks/INTAKE/example.md")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve Once" }));
+    expect(onBack).not.toHaveBeenCalled();
+    expect(onTaskPacketApproval).toHaveBeenCalledWith("job-1", "approve-once");
   });
 
-  it("triggers acknowledge callback for completed queue packets", () => {
-    const acknowledge = vi.fn();
-    render(
-      <MiniAppView
-        appName="ORION"
-        screen="queue"
-        screenLabel="Queue Center"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
-        home={null}
-        review={null}
-        queueRequests={[
-          {
-            id: "qr-completed",
-            jobId: "job-1",
-            owner: "POLARIS",
-            status: "completed",
-            message: "Follow-up completed for POLARIS.",
-            intakePath: "tasks/INTAKE/example.md",
-            packetNumber: 9,
-            createdAt: "2026-04-28T13:01:00.000Z",
-          },
-        ]}
-        loading={false}
-        error=""
-        composerText=""
-        sending={false}
-        hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={vi.fn()}
-        onComposerChange={vi.fn()}
-        onComposerSubmit={vi.fn()}
-        onApproval={vi.fn()}
-        onFollowup={vi.fn()}
-        onAcknowledgeQueueRequest={acknowledge}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
-    );
+  it("sends task packet approval action from task detail", async () => {
+    const api = createApi();
+    const payload = await api.bootstrap();
+    const packetDecision = vi.spyOn(api, "resolveTaskPacketApproval");
+    api.bootstrap = vi.fn(async () => ({
+      ...payload,
+      startapp: "task/job-1",
+    }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and Close" }));
-    expect(acknowledge).toHaveBeenCalledWith("qr-completed");
+    render(<MiniApp api={api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Approve Once" }));
+    expect(packetDecision).toHaveBeenCalledWith("job-1", "approve-once");
   });
 
-  it("shows acknowledge action for failed queue packets to allow close", () => {
-    const acknowledge = vi.fn();
-    render(
-      <MiniAppView
-        appName="ORION"
-        screen="queue"
-        screenLabel="Queue Center"
-        bridgeStatus={bridgeStatus}
-        conversation={null}
-        inbox={null}
-        selectedJobDetail={null}
-        detailLoading={false}
-        home={null}
-        review={null}
-        queueRequests={[
-          {
-            id: "qr-failed",
-            jobId: "job-1",
-            owner: "POLARIS",
-            status: "failed",
-            message: "Follow-up failed for POLARIS.",
-            intakePath: "tasks/INTAKE/example.md",
-            packetNumber: 11,
-            createdAt: "2026-04-28T13:02:00.000Z",
-          },
-        ]}
-        loading={false}
-        error=""
-        composerText=""
-        sending={false}
-        hasNativeMainButton={false}
-        actionMessage=""
-        selectedJobId={null}
-        onScreenChange={vi.fn()}
-        onComposerChange={vi.fn()}
-        onComposerSubmit={vi.fn()}
-        onApproval={vi.fn()}
-        onFollowup={vi.fn()}
-        onAcknowledgeQueueRequest={acknowledge}
-        onSelectJob={vi.fn()}
-        onQueueCenter={vi.fn()}
-      />
-    );
+  it("sends approval decision action from pending approval cards", async () => {
+    const api = createApi();
+    const bootstrap = await api.bootstrap();
+    const approvalDecision = vi.spyOn(api, "resolveApproval");
+    const jobDetail = await api.fetchJobDetail("job-1");
+    api.bootstrap = vi.fn(async () => ({
+      ...bootstrap,
+      startapp: "task/job-1",
+    }));
+    api.fetchJobDetail = vi.fn(async () => ({
+      ...jobDetail,
+      taskPacketApproval: {
+        eligible: false,
+        reason: "No task-packet decision needed.",
+        decisions: ["approve-once", "deny"] as Array<"approve-once" | "deny">,
+      },
+    }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Acknowledge and Close" }));
-    expect(acknowledge).toHaveBeenCalledWith("qr-failed");
+    render(<MiniApp api={api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Allow Once" }));
+    expect(approvalDecision).toHaveBeenCalledWith("abc", "allow-once");
   });
 });

@@ -43,7 +43,7 @@ Read-model expectations:
 - Per-job artifacts carry the canonical state, state reason, notify channels, notification delivery status, stable queued/result digests, and a safe result preview.
 - `summary.json` is the aggregate API for queued/result/workflow status; status views should not re-infer that state from inbox markdown when the summary is present.
 - `notification_delivery` distinguishes `delivered`, `failed-to-deliver`, `suppressed`, `pending`, and `not-requested` for queued and result events, with per-channel attempts, timestamps, and last error.
-- Completed packets are archived only after their terminal result has been delivered, suppressed, or dead-lettered and has aged past the 48-hour default. Queued, stale, blocked, and pending-verification packets stay active.
+- Closed packets are archived only after their result notification has been delivered, suppressed, or dead-lettered and has aged past the 48-hour default. Auto-archive currently covers completed (`Status: OK`) and cancelled (`Status: CANCELLED`) packets. Queued, stale, blocked, failed, and pending-verification packets stay active.
 
 Canonical delegated-job states:
 - `queued`

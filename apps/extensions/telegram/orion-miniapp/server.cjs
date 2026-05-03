@@ -362,13 +362,17 @@ async function routeApi(req, res, pathname) {
       const command = `/approve ${approvalId} ${decision}`;
       const queryId = String(fields.query_id || "").trim();
       if (queryId) {
-        await answerWebAppQuery(queryId, command);
-        sendJson(res, 200, {
-          ok: true,
-          closesWebApp: true,
-          message: `Approval command sent as you: ${command}`,
-        });
-        return;
+        try {
+          await answerWebAppQuery(queryId, command);
+          sendJson(res, 200, {
+            ok: true,
+            closesWebApp: true,
+            message: `Approval command sent as you: ${command}`,
+          });
+          return;
+        } catch (error) {
+          console.error(`[miniapp-approvals] answerWebAppQuery failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
       sendJson(res, 200, {
         ok: true,

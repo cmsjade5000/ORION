@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Archive completed inbox packets after their result notification has aged out."""
+"""Archive closed inbox packets after their result notification has aged out."""
 
 from __future__ import annotations
 
@@ -71,10 +71,16 @@ def _eligible_jobs(summary: dict, *, now_ts: float, older_than_hours: float) -> 
     for job in jobs:
         if not isinstance(job, dict):
             continue
-        if str(job.get("state") or "") != "complete":
-            continue
         result = job.get("result")
-        if not isinstance(result, dict) or str(result.get("status") or "").lower() != "ok":
+        if not isinstance(result, dict):
+            continue
+        state = str(job.get("state") or "")
+        result_status = str(result.get("status") or "").lower()
+        if state == "complete" and result_status == "ok":
+            pass
+        elif state == "cancelled" and result_status == "cancelled":
+            pass
+        else:
             continue
         notified_at = _result_delivery_ts(job)
         if notified_at is None or notified_at > cutoff:
@@ -159,7 +165,7 @@ def archive_completed_packets(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Archive completed Task Packet blocks from active inbox files.")
+    ap = argparse.ArgumentParser(description="Archive closed Task Packet blocks from active inbox files.")
     ap.add_argument("--repo-root", default=".")
     ap.add_argument("--older-than-hours", type=float, default=48.0)
     ap.add_argument("--apply", action="store_true", help="Actually move packet blocks; default is dry-run.")

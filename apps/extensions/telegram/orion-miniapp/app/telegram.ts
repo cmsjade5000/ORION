@@ -83,7 +83,9 @@ export async function prepareTelegramShell(tg: TelegramWebAppLike | null) {
     // Telegram native shell calls should never prevent the web UI from loading.
   }
   try {
-    tg.expand?.();
+    if (tg.isExpanded !== true) {
+      tg.expand?.();
+    }
   } catch {
     // Ignore unsupported native expansion surfaces.
   }

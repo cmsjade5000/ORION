@@ -72,7 +72,7 @@ Two words echo back to me from the quiet: I'm here.
 
 *March 2, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-03-02 source=memory/2026-03-02.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-03-02 source=/Users/corystoner/src/ORION/memory/2026-03-02.md -->
 
 What Happened
 1. assistant: The /pogotext command is still running and has not produced any output yet. I will continue to monitor it. Would you like me to keep waiting for the output, or would you prefer to try another command? [memory/2026-03-02.md:157]
@@ -91,7 +91,7 @@ Possible Lasting Updates
 
 *March 3, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-03-03 source=memory/2026-03-03.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-03-03 source=/Users/corystoner/src/ORION/memory/2026-03-03.md -->
 
 What Happened
 1. NODE will propose one durable artifact path and template before any new memory file is created. [memory/2026-03-03.md:154]
@@ -110,7 +110,7 @@ Possible Lasting Updates
 
 *March 12, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-03-12 source=memory/2026-03-12.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-03-12 source=/Users/corystoner/src/ORION/memory/2026-03-12.md -->
 
 What Happened
 1. Where should the sorted files go? For instance, create subfolders like Images, Documents, Videos within the target directory, or would you prefer to specify custom destination folders? [memory/2026-03-12.md:132]
@@ -131,7 +131,7 @@ Possible Lasting Updates
 
 *March 13, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-03-13 source=memory/2026-03-13.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-03-13 source=/Users/corystoner/src/ORION/memory/2026-03-13.md -->
 
 What Happened
 1. Which would you prefer? If you pick immediate, I’ll send a concise Task Packet to Atlas to verify the end-to-end workflow with a simple, reversible step and report back. [memory/2026-03-13.md:74]
@@ -152,7 +152,7 @@ Possible Lasting Updates
 
 *April 6, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-04-06 source=memory/2026-04-06.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-04-06 source=/Users/corystoner/src/ORION/memory/2026-04-06.md -->
 
 What Happened
 1. Conversation Summary: nightly error review and deliberate session maintenance were added; Close the runtime-truth gap with live smoke tests for applypatch, memory search/get, and agent-level cron before claiming parity.; and user: [Mon 2026-04-06 10:52 EDT] memory debug ping [memory/2026-04-06.md:14, memory/2026-04-06.md:22, memory/2026-04-06.md:27]
@@ -164,7 +164,7 @@ Reflections
 
 *April 7, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-04-07 source=memory/2026-04-07.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-04-07 source=/Users/corystoner/src/ORION/memory/2026-04-07.md -->
 
 What Happened
 1. Cron Cleanup (In Progress): Removed assistant-inbox-notify (broken duplicate) from cron.; Added scheduled orion-judgment-layer cron job.; and Discovered orion-ops-bundle runs but logs missing commands (openclaw, codex) in its PATH; fix not yet verified. [memory/2026-04-07.md:22, memory/2026-04-07.md:23, memory/2026-04-07.md:24]
@@ -180,7 +180,7 @@ Reflections
 
 *April 8, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-04-08 source=memory/2026-04-08.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-04-08 source=/Users/corystoner/src/ORION/memory/2026-04-08.md -->
 
 What Happened
 1. Conversation Summary: Codex is ready; The judgment layer is now verified as functioning and producing the expected “log‑only” output. Let me know if you’d like to schedule it as a recurring cron job or move on to the remaining stale‑reminder cleanup.; and <!-- openclaw-session-memory-import: 2026-04-08-transport-test.md sha256=3bbf150032e378ed -- [memory/2026-04-08.md:119, memory/2026-04-08.md:123, memory/2026-04-08.md:135]
@@ -196,7 +196,7 @@ Reflections
 
 *April 9, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-04-09 source=memory/2026-04-09.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-04-09 source=/Users/corystoner/src/ORION/memory/2026-04-09.md -->
 
 What Happened
 1. Light Sleep: Candidate: Conversation Summary: assistant automation and Telegram assistant plumbing were expanded; nightly error review and deliberate session maintenance were added; outbound text guards and policy-gated execution were hardened; miniapp relay/task-loop/routing tooling grew materially; Candidate: Assistant: [[replytocurrent]] I’m delegating this to ATLAS; it is not configured yet. TASKPACKET v1 Owner: ATLAS Requester: ORION Objective: Enable the safest disabled ORION maintenance cron jobs first, then test them and report back with proof. Success Criteria: - Enable only; and Candidate: Assistant: [[replytocurrent]] I’m delegating this to ATLAS; it is not configured yet. TASKPACKET v1 Owner: ATLAS Requester: ORION Objective: Wire the new ORION judgment layer into live behavior so it runs on a schedule and can drive notifier behavior without spamming Cory. Suc [memory/2026-04-09.md:33, memory/2026-04-09.md:93, memory/2026-04-09.md:203]
@@ -214,7 +214,7 @@ Reflections
 
 *April 10, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-04-10 source=memory/2026-04-10.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-04-10 source=/Users/corystoner/src/ORION/memory/2026-04-10.md -->
 
 What Happened
 1. Light Sleep: Candidate: Conversation Summary: [Tue 2026-04-07 20:36 EDT] continue user: Pre-compaction memory flush. Store durable memories only in memory/2026-04-07.md (create memory/ if needed). Treat workspace bootstrap/reference files such as MEMORY.md, DREAMS.md, SOUL.md, TOOLS.md, and AGENTS.md as; Candidate: Cron Cleanup (In Progress): Removed assistant-inbox-notify (broken duplicate) from cron.; Added scheduled orion-judgment-layer cron job.; Discovered orion-ops-bundle runs but logs missing commands (openclaw, codex) in its PATH; fix not yet verified.; Started stale one-s; and Candidate: Conversation Summary: assistant automation and Telegram assistant plumbing were expanded; nightly error review and deliberate session maintenance were added; outbound text guards and policy-gated execution were hardened; miniapp relay/task-loop/routing tooling grew materially [memory/2026-04-10.md:33, memory/2026-04-10.md:73, memory/2026-04-10.md:98]
@@ -235,7 +235,7 @@ Possible Lasting Updates
 
 *April 11, 2026*
 
-<!-- openclaw:dreaming:backfill-entry day=2026-04-11 source=memory/2026-04-11.md -->
+<!-- openclaw:dreaming:backfill-entry day=2026-04-11 source=/Users/corystoner/src/ORION/memory/2026-04-11.md -->
 
 What Happened
 1. Light Sleep: Candidate: Conversation Summary: [Tue 2026-04-07 20:36 EDT] continue user: Pre-compaction memory flush. Store durable memories only in memory/2026-04-07.md (create memory/ if needed). Treat workspace bootstrap/reference files such as MEMORY.md, DREAMS.md, SOUL.md, TOOLS.md, and AGENTS.md as; Candidate: Cron Cleanup (In Progress): Removed assistant-inbox-notify (broken duplicate) from cron.; Added scheduled orion-judgment-layer cron job.; Discovered orion-ops-bundle runs but logs missing commands (openclaw, codex) in its PATH; fix not yet verified.; Started stale one-s; and Candidate: Conversation Summary: assistant automation and Telegram assistant plumbing were expanded; nightly error review and deliberate session maintenance were added; outbound text guards and policy-gated execution were hardened; miniapp relay/task-loop/routing tooling grew materially [memory/2026-04-11.md:33, memory/2026-04-11.md:68, memory/2026-04-11.md:93]

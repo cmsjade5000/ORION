@@ -579,6 +579,9 @@ def _load_delegated_workflow_followups(root: Path) -> list[str]:
 def _load_delegated_specialist_delivery_checks(root: Path) -> list[str]:
     safety_findings: list[str] = []
     for job in _summary_jobs(root):
+        state = str(job.get("state") or "").strip().lower()
+        if state in {"complete", "cancelled"}:
+            continue
         owner = str(job.get("owner") or "UNKNOWN").strip() or "UNKNOWN"
         notify = str(job.get("notify") or "")
         if not blocked_direct_telegram_delivery(owner, notify):

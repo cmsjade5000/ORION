@@ -131,6 +131,68 @@ class TestArchiveCompletedInboxPackets(unittest.TestCase):
             active = (root / "tasks" / "INBOX" / "ATLAS.md").read_text(encoding="utf-8")
             self.assertIn("Complete archival candidate.", active)
 
+    def test_apply_archives_cancelled_packets_older_than_threshold(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            inbox = root / "tasks" / "INBOX" / "ATLAS.md"
+            jobs = root / "tasks" / "JOBS"
+            inbox.parent.mkdir(parents=True, exist_ok=True)
+            jobs.mkdir(parents=True, exist_ok=True)
+
+            cancelled_before_result = [
+                "TASK_PACKET v1",
+                "Owner: ATLAS",
+                "Requester: ORION",
+                "Notify: telegram",
+                "Objective: Cancelled archival candidate.",
+            ]
+            cancelled_block = cancelled_before_result + [
+                "Result:",
+                "Status: CANCELLED",
+                "Summary: No longer needed.",
+            ]
+            inbox.write_text("\n".join(cancelled_block) + "\n", encoding="utf-8")
+            digest = self.mod.sha256_lines(cancelled_before_result)
+            summary = {
+                "jobs": [
+                    {
+                        "state": "cancelled",
+                        "owner": "ATLAS",
+                        "objective": "Cancelled archival candidate.",
+                        "queued_digest": digest,
+                        "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 1},
+                        "result": {"status": "cancelled"},
+                        "notification_delivery": {
+                            "result": {
+                                "status": "delivered",
+                                "channels": {
+                                    "telegram": {
+                                        "status": "delivered",
+                                        "attempts": 1,
+                                        "last_ts": 1_000.0,
+                                        "last_error": "",
+                                    }
+                                },
+                            }
+                        },
+                    }
+                ]
+            }
+            (jobs / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+            report = self.mod.archive_completed_packets(
+                repo_root=root,
+                older_than_hours=48.0,
+                apply=True,
+                now_ts=1_000.0 + (49 * 3600.0),
+            )
+
+            self.assertEqual(report["archived_count"], 1)
+            active = inbox.read_text(encoding="utf-8")
+            self.assertNotIn("Cancelled archival candidate.", active)
+            archive_text = Path(str(report["archive_path"])).read_text(encoding="utf-8")
+            self.assertIn("Cancelled archival candidate.", archive_text)
+
 
 if __name__ == "__main__":
     unittest.main()

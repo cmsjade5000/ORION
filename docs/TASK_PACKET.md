@@ -264,7 +264,7 @@ Inbox files are append-only queues of Task Packets.
 - For allowlisted read-only packets, `scripts/run_inbox_packets.py` can execute the `Commands to run:` section and write the `Result:` block.
 - `scripts/task_execution_loop.py` and `scripts/inbox_cycle.py` also derive durable delegated-job state under `tasks/JOBS/*.json`.
 - `tasks/JOBS/summary.json` includes `notification_delivery`, which shows whether a queued/result notification is delivered, failed, suppressed, pending, or not requested.
-- Completed packets remain in the active inbox during the notification age-out window. `scripts/archive_completed_inbox_packets.py --apply` moves only terminal, successfully summarized packets older than the configured threshold into `tasks/INBOX/archive/`; queued, stale, blocked, and pending-verification packets stay active.
+- Closed packets remain in the active inbox during the notification age-out window. `scripts/archive_completed_inbox_packets.py --apply` moves completed (`Status: OK`) and cancelled (`Status: CANCELLED`) packets older than the configured threshold into `tasks/INBOX/archive/`; queued, stale, blocked, failed, and pending-verification packets stay active.
   - Formatting requirement for `Commands to run:`:
     - Preferred: header line `Commands to run:` followed by bullet lines (example `- diagnose_gateway.sh`).
     - Supported: single-line form `Commands to run: diagnose_gateway.sh`.

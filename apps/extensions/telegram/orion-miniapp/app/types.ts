@@ -1,4 +1,41 @@
-export type MiniAppScreen = "chat" | "inbox" | "today" | "queue";
+export type MiniAppScreen = "home" | "compose" | "queue" | "task" | "status" | "activity" | "settings";
+
+export type TaskStatus = "queued" | "running" | "waiting" | "needs_input" | "done" | "failed" | "stuck";
+
+export type QueueFilter = "active" | "pending" | "needs_input" | "done" | "failed";
+
+export type Task = {
+  id: string;
+  owner: string;
+  objective: string;
+  state: string;
+  status: TaskStatus;
+  statusReason?: string | null;
+  inboxPath?: string | null;
+};
+
+export type SystemStatus = {
+  api: "online" | "partial" | "offline";
+  queue: "healthy" | "degraded" | "offline";
+  worker: "healthy" | "degraded" | "offline";
+  updatedAt: string | null;
+  message?: string;
+};
+
+export type ActivityItem = {
+  id: string;
+  type: "request" | "task" | "system" | "approval";
+  title: string;
+  detail: string;
+  atMs: number;
+};
+
+export type QuickAction = {
+  key: string;
+  title: string;
+  label: string;
+  template?: string;
+};
 
 export type ChatMessage = {
   id: string;
@@ -138,6 +175,7 @@ export type HomePayload = {
   jobCounts: Record<string, number>;
   jobs: JobItem[];
   updatedTs: number | null;
+  updatedAt?: string | null;
 };
 
 export type ReviewPayload = {

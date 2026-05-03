@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
+  ActivityItem,
+  ApprovalItem,
   BootstrapPayload,
   ChatConversation,
   ChatRunPayload,
@@ -8,9 +10,12 @@ import type {
   JobDetailPayload,
   JobItem,
   MiniAppScreen,
+  QueueFilter,
   QueueRequest,
   QueueRequestStatus,
   ReviewPayload,
+  Task,
+  TaskStatus,
 } from "./types";
 import {
   applySafeAreaInsets,
@@ -21,7 +26,19 @@ import {
   vibrateNotice,
   vibrateSelection,
 } from "./telegram";
-import { buildInboxSections, formatRelativeTime, isFollowupActionable, screenFromStartapp, screenTitle, statusTone } from "./view-model";
+import {
+  buildActivityFeed,
+  buildQueueRows,
+  buildTaskRows,
+  formatRelativeTime,
+  isAttentionTask,
+  parseTaskIdFromStartapp,
+  rightNowCounts,
+  screenFromStartapp,
+  screenTitle,
+  statusChipClass,
+  statusLabel,
+} from "./view-model";
 
 type ApiClient = {
   bootstrap(): Promise<BootstrapPayload>;
@@ -47,29 +64,43 @@ type QueueRequestView = Omit<QueueRequest, "status"> & {
   status: QueueRequestStatus | "queuing";
 };
 
-const ACTIVE_QUEUE_STATUSES = ["queuing", "queued", "refresh_delayed"] as const;
+type RouteEntry = {
+  screen: MiniAppScreen;
+  queueFilter?: QueueFilter;
+  taskId?: string;
+};
 
-function normalizeQueueStatus(status?: string): string {
-  return String(status || "").trim().toLowerCase();
-}
+const QUEUE_FILTERS: Array<{ id: QueueFilter; label: string }> = [
+  { id: "active", label: "Active" },
+  { id: "pending", label: "Pending" },
+  { id: "needs_input", label: "Needs Input" },
+  { id: "done", label: "Done" },
+  { id: "failed", label: "Failed" },
+];
 
-function isActionableQueueStatus(status?: string): boolean {
-  return ACTIVE_QUEUE_STATUSES.includes(normalizeQueueStatus(status) as (typeof ACTIVE_QUEUE_STATUSES)[number]);
-}
+const QUICK_TEMPLATES = [
+  { key: "status", label: "System Health", template: "/health" },
+  { key: "queue", label: "Queue Check", template: "/queue" },
+  { key: "review", label: "Status Pulse", template: "/review" },
+  { key: "open", label: "Search", template: "Open the latest Orion activity and tell me what is blocked." },
+];
 
-function isAcknowledgableQueueStatus(status?: string): boolean {
-  return ["completed", "failed", "refresh_delayed"].includes(normalizeQueueStatus(status));
-}
-
-function queueAcknowledgeLabel(): string {
-  return "Acknowledge";
-}
+const QUEUE_TONES: Readonly<Record<TaskStatus | "stalled", "good" | "warn" | "alert" | "neutral">> = {
+  done: "good",
+  failed: "alert",
+  queued: "neutral",
+  running: "good",
+  waiting: "warn",
+  needs_input: "warn",
+  stuck: "warn",
+  stalled: "warn",
+};
 
 function safeNative(action: () => void) {
   try {
     action();
   } catch {
-    // Telegram native button APIs vary by client/version; keep the web UI alive.
+    // Telegram API surface varies and should never break the web UI.
   }
 }
 
@@ -105,27 +136,73 @@ function jsonFetch<T>(url: string, options?: RequestInit): Promise<T> {
   }).then(async (response) => {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(String((payload as any).error || `Request failed: ${response.status}`));
+      throw new Error(String((payload as { error?: string })?.error || `Request failed: ${response.status}`));
     }
     return payload as T;
   });
 }
 
-function friendlyPanelError(error: unknown, fallback: string): string {
-  const message = error instanceof Error ? error.message : String(error || "");
-  if (/Command failed:|assistant_status\.py|usage:|invalid choice/i.test(message)) {
-    return "ORION queued the action, but the status panel refresh hit a backend command mismatch.";
+function resolveBridgeStatus(input: {
+  loading: boolean;
+  error: string;
+  sending: boolean;
+  home: HomePayload | null;
+  review: ReviewPayload | null;
+  inbox: InboxPayload | null;
+  conversation: ChatConversation | null;
+}): BridgeStatus {
+  if (input.error) return { label: "Bridge offline", tone: "alert" };
+  if (input.loading || input.sending) return { label: "Bridge updating", tone: "warn" };
+  if (!input.conversation || !input.home || !input.review || !input.inbox) return { label: "Bridge partial", tone: "warn" };
+  return { label: "Bridge online", tone: "good" };
+}
+
+type SystemOverview = {
+  api: "online" | "partial" | "offline";
+  queue: "healthy" | "degraded" | "offline";
+  worker: "healthy" | "degraded" | "offline";
+  updatedAt: string;
+  message: string;
+};
+
+function deriveSystemStatus(input: {
+  loading: boolean;
+  error: string;
+  home: HomePayload | null;
+  review: ReviewPayload | null;
+  inbox: InboxPayload | null;
+  queueRequests: QueueRequestView[];
+}): SystemOverview {
+  if (input.error) {
+    return {
+      api: "offline",
+      queue: "offline",
+      worker: "offline",
+      updatedAt: new Date().toISOString(),
+      message: input.error,
+    };
   }
-  if (/miniapp-auth:/i.test(message)) {
-    return "Telegram bridge auth drifted. Close the Mini App and reopen it from Telegram.";
-  }
-  if (/job not found/i.test(message)) {
-    return "That work item is no longer in the active queue.";
-  }
-  if (/already queuing/i.test(message)) {
-    return "That follow-up is already being queued.";
-  }
-  return fallback;
+
+  const updatedFrom = [input.home?.updatedTs, input.inbox?.updatedTs]
+    .map((value) => (typeof value === "number" ? value : 0))
+    .filter(Boolean);
+  const hasPanel = input.loading ? false : Boolean(input.home && input.review && input.inbox);
+  const hasFailures = input.queueRequests.some((request) => request.status === "failed");
+
+  return {
+    api: hasPanel ? "online" : "partial",
+    queue: hasFailures ? "degraded" : input.queueRequests.length ? "healthy" : "healthy",
+    worker: hasPanel ? "healthy" : "degraded",
+    updatedAt: updatedFrom.length ? new Date(Math.max(...updatedFrom)).toISOString() : new Date().toISOString(),
+    message:
+      input.loading
+        ? "Checking live state"
+        : input.error
+          ? input.error
+          : hasFailures
+            ? "Queue has failed packets that may need attention."
+            : "Live state is available.",
+  };
 }
 
 function mergeQueueRequests(current: QueueRequestView[], incoming: QueueRequestView[]): QueueRequestView[] {
@@ -133,37 +210,28 @@ function mergeQueueRequests(current: QueueRequestView[], incoming: QueueRequestV
   [...incoming, ...current].forEach((request) => {
     byId.set(request.id, request);
   });
-  return [...byId.values()]
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 20);
+  return [...byId.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 20);
 }
 
-function requestForJob(queueRequests: QueueRequestView[], jobId: string): QueueRequestView | null {
-  return (
-    queueRequests.find((request) => request.jobId === jobId && isActionableQueueStatus(request.status)) ||
-    queueRequests.find((request) => request.jobId === jobId && request.status === "failed") ||
-    queueRequests.find((request) => request.jobId === jobId && request.status === "completed") ||
-    null
-  );
-}
-
-function queueStatusLabel(request: QueueRequestView | null): string {
-  if (!request) return "Ask POLARIS to Rework";
-  if (request.status === "queuing") return "Queuing...";
-  if (request.status === "queued") return "Rework Queued";
-  if (request.status === "refresh_delayed") return "Queued; Refresh Delayed";
-  if (request.status === "completed") return "Rework Completed";
-  if (request.status === "acknowledged") return "Acknowledged";
-  return "Retry Rework Request";
-}
-
-function queueStatusTone(status?: string): "good" | "warn" | "alert" | "neutral" {
-  if (status === "queued") return "good";
-  if (status === "queuing" || status === "refresh_delayed") return "warn";
-  if (status === "failed") return "alert";
-  if (status === "completed") return "good";
-  if (status === "acknowledged") return "neutral";
-  return "neutral";
+function summarizeLastRequest(
+  tasks: Task[],
+  queueRequests: QueueRequestView[],
+  conversation: ChatConversation | null,
+): { task: Task | null; text: string; request: QueueRequestView | null } {
+  const latestQueueItem = queueRequests[0] || null;
+  const fromTask = latestQueueItem ? tasks.find((task) => task.id === latestQueueItem.jobId) || null : null;
+  if (fromTask) {
+    return { task: fromTask, request: latestQueueItem, text: `${fromTask.objective} (${statusLabel(fromTask.status)})` };
+  }
+  if (!conversation?.messages?.length) {
+    return { task: null, request: latestQueueItem, text: "No request has been sent yet." };
+  }
+  const lastUserMessage = [...conversation.messages].reverse().find((message) => message.role === "user");
+  if (!lastUserMessage) {
+    return { task: null, request: latestQueueItem, text: "No request has been sent yet." };
+  }
+  const text = lastUserMessage.text.trim();
+  return { task: null, request: latestQueueItem, text: text ? text.slice(0, 96) + (text.length > 96 ? "…" : "") : "No request has been sent yet." };
 }
 
 function formatQueueRequestTime(value: string): string {
@@ -172,21 +240,629 @@ function formatQueueRequestTime(value: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function deriveBridgeStatus(input: {
+type MiniAppViewProps = {
+  appName: string;
+  route: RouteEntry;
+  routeDepth: number;
+  bridgeStatus: BridgeStatus;
+  canGoBack: boolean;
   loading: boolean;
   error: string;
-  sending: boolean;
+  actionMessage: string;
   conversation: ChatConversation | null;
+  inbox: InboxPayload | null;
   home: HomePayload | null;
   review: ReviewPayload | null;
-  inbox: InboxPayload | null;
-}): BridgeStatus {
-  if (input.error) return { label: "Bridge offline", tone: "alert" };
-  if (input.loading) return { label: "Bridge checking", tone: "warn" };
-  if (input.sending) return { label: "Bridge sending", tone: "warn" };
-  if (!input.conversation) return { label: "Bridge unavailable", tone: "alert" };
-  if (!input.home || !input.review || !input.inbox) return { label: "Bridge partial", tone: "warn" };
-  return { label: "Bridge online", tone: "good" };
+  tasks: Task[];
+  queueFilter: QueueFilter;
+  queueRequests: QueueRequestView[];
+  activity: ActivityItem[];
+  systemStatus: SystemOverview;
+  selectedJobDetail: JobDetailPayload | null;
+  detailLoading: boolean;
+  composerText: string;
+  sending: boolean;
+  hasNativeMainButton: boolean;
+  onNavigate(screen: MiniAppScreen, queueFilter?: QueueFilter): void;
+  onBack(): void;
+  onComposerChange(text: string): void;
+  onComposerSubmit(): void;
+  onApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny"): void;
+  onTaskPacketApproval?(jobId: string, decision: "approve-once" | "deny"): void;
+  onFollowup(jobId: string): void;
+  onAcknowledgeQueueRequest(requestId: string): void;
+  onOpenTask(taskId: string): void;
+  onClearError(): void;
+};
+
+function ChipNav({
+  active,
+  onChange,
+}: {
+  active: MiniAppScreen;
+  onChange: (screen: MiniAppScreen) => void;
+}) {
+  const entries: MiniAppScreen[] = ["home", "compose", "queue", "status", "activity", "settings"];
+  return (
+    <nav className="chip-nav" aria-label="Primary routes">
+      {entries.map((screen) => (
+        <button
+          key={screen}
+          type="button"
+          className={`chip-nav__btn ${active === screen ? "is-active" : ""}`}
+          onClick={() => onChange(screen)}
+        >
+          {screenTitle(screen)}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="panel">
+      <header className="panel__header">
+        <h2>{title}</h2>
+        {subtitle ? <p className="panel__subtitle">{subtitle}</p> : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function CardRow({ children }: { children: ReactNode }) {
+  return <div className="card-row">{children}</div>;
+}
+
+function StatCard({ label, value, tone, detail }: { label: string; value: string | number; tone?: "good" | "warn" | "alert" | "neutral"; detail?: string }) {
+  return (
+    <article className={`stat-card tone-${tone || "neutral"}`}>
+      <p className="stat-card__label">{label}</p>
+      <p className="stat-card__value">{value}</p>
+      {detail ? <p className="stat-card__detail">{detail}</p> : null}
+    </article>
+  );
+}
+
+function QueueFilterTabs({ value, onChange }: { value: QueueFilter; onChange: (filter: QueueFilter) => void }) {
+  return (
+    <div className="filter-tabs" role="tablist" aria-label="Task filters">
+      {QUEUE_FILTERS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="tab"
+          aria-selected={value === item.id}
+          className={`filter-tab ${value === item.id ? "is-active" : ""}`}
+          onClick={() => onChange(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  onOpen,
+  onFollowup,
+  request,
+}: {
+  task: Task;
+  request: QueueRequestView | null;
+  onOpen: (taskId: string) => void;
+  onFollowup: (taskId: string) => void;
+}) {
+  return (
+    <article className="task-row">
+      <p className="task-row__meta">{task.owner}</p>
+      <h3>{task.objective}</h3>
+      <p className={`task-row__status tone-${statusChipClass(task.status)}`}>{statusLabel(task.status)}</p>
+      {task.statusReason ? <p className="task-row__reason">{task.statusReason}</p> : null}
+      <p className="task-row__id">{task.id}</p>
+      <p className="task-row__request">{request ? request.message : "No queued packet yet."}</p>
+      <div className="task-row__actions">
+        <button type="button" className="button button--primary" onClick={() => onOpen(task.id)}>
+          Open Task
+        </button>
+        {request?.status === "failed" ? (
+          <button type="button" className="button" onClick={() => onFollowup(task.id)}>
+            Retry Follow-up
+          </button>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function TaskListSection({
+  tasks,
+  filter,
+  queueRequests,
+  onOpenTask,
+  onFollowup,
+}: {
+  tasks: Task[];
+  filter: QueueFilter;
+  queueRequests: QueueRequestView[];
+  onOpenTask: (taskId: string) => void;
+  onFollowup: (taskId: string) => void;
+}) {
+  return (
+    <Section title="Task Queue" subtitle={`Current view: ${filter}`}>
+      {tasks.length ? (
+        tasks.map((task) => {
+          const request = queueRequests.find((item) => item.jobId === task.id) || null;
+          return (
+            <TaskRow
+              key={task.id}
+              task={task}
+              onOpen={onOpenTask}
+              onFollowup={onFollowup}
+              request={request}
+            />
+          );
+        })
+      ) : (
+        <p className="empty-mini">No tasks match this filter.</p>
+      )}
+    </Section>
+  );
+}
+
+function TaskDetailPanel({
+  task,
+  request,
+  detail,
+  detailLoading,
+  onBack,
+  onApproval,
+  onTaskPacketApproval,
+  onFollowup,
+  onAcknowledge,
+}: {
+  task: Task | null;
+  request: QueueRequestView | null;
+  detail: JobDetailPayload | null;
+  detailLoading: boolean;
+  onBack: () => void;
+  onApproval: (approvalId: string, decision: "allow-once" | "allow-always" | "deny") => void;
+  onTaskPacketApproval?: (jobId: string, decision: "approve-once" | "deny") => void;
+  onFollowup: (jobId: string) => void;
+  onAcknowledge: () => void;
+}) {
+  return (
+    <Section title="Task Detail" subtitle={task ? task.objective : "Select a task to inspect."}>
+      {!task ? <p className="empty-mini">No task selected.</p> : null}
+      {task ? (
+        <>
+          <dl className="detail-grid">
+            <div>
+              <dt>ID</dt>
+              <dd>{task.id}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{statusLabel(task.status)}</dd>
+            </div>
+            <div>
+              <dt>Owner</dt>
+              <dd>{task.owner}</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>{task.inboxPath || "n/a"}</dd>
+            </div>
+            {request ? (
+              <>
+                <div>
+                  <dt>Queue packet</dt>
+                  <dd>{request.message}</dd>
+                </div>
+                <div>
+                  <dt>Queued</dt>
+                  <dd>{formatQueueRequestTime(request.createdAt)}</dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+          {detailLoading ? <p className="empty-mini">Loading task context...</p> : null}
+          {detail ? (
+            <>
+              <p className="panel__subtitle">Need Summary</p>
+              <p>{detail.needSummary}</p>
+              <p className="panel__subtitle">Next Step</p>
+              <p>{detail.nextStep}</p>
+              {detail.resultLines.length ? <pre className="result-lines">{detail.resultLines.join("\n")}</pre> : null}
+              {detail.relatedApprovals.length ? (
+                <div>
+                  <p className="panel__subtitle">Pending Approvals</p>
+                  {detail.relatedApprovals.map((approval) => (
+                    <div key={approval.approvalId} className="approval-stack__item">
+                      <p>{approval.summary}</p>
+                      <div className="task-row__actions">
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={() => onApproval(approval.approvalId, "allow-once")}
+                        >
+                          Allow Once
+                        </button>
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={() => onApproval(approval.approvalId, "allow-always")}
+                        >
+                          Allow Always
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => onApproval(approval.approvalId, "deny")}
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {detail.taskPacketApproval?.eligible ? (
+                <div>
+                  <p className="panel__subtitle">Task Packet Decision</p>
+                  <p>{detail.taskPacketApproval.reason}</p>
+                  <div className="task-row__actions">
+                    <button type="button" className="button" onClick={() => onTaskPacketApproval?.(detail.job.job_id, "approve-once")}>
+                      Approve Once
+                    </button>
+                    <button type="button" className="button button--ghost" onClick={() => onTaskPacketApproval?.(detail.job.job_id, "deny")}>
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {request ? (
+                <div className="task-row__actions">
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => {
+                      onFollowup(detail.job.job_id);
+                    }}
+                  >
+                    Ask ORION for rework
+                  </button>
+                  {request.status === "completed" || request.status === "failed" ? (
+                    <button type="button" className="button button--ghost" onClick={onAcknowledge}>
+                      Acknowledge Packet
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          <div className="task-row__actions">
+            <button type="button" className="button button--primary" onClick={onBack}>
+              Back
+            </button>
+          </div>
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
+function ActivityPanel({ items }: { items: ActivityItem[] }) {
+  return (
+    <Section title="Recent Activity">
+      {items.length ? (
+        <ul className="activity-list">
+          {items.slice(0, 20).map((item) => (
+            <li key={item.id} className="activity-item">
+              <p>
+                <span className={`activity-item__type tone-${item.type === "approval" ? "warn" : item.type === "system" ? "good" : "neutral"}`}>
+                  {item.type}
+                </span>
+                {item.title}
+              </p>
+              <p>{item.detail}</p>
+              <p className="activity-item__time">{formatRelativeTime(Math.max(1, Date.now() - item.atMs))}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="empty-mini">No recent activity yet.</p>
+      )}
+    </Section>
+  );
+}
+
+function SettingsPanel() {
+  const tg = getTelegramWebApp();
+  return (
+    <Section title="Settings / Diagnostics">
+      <dl className="detail-grid">
+        <div>
+          <dt>Telegram color scheme</dt>
+          <dd>{tg?.colorScheme || "unknown"}</dd>
+        </div>
+        <div>
+          <dt>Main button</dt>
+          <dd>{tg?.MainButton ? "Available" : "Unavailable"}</dd>
+        </div>
+        <div>
+          <dt>Back button</dt>
+          <dd>{tg?.BackButton ? "Available" : "Unavailable"}</dd>
+        </div>
+      </dl>
+      <p className="panel__subtitle">The app keeps Telegram shell sync explicit and only binds back behavior when there is a real route stack.</p>
+    </Section>
+  );
+}
+
+export function MiniAppView(props: MiniAppViewProps) {
+  const filteredQueue = useMemo(
+    () => buildQueueRows(props.tasks, props.queueFilter || "active"),
+    [props.tasks, props.queueFilter],
+  );
+  const rightNow = rightNowCounts(props.tasks);
+  const attentionTasks = useMemo(() => props.tasks.filter(isAttentionTask), [props.tasks]);
+  const lastRequest = summarizeLastRequest(props.tasks, props.queueRequests, props.conversation);
+
+  return (
+    <div className="orion-shell">
+      <header className="header">
+        <div>
+          <p className="eyebrow">ORION Relay Console</p>
+          <h1>{props.appName}</h1>
+        </div>
+        <p className={`bridge-status tone-${props.bridgeStatus.tone}`}>{props.bridgeStatus.label}</p>
+      </header>
+
+      <ChipNav active={props.route.screen} onChange={(screen) => props.onNavigate(screen)} />
+
+      {props.error ? <p className="banner banner--error">{props.error}</p> : null}
+      {props.actionMessage ? <p className="banner banner--info">{props.actionMessage}</p> : null}
+
+      {props.route.screen === "home" ? (
+        <main className="layout">
+          <Section title="What is Orion doing right now?">
+            <CardRow>
+              <StatCard label="Running" value={rightNow.running} tone="good" />
+              <StatCard label="Waiting" value={rightNow.waiting} tone="warn" />
+              <StatCard label="Needs Input" value={rightNow.needsInput} tone="warn" />
+            </CardRow>
+            <div className="quick-actions">
+              <button type="button" className="button button--primary" onClick={() => props.onNavigate("compose")}>
+                New Request
+              </button>
+              <button type="button" className="button" onClick={() => props.onNavigate("queue", "active")}>
+                Open Active Queue
+              </button>
+              <button type="button" className="button" onClick={() => props.onNavigate("status")}>
+                Open System Status
+              </button>
+            </div>
+          </Section>
+
+          <Section title="Last request" subtitle="One tap to inspect last request detail.">
+            <p className="detail-title">{lastRequest.text}</p>
+            {lastRequest.task ? (
+              <div className="task-row__actions">
+                <button type="button" className="button button--primary" onClick={() => props.onOpenTask(lastRequest.task!.id)}>
+                  Open Last Request
+                </button>
+              </div>
+            ) : null}
+          </Section>
+
+          <Section title="What needs attention?" subtitle="Needs Input / Failed / Stuck">
+            {attentionTasks.length ? (
+              <>
+                <CardRow>
+                  {attentionTasks.slice(0, 3).map((task) => {
+                    const request = props.queueRequests.find((item) => item.jobId === task.id);
+                    const tone = QUEUE_TONES[task.status] || "warn";
+                    return (
+                      <article key={task.id} className={`mini-task-tone tone-${tone}`}>
+                        <p className={`mini-task__status tone-${statusChipClass(task.status)}`}>{statusLabel(task.status)}</p>
+                        <p>{task.objective}</p>
+                        {request ? <p className="detail-text">{request.message}</p> : null}
+                        <button type="button" className="button button--primary" onClick={() => props.onOpenTask(task.id)}>
+                          Open
+                        </button>
+                      </article>
+                    );
+                  })}
+                </CardRow>
+                <div className="task-row__actions">
+                  <button type="button" className="button" onClick={() => props.onNavigate("queue", "needs_input")}>
+                    Open Attention Queue
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="empty-mini">No tasks need attention.</p>
+            )}
+          </Section>
+
+          <Section title="System Health" subtitle="API / Queue / Worker">
+            <CardRow>
+              <StatCard
+                label="API"
+                value={props.systemStatus.api}
+                tone={props.systemStatus.api === "online" ? "good" : "warn"}
+                detail={props.systemStatus.message}
+              />
+              <StatCard label="Queue" value={props.systemStatus.queue} tone={props.systemStatus.queue === "healthy" ? "good" : "warn"} />
+              <StatCard
+                label="Worker"
+                value={props.systemStatus.worker}
+                tone={props.systemStatus.worker === "healthy" ? "good" : "warn"}
+              />
+            </CardRow>
+            <p className="meta-text">Updated: {new Date(props.systemStatus.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>
+          </Section>
+
+          <Section title="Quick templates">
+            <div className="quick-actions">
+              {QUICK_TEMPLATES.map((template) => (
+                <button
+                  key={template.key}
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    props.onComposerChange(`${template.template} `);
+                    props.onNavigate("compose");
+                  }}
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
+          </Section>
+        </main>
+      ) : null}
+
+      {props.route.screen === "compose" ? (
+        <main className="layout">
+          <Section title="Compose Request" subtitle="One clear send action to Orion.">
+            <form
+              className="composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                props.onComposerSubmit();
+              }}
+            >
+              <label htmlFor="orion-composer" className="sr-only">
+                New request
+              </label>
+              <textarea
+                id="orion-composer"
+                value={props.composerText}
+                onChange={(event) => props.onComposerChange(event.target.value)}
+                placeholder="Tell ORION exactly what to do next..."
+                disabled={props.sending || !props.conversation}
+              />
+              {!props.hasNativeMainButton ? (
+                <button
+                  type="submit"
+                  className="button button--primary"
+                  disabled={props.sending || !props.conversation || !props.composerText.trim()}
+                >
+                  {props.sending ? "Sending..." : "Send to ORION"}
+                </button>
+              ) : null}
+            </form>
+            <p className="panel__subtitle">Template quick start</p>
+            <div className="quick-actions">
+              {QUICK_TEMPLATES.map((template) => (
+                <button
+                  key={template.key}
+                  type="button"
+                  className="button"
+                  onClick={() => props.onComposerChange(template.template)}
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
+          </Section>
+        </main>
+      ) : null}
+
+      {props.route.screen === "queue" ? (
+        <main className="layout">
+          <QueueFilterTabs
+            value={props.queueFilter || "active"}
+            onChange={(filter) => props.onNavigate("queue", filter)}
+          />
+          <TaskListSection
+            tasks={filteredQueue}
+            filter={props.queueFilter || "active"}
+            queueRequests={props.queueRequests}
+            onOpenTask={props.onOpenTask}
+            onFollowup={props.onFollowup}
+          />
+        </main>
+      ) : null}
+
+      {props.route.screen === "task" ? (
+        <main className="layout">
+          <TaskDetailPanel
+            task={
+              props.route.taskId ? props.tasks.find((task) => task.id === props.route.taskId) || null : null
+            }
+            request={props.route.taskId ? props.queueRequests.find((item) => item.jobId === props.route.taskId) || null : null}
+            detail={props.selectedJobDetail}
+            detailLoading={props.detailLoading}
+            onBack={() => props.onBack()}
+            onApproval={props.onApproval}
+            onTaskPacketApproval={props.onTaskPacketApproval}
+            onFollowup={props.onFollowup}
+            onAcknowledge={() => {
+              const request = props.route.taskId
+                ? props.queueRequests.find((item) => item.jobId === props.route.taskId)
+                : null;
+              if (request) props.onAcknowledgeQueueRequest(request.id);
+            }}
+          />
+        </main>
+      ) : null}
+
+      {props.route.screen === "status" ? (
+        <main className="layout">
+          <Section title="System Status" subtitle="Live diagnostics for the Orion relay">
+            <div className="detail-grid detail-grid--wide">
+              <div>
+                <dt>API</dt>
+                <dd>{props.systemStatus.api}</dd>
+              </div>
+              <div>
+                <dt>Queue</dt>
+                <dd>{props.systemStatus.queue}</dd>
+              </div>
+              <div>
+                <dt>Worker</dt>
+                <dd>{props.systemStatus.worker}</dd>
+              </div>
+              <div>
+                <dt>Queue packets</dt>
+                <dd>{props.queueRequests.length}</dd>
+              </div>
+              <div>
+                <dt>Last update</dt>
+                <dd>{new Date(props.systemStatus.updatedAt).toLocaleString()}</dd>
+              </div>
+            </div>
+            <p className="panel__subtitle">{props.systemStatus.message}</p>
+          </Section>
+        </main>
+      ) : null}
+
+      {props.route.screen === "activity" ? (
+        <main className="layout">
+          <ActivityPanel items={props.activity} />
+        </main>
+      ) : null}
+
+      {props.route.screen === "settings" ? (
+        <main className="layout">
+          <SettingsPanel />
+        </main>
+      ) : null}
+    </div>
+  );
 }
 
 export function createApiClient(): ApiClient {
@@ -208,11 +884,11 @@ export function createApiClient(): ApiClient {
         try {
           onRun(JSON.parse(event.data) as ChatRunPayload);
         } catch {
-          onError("ORION sent back a garbled bridge update.");
+          onError("ORION returned a malformed stream event.");
         }
       });
       source.addEventListener("error", () => {
-        onError("ORION lost the bridge signal for a moment.");
+        onError("Lost bridge event stream. Check in a moment.");
         source.close();
       });
       return () => source.close();
@@ -239,747 +915,58 @@ export function createApiClient(): ApiClient {
   };
 }
 
-type MiniAppViewProps = {
-  appName: string;
-  screen: MiniAppScreen;
-  screenLabel: string;
-  bridgeStatus: BridgeStatus;
-  conversation: ChatConversation | null;
-  inbox: InboxPayload | null;
-  selectedJobDetail: JobDetailPayload | null;
-  detailLoading: boolean;
-  home: HomePayload | null;
-  review: ReviewPayload | null;
-  queueRequests: QueueRequestView[];
-  loading: boolean;
-  error: string;
-  composerText: string;
-  sending: boolean;
-  hasNativeMainButton: boolean;
-  actionMessage: string;
-  selectedJobId: string | null;
-  onScreenChange(screen: MiniAppScreen): void;
-  onComposerChange(text: string): void;
-  onComposerSubmit(): void;
-  onApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny"): void;
-  onTaskPacketApproval?(jobId: string, decision: "approve-once" | "deny"): void;
-  onFollowup(jobId: string): void;
-  onAcknowledgeQueueRequest(requestId: string): void;
-  onSelectJob(jobId: string | null): void;
-  onQueueCenter(): void;
-};
-
-export function MiniAppView(props: MiniAppViewProps) {
-  const sections = props.inbox ? buildInboxSections(props.inbox) : [];
-  const visibleQueueRequests = props.queueRequests.filter((request) => request.status !== "acknowledged");
-  const selectedJob =
-    props.selectedJobId && props.inbox
-      ? props.inbox.jobs.find((job) => job.job_id === props.selectedJobId) || null
-      : null;
-  const latestQueueRequest = visibleQueueRequests[0] || null;
-
-  return (
-    <div className="starship-shell">
-      <div className="starfield" aria-hidden="true" />
-      <header className="hero">
-        <div className="hero__row">
-          <div>
-            <h1>{props.appName}</h1>
-            <p className="hero__lede">A friendly bridge into ORION: chat up front, mission inbox on deck, today in view.</p>
-          </div>
-          <div className={`bridge-status tone-${props.bridgeStatus.tone}`} aria-live="polite">
-            <span className="bridge-status__light" aria-hidden="true" />
-            <span>{props.bridgeStatus.label}</span>
-          </div>
-        </div>
-      </header>
-
-      <nav className="nav-grid" aria-label="ORION mini app sections">
-        {(["chat", "inbox", "today"] as MiniAppScreen[]).map((screen) => (
-          <button
-            key={screen}
-            type="button"
-            className={`nav-chip ${props.screen === screen ? "is-active" : ""}`}
-            aria-label={`Open ${screenTitle(screen)}`}
-            onClick={() => props.onScreenChange(screen)}
-          >
-            <span className="nav-chip__eyebrow">{screen === "chat" ? "Bridge" : screen === "inbox" ? "Mission" : "Status"}</span>
-            <span className="nav-chip__label">{screenTitle(screen)}</span>
-          </button>
-        ))}
-      </nav>
-
-      {props.error ? <div className="banner banner--error">{props.error}</div> : null}
-      {props.actionMessage ? <div className="banner banner--info">{props.actionMessage}</div> : null}
-
-      <main className="layout">
-        {props.screen === "chat" ? (
-          <section className="panel panel--chat">
-            <div className="panel__header">
-              <div>
-                <h2>{props.screenLabel}</h2>
-              </div>
-            </div>
-            <div className="transcript">
-              {props.loading ? <div className="empty-state">Booting the bridge console...</div> : null}
-              {!props.loading && props.conversation && props.conversation.messages.length === 0 ? (
-                <div className="empty-state">
-                  <p className="empty-state__title">ORION is on station.</p>
-                  <p>Ask for a summary, hand over a task, or queue the next move from the same bridge.</p>
-                </div>
-              ) : null}
-              {props.conversation?.messages.map((message) => (
-                <article key={message.id} className={`bubble bubble--${message.role}`}>
-                  <div className="bubble__meta">
-                    <span>{message.role === "assistant" ? "ORION" : message.role === "user" ? "You" : "Bridge"}</span>
-                    <span>{new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
-                  </div>
-                  <p>{message.text}</p>
-                </article>
-              ))}
-            </div>
-            <form
-              className="composer"
-              onSubmit={(event) => {
-                event.preventDefault();
-                props.onComposerSubmit();
-              }}
-            >
-              <textarea
-                value={props.composerText}
-                onChange={(event) => props.onComposerChange(event.target.value)}
-                placeholder="Message ORION from the bridge..."
-                disabled={props.sending || !props.conversation}
-              />
-              {!props.hasNativeMainButton ? (
-                <button
-                  type="submit"
-                  className="button button--primary"
-                  disabled={props.sending || !props.conversation || !props.composerText.trim()}
-                >
-                  {props.sending ? "Sending..." : "Send to ORION"}
-                </button>
-              ) : null}
-            </form>
-          </section>
-        ) : null}
-
-        {props.screen === "inbox" ? (
-          <section className="panel panel--inbox">
-            <div className="panel__header">
-              <div>
-                <h2>Mission Inbox</h2>
-              </div>
-              <div className="cluster-pills">
-                {sections.map((section) => (
-                  <div key={section.key} className="metric-pill">
-                    <span>{section.title}</span>
-                    <strong>{section.count}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="panel-grid">
-              <div className="stack">
-                <section className="subpanel">
-                  <h3>Approvals</h3>
-                  {props.inbox?.approvals.length ? (
-                    props.inbox.approvals.map((approval) => (
-                      <article key={approval.approvalId} className="list-card">
-                        <div className="list-card__meta">
-                          <span>{approval.label}</span>
-                          <span>{formatRelativeTime(approval.ageMs)}</span>
-                        </div>
-                        <p>{approval.summary}</p>
-                        <div className="action-row">
-                          <button type="button" className="button button--primary" onClick={() => props.onApproval(approval.approvalId, "allow-once")}>
-                            Allow Once
-                          </button>
-                          <button type="button" className="button" onClick={() => props.onApproval(approval.approvalId, "allow-always")}>
-                            Always
-                          </button>
-                          <button type="button" className="button button--ghost" onClick={() => props.onApproval(approval.approvalId, "deny")}>
-                            Deny
-                          </button>
-                        </div>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="empty-mini">No live approval prompts on the board.</div>
-                  )}
-                </section>
-
-                <section className="subpanel">
-                  <h3>Work Queue</h3>
-                  {props.inbox?.jobs.length ? (
-                    props.inbox.jobs.map((job) => {
-                      const queueRequest = requestForJob(props.queueRequests, job.job_id);
-                      const queueLocked = queueRequest && isActionableQueueStatus(queueRequest.status);
-                      const hasApproval = props.inbox?.approvals.some((approval) =>
-                        [approval.summary, approval.label, approval.sessionKey, approval.sessionId]
-                          .join(" ")
-                          .toLowerCase()
-                          .includes(job.job_id.toLowerCase())
-                      );
-                      return (
-                        <article key={job.job_id} className={`list-card tone-${statusTone(job.state)}`}>
-                          <div className="list-card__meta">
-                            <span>{job.owner}</span>
-                            <span>{job.state.replace(/_/g, " ")}</span>
-                          </div>
-                          <p>{job.objective}</p>
-                          <div className="mission-hints">
-                            {hasApproval ? <span className="hint-pill tone-warn">Approval needed</span> : null}
-                            {job.state_reason ? <span className="hint-pill">{job.state_reason.replace(/_/g, " ")}</span> : null}
-                            {job.result?.status ? <span className={`hint-pill tone-${statusTone(job.result.status)}`}>Result {job.result.status}</span> : null}
-                          </div>
-                          {queueRequest ? (
-                            <div className={`queue-chip tone-${queueStatusTone(queueRequest.status)}`}>
-                              <strong>{queueStatusLabel(queueRequest)}</strong>
-                              {queueRequest.status === "failed" ? <span>{queueRequest.message}</span> : null}
-                            </div>
-                          ) : null}
-                          <div className="action-row">
-                            <button type="button" className="button" onClick={() => props.onSelectJob(job.job_id)}>
-                              Inspect
-                            </button>
-                            {isFollowupActionable(job) ? (
-                              <button
-                                type="button"
-                                className="button button--primary"
-                                disabled={Boolean(queueLocked)}
-                                onClick={() => props.onFollowup(job.job_id)}
-                              >
-                                {queueStatusLabel(queueRequest)}
-                              </button>
-                            ) : null}
-                            {queueRequest && isAcknowledgableQueueStatus(queueRequest.status) ? (
-                              <button
-                                type="button"
-                                className="button button--ghost"
-                                onClick={() => props.onAcknowledgeQueueRequest(queueRequest.id)}
-                              >
-                                {queueAcknowledgeLabel()}
-                              </button>
-                            ) : null}
-                          </div>
-                        </article>
-                      );
-                    })
-                  ) : (
-                    <div className="empty-mini">Nothing is clogging the queue right now.</div>
-                  )}
-                </section>
-              </div>
-
-              <aside className="subpanel subpanel--detail">
-                <h3>{selectedJob ? "Selected Work Item" : "Queue Notes"}</h3>
-                {selectedJob ? (
-                  (() => {
-                    const queueRequest = requestForJob(props.queueRequests, selectedJob.job_id);
-                    const queueLocked = queueRequest && isActionableQueueStatus(queueRequest.status);
-                    const detail = props.selectedJobDetail && props.selectedJobDetail.job.job_id === selectedJob.job_id ? props.selectedJobDetail : null;
-                    return (
-                      <>
-                        <p className="detail-title">{selectedJob.objective}</p>
-                        {props.detailLoading ? <div className="empty-mini">Loading mission context...</div> : null}
-                        {detail ? (
-                          <div className="mission-brief">
-                            <section>
-                              <h4>What It Needs</h4>
-                              <p>{detail.needSummary}</p>
-                            </section>
-                            <section>
-                              <h4>Next Move</h4>
-                              <p>{detail.nextStep}</p>
-                            </section>
-                          </div>
-                        ) : null}
-                        <dl className="detail-grid">
-                          <div>
-                            <dt>Owner</dt>
-                            <dd>{selectedJob.owner}</dd>
-                          </div>
-                          <div>
-                            <dt>State</dt>
-                            <dd>{selectedJob.state}</dd>
-                          </div>
-                          <div>
-                            <dt>Inbox</dt>
-                            <dd>{selectedJob.inbox?.path || "n/a"}</dd>
-                          </div>
-                        </dl>
-                        {queueRequest ? (
-                          <div className={`queue-detail tone-${queueStatusTone(queueRequest.status)}`}>
-                            <strong>{queueStatusLabel(queueRequest)}</strong>
-                            {queueRequest.intakePath ? <span>{queueRequest.intakePath}</span> : null}
-                          </div>
-                        ) : null}
-                        {queueRequest && isAcknowledgableQueueStatus(queueRequest.status) ? (
-                          <div className="action-row">
-                            <button
-                              type="button"
-                              className="button button--ghost"
-                              onClick={() => props.onAcknowledgeQueueRequest(queueRequest.id)}
-                            >
-                              {queueAcknowledgeLabel()} and Close
-                            </button>
-                          </div>
-                        ) : null}
-                        {detail?.relatedApprovals.length ? (
-                          <div className="approval-stack">
-                            <h4>Command Approval</h4>
-                            {detail.relatedApprovals.map((approval) => (
-                              <article key={approval.approvalId} className="approval-card">
-                                <div className="list-card__meta">
-                                  <span>{approval.label}</span>
-                                  <span>{formatRelativeTime(approval.ageMs)}</span>
-                                </div>
-                                <p>{approval.summary}</p>
-                                <code>{`/approve ${approval.approvalId} ${approval.suggestedDecision}`}</code>
-                                <div className="action-row">
-                                  <button
-                                    type="button"
-                                    className="button button--primary"
-                                    onClick={() => props.onApproval(approval.approvalId, "allow-once")}
-                                  >
-                                    Allow Once
-                                  </button>
-                                  <button type="button" className="button" onClick={() => props.onApproval(approval.approvalId, "allow-always")}>
-                                    Always
-                                  </button>
-                                  <button type="button" className="button button--ghost" onClick={() => props.onApproval(approval.approvalId, "deny")}>
-                                    Deny
-                                  </button>
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-                        ) : null}
-                        {detail?.taskPacketApproval?.latestDecision ? (
-                          <div className="approval-stack">
-                            <h4>Task Packet Decision</h4>
-                            <article className="approval-card">
-                              <div className="list-card__meta">
-                                <span>
-                                  {detail.taskPacketApproval.latestDecision.decision === "approve_once"
-                                    ? "Approved Once"
-                                    : "Denied"}
-                                </span>
-                                <span>{detail.taskPacketApproval.latestDecision.createdAt}</span>
-                              </div>
-                              <p>{detail.taskPacketApproval.reason}</p>
-                              {detail.taskPacketApproval.followupJob ? (
-                                <div className="queue-chip tone-good">
-                                  <strong>Owner Follow-Up Queued</strong>
-                                  <span>
-                                    {detail.taskPacketApproval.followupJob.owner} · {detail.taskPacketApproval.followupJob.state.replace(/_/g, " ")} ·{" "}
-                                    {detail.taskPacketApproval.followupJob.job_id}
-                                  </span>
-                                </div>
-                              ) : null}
-                            </article>
-                          </div>
-                        ) : null}
-                        {detail?.taskPacketApproval?.eligible ? (
-                          <div className="approval-stack">
-                            <h4>Task Packet Decision</h4>
-                            <article className="approval-card">
-                              <p>{detail.taskPacketApproval.reason}</p>
-                              <div className="action-row">
-                                <button
-                                  type="button"
-                                  className="button button--primary"
-                                  onClick={() => props.onTaskPacketApproval?.(selectedJob.job_id, "approve-once")}
-                                >
-                                  Approve Once
-                                </button>
-                                <button
-                                  type="button"
-                                  className="button button--ghost"
-                                  onClick={() => props.onTaskPacketApproval?.(selectedJob.job_id, "deny")}
-                                >
-                                  Deny
-                                </button>
-                              </div>
-                            </article>
-                          </div>
-                        ) : null}
-                        {detail?.resultLines.length ? (
-                          <details className="detail-disclosure" open>
-                            <summary>Result Evidence</summary>
-                            <pre>{detail.resultLines.join("\n")}</pre>
-                          </details>
-                        ) : null}
-                        {detail?.packetText ? (
-                          <details className="detail-disclosure">
-                            <summary>Original Packet</summary>
-                            <pre>{detail.packetText}</pre>
-                          </details>
-                        ) : null}
-                        <div className="action-row">
-                          {isFollowupActionable(selectedJob) ? (
-                            <button
-                              type="button"
-                              className={detail?.taskPacketApproval?.eligible ? "button" : "button button--primary"}
-                              disabled={Boolean(queueLocked)}
-                              onClick={() => props.onFollowup(selectedJob.job_id)}
-                            >
-                              {queueStatusLabel(queueRequest)}
-                            </button>
-                          ) : null}
-                          {queueRequest ? (
-                            <button type="button" className="button" onClick={props.onQueueCenter}>
-                              View Queue
-                            </button>
-                          ) : null}
-                          <button type="button" className="button button--ghost" onClick={() => props.onSelectJob(null)}>
-                            Close
-                          </button>
-                        </div>
-                      </>
-                    );
-                  })()
-                ) : (
-                  <div className="empty-mini">
-                    <p>Select a work item to inspect the packet context.</p>
-                    <p>Approvals and follow-ups stay limited to existing command paths, not a shadow task system.</p>
-                  </div>
-                )}
-              </aside>
-            </div>
-            <button type="button" className="queue-activity" onClick={props.onQueueCenter}>
-              <span>
-                {latestQueueRequest
-                  ? `${queueStatusLabel(latestQueueRequest)} · ${formatQueueRequestTime(latestQueueRequest.createdAt)}`
-                  : "Queue activity"}
-              </span>
-              <strong>{visibleQueueRequests.length ? `${visibleQueueRequests.length} recent` : "Open"}</strong>
-            </button>
-          </section>
-        ) : null}
-
-        {props.screen === "queue" ? (
-          <section className="panel panel--queue">
-            <div className="panel__header">
-              <div>
-                <h2>Queue Center</h2>
-                <p className="panel__note">Recent POLARIS rework requests from this Mini App.</p>
-              </div>
-              <button type="button" className="button" onClick={() => props.onScreenChange("inbox")}>
-                Mission Inbox
-              </button>
-            </div>
-            <div className="queue-list">
-              {visibleQueueRequests.length ? (
-                visibleQueueRequests.map((request) => (
-                  <article key={request.id} className={`list-card queue-card tone-${queueStatusTone(request.status)}`}>
-                    <div className="list-card__meta">
-                      <span>{request.owner}</span>
-                      <span>{formatQueueRequestTime(request.createdAt)}</span>
-                    </div>
-                    <h3>{queueStatusLabel(request)}</h3>
-                    <p>{request.message}</p>
-                    <dl className="detail-grid">
-                      <div>
-                        <dt>Job</dt>
-                        <dd>{request.jobId}</dd>
-                      </div>
-                      <div>
-                        <dt>Intake</dt>
-                        <dd>{request.intakePath || "pending"}</dd>
-                      </div>
-                      <div>
-                        <dt>Packet</dt>
-                        <dd>{request.packetNumber ? `#${request.packetNumber}` : "pending"}</dd>
-                      </div>
-                    </dl>
-                    {isAcknowledgableQueueStatus(request.status) ? (
-                      <div className="action-row">
-                        <button
-                          type="button"
-                          className="button button--primary"
-                          onClick={() => props.onAcknowledgeQueueRequest(request.id)}
-                        >
-                          {queueAcknowledgeLabel()} and Close
-                        </button>
-                      </div>
-                    ) : null}
-                  </article>
-                ))
-              ) : (
-                <div className="empty-mini">No active queue requests have been created from this Mini App yet.</div>
-              )}
-            </div>
-          </section>
-        ) : null}
-
-        {props.screen === "today" ? (
-          <section className="panel panel--today">
-            <div className="panel__header">
-              <div>
-                <h2>Today</h2>
-              </div>
-            </div>
-            <div className="today-grid">
-              <article className="subpanel">
-                <h3>Today Snapshot</h3>
-                <pre>{props.home?.today || "No status snapshot yet."}</pre>
-              </article>
-              <article className="subpanel">
-                <h3>Follow-Ups</h3>
-                <pre>{props.review?.followups || "No follow-up digest yet."}</pre>
-              </article>
-              <article className="subpanel">
-                <h3>Review</h3>
-                <pre>{props.review?.review || props.home?.review || "No review digest yet."}</pre>
-              </article>
-            </div>
-          </section>
-        ) : null}
-      </main>
-    </div>
-  );
-}
-
-export function MiniApp({ api }: { api?: ApiClient }) {
-  const defaultApi = useMemo(() => createApiClient(), []);
-  const client = api ?? defaultApi;
+export function MiniApp({ api: providedApi }: { api?: ApiClient }) {
+  const client = useMemo(() => providedApi ?? createApiClient(), [providedApi]);
   const tg = useMemo(() => getTelegramWebApp(), []);
+
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
   const [home, setHome] = useState<HomePayload | null>(null);
   const [review, setReview] = useState<ReviewPayload | null>(null);
   const [inbox, setInbox] = useState<InboxPayload | null>(null);
-  const [screen, setScreen] = useState<MiniAppScreen>("chat");
-  const [routeStack, setRouteStack] = useState<MiniAppScreen[]>(["chat"]);
+  const [routeStack, setRouteStack] = useState<RouteEntry[]>([{ screen: "home" }]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const [composerText, setComposerText] = useState("");
   const [sending, setSending] = useState(false);
-  const [actionMessage, setActionMessage] = useState("");
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedJobDetail, setSelectedJobDetail] = useState<JobDetailPayload | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [queueRequests, setQueueRequests] = useState<QueueRequestView[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+
   const streamCleanupRef = useRef<(() => void) | null>(null);
-  const followupInFlightRef = useRef(new Set<string>());
+    const followupInFlight = useRef<Set<string>>(new Set());
   const mainButtonClickRef = useRef<() => void>(() => undefined);
   const backButtonClickRef = useRef<() => void>(() => undefined);
-  const mainButtonListenerRef = useRef<() => void>(() => {
-    mainButtonClickRef.current();
-  });
-  const backButtonListenerRef = useRef<() => void>(() => {
-    backButtonClickRef.current();
-  });
-  const lastChatCanSendRef = useRef<boolean | null>(null);
-  const selectedJob = selectedJobId && inbox ? inbox.jobs.find((job) => job.job_id === selectedJobId) || null : null;
-  const selectedQueueRequest = selectedJob ? requestForJob(queueRequests, selectedJob.job_id) : null;
-  const hasBackDestination = selectedJobId !== null || routeStack.length > 1;
-  const bridgeStatus = deriveBridgeStatus({ loading, error, sending, conversation, home, review, inbox });
+  const mainButtonEventRef = useRef<() => void>(() => mainButtonClickRef.current());
+  const backButtonEventRef = useRef<() => void>(() => backButtonClickRef.current());
+
+  const currentRoute = routeStack.at(-1) || { screen: "home" };
+  const canGoBack = routeStack.length > 1;
+
+  const tasks = useMemo(() => buildTaskRows(inbox), [inbox]);
+  const systemStatus = useMemo(() => deriveSystemStatus({ loading, error, home, review, inbox, queueRequests }), [loading, error, home, review, inbox, queueRequests]);
+  const bridgeStatus = resolveBridgeStatus({ loading, error, sending, home, review, inbox, conversation });
 
   useEffect(() => {
     prepareTelegramShell(tg);
-    const refreshShell = () => {
+    const syncTheme = () => {
       applyTelegramTheme(tg);
       applySafeAreaInsets(tg);
     };
-    tg?.onEvent?.("themeChanged", refreshShell);
-    tg?.onEvent?.("viewportChanged", refreshShell);
-    tg?.onEvent?.("safeAreaChanged", refreshShell);
-    tg?.onEvent?.("contentSafeAreaChanged", refreshShell);
+    syncTheme();
+    tg?.onEvent?.("themeChanged", syncTheme);
+    tg?.onEvent?.("viewportChanged", syncTheme);
+    tg?.onEvent?.("safeAreaChanged", syncTheme);
+    tg?.onEvent?.("contentSafeAreaChanged", syncTheme);
     return () => {
-      tg?.offEvent?.("themeChanged", refreshShell);
-      tg?.offEvent?.("viewportChanged", refreshShell);
-      tg?.offEvent?.("safeAreaChanged", refreshShell);
-      tg?.offEvent?.("contentSafeAreaChanged", refreshShell);
+      tg?.offEvent?.("themeChanged", syncTheme);
+      tg?.offEvent?.("viewportChanged", syncTheme);
+      tg?.offEvent?.("safeAreaChanged", syncTheme);
+      tg?.offEvent?.("contentSafeAreaChanged", syncTheme);
     };
   }, [tg]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    client
-      .bootstrap()
-      .then((bootstrapPayload) => {
-        if (cancelled) return;
-        setBootstrap(bootstrapPayload);
-        setConversation(bootstrapPayload.conversation);
-        const startScreen = screenFromStartapp(bootstrapPayload.startapp);
-        setScreen(startScreen);
-        setRouteStack([startScreen]);
-        setError("");
-
-        return Promise.allSettled([client.home(), client.review(), client.inbox()]).then((results) => {
-          if (cancelled) return;
-          const [homeResult, reviewResult, inboxResult] = results;
-          if (homeResult.status === "fulfilled") {
-            setHome(homeResult.value);
-          }
-          if (reviewResult.status === "fulfilled") {
-            setReview(reviewResult.value);
-          }
-          if (inboxResult.status === "fulfilled") {
-            setInbox(inboxResult.value);
-            setQueueRequests((current) => mergeQueueRequests(current, inboxResult.value.queueRequests || []));
-          }
-          if (results.some((result) => result.status === "rejected")) {
-            setActionMessage("Bridge chat is live. One of the side panels is still warming up.");
-          }
-        });
-      })
-      .catch((loadError) => {
-        if (cancelled) return;
-        const message = loadError instanceof Error ? loadError.message : "ORION could not boot the bridge.";
-        setError(message.startsWith("miniapp-auth:") ? "Telegram bridge auth drifted. Close the Mini App and reopen it from Telegram." : message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client]);
-
-  function goToRootScreen(next: MiniAppScreen) {
-    if (next === screen) {
-      setSelectedJobId(null);
-      setSelectedJobDetail(null);
-      return;
-    }
-    setScreen(next);
-    setSelectedJobId(null);
-    setSelectedJobDetail(null);
-    setRouteStack([next]);
-  }
-
-  function openQueueCenter() {
-    if (screen === "inbox") {
-      setSelectedJobId(null);
-      setSelectedJobDetail(null);
-      setScreen("queue");
-      setRouteStack((current) => {
-        if (current[current.length - 1] === "queue") return current;
-        return [...current, "queue"];
-      });
-      return;
-    }
-
-    setScreen("queue");
-    setRouteStack((current) => {
-      if (current[current.length - 1] === "queue") return current;
-      return [...current, "queue"];
-    });
-  }
-
-  function goBack() {
-    if (screen === "inbox" && selectedJobId) {
-      setSelectedJobId(null);
-      setSelectedJobDetail(null);
-      return;
-    }
-
-    if (routeStack.length <= 1) {
-      return;
-    }
-
-    setRouteStack((current) => {
-      if (current.length <= 1) return current;
-      const nextStack = current.slice(0, -1);
-      const nextScreen = nextStack[nextStack.length - 1];
-      setScreen(nextScreen || "chat");
-      return nextStack;
-    });
-  }
-
-  mainButtonClickRef.current = () => {
-    if (screen === "chat" && !sending) {
-      void handleSubmit();
-      return;
-    }
-    if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
-      if (selectedQueueRequest?.status === "queuing") return;
-      if (selectedQueueRequest && isActionableQueueStatus(selectedQueueRequest.status)) {
-        openQueueCenter();
-        return;
-      }
-      void handleFollowup(selectedJob.job_id);
-    }
-  };
-  backButtonClickRef.current = () => {
-    goBack();
-  };
-
-  useEffect(() => {
-    if (!tg?.MainButton || !tg?.BackButton) return;
-    const mainButton = tg.MainButton;
-    const backButton = tg.BackButton;
-    const mainClick = mainButtonListenerRef.current;
-    const backClick = backButtonListenerRef.current;
-
-    safeNative(() => mainButton.offClick(mainClick));
-    safeNative(() => backButton.offClick(backClick));
-    safeNative(() => mainButton.hideProgress?.());
-    safeNative(() => mainButton.hide());
-    safeNative(() => backButton.hide());
-
-    if (screen === "chat") {
-      safeNative(() => mainButton.setText(sending ? "Sending..." : "Send to ORION"));
-      lastChatCanSendRef.current = null;
-      safeNative(() => mainButton.show());
-      safeNative(() => mainButton.onClick(mainClick));
-    }
-    if (screen === "inbox" && selectedJob && isFollowupActionable(selectedJob)) {
-      const isQueued = selectedQueueRequest && isActionableQueueStatus(selectedQueueRequest.status);
-      safeNative(() => mainButton.setText(isQueued ? "View Queue" : queueStatusLabel(selectedQueueRequest)));
-      if (selectedQueueRequest?.status === "queuing") {
-        safeNative(() => mainButton.disable?.());
-        safeNative(() => mainButton.showProgress?.(true));
-      } else {
-        safeNative(() => mainButton.enable?.());
-      }
-      safeNative(() => mainButton.show());
-      safeNative(() => mainButton.onClick(mainClick));
-    }
-    if (hasBackDestination) {
-      safeNative(() => backButton.show());
-      safeNative(() => backButton.onClick(backClick));
-    } else {
-      safeNative(() => backButton.offClick(backClick));
-      safeNative(() => backButton.hide());
-    }
-
-    return () => {
-      safeNative(() => mainButton.hideProgress?.());
-      safeNative(() => mainButton.offClick(mainClick));
-      safeNative(() => backButton.offClick(backClick));
-    };
-  }, [screen, selectedJobId, selectedJob, selectedQueueRequest, sending, hasBackDestination, tg]);
-
-  useEffect(() => {
-    if (!tg?.MainButton || screen !== "chat") return;
-    const canSend = Boolean(composerText.trim() && conversation && !sending);
-    if (lastChatCanSendRef.current === canSend) return;
-    lastChatCanSendRef.current = canSend;
-    if (canSend) {
-      safeNative(() => tg.MainButton?.enable?.());
-    } else {
-      safeNative(() => tg.MainButton?.disable?.());
-    }
-  }, [composerText, conversation, screen, sending, tg]);
-
-  function applyRun(run: ChatRunPayload) {
-    setConversation(run.conversation);
-    if (run.status === "completed") {
-      setSending(false);
-      vibrateNotice(tg, "success");
-    }
-    if (run.status === "failed") {
-      setSending(false);
-      setError(run.error || "ORION hit a bridge snag.");
-      vibrateNotice(tg, "error");
-    }
-  }
 
   async function refreshPanels() {
     const [homePayload, reviewPayload, inboxPayload] = await Promise.all([client.home(), client.review(), client.inbox()]);
@@ -987,214 +974,382 @@ export function MiniApp({ api }: { api?: ApiClient }) {
     setReview(reviewPayload);
     setInbox(inboxPayload);
     setQueueRequests((current) => mergeQueueRequests(current, inboxPayload.queueRequests || []));
+    setActivity(buildActivityFeed(homePayload, inboxPayload, inboxPayload.queueRequests || [], reviewPayload));
   }
 
-  async function handleSubmit() {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    client
+      .bootstrap()
+      .then(async (payload) => {
+        if (cancelled) return;
+        setBootstrap(payload);
+        setConversation(payload.conversation);
+
+        const start = screenFromStartapp(payload.startapp);
+        const taskId = parseTaskIdFromStartapp(payload.startapp);
+        const nextStack: RouteEntry[] =
+          start === "home"
+            ? [{ screen: "home" }]
+            : start === "task" && taskId
+              ? [{ screen: "home" }, { screen: "task", taskId }]
+              : [{ screen: "home" }, { screen: start }];
+        setRouteStack(nextStack);
+
+        await refreshPanels();
+        setError("");
+      })
+      .catch((bootstrapError) => {
+        if (cancelled) return;
+        setError(bootstrapError instanceof Error ? bootstrapError.message : "ORION could not bootstrap.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (currentRoute.screen !== "task" || !currentRoute.taskId) {
+      setSelectedJobDetail(null);
+      return;
+    }
+    setSelectedJobDetail(null);
+    setDetailLoading(true);
+    client
+      .fetchJobDetail(currentRoute.taskId)
+      .then((detail) => setSelectedJobDetail(detail))
+      .catch((detailError) =>
+        setError(detailError instanceof Error ? detailError.message : "Could not load task detail."),
+      )
+      .finally(() => setDetailLoading(false));
+  }, [client, currentRoute.screen, currentRoute.taskId]);
+
+  useEffect(() => {
+    const mainButton = tg?.MainButton;
+    if (!mainButton) return;
+
+    mainButtonClickRef.current = () => {
+      if (currentRoute.screen === "compose" && !sending && conversation && composerText.trim()) {
+        void handleSubmit();
+      }
+    };
+
+    safeNative(() => mainButton.offClick(mainButtonEventRef.current));
+    safeNative(() => mainButton.hide());
+
+    if (currentRoute.screen === "compose") {
+      safeNative(() => mainButton.setText(sending ? "Sending..." : "Send to ORION"));
+      safeNative(() => mainButton.onClick(mainButtonEventRef.current));
+      if (composerText.trim() && conversation && !sending) {
+        safeNative(() => mainButton.enable?.());
+      } else {
+        safeNative(() => mainButton.disable?.());
+      }
+      safeNative(() => mainButton.show());
+    }
+
+    return () => {
+      safeNative(() => mainButton.offClick(mainButtonEventRef.current));
+    };
+  }, [conversation, currentRoute.screen, composerText, sending, tg]);
+
+  useEffect(() => {
+    const backButton = tg?.BackButton;
+    if (!backButton) return;
+
+    backButtonClickRef.current = () => {
+      if (canGoBack) {
+        handleBack();
+      }
+    };
+
+    safeNative(() => backButton.offClick(backButtonEventRef.current));
+    safeNative(() => backButton.hide());
+
+    if (canGoBack) {
+      safeNative(() => backButton.show());
+      safeNative(() => backButton.onClick(backButtonEventRef.current));
+    }
+
+    return () => {
+      safeNative(() => backButton.offClick(backButtonEventRef.current));
+    };
+  }, [canGoBack, tg]);
+
+  useEffect(() => {
+    if (!tg?.MainButton || currentRoute.screen !== "compose") return;
+    if (!conversation || !composerText.trim() || sending) {
+      safeNative(() => tg?.MainButton?.disable?.());
+    } else {
+      safeNative(() => tg?.MainButton?.enable?.());
+    }
+  }, [composerText, conversation, currentRoute.screen, sending, tg]);
+
+  useEffect(() => {
+    return () => streamCleanupRef.current?.();
+  }, []);
+
+  function updateQueueState(update: (incoming: QueueRequestView[]) => QueueRequestView[]) {
+    setQueueRequests((current) => update(current));
+  }
+
+  function handleSubmit() {
     const text = composerText.trim();
-    if (!text || sending || !conversation) return;
+    if (!text || !conversation || sending) return;
     setSending(true);
     setError("");
     setActionMessage("");
     vibrateImpact(tg, "medium");
 
-    const optimisticMessage = {
-      id: `optimistic-${Date.now()}`,
-      role: "user" as const,
-      text,
-      createdAt: Date.now(),
-    };
-    setConversation({
-      ...conversation,
-      updatedAt: Date.now(),
-      messages: [...conversation.messages, optimisticMessage],
+    setConversation((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        updatedAt: Date.now(),
+        messages: [
+          ...current.messages,
+          {
+            id: `optimistic-${Date.now()}`,
+            role: "user",
+            text,
+            createdAt: Date.now(),
+          },
+        ],
+      };
     });
     setComposerText("");
 
-    try {
-      const run = await client.sendChat({
-        conversationId: conversation.conversationId,
-        message: text,
+    client
+      .sendChat({ conversationId: conversation.conversationId, message: text })
+      .then((run) => {
+        applyRun(run);
+        streamCleanupRef.current?.();
+        streamCleanupRef.current = client.streamRun(
+          run.runId,
+          (payload) => {
+            applyRun(payload);
+          },
+          (message) => {
+            setSending(false);
+            setError(message);
+            vibrateNotice(tg, "error");
+          },
+        );
+      })
+      .catch((submitError) => {
+        setSending(false);
+        setError(submitError instanceof Error ? submitError.message : "ORION did not accept this request.");
+        vibrateNotice(tg, "error");
       });
-      applyRun(run);
-      streamCleanupRef.current?.();
-      streamCleanupRef.current = client.streamRun(
-        run.runId,
-        (payload) => {
-          applyRun(payload);
-        },
-        (message) => {
-          setSending(false);
-          setError(message);
-        }
-      );
-    } catch (submitError) {
+  }
+
+  function applyRun(run: ChatRunPayload) {
+    setConversation(run.conversation);
+    if (run.status === "completed") {
       setSending(false);
-      setError(submitError instanceof Error ? submitError.message : "ORION could not take the message.");
-      vibrateNotice(tg, "error");
-    }
-  }
-
-  async function handleApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny") {
-    setActionMessage("");
-    try {
-      const payload = await client.resolveApproval(approvalId, decision);
-      setActionMessage(payload.message);
-      await refreshPanels();
       vibrateNotice(tg, "success");
-      if (payload.closesWebApp) {
-        setTimeout(() => tg?.close?.(), 350);
-      }
-    } catch (approvalError) {
-      setError(approvalError instanceof Error ? approvalError.message : "Approval action failed.");
+      void refreshPanels().catch(() => {});
+    }
+    if (run.status === "failed") {
+      setSending(false);
+      setError(run.error || "ORION run failed.");
       vibrateNotice(tg, "error");
     }
   }
 
-  async function handleTaskPacketApproval(jobId: string, decision: "approve-once" | "deny") {
+  function handleApproval(approvalId: string, decision: "allow-once" | "allow-always" | "deny") {
+    setActionMessage("");
+    client
+      .resolveApproval(approvalId, decision)
+      .then((payload) => {
+        setActionMessage(
+          payload.message + (payload.closesWebApp ? "" : payload.message.includes("Run this manually")
+            ? ""
+            : " Keep Telegram open and tap again if needed."),
+        );
+        return refreshPanels().catch((refreshError) => {
+          setError(refreshError instanceof Error ? refreshError.message : "Action applied; refresh failed.");
+        });
+      })
+      .then(() => vibrateNotice(tg, "success"))
+      .catch((approvalError) => {
+        setError(approvalError instanceof Error ? approvalError.message : "Approval action failed.");
+        vibrateNotice(tg, "error");
+      });
+  }
+
+  function handleTaskPacketApproval(jobId: string, decision: "approve-once" | "deny") {
     setActionMessage("");
     setError("");
-    try {
-      const payload = await client.resolveTaskPacketApproval(jobId, decision);
-      setActionMessage(payload.message);
-      await refreshPanels();
-      if (selectedJobId === jobId) {
-        setSelectedJobDetail(await client.fetchJobDetail(jobId));
-      }
-      vibrateNotice(tg, "success");
-    } catch (approvalError) {
-      setError(approvalError instanceof Error ? approvalError.message : "Task Packet approval failed.");
-      vibrateNotice(tg, "error");
-    }
+    client
+      .resolveTaskPacketApproval(jobId, decision)
+      .then((payload) => {
+        setActionMessage(payload.message);
+        return refreshPanels().catch((refreshError) => {
+          setError(refreshError instanceof Error ? refreshError.message : "Task action applied; refresh failed.");
+        });
+      })
+      .then(() => {
+        if (currentRoute.taskId === jobId) {
+          return client.fetchJobDetail(jobId).then((detail) => setSelectedJobDetail(detail));
+        }
+      })
+      .then(() => vibrateNotice(tg, "success"))
+      .catch((approvalError) => {
+        setError(approvalError instanceof Error ? approvalError.message : "Task packet action failed.");
+        vibrateNotice(tg, "error");
+      });
   }
 
-  async function handleFollowup(jobId: string) {
-    setActionMessage("");
-    setError("");
-    if (followupInFlightRef.current.has(jobId)) return;
-    const existing = requestForJob(queueRequests, jobId);
-    if (existing && isActionableQueueStatus(existing.status)) {
-      setScreen("queue");
+  function handleFollowup(jobId: string) {
+    if (followupInFlight.current.has(jobId)) return;
+    followupInFlight.current.add(jobId);
+    const alreadyQueued = queueRequests.find((request) => request.jobId === jobId);
+    if (alreadyQueued && (alreadyQueued.status === "queued" || alreadyQueued.status === "refresh_delayed")) {
+      handleRootNavigate("queue", "active");
+      followupInFlight.current.delete(jobId);
       return;
     }
-    followupInFlightRef.current.add(jobId);
-    const pendingRequest: QueueRequestView = {
+
+    const optimistic: QueueRequestView = {
       id: `pending-${jobId}`,
       jobId,
       owner: "POLARIS",
       status: "queuing",
-      message: "Asking POLARIS to rework this packet.",
+      message: "Submitting follow-up request...",
       intakePath: "",
       createdAt: new Date().toISOString(),
     };
-    setQueueRequests((current) => mergeQueueRequests(current.filter((request) => request.id !== pendingRequest.id), [pendingRequest]));
-    try {
-      const payload = await client.createFollowup(jobId);
-      const queuedRequest: QueueRequestView =
-        payload.request || {
-          id: `local-${Date.now()}`,
-          jobId,
-          owner: "POLARIS",
-          status: "queued",
-          message: payload.message || "Rework request queued for POLARIS.",
-          intakePath: "",
-          createdAt: new Date().toISOString(),
-        };
-      setQueueRequests((current) => mergeQueueRequests(current.filter((request) => request.id !== pendingRequest.id), [queuedRequest]));
-      try {
-        await refreshPanels();
-      } catch (refreshError) {
-        const delayedRequest: QueueRequestView = { ...queuedRequest, status: "refresh_delayed" };
-        setQueueRequests((current) =>
+    updateQueueState((current) => mergeQueueRequests(current, [optimistic]));
+
+    client
+      .createFollowup(jobId)
+      .then((payload) => {
+        const queued: QueueRequestView = payload.request
+          ? { ...payload.request, status: payload.request.status }
+          : {
+              id: `local-${Date.now()}`,
+              jobId,
+              owner: "POLARIS",
+              status: "queued",
+              message: payload.message || "Follow-up queued.",
+              intakePath: "",
+              createdAt: new Date().toISOString(),
+            };
+        updateQueueState((current) =>
           mergeQueueRequests(
-            current.filter((request) => request.id !== pendingRequest.id && request.id !== queuedRequest.id),
-            [delayedRequest]
-          )
+            current.filter((request) => request.id !== optimistic.id),
+            [queued],
+          ),
         );
-        void client.updateQueueRequestStatus(queuedRequest.id, "refresh_delayed").catch(() => undefined);
+        setActionMessage(payload.message || "Follow-up queued.");
+        vibrateNotice(tg, "success");
+      })
+      .catch((followupError) => {
+        const message = followupError instanceof Error ? followupError.message : "Follow-up failed.";
+        const failed: QueueRequestView = {
+          ...optimistic,
+          status: "failed",
+          message: /secret|raw|token/i.test(message)
+            ? "Follow-up failed. Please retry from task detail."
+            : message,
+        };
+        updateQueueState((current) => mergeQueueRequests(current.filter((request) => request.id !== optimistic.id), [failed]));
+        setError("Follow-up action failed.");
+        vibrateNotice(tg, "error");
+      })
+      .finally(() => {
+        followupInFlight.current.delete(jobId);
+      });
+  }
+
+  function handleAcknowledgeQueueRequest(requestId: string) {
+    client
+      .updateQueueRequestStatus(requestId, "acknowledged")
+      .then((payload) => {
+        updateQueueState((current) => mergeQueueStates(current, [payload.request]));
+        return refreshPanels();
+      })
+      .then(() => vibrateNotice(tg, "success"))
+      .catch((ackError) => {
+        setError(ackError instanceof Error ? ackError.message : "Could not acknowledge queue packet.");
+        vibrateNotice(tg, "error");
+      });
+  }
+
+  function mergeQueueStates(current: QueueRequestView[], incoming: QueueRequestView[]) {
+    return mergeQueueRequests(current, incoming);
+  }
+
+  function handleRootNavigate(screen: MiniAppScreen, queueFilter?: QueueFilter) {
+    if (screen === "home") {
+      setRouteStack([{ screen: "home" }]);
+      return;
+    }
+
+    if (screen === "queue") {
+      setRouteStack([{ screen: "home" }, { screen: "queue", queueFilter: queueFilter || "active" }]);
+      return;
+    }
+
+    setRouteStack([{ screen: "home" }, { screen }]);
+  }
+
+  function handleOpenTask(taskId: string) {
+    setRouteStack((current) => {
+      const top = current.at(-1);
+      if (top?.screen === "task") {
+        if (top.taskId === taskId) return current;
+        return [...current.slice(0, -1), { screen: "task", taskId }];
       }
-      vibrateNotice(tg, "success");
-    } catch (followupError) {
-      const failedMessage = friendlyPanelError(followupError, "Follow-up action failed.");
-      setQueueRequests((current) =>
-        mergeQueueRequests(
-          current.filter((request) => request.id !== pendingRequest.id),
-          [{ ...pendingRequest, status: "failed", message: failedMessage }]
-        )
-      );
-      vibrateNotice(tg, "error");
-    } finally {
-      followupInFlightRef.current.delete(jobId);
-    }
+      return [...current, { screen: "task", taskId }];
+    });
   }
 
-  async function handleAcknowledgeQueueRequest(requestId: string) {
-    setActionMessage("");
-    setError("");
-    try {
-      const payload = await client.updateQueueRequestStatus(requestId, "acknowledged");
-      setQueueRequests((current) => mergeQueueRequests(current, [payload.request]));
-      await refreshPanels();
-      setActionMessage("Queue packet acknowledged.");
-      vibrateNotice(tg, "success");
-    } catch (ackError) {
-      setError(ackError instanceof Error ? ackError.message : "Queue packet could not be acknowledged.");
-      vibrateNotice(tg, "error");
-    }
+  function handleBack() {
+    if (!canGoBack) return;
+    setRouteStack((current) => current.slice(0, -1));
   }
-
-  async function handleSelectJob(jobId: string | null) {
-    setSelectedJobId(jobId);
-    setSelectedJobDetail(null);
-    setError("");
-    if (!jobId) return;
-    setDetailLoading(true);
-    try {
-      const detail = await client.fetchJobDetail(jobId);
-      setSelectedJobDetail(detail);
-    } catch (detailError) {
-      setError(detailError instanceof Error ? detailError.message : "Mission detail could not load.");
-    } finally {
-      setDetailLoading(false);
-    }
-  }
-
-  useEffect(() => () => streamCleanupRef.current?.(), []);
 
   return (
     <MiniAppView
       appName={bootstrap?.appName || "ORION"}
-      screen={screen}
-      screenLabel={screenTitle(screen)}
+      route={currentRoute}
+      routeDepth={routeStack.length}
       bridgeStatus={bridgeStatus}
-      conversation={conversation}
-      inbox={inbox}
-      selectedJobDetail={selectedJobDetail}
-      detailLoading={detailLoading}
-      home={home}
-      review={review}
-      queueRequests={queueRequests}
+      canGoBack={canGoBack}
       loading={loading}
       error={error}
+      actionMessage={actionMessage}
+      conversation={conversation}
+      inbox={inbox}
+      home={home}
+      review={review}
+      tasks={tasks}
+      queueFilter={currentRoute.queueFilter || "active"}
+      queueRequests={queueRequests}
+      activity={activity}
+      systemStatus={systemStatus}
+      selectedJobDetail={selectedJobDetail}
+      detailLoading={detailLoading}
       composerText={composerText}
       sending={sending}
       hasNativeMainButton={Boolean(tg?.MainButton)}
-      actionMessage={actionMessage}
-      selectedJobId={selectedJobId}
-      onScreenChange={(next) => {
-        goToRootScreen(next);
-        vibrateSelection(tg);
-      }}
+      onNavigate={handleRootNavigate}
+      onBack={handleBack}
       onComposerChange={setComposerText}
-      onComposerSubmit={() => void handleSubmit()}
-      onApproval={(approvalId, decision) => void handleApproval(approvalId, decision)}
-      onTaskPacketApproval={(jobId, decision) => void handleTaskPacketApproval(jobId, decision)}
-      onFollowup={(jobId) => void handleFollowup(jobId)}
-      onAcknowledgeQueueRequest={(requestId) => void handleAcknowledgeQueueRequest(requestId)}
-      onSelectJob={(jobId) => void handleSelectJob(jobId)}
-      onQueueCenter={() => {
-        openQueueCenter();
-        vibrateSelection(tg);
-      }}
+      onComposerSubmit={() => handleSubmit()}
+      onApproval={handleApproval}
+      onTaskPacketApproval={handleTaskPacketApproval}
+      onFollowup={handleFollowup}
+      onAcknowledgeQueueRequest={handleAcknowledgeQueueRequest}
+      onOpenTask={handleOpenTask}
+      onClearError={() => setError("")}
     />
   );
 }
