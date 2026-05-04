@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run a one-shot staged canary harness.
+Run a one-shot staged canary harness with structured action schemas.
 """
 
 from __future__ import annotations
@@ -8,14 +8,34 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
-import shlex
 import subprocess
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-SHELL_META_RE = re.compile(r"(\|\||&&|[|;`]|[<>]|\$\()")
+CANARY_ACTION_TIMEOUT_SECONDS = max(1.0, float(os.environ.get("ORION_CANARY_ACTION_TIMEOUT_SECONDS", "15")))
+CANARY_ACTION_ARG_MAX_BYTES = max(1, int(os.environ.get("ORION_CANARY_ACTION_ARG_MAX_BYTES", "512")))
+CANARY_ALLOWED_TARGET_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+CANARY_ALLOWED_ARG_PATTERN = re.compile(r"^[A-Za-z0-9._:/=+-]{1,128}$")
+CANARY_SUPPORTED_ACTIONS = frozenset({"make", "python"})
+CANARY_ALLOWED_ENV_KEYS = {
+    "HOME",
+    "PATH",
+    "PYTHONUNBUFFERED",
+    "TMPDIR",
+    "USER",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+    "SYSTEMROOT",
+}
+CANARY_ALLOWED_MAKE_TARGETS = {
+    token.strip()
+    for token in os.environ.get("CANARY_ALLOWED_MAKE_TARGETS", "").split(",")
+    if token.strip() and CANARY_ALLOWED_TARGET_PATTERN.match(token.strip())
+}
 
 
 def _sanitize_candidate(value: str) -> str:
@@ -33,23 +53,137 @@ def _resolve_output_json(repo_root: Path, output_json: str | None, candidate: st
     return repo_root / "eval" / "history" / f"canary-stage-{safe_candidate}-{ts}.json"
 
 
-def _parse_command_string(raw: str) -> list[str]:
+def _parse_action_spec(raw: str) -> dict[str, Any]:
     text = str(raw or "").strip()
     if not text:
-        raise ValueError("command is empty")
-    try:
-        argv = shlex.split(text, posix=True)
-    except ValueError as exc:
-        raise ValueError(f"invalid quoting: {exc}") from exc
-    if not argv:
-        raise ValueError("command is empty")
-    for part in argv:
-        if SHELL_META_RE.search(part):
-            raise ValueError("shell metacharacters are not allowed; pass a direct argv-style command")
-    return argv
+        raise ValueError("action descriptor is required")
+
+    if text.startswith("{"):
+        try:
+            parsed = json.loads(text)
+        except Exception as exc:
+            raise ValueError(f"invalid JSON action descriptor: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("action descriptor must be a JSON object")
+        action = str(parsed.get("action", "")).strip()
+        params = parsed.get("params", parsed.get("args", {}))
+        if not isinstance(params, dict):
+            raise ValueError("action params must be an object")
+        params = dict(params)
+        for compat_key in ("target", "script", "args"):
+            if compat_key not in params and compat_key in parsed:
+                params[compat_key] = parsed[compat_key]
+        if not isinstance(params, dict):
+            raise ValueError("action params must be an object")
+        return {"action": action, "params": params}
+
+    if ":" in text:
+        action, rest = text.split(":", 1)
+        action = action.strip()
+        if not action:
+            raise ValueError("action is required")
+        params: dict[str, Any] = {}
+        if rest.strip():
+            args: list[str] = []
+            for token in rest.split(","):
+                token = token.strip()
+                if not token:
+                    continue
+                if "=" in token:
+                    key, value = token.split("=", 1)
+                    params[key.strip()] = value.strip()
+                else:
+                    args.append(token)
+            if args:
+                params["args"] = args
+        return {"action": action, "params": params}
+
+    raise ValueError("non-JSON action descriptor must be in opcode[:arg] format")
 
 
-def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
+def _safe_text(raw: Any) -> str:
+    text = str(raw).strip()
+    if not text:
+        return ""
+    return text.replace("\x00", " ")
+
+
+def _safe_args(value: Any, max_items: int = 8) -> list[str]:
+    values = value if isinstance(value, list) else ([] if value in (None, "") else [value])
+    out: list[str] = []
+    for item in values:
+        token = _safe_text(item)
+        if not token:
+            continue
+        if len(token.encode("utf-8")) > CANARY_ACTION_ARG_MAX_BYTES:
+            raise ValueError(f"action arg exceeds {CANARY_ACTION_ARG_MAX_BYTES} bytes")
+        if not CANARY_ALLOWED_ARG_PATTERN.match(token):
+            raise ValueError(f"invalid action arg token: {token}")
+        out.append(token)
+    if len(out) > max_items:
+        raise ValueError(f"too many action args (max {max_items})")
+    return out
+
+
+def _action_to_argv(descriptor: dict[str, Any]) -> list[str]:
+    action = str(descriptor.get("action", "")).strip()
+    if not action:
+        raise ValueError("action is required")
+    if action not in CANARY_SUPPORTED_ACTIONS:
+        raise ValueError(f"unsupported action: {action}")
+    params = descriptor.get("params", {})
+    if not isinstance(params, dict):
+        raise ValueError("action params must be an object")
+
+    if action == "make":
+        target = str(params.get("target", "")).strip()
+        if not target:
+            positional = _safe_args(params.get("args", []), max_items=1)
+            if not positional:
+                raise ValueError("make action requires target")
+            target = positional[0]
+            params = dict(params)
+            params["args"] = []
+        if not CANARY_ALLOWED_TARGET_PATTERN.match(target):
+            raise ValueError(f"invalid make target: {target}")
+        if CANARY_ALLOWED_MAKE_TARGETS and target not in CANARY_ALLOWED_MAKE_TARGETS:
+            raise ValueError(f"make target is not allowlisted: {target}")
+        args = _safe_args(params.get("args", []), max_items=8)
+        return ["make", target, *args]
+
+    if action == "python":
+        script = str(params.get("script", "")).strip()
+        if not script:
+            raise ValueError("python action requires script")
+        if not script.endswith(".py") or script.startswith("/"):
+            raise ValueError("python action script must be a repo-relative .py file")
+        if ".." in script.split("/"):
+            raise ValueError("python script path may not include ..")
+        args = _safe_args(params.get("args", []), max_items=16)
+        return ["python3", script, *args]
+
+    raise ValueError(f"unsupported action: {action}")
+
+
+def _parse_command_string(raw: str) -> list[str]:
+    # Backward-compatibility shim; modern mode uses action descriptors.
+    text = str(raw or "").strip().lower()
+    if text in {"", "noop"}:
+        return []
+    raise ValueError("free-form command descriptors are disabled for safety")
+
+
+def _safe_environment() -> dict[str, str]:
+    env: dict[str, str] = {}
+    for key in sorted(CANARY_ALLOWED_ENV_KEYS):
+        value = os.environ.get(key)
+        if value:
+            env[key] = value
+    env["PYTHONUNBUFFERED"] = "1"
+    return env
+
+
+def _run_command(command: list[str], cwd: Path, *, timeout_seconds: float) -> dict[str, Any]:
     started = dt.datetime.now(dt.timezone.utc)
     completed = subprocess.run(
         command,
@@ -57,18 +191,21 @@ def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=_safe_environment(),
+        timeout=max(1.0, float(timeout_seconds)),
     )
     ended = dt.datetime.now(dt.timezone.utc)
 
-    display = " ".join(shlex.quote(part) for part in command)
+    display = " ".join(command)
 
     return {
-        "cmd": display,
+        "cmd": command,
         "cwd": str(cwd),
         "returncode": completed.returncode,
         "started_at": started.isoformat(),
         "ended_at": ended.isoformat(),
         "duration_seconds": round((ended - started).total_seconds(), 3),
+        "display": display,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
     }
@@ -157,8 +294,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run staged canary harness with pre/post checks.")
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--repo-root", default=".")
-    parser.add_argument("--stage-cmd", required=True, help="Command for staged install/enable (shlex split; no shell operators).")
-    parser.add_argument("--rollback-cmd", default=None, help="Command to rollback if stage fails (shlex split; no shell operators).")
+    parser.add_argument(
+        "--stage-action",
+        required=True,
+        help='Structured descriptor, e.g. \'{"action":"make","target":"eval-run"}\' or \'make:target=eval-run\'.',
+    )
+    parser.add_argument(
+        "--rollback-action",
+        default=None,
+        help="Structured descriptor for optional rollback action.",
+    )
+    parser.add_argument("--command-timeout-s", type=float, default=CANARY_ACTION_TIMEOUT_SECONDS)
     parser.add_argument("--skip-eval", action="store_true", default=False)
     parser.add_argument("--skip-reliability", action="store_true", default=False)
     parser.add_argument("--skip-side-effects", action="store_true", default=False)
@@ -167,18 +313,20 @@ def main() -> int:
 
     repo_root = Path(args.repo_root).resolve()
     try:
-        stage_argv = _parse_command_string(args.stage_cmd)
+        stage_argv = _action_to_argv(_parse_action_spec(args.stage_action))
     except ValueError as exc:
-        print(f"invalid --stage-cmd: {exc}")
+        print(f"invalid --stage-action: {exc}")
         return 2
 
     rollback_argv: list[str] | None = None
-    if args.rollback_cmd:
+    if args.rollback_action:
         try:
-            rollback_argv = _parse_command_string(args.rollback_cmd)
+            rollback_argv = _action_to_argv(_parse_action_spec(args.rollback_action))
         except ValueError as exc:
-            print(f"invalid --rollback-cmd: {exc}")
+            print(f"invalid --rollback-action: {exc}")
             return 2
+
+    command_timeout = max(1.0, float(args.command_timeout_s))
 
     now_utc = dt.datetime.now(dt.timezone.utc)
     ts = now_utc.strftime("%Y%m%d-%H%M%S")
@@ -197,20 +345,24 @@ def main() -> int:
 
     steps: dict[str, dict[str, Any]] = {}
     if not args.skip_eval:
-        steps["pre_eval"] = _run_command(["make", "eval-run"], repo_root)
+        steps["pre_eval"] = _run_command(["make", "eval-run"], repo_root, timeout_seconds=command_timeout)
     if not args.skip_reliability:
-        steps["pre_reliability"] = _run_command(["make", "eval-reliability-daily"], repo_root)
+        steps["pre_reliability"] = _run_command(
+            ["make", "eval-reliability-daily"], repo_root, timeout_seconds=command_timeout
+        )
 
-    steps["stage"] = _run_command(stage_argv, repo_root)
+    steps["stage"] = _run_command(stage_argv, repo_root, timeout_seconds=command_timeout)
 
     if steps["stage"]["returncode"] != 0 and rollback_argv:
-        steps["rollback"] = _run_command(rollback_argv, repo_root)
+        steps["rollback"] = _run_command(rollback_argv, repo_root, timeout_seconds=command_timeout)
 
     if steps["stage"]["returncode"] == 0:
         if not args.skip_eval:
-            steps["post_eval"] = _run_command(["make", "eval-run"], repo_root)
+            steps["post_eval"] = _run_command(["make", "eval-run"], repo_root, timeout_seconds=command_timeout)
         if not args.skip_reliability:
-            steps["post_reliability"] = _run_command(["make", "eval-reliability-daily"], repo_root)
+            steps["post_reliability"] = _run_command(
+                ["make", "eval-reliability-daily"], repo_root, timeout_seconds=command_timeout
+            )
 
     steps["canary_health_check"] = _run_command(
         [
@@ -226,6 +378,7 @@ def main() -> int:
             str(canary_output_json),
         ],
         repo_root,
+        timeout_seconds=max(1.0, command_timeout + 30.0),
     )
 
     post_state = {
@@ -291,6 +444,10 @@ def main() -> int:
         "timestamp_utc": now_utc.isoformat(),
         "candidate": args.candidate,
         "repo_root": str(repo_root),
+        "actions": {
+            "stage": ["--stage-action", args.stage_action],
+            "rollback": ["--rollback-action", args.rollback_action] if args.rollback_action else [],
+        },
         "pre_state": pre_state,
         "steps": steps,
         "post_state": post_state,

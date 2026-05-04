@@ -41,24 +41,24 @@ RE_KV = re.compile(r"^(?P<key>[A-Za-z][A-Za-z ]*):\s*(?P<value>.*)\s*$")
 
 ALLOWLIST_COMMANDS: dict[str, list[str]] = {
     # Packet may specify just "diagnose_gateway.sh"; map to the repo script.
-    "diagnose_gateway.sh": ["bash", "-lc", "scripts/diagnose_gateway.sh"],
-    "./scripts/diagnose_gateway.sh": ["bash", "-lc", "scripts/diagnose_gateway.sh"],
-    "scripts/diagnose_gateway.sh": ["bash", "-lc", "scripts/diagnose_gateway.sh"],
+    "diagnose_gateway.sh": ["scripts/diagnose_gateway.sh"],
+    "./scripts/diagnose_gateway.sh": ["scripts/diagnose_gateway.sh"],
+    "scripts/diagnose_gateway.sh": ["scripts/diagnose_gateway.sh"],
 
     # Multi-agent sanity checks (all read-only).
-    "ember_sanity_check.sh": ["bash", "-lc", "scripts/ember_sanity_check.sh"],
-    "scripts/ember_sanity_check.sh": ["bash", "-lc", "scripts/ember_sanity_check.sh"],
-    "pixel_sanity_check.sh": ["bash", "-lc", "scripts/pixel_sanity_check.sh"],
-    "scripts/pixel_sanity_check.sh": ["bash", "-lc", "scripts/pixel_sanity_check.sh"],
-    "node_sanity_check.sh": ["bash", "-lc", "scripts/node_sanity_check.sh"],
-    "scripts/node_sanity_check.sh": ["bash", "-lc", "scripts/node_sanity_check.sh"],
-    "ledger_snapshot.sh": ["bash", "-lc", "scripts/ledger_snapshot.sh"],
-    "scripts/ledger_snapshot.sh": ["bash", "-lc", "scripts/ledger_snapshot.sh"],
+    "ember_sanity_check.sh": ["scripts/ember_sanity_check.sh"],
+    "scripts/ember_sanity_check.sh": ["scripts/ember_sanity_check.sh"],
+    "pixel_sanity_check.sh": ["scripts/pixel_sanity_check.sh"],
+    "scripts/pixel_sanity_check.sh": ["scripts/pixel_sanity_check.sh"],
+    "node_sanity_check.sh": ["scripts/node_sanity_check.sh"],
+    "scripts/node_sanity_check.sh": ["scripts/node_sanity_check.sh"],
+    "ledger_snapshot.sh": ["scripts/ledger_snapshot.sh"],
+    "scripts/ledger_snapshot.sh": ["scripts/ledger_snapshot.sh"],
 
     # Read-only arb scanning (no trading / no secrets).
-    "arb_scan.sh": ["bash", "-lc", "scripts/arb_scan.sh"],
-    "./scripts/arb_scan.sh": ["bash", "-lc", "scripts/arb_scan.sh"],
-    "scripts/arb_scan.sh": ["bash", "-lc", "scripts/arb_scan.sh"],
+    "arb_scan.sh": ["scripts/arb_scan.sh"],
+    "./scripts/arb_scan.sh": ["scripts/arb_scan.sh"],
+    "scripts/arb_scan.sh": ["scripts/arb_scan.sh"],
 }
 
 

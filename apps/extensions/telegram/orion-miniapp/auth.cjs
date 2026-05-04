@@ -70,6 +70,9 @@ function validateInitData(raw, botToken, options = {}) {
   }
 
   const actualHash = signInitData(rawFields, botToken);
+  if (actualHash.length !== expectedHash.length) {
+    return { ok: false, reason: "bad-hash-length", fields };
+  }
   const matches = crypto.timingSafeEqual(Buffer.from(expectedHash), Buffer.from(actualHash));
   if (!matches) {
     return { ok: false, reason: "bad-hash", fields };

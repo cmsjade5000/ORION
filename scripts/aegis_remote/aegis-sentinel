@@ -87,6 +87,9 @@ fi
 : "${AEGIS_DIGEST_WINDOW_SEC:=43200}"
 : "${AEGIS_DIGEST_SEVERITIES:=P2}"
 : "${AEGIS_DIGEST_MAX_ITEMS:=25}"
+: "${AEGIS_OPENCLAW_DOWN_CONFIRM_SEC:=300}"
+: "${AEGIS_OPENCLAW_POST_RESTART_WAIT_SEC:=90}"
+: "${AEGIS_OPENCLAW_POST_RESTART_POLL_SEC:=5}"
 
 AEGIS_DIGEST_SEVERITIES="$(printf '%s' "$AEGIS_DIGEST_SEVERITIES" | tr -d '[:space:]')"
 case "${AEGIS_DIGEST_WINDOW_SEC}" in
@@ -101,11 +104,25 @@ esac
 if [ "${AEGIS_DIGEST_MAX_ITEMS}" -le 0 ]; then
   AEGIS_DIGEST_MAX_ITEMS=25
 fi
+case "${AEGIS_OPENCLAW_DOWN_CONFIRM_SEC}" in
+  ''|*[!0-9]*) AEGIS_OPENCLAW_DOWN_CONFIRM_SEC=300 ;;
+esac
+case "${AEGIS_OPENCLAW_POST_RESTART_WAIT_SEC}" in
+  ''|*[!0-9]*) AEGIS_OPENCLAW_POST_RESTART_WAIT_SEC=90 ;;
+esac
+case "${AEGIS_OPENCLAW_POST_RESTART_POLL_SEC}" in
+  ''|*[!0-9]*) AEGIS_OPENCLAW_POST_RESTART_POLL_SEC=5 ;;
+esac
+if [ "${AEGIS_OPENCLAW_POST_RESTART_POLL_SEC}" -le 0 ]; then
+  AEGIS_OPENCLAW_POST_RESTART_POLL_SEC=5
+fi
 
 DEFENSE_PLANS_DIR="$STATE_DIR/defense_plans"
 ALERT_SENT=0
 DIGEST_PENDING_FILE="$STATE_DIR/digest_pending.tsv"
 DIGEST_LAST_SENT_FILE="$STATE_DIR/digest_last_sent_epoch"
+OPENCLAW_DOWN_FIRST_SEEN_FILE="$STATE_DIR/openclaw_down_first_seen_epoch"
+OPENCLAW_DOWN_INCIDENT_FILE="$STATE_DIR/openclaw_down_incident"
 
 post_slack() {
   local text="$1"
@@ -250,6 +267,21 @@ msg_system() {
   format_alert "AEGIS (System Watch): $headline" "$what" "$did" "$next" ""
 }
 
+wait_for_openclaw_service_active() {
+  local deadline now
+  deadline=$(($(date +%s) + AEGIS_OPENCLAW_POST_RESTART_WAIT_SEC))
+  while true; do
+    if systemctl is-active --quiet openclaw-aegis.service; then
+      return 0
+    fi
+    now=$(date +%s)
+    if [ "$now" -ge "$deadline" ]; then
+      return 1
+    fi
+    sleep "$AEGIS_OPENCLAW_POST_RESTART_POLL_SEC"
+  done
+}
+
 alert_throttled() {
   # alert_throttled <key> <ttl_seconds> <text> <severity> <trigger> <summary> <actions> [incident_id]
   # Sets global ALERT_SENT=1 when sent, 0 when skipped.
@@ -352,22 +384,48 @@ write_defense_plan_ssh_anomaly() {
 
 # 1) OpenClaw service down (allowed action: restart AEGIS gateway)
 if ! systemctl is-active --quiet openclaw-aegis.service; then
-  log "WARN: openclaw-aegis.service inactive; restarting"
+  now_epoch=$(date +%s)
+  first_seen="$now_epoch"
+  if [ -f "$OPENCLAW_DOWN_FIRST_SEEN_FILE" ]; then
+    first_seen=$(cat "$OPENCLAW_DOWN_FIRST_SEEN_FILE" 2>/dev/null || echo "$now_epoch")
+  else
+    printf '%s\n' "$now_epoch" >"$OPENCLAW_DOWN_FIRST_SEEN_FILE"
+    chmod 0640 "$OPENCLAW_DOWN_FIRST_SEEN_FILE" 2>/dev/null || true
+  fi
+  case "$first_seen" in
+    ''|*[!0-9]*) first_seen="$now_epoch" ;;
+  esac
+
+  elapsed=$((now_epoch - first_seen))
+  log "SUSPECT: openclaw-aegis.service inactive elapsed=${elapsed}s; restarting quietly before alert"
   systemctl restart openclaw-aegis.service || true
-  sleep 2
-  if systemctl is-active --quiet openclaw-aegis.service; then
-    log "RECOVERED: openclaw-aegis.service restarted"
-    alert_throttled \
-      "openclaw_recovered" 1800 \
-      "$(msg_system "AEGIS service restarted." "My own OpenClaw service was not running." "Restarted it successfully." "No action needed.")" \
-      "P1" "AEGIS_GATEWAY_RESTART" "AEGIS OpenClaw service was down; restart succeeded." "Restarted openclaw-aegis.service."
+
+  if wait_for_openclaw_service_active; then
+    log "RECOVERED: openclaw-aegis.service restarted quietly; suppressing Telegram page"
+    incident_id="INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')"
+    incident_append "$incident_id" "P2" "AEGIS_GATEWAY_RESTART" "AEGIS OpenClaw service was briefly down and self-recovered." "Restarted openclaw-aegis.service; Telegram page suppressed." "closed"
+    rm -f "$OPENCLAW_DOWN_FIRST_SEEN_FILE" "$OPENCLAW_DOWN_INCIDENT_FILE" 2>/dev/null || true
+  elif [ "$elapsed" -lt "$AEGIS_OPENCLAW_DOWN_CONFIRM_SEC" ]; then
+    log "SUSPECT: openclaw-aegis.service still inactive after restart, but outage not confirmed yet elapsed=${elapsed}s confirm=${AEGIS_OPENCLAW_DOWN_CONFIRM_SEC}s"
   else
     log "ALERT: openclaw-aegis.service still down"
+    incident_id=""
+    if [ -f "$OPENCLAW_DOWN_INCIDENT_FILE" ]; then
+      incident_id=$(cat "$OPENCLAW_DOWN_INCIDENT_FILE" 2>/dev/null || true)
+    fi
+    if [ -z "$incident_id" ]; then
+      incident_id="INC-AEGIS-SEC-$(date -u '+%Y%m%dT%H%M%SZ')"
+      printf '%s\n' "$incident_id" >"$OPENCLAW_DOWN_INCIDENT_FILE"
+      chmod 0640 "$OPENCLAW_DOWN_INCIDENT_FILE" 2>/dev/null || true
+    fi
     alert_throttled \
       "openclaw_down" 600 \
-      "$(msg_system "AEGIS service is down." "My own OpenClaw service is not running." "Tried to restart it, but it still appears down." "Check systemd status on the AEGIS server.")" \
-      "P0" "AEGIS_GATEWAY_DOWN" "AEGIS OpenClaw service is down; restart failed." "Attempted systemd restart; still inactive."
+      "$(msg_system "AEGIS service is down." "My own OpenClaw service has stayed down past the confirm window." "Tried to restart it and waited for recovery, but it still appears down." "Check systemd status on the AEGIS server.")" \
+      "P0" "AEGIS_GATEWAY_DOWN" "AEGIS OpenClaw service is down after sustained confirmation." "Attempted systemd restart and waited for recovery; still inactive." \
+      "$incident_id"
   fi
+else
+  rm -f "$OPENCLAW_DOWN_FIRST_SEEN_FILE" "$OPENCLAW_DOWN_INCIDENT_FILE" 2>/dev/null || true
 fi
 
 # 2) SSH auth anomalies (signal only)

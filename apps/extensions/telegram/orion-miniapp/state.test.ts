@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -165,5 +165,13 @@ describe("mini app approval scanning", () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("returns null for malformed json payloads from assistant subprocesses", async () => {
+    const { runJsonCommand } = require("./state.cjs");
+
+    await expect(
+      runJsonCommand("node", ["-e", "process.stdout.write('not json')"], path.join(os.tmpdir(), "orion-miniapp"))
+    ).resolves.toBeNull();
   });
 });

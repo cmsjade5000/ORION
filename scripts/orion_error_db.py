@@ -26,6 +26,8 @@ SEVERITY_ORDER = {"info": 0, "warn": 1, "error": 2}
 INCIDENT_RE = re.compile(r"^INCIDENT v1\s*$", re.MULTILINE)
 KV_RE = re.compile(r"^(?P<key>[A-Za-z][A-Za-z _-]*):\s*(?P<value>.*)\s*$")
 ERROR_LINE_RE = re.compile(r"(error|failed|failure|timeout|exception|abort)", re.IGNORECASE)
+INCIDENT_APPEND_SUMMARY_MAX_BYTES = 1024
+INCIDENT_APPEND_SUMMARY_FALLBACK = "no summary provided"
 
 
 def repo_root(path: str | None) -> Path:
@@ -52,6 +54,21 @@ def stable_fingerprint(parts: list[str]) -> str:
     norm = " | ".join(normalize_text(p).lower() for p in parts if normalize_text(p))
     digest = hashlib.sha1(norm.encode("utf-8", errors="replace")).hexdigest()
     return digest[:16]
+
+
+def sanitize_incident_summary(raw_summary: str, max_bytes: int = INCIDENT_APPEND_SUMMARY_MAX_BYTES) -> str:
+    normalized = normalize_text(raw_summary or "")
+    if not normalized:
+        return INCIDENT_APPEND_SUMMARY_FALLBACK
+
+    safe = normalized.replace("\x00", "")
+    safe = safe.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    safe = re.sub(r"\s+", " ", safe).strip()
+    encoded = safe.encode("utf-8", errors="replace")
+    if len(encoded) > max_bytes:
+        safe = encoded[:max_bytes].decode("utf-8", errors="ignore").rstrip()
+    safe = re.sub(r"\s+", " ", safe).strip()
+    return safe or INCIDENT_APPEND_SUMMARY_FALLBACK
 
 
 def open_db(path: Path) -> sqlite3.Connection:
@@ -489,6 +506,7 @@ def _write_review_report(root: Path, payload: dict[str, Any]) -> Path:
 def _maybe_append_incident(root: Path, item: dict[str, Any]) -> str | None:
     if item["severity"] != "error" or item["occurrences"] < 3:
         return None
+    summary = sanitize_incident_summary(item["summary"])
     cmd = [
         "bash",
         "scripts/incident_append.sh",
@@ -499,7 +517,7 @@ def _maybe_append_incident(root: Path, item: dict[str, Any]) -> str | None:
         "--trigger",
         "ORION_RECURRING_ERROR",
         "--summary",
-        item["summary"],
+        summary,
         "--evidence",
         f"fingerprint={item['fingerprint']} occurrences={item['occurrences']}",
         "--action",

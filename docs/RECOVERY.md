@@ -90,18 +90,23 @@ When ORION is down and you have local access to the Mac mini:
    - `openclaw models status`
 
 Shortcut:
-- `scripts/resurrect_orion_mac.sh` runs the above sequence as a single script.
+- `scripts/resurrect_orion_mac.sh` is the lightweight gateway guard/recovery path.
+- If you want the heavier repair flow after a restart, run `scripts/resurrect_orion_mac.sh --repair`.
 
-## Optional: Auto-Resurrection At Login (macOS)
+## Optional: Auto-Resurrection Guard (macOS)
 
-If you want the Mac mini to run a best-effort “resurrection” once on login after reboot:
+If you want the Mac mini to run a lightweight corroborated gateway guard every 5 minutes:
 
 - Install the LaunchAgent:
   - `scripts/install_orion_resurrector_launchagent.sh /Users/corystoner/src/ORION`
 - Logs:
   - `~/Library/Logs/orion_resurrector.log`
 
-This is intentionally login-scoped (LaunchAgent). It is not a boot-level daemon.
+Behavior:
+- The guard only restarts the gateway when local failure is corroborated by more than one signal.
+- It skips noisy single-probe failures and rate-limits restart attempts to avoid flapping loops.
+
+This remains login-scoped (LaunchAgent). It is not a boot-level daemon.
 
 ## After Recovery (Hard Requirement)
 

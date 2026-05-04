@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { assertPayloadLimit, withSubprocessSlot } = require("./subprocess_guard.cjs");
 
 function now() {
   return Date.now();
@@ -254,65 +255,76 @@ function createChatManager(options = {}) {
 function defaultExecuteTurn({ workspaceRoot, sessionId, message }) {
   return new Promise((resolve) => {
     const timeoutSeconds = Math.max(15, Number.parseInt(process.env.ORION_MINIAPP_TURN_TIMEOUT_SECONDS || "90", 10) || 90);
+    let boundedMessage;
+    try {
+      boundedMessage = assertPayloadLimit(message, "miniapp-chat-message");
+    } catch (error) {
+      resolve({ ok: false, error: error instanceof Error ? error.message : String(error), text: "" });
+      return;
+    }
     let settled = false;
-    const child = spawn(
-      "python3",
-      [
-        "scripts/openclaw_guarded_turn.py",
-        "--repo-root",
-        workspaceRoot,
-        "--agent",
-        "main",
-        "--runtime-channel",
-        "local",
-        "--session-id",
-        sessionId,
-        "--thinking",
-        "medium",
-        "--timeout",
-        String(timeoutSeconds),
-        "--message",
-        message,
-      ],
-      {
-        cwd: workspaceRoot,
-        env: { ...process.env },
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    );
+    withSubprocessSlot(() =>
+      new Promise((resolveTurn) => {
+        const child = spawn(
+          "python3",
+          [
+            "scripts/openclaw_guarded_turn.py",
+            "--repo-root",
+            workspaceRoot,
+            "--agent",
+            "main",
+            "--runtime-channel",
+            "local",
+            "--session-id",
+            sessionId,
+            "--thinking",
+            "medium",
+            "--timeout",
+            String(timeoutSeconds),
+            "--message",
+            boundedMessage,
+          ],
+          {
+            cwd: workspaceRoot,
+            env: { ...process.env },
+            stdio: ["ignore", "pipe", "pipe"],
+          }
+        );
 
-    let stdout = "";
-    let stderr = "";
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(watchdog);
-      resolve(result);
-    };
-    const watchdog = setTimeout(() => {
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        if (!settled) child.kill("SIGKILL");
-      }, 3000).unref?.();
-      finish({ ok: false, error: `timed out after ${timeoutSeconds}s`, text: "" });
-    }, (timeoutSeconds + 5) * 1000);
-    watchdog.unref?.();
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", (error) => {
-      finish({ ok: false, error: error.message, text: "" });
-    });
-    child.on("close", (code) => {
-      if (code === 0) {
-        finish({ ok: true, text: String(stdout || "").trim(), error: "" });
-        return;
-      }
-      finish({ ok: false, error: String(stderr || stdout || "").trim(), text: "" });
-    });
+        let stdout = "";
+        let stderr = "";
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
+          resolveTurn(result);
+        };
+        const watchdog = setTimeout(() => {
+          child.kill("SIGTERM");
+          setTimeout(() => {
+            if (!settled) child.kill("SIGKILL");
+          }, 3000).unref?.();
+          finish({ ok: false, error: `timed out after ${timeoutSeconds}s`, text: "" });
+        }, (timeoutSeconds + 5) * 1000);
+        watchdog.unref?.();
+        child.stdout.on("data", (chunk) => {
+          stdout += String(chunk);
+        });
+        child.stderr.on("data", (chunk) => {
+          stderr += String(chunk);
+        });
+        child.on("error", (error) => {
+          finish({ ok: false, error: error.message, text: "" });
+        });
+        child.on("close", (code) => {
+          if (code === 0) {
+            finish({ ok: true, text: String(stdout || "").trim(), error: "" });
+            return;
+          }
+          finish({ ok: false, error: String(stderr || stdout || "").trim(), text: "" });
+        });
+      })
+    ).then((result) => resolve(result), (error) => resolve({ ok: false, error: String(error), text: "" }));
   });
 }
 

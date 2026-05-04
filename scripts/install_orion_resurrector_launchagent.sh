@@ -3,7 +3,9 @@ set -euo pipefail
 
 repo_root="${1:-}"
 if [[ -z "${repo_root}" ]]; then
-  if [[ -d "${HOME}/Desktop/ORION" ]]; then
+  if [[ -d "${HOME}/src/ORION" ]]; then
+    repo_root="${HOME}/src/ORION"
+  elif [[ -d "${HOME}/Desktop/ORION" ]]; then
     repo_root="${HOME}/Desktop/ORION"
   elif repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
     true
@@ -25,7 +27,9 @@ if [[ ! -x "${resurrect_script}" ]]; then
   exit 1
 fi
 
-sed "s|__REPO_ROOT__|${repo_root}|g" \
+sed \
+  -e "s|__REPO_ROOT__|${repo_root}|g" \
+  -e "s|__HOME__|${HOME}|g" \
   "${repo_root}/scripts/orion_resurrector_launchagent.plist" > "${plist_target}"
 
 launchctl unload "${plist_target}" >/dev/null 2>&1 || true

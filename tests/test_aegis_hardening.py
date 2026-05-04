@@ -85,6 +85,22 @@ printf '%s\n' "$@" > "${MOCK_SSH_LOG:?}"
         self.assertIn("AEGIS_ORION_POST_RESTART_WAIT_SEC:=180", script)
         self.assertIn("transient ORION health failure self-corrected before external alert", script)
 
+    def test_sentinel_debounces_aegis_service_down_before_telegram_page(self):
+        script = (self._repo_root() / "scripts" / "aegis_remote" / "aegis-sentinel").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("AEGIS_OPENCLAW_DOWN_CONFIRM_SEC:=300", script)
+        self.assertIn('OPENCLAW_DOWN_FIRST_SEEN_FILE="$STATE_DIR/openclaw_down_first_seen_epoch"', script)
+        self.assertIn("wait_for_openclaw_service_active", script)
+        self.assertIn("restarted quietly; suppressing Telegram page", script)
+        self.assertIn("outage not confirmed yet", script)
+        self.assertIn("has stayed down past the confirm window", script)
+        service_section = script.split("# 1) OpenClaw service down", 1)[1]
+        service_section = service_section.split("\n# 2) SSH auth anomalies", 1)[0]
+        recovered_section = service_section.split("restarted quietly; suppressing Telegram page", 1)[1]
+        recovered_section = recovered_section.split('elif [ "$elapsed" -lt "$AEGIS_OPENCLAW_DOWN_CONFIRM_SEC" ]; then', 1)[0]
+        self.assertNotIn("alert_throttled", recovered_section)
+
 
 if __name__ == "__main__":
     unittest.main()

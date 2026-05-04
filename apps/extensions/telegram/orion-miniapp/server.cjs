@@ -20,11 +20,38 @@ const {
   runTextCommand,
   updateQueueRequestStatus,
 } = require("./state.cjs");
+const { assertPayloadLimit } = require("./subprocess_guard.cjs");
 
 const CONFIG = publicConfig();
 const PUBLIC_DIR = path.join(__dirname, "public");
 const chatManager = createChatManager({ workspaceRoot: CONFIG.workspaceRoot });
 const activeFollowupJobs = new Set();
+const AUTH_FAILURE_LOG_WINDOW_MS = 60 * 60 * 1000;
+const AUTH_FAILURE_MAX_LOGS_PER_WINDOW = 6;
+const authFailureCounters = new Map();
+
+function logAuthFailure(reason) {
+  const now = Date.now();
+  const key = String(reason || "unknown");
+  const state = authFailureCounters.get(key) || { windowStart: now, count: 0 };
+  if (now - state.windowStart >= AUTH_FAILURE_LOG_WINDOW_MS) {
+    state.windowStart = now;
+    state.count = 0;
+  }
+  state.count += 1;
+  authFailureCounters.set(key, state);
+  if (state.count <= AUTH_FAILURE_MAX_LOGS_PER_WINDOW) {
+    console.warn(`[miniapp-auth] ${key}`);
+  }
+}
+
+function parseJsonBody(bodyText) {
+  try {
+    return JSON.parse(bodyText || "{}");
+  } catch {
+    return null;
+  }
+}
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
@@ -191,23 +218,24 @@ function serveIndex(req, res) {
 
 async function withAuth(req, res, handler) {
   const rawInitData = initDataFromRequest(req);
-  const validated = validateInitData(rawInitData, CONFIG.botToken, {
-    maxAgeSeconds: CONFIG.allowedClockSkewSeconds,
-  });
-  if (!validated.ok) {
-    sendJson(res, 401, { error: `miniapp-auth:${validated.reason}` });
-    return;
-  }
-  if (!isAllowedOperator(validated.fields)) {
-    sendJson(res, 403, { error: "miniapp-auth:not-allowlisted" });
-    return;
-  }
   try {
+    const validated = validateInitData(rawInitData, CONFIG.botToken, {
+      maxAgeSeconds: CONFIG.allowedClockSkewSeconds,
+    });
+    if (!validated.ok) {
+      logAuthFailure(`miniapp-auth:${validated.reason}`);
+      sendJson(res, 401, { error: `miniapp-auth:${validated.reason}` });
+      return;
+    }
+    if (!isAllowedOperator(validated.fields)) {
+      logAuthFailure("miniapp-auth:not-allowlisted");
+      sendJson(res, 403, { error: "miniapp-auth:not-allowlisted" });
+      return;
+    }
     await handler(validated.fields);
   } catch (error) {
-    sendJson(res, 500, {
-      error: publicApiError(error),
-    });
+    logAuthFailure(`miniapp-auth-handler-error:${String(error instanceof Error ? error.message : error || "error")}`);
+    sendJson(res, 401, { error: "miniapp-auth:validation-failed" });
   }
 }
 
@@ -278,11 +306,22 @@ async function routeApi(req, res, pathname) {
 
   if (pathname === "/api/capture" && req.method === "POST") {
     return withAuth(req, res, async () => {
-      const body = JSON.parse((await readBody(req)) || "{}");
+      const body = parseJsonBody(await readBody(req));
+      if (!body) {
+        sendJson(res, 400, { error: "invalid json payload" });
+        return;
+      }
       const text = String(body.text || "").trim();
       const notify = String(body.notify || "telegram").trim();
       if (!text) {
         sendJson(res, 400, { error: "capture text is required" });
+        return;
+      }
+      let boundedText;
+      try {
+        boundedText = assertPayloadLimit(text, "capture-text");
+      } catch (error) {
+        sendJson(res, 413, { error: error instanceof Error ? error.message : String(error) });
         return;
       }
       const payload = await runJsonCommand(
@@ -292,7 +331,7 @@ async function routeApi(req, res, pathname) {
           "--repo-root",
           CONFIG.workspaceRoot,
           "--text",
-          text,
+          boundedText,
           "--notify",
           notify === "none" ? "none" : "telegram",
           "--json",
@@ -305,8 +344,18 @@ async function routeApi(req, res, pathname) {
 
   if (pathname === "/api/chat/runs" && req.method === "POST") {
     return withAuth(req, res, async (fields) => {
-      const body = JSON.parse((await readBody(req)) || "{}");
-      const message = String(body.message || "").trim();
+      const body = parseJsonBody(await readBody(req));
+      if (!body) {
+        sendJson(res, 400, { error: "invalid json payload" });
+        return;
+      }
+      let message;
+      try {
+        message = assertPayloadLimit(String(body.message || ""), "chat-message");
+      } catch (error) {
+        sendJson(res, 413, { error: error instanceof Error ? error.message : String(error) });
+        return;
+      }
       if (!message) {
         sendJson(res, 400, { error: "chat message is required" });
         return;
@@ -329,24 +378,13 @@ async function routeApi(req, res, pathname) {
 
   const streamMatch = pathname.match(/^\/api\/chat\/runs\/([^/]+)\/events$/i);
   if (streamMatch && req.method === "GET") {
-    const rawInitData = initDataFromRequest(req);
-    const validated = validateInitData(rawInitData, CONFIG.botToken, {
-      maxAgeSeconds: CONFIG.allowedClockSkewSeconds,
+    return withAuth(req, res, async () => {
+      const lastEventId = req.headers["last-event-id"] || new URL(req.url, `http://${req.headers.host || "localhost"}`).searchParams.get("lastEventId");
+      const ok = chatManager.subscribe(streamMatch[1], res, lastEventId);
+      if (!ok) {
+        sendJson(res, 404, { error: "chat run not found" });
+      }
     });
-    if (!validated.ok) {
-      sendJson(res, 401, { error: `miniapp-auth:${validated.reason}` });
-      return;
-    }
-    if (!isAllowedOperator(validated.fields)) {
-      sendJson(res, 403, { error: "miniapp-auth:not-allowlisted" });
-      return;
-    }
-    const lastEventId = req.headers["last-event-id"] || new URL(req.url, `http://${req.headers.host || "localhost"}`).searchParams.get("lastEventId");
-    const ok = chatManager.subscribe(streamMatch[1], res, lastEventId);
-    if (!ok) {
-      sendJson(res, 404, { error: "chat run not found" });
-    }
-    return;
   }
 
   const approvalMatch = pathname.match(/^\/api\/approvals\/([0-9a-f-]+)\/action$/i);
@@ -424,7 +462,7 @@ async function routeApi(req, res, pathname) {
             "--repo-root",
             CONFIG.workspaceRoot,
             "--text",
-            captureText,
+            assertPayloadLimit(captureText, "followup-capture-text"),
             "--notify",
             "telegram",
             "--json",

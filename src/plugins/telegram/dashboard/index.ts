@@ -1,4 +1,5 @@
 import { Bot, InlineKeyboard } from "grammy";
+import { requireOperatorAccess } from "../access";
 import { buildMiniAppUrl } from "../miniapp";
 
 /**
@@ -6,6 +7,7 @@ import { buildMiniAppUrl } from "../miniapp";
  */
 export function registerDashboard(bot: Bot) {
   bot.command("agents", async (ctx) => {
+    if (!(await requireOperatorAccess(ctx as never, "Agents dashboard"))) return;
     const keyboard = new InlineKeyboard()
       .text("ORION", "agent_ORION")
       .text("ATLAS", "agent_ATLAS")
@@ -27,6 +29,10 @@ export function registerDashboard(bot: Bot) {
 
   // Important UX: answer callback queries so Telegram doesn't leave the spinner stuck.
   bot.callbackQuery(/^agent_([A-Z]+)$/, async (ctx) => {
+    if (!(await requireOperatorAccess(ctx as never, "Agents dashboard"))) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
     const agentId = String(ctx.match?.[1] || "").trim();
     const info = agentInfo(agentId);
     await ctx.answerCallbackQuery();

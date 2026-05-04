@@ -3,6 +3,7 @@ import path from "node:path";
 import { requireOperatorAccess } from "../access";
 import { runCommand } from "../process";
 import { BoundedExecutor, ChatTaskQueue } from "../queue";
+const { assertPayloadLimit } = require("../../../apps/extensions/telegram/orion-miniapp/subprocess_guard.cjs");
 
 type AssistantCmd =
   | "today"
@@ -51,9 +52,16 @@ function parseJsonMessage(raw: string): string | null {
 }
 
 async function runAssistantCommand(root: string, cmd: AssistantCmd, text?: string): Promise<{ ok: boolean; message: string }> {
+  let boundedText = "";
+  try {
+    boundedText = text ? assertPayloadLimit(text, "assistant-command-text") : "";
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error || "") };
+  }
+
   const argv =
     cmd === "capture"
-      ? ["scripts/assistant_capture.py", "--text", text || "", "--json"]
+      ? ["scripts/assistant_capture.py", "--text", boundedText || "", "--json"]
       : ["scripts/assistant_status.py", "--cmd", cmd, "--json"];
 
   const proc = await runCommand("python3", argv, {

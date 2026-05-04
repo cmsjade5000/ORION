@@ -5,10 +5,22 @@ import stat
 import subprocess
 import tempfile
 import unittest
+import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 
 class TestOrionErrorDb(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        repo_root = Path(__file__).resolve().parents[1]
+        script_path = repo_root / "scripts" / "orion_error_db.py"
+        spec = importlib.util.spec_from_file_location("orion_error_db", script_path)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+        cls.mod = mod
+
     def _script(self) -> Path:
         return Path(__file__).resolve().parents[1] / "scripts" / "orion_error_db.py"
 
@@ -259,3 +271,19 @@ print(json.dumps({"ok": True}))
             self.assertTrue(any("scripts/runtime_reconcile.py" in cmd for cmd in cmds), cmds)
             self.assertTrue(any("scripts/task_registry_repair.py" in cmd for cmd in cmds), cmds)
             self.assertTrue(any("scripts/session_maintenance.py" in cmd for cmd in cmds), cmds)
+
+    def test_sanitize_incident_summary_and_summary_sanitization_in_append_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root.mkdir(parents=True, exist_ok=True)
+            raw_summary = "gateway loop\n\x00$(echo dangerous)\t" + ("x" * 4000)
+            with unittest.mock.patch.object(self.mod.subprocess, "run") as run_mock:
+                run_mock.return_value = SimpleNamespace(returncode=0, stdout="id=INC-2026-TEST", stderr="")
+                self.mod._maybe_append_incident(root, {"summary": raw_summary, "fingerprint": "f1", "occurrences": 3, "severity": "error"})
+                self.assertEqual(run_mock.call_count, 1)
+                argv = run_mock.call_args.args[0]
+                summary_idx = argv.index("--summary") + 1
+                safe_summary = argv[summary_idx]
+                self.assertNotIn("\n", safe_summary)
+                self.assertNotIn("\x00", safe_summary)
+                self.assertLessEqual(len(safe_summary.encode("utf-8")), self.mod.INCIDENT_APPEND_SUMMARY_MAX_BYTES)

@@ -4,8 +4,11 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
+const { acquireSubprocessSlot, safeJsonPayload } = require("./subprocess_guard.cjs");
 
 const execFileAsync = promisify(execFile);
+const RUN_JSON_COMMAND_TIMEOUT_MS = 15000;
+const RUN_JSON_COMMAND_MAX_BYTES = 1024 * 1024;
 
 function repoRootFromWorkspace(workspaceRoot) {
   return path.resolve(workspaceRoot || process.cwd());
@@ -141,23 +144,62 @@ function updateQueueRequestStatus(workspaceRoot, requestId, status) {
   return updated;
 }
 
-async function runJsonCommand(command, argv, cwd, env = process.env) {
-  const { stdout, stderr } = await execFileAsync(command, argv, {
-    cwd,
-    env,
-    maxBuffer: 8 * 1024 * 1024,
+async function runJsonCommand(
+  command,
+  argv,
+  cwd,
+  env = process.env,
+  timeoutMs = RUN_JSON_COMMAND_TIMEOUT_MS,
+  maxBytes = RUN_JSON_COMMAND_MAX_BYTES
+) {
+  return acquireSubprocessSlot().then(async (release) => {
+    try {
+      const { stdout, stderr } = await execFileAsync(command, argv, {
+        cwd,
+        env,
+        timeout: Number(timeoutMs || RUN_JSON_COMMAND_TIMEOUT_MS),
+        maxBuffer: Math.max(1024, Number(maxBytes || RUN_JSON_COMMAND_MAX_BYTES)),
+      });
+      const out = safeJsonPayload(String(stdout || stderr || "").trim());
+      if (!out) return null;
+      try {
+        const payload = JSON.parse(out);
+        if (!payload || typeof payload !== "object") {
+          return null;
+        }
+        return payload;
+      } catch (error) {
+        return null;
+      }
+    } catch {
+      return null;
+    } finally {
+      release();
+    }
   });
-  const out = String(stdout || stderr || "").trim();
-  return out ? JSON.parse(out) : null;
 }
 
-async function runTextCommand(command, argv, cwd, env = process.env) {
-  const { stdout, stderr } = await execFileAsync(command, argv, {
-    cwd,
-    env,
-    maxBuffer: 8 * 1024 * 1024,
+async function runTextCommand(
+  command,
+  argv,
+  cwd,
+  env = process.env,
+  timeoutMs = RUN_JSON_COMMAND_TIMEOUT_MS,
+  maxBytes = RUN_JSON_COMMAND_MAX_BYTES
+) {
+  return acquireSubprocessSlot().then(async (release) => {
+    try {
+      const { stdout, stderr } = await execFileAsync(command, argv, {
+        cwd,
+        env,
+        timeout: timeoutMs,
+        maxBuffer: maxBytes,
+      });
+      return String(stdout || stderr || "").trim();
+    } finally {
+      release();
+    }
   });
-  return String(stdout || stderr || "").trim();
 }
 
 async function assistantMessage(workspaceRoot, command) {

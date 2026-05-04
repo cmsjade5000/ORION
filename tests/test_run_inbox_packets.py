@@ -201,7 +201,7 @@ class TestRunInboxPackets(unittest.TestCase):
             root = Path(td)
             inbox = self._write_inbox(root, "ORION", self._packet(owner="ORION"))
             timeout_exc = TimeoutExpired(
-                cmd=["bash", "-lc", "scripts/diagnose_gateway.sh"],
+                cmd=["scripts/diagnose_gateway.sh"],
                 timeout=120,
                 output="partial stdout",
                 stderr="partial stderr",
@@ -226,6 +226,20 @@ class TestRunInboxPackets(unittest.TestCase):
             self.assertTrue(artifact.exists())
             artifact_text = artifact.read_text(encoding="utf-8")
             self.assertIn("command timed out after 120.0s", artifact_text)
+
+    def test_executes_allowlisted_command_as_argv_without_shell(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            inbox = self._write_inbox(root, "ORION", self._packet(owner="ORION"))
+            proc = SimpleNamespace(returncode=0, stdout="Gateway target: localhost\n", stderr="")
+            with mock.patch.object(self.runner.subprocess, "run", return_value=proc) as run_mock, mock.patch.object(
+                self.runner.time, "strftime", return_value="20260101-120000"
+            ):
+                rc = self.runner.run(root, max_packets=10)
+
+            self.assertEqual(rc, 0)
+            cmd = run_mock.call_args.args[0]
+            self.assertEqual(cmd, ["scripts/diagnose_gateway.sh"])
 
     def test_append_packet_if_absent_blocks_duplicate_idempotency_and_packet_id(self):
         with tempfile.TemporaryDirectory() as td:

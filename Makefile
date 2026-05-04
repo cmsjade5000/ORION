@@ -109,12 +109,12 @@ canary-health-check:
 ## One-shot staged canary harness (pre/post eval + stage + side-effect checks)
 canary-stage:
 	@if [ -z "$(strip $(CANDIDATE))" ]; then echo "CANDIDATE is required"; exit 2; fi
-	@if [ -z "$(strip $(STAGE_CMD))" ]; then echo "STAGE_CMD is required"; exit 2; fi
+	@if [ -z "$(strip $(STAGE_ACTION))" ]; then echo "STAGE_ACTION is required"; exit 2; fi
 	@python3 scripts/canary_stage_harness.py \
 		--candidate "$(CANDIDATE)" \
 		--repo-root . \
-		--stage-cmd "$(STAGE_CMD)" \
-		$(if $(strip $(ROLLBACK_CMD)),--rollback-cmd "$(ROLLBACK_CMD)",) \
+		--stage-action "$(STAGE_ACTION)" \
+		$(if $(strip $(ROLLBACK_ACTION)),--rollback-action "$(ROLLBACK_ACTION)",) \
 		$(HARNESS_ARGS)
 
 ## Run online skill discovery scan and update weekly shortlist generated section

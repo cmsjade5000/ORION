@@ -1,14 +1,14 @@
 # Reliability Snapshot
 
-- Generated at: `2026-05-03T14:10:07.995680+00:00`
+- Generated at: `2026-05-04T14:10:10.201611+00:00`
 - Window: last `24h`
 
 ## Lane Wait
 
-- Count: `1`
-- Max: `9943 ms`
-- P95: `9943 ms`
-- By lane: `{'session:agent:main:main': 1}`
+- Count: `0`
+- Max: `0 ms`
+- P95: `0 ms`
+- By lane: `{}`
 
 ## Cron
 
@@ -31,8 +31,8 @@
 
 - Version: `1`
 - Total: `35`
-- By last status: `{'ok': 27, 'error': 6}`
-- Delivery status counts: `{'delivered': 5, 'not-requested': 5, 'not-delivered': 12, 'unknown': 4}`
+- By last status: `{'ok': 29, 'error': 4}`
+- Delivery status counts: `{'delivered': 5, 'not-requested': 7, 'not-delivered': 12, 'unknown': 2}`
 
 ## Queue Health
 
