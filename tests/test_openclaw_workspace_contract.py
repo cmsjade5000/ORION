@@ -57,6 +57,9 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         cls.native_subagent_control = (
             cls.repo / "docs" / "NATIVE_SUBAGENT_CONTROL_PLANE.md"
         ).read_text(encoding="utf-8")
+        cls.file_transfer_broker = (
+            cls.repo / "docs" / "ORION_FILE_TRANSFER_BROKER.md"
+        ).read_text(encoding="utf-8")
 
     def test_examples_pin_tools_profile(self):
         self.assertEqual(self.json_example["tools"]["profile"], "coding")
@@ -208,7 +211,7 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
         self.assertIn("make operator-health-bundle", self.readme)
         self.assertIn("POLARIS", self.single_bot)
         self.assertIn("Notify: telegram", self.polaris_inbox)
-        self.assertIn("OpenClaw 2026.4.27", self.readme)
+        self.assertIn("OpenClaw 2026.5.3-1", self.readme)
         self.assertIn("ORION_RUNTIME_BASELINE_2026_04_07.md", self.readme)
         self.assertIn("ORION_EXTENSION_SURFACES.md", self.readme)
         self.assertIn("REPO_HYGIENE.md", self.readme)
@@ -282,6 +285,21 @@ class TestOpenClawWorkspaceContract(unittest.TestCase):
             "`/goal` state is not an ORION source of truth",
         ):
             self.assertIn(needle, self.native_subagent_control)
+
+    def test_file_transfer_broker_keeps_orion_guardrails(self):
+        for needle in (
+            "It is not a freeform node-to-node file movement system.",
+            "ATLAS owns multi-step transfer execution.",
+            "STRATUS may handle node, host, and gateway implementation details under ATLAS.",
+            "`ask: always`",
+            "`followSymlinks: false`",
+            "`maxBytes: 16777216`",
+            "`Owner: ATLAS`",
+            "`Approval Gate: CORY_MINIAPP_APPROVED` for writes",
+            "`Evidence Required:`",
+            "Do not use a wildcard `*` node policy.",
+        ):
+            self.assertIn(needle, self.file_transfer_broker)
 
     def test_telegram_topic_crons_require_thread_id_guidance(self):
         self.assertIn("openclaw cron add", self.telegram_topic_routing)

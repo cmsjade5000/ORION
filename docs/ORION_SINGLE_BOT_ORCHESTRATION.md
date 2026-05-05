@@ -65,6 +65,18 @@ When Cory asks ORION to review a PDF or file-heavy artifact:
 See:
 - `docs/PDF_REVIEW_WORKFLOW.md`
 
+### Brokered File Transfer Path
+
+When Cory asks ORION to move, fetch, inspect, or stage files across paired nodes:
+
+1. ORION keeps the user-facing thread and decides whether the file-transfer broker is warranted.
+2. ORION delegates execution to ATLAS with a Task Packet using `docs/ORION_FILE_TRANSFER_BROKER.md`.
+3. ATLAS may route node or gateway details to STRATUS, but ATLAS remains responsible for the result.
+4. Read operations use `dir_list`, `file_fetch`, or `dir_fetch`; writes use `file_write` only inside broker inbound staging.
+5. Writes require `Approval Gate: CORY_MINIAPP_APPROVED` and proof before ORION reports `verified`.
+
+Freeform node-to-node file movement is not part of ORION core.
+
 ## Mandatory News Pipeline (Sourced)
 
 To prevent plausible-but-wrong headlines:

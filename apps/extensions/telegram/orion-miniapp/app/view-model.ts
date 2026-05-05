@@ -26,9 +26,9 @@ function parseStartappTaskId(value: string): string | null {
 export function screenFromStartapp(startapp?: string): MiniAppScreen {
   const value = String(startapp || "").trim().toLowerCase();
   if (parseStartappTaskId(value)) return "task";
-  if (["home", "home-screen", "command", "console"].includes(value)) return "home";
+  if (["home", "home-screen", "command", "console", "today", "followups", "review"].includes(value)) return "home";
   if (["compose", "chat", "request", "new"].includes(value)) return "compose";
-  if (["queue", "work", "tasks"].includes(value)) return "queue";
+  if (["queue", "work", "tasks", "inbox", "approvals"].includes(value)) return "queue";
   if (["activity", "logs", "activitylog", "feed", "recent"].includes(value)) return "activity";
   if (["status", "system", "health"].includes(value)) return "status";
   if (["settings", "diagnostics"].includes(value)) return "settings";

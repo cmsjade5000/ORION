@@ -70,6 +70,16 @@ auth:
     overloadedProfileRotations: 0
     overloadedBackoffMs: 45000
 
+gateway:
+  nodes:
+    # Dangerous plugin node commands are denied unless explicitly listed here.
+    # Keep this list scoped to the brokered file-transfer commands.
+    allowCommands:
+      - dir.list
+      - file.fetch
+      - dir.fetch
+      - file.write
+
 tools:
   # As of OpenClaw 2026.3.x, new local installs default to tools.profile=messaging when unset.
   # ORION is a local workspace agent and expects the broader coding tool posture.
@@ -265,5 +275,29 @@ plugins:
           apiKey: ${OPENROUTER_API_KEY}
           baseUrl: https://openrouter.ai/api/v1
           model: text-embedding-3-small
+    file-transfer:
+      # Brokered Mac Mini file handoff only. Live apply resolves the stable
+      # node ID; do not use wildcard node policy.
+      enabled: false
+      config:
+        nodes:
+          "Mac Mini":
+            ask: always
+            allowReadPaths:
+              - /Users/corystoner/src/ORION/tmp/file-transfer-broker/outbound/**
+              - /Users/corystoner/src/ORION/tasks/WORK/artifacts/**
+              - /Users/corystoner/src/ORION/tasks/JOBS/**
+              - /Users/corystoner/.openclaw/attachments/**
+            allowWritePaths:
+              - /Users/corystoner/src/ORION/tmp/file-transfer-broker/inbound/**
+            denyPaths:
+              - /Users/corystoner/.openclaw/secrets/**
+              - /Users/corystoner/.openclaw/.env*
+              - /Users/corystoner/.ssh/**
+              - /Users/corystoner/Library/Keychains/**
+              - /Users/corystoner/Library/**
+              - /Users/corystoner/src/ORION/.git/**
+            maxBytes: 16777216
+            followSymlinks: false
     discord:
       enabled: false

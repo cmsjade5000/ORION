@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-const { assertPayloadLimit, withSubprocessSlot } = require("../../apps/extensions/telegram/orion-miniapp/subprocess_guard.cjs");
+const { assertPayloadLimit, withSubprocessSlot } = require("../../../apps/extensions/telegram/orion-miniapp/subprocess_guard.cjs");
 
 export type CommandRunResult = {
   code: number | null;
@@ -76,6 +76,6 @@ export async function runCommand(
             timedOut,
           });
         });
-      });
+      })
   );
 }

@@ -176,3 +176,39 @@ What changed / what I found:
   - Reply summary: Good evening, Cory — I’m doing well. Quiet, steady, and glad to hear from you.
 Next step (if any):
   - None.
+
+TASK_PACKET v1
+Owner: SCRIBE
+Requester: ORION
+Notify: telegram
+Idempotency Key: task-approval-tpa-7379621791e795e1
+Workflow ID: ik-991810163b3c02dd
+Approval Gate: CORY_MINIAPP_APPROVED
+Gate Evidence: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-7379621791e795e1
+Execution Mode: direct
+Tool Scope: write
+Objective: Continue the approved Task Packet exactly once: Create a send-ready draft response from the inbound request context.
+Success Criteria:
+- Re-check the original packet, stop gates, and current state before any action.
+- Execute only the work covered by Cory's Mini App approval record.
+- Report command/path proof and verification in the Result block.
+Constraints:
+- Approval scope is this exact packet only; do not generalize it to future packets.
+- Preserve every stop gate from the original packet unless the approval record explicitly covers it.
+- Do not perform credential, payment, destructive, or broad external-delivery work unless the original packet and approval both authorize it.
+Inputs:
+- Approval record: tasks/APPROVALS/task-packet-approvals.jsonl id=tpa-7379621791e795e1
+- Original job id: ik-991810163b3c02dd
+- Original inbox: tasks/INBOX/SCRIBE.md:95
+- Actor: telegram:8471523294 Cory
+Risks:
+- Approval could be misapplied to adjacent work; mitigate by matching the original job id and inbox pointer.
+Stop Gates:
+- If the original packet is missing, changed materially, or no longer blocked on Cory approval, stop and return BLOCKED.
+- If execution would exceed the original packet scope, stop and ask ORION for a new approval packet.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Verification:
+- Next step (if any):

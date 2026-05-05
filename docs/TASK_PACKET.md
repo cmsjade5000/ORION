@@ -90,6 +90,13 @@ Output Format:
   - `Action Class:` for example `read_like`, `local_write`, `identity_bearing`, `destructive`, `persistent_change`
   - `Action Id:` typed action identifier such as `open_app`, `open_url`, `shortcut`
   - `Inputs Summary:` concise parameter summary safe to log/review
+- Brokered file-transfer fields when using `docs/ORION_FILE_TRANSFER_BROKER.md`:
+  - `Device Target:` must be `macos-node`
+  - `Action Class:` must be `read_like` for `dir_list`, `file_fetch`, or `dir_fetch`, and `local_write` for `file_write`
+  - `Action Id:` must be `file_fetch`, `dir_list`, `dir_fetch`, or `file_write`
+  - `Inputs Summary:` must include source path, destination path when relevant, and node display name
+  - `Approval Gate: CORY_MINIAPP_APPROVED` is required for writes
+  - `Evidence Required:` must include source path, destination path, command/result payload, and final listing or checksum when available
 
 ## Cron Payload Guidance
 
@@ -239,6 +246,43 @@ For internal sessions, include:
 - Policy anchors: `SECURITY.md`, `TOOLS.md`, `USER.md`
 - Task Packet (in-message or as a file link)
 - If the runtime already carries realtime transcript context, include only the delta needed for safe execution plus any artifact paths that are not already obvious from the thread.
+
+## Brokered File Transfer Example
+
+Use this shape for OpenClaw `file-transfer` work. Writes must stay inside the broker inbound staging path and require approval evidence.
+
+```text
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Objective: Move the prepared diagnostics file from broker outbound staging into broker inbound staging on the Mac Mini node.
+Success Criteria:
+- The file is written only under /Users/corystoner/src/ORION/tmp/file-transfer-broker/inbound/.
+- The result includes the node command payload and final checksum or listing proof.
+Constraints:
+- Use docs/ORION_FILE_TRANSFER_BROKER.md.
+- Do not read or write outside configured broker paths.
+- Do not follow symlinks.
+Inputs:
+- Source: /Users/corystoner/src/ORION/tmp/file-transfer-broker/outbound/diagnostics.txt
+- Destination: /Users/corystoner/src/ORION/tmp/file-transfer-broker/inbound/diagnostics.txt
+Risks:
+- local_write; bounded to staging and approval-gated
+Stop Gates:
+- Stop before file_write unless Approval Gate evidence is present.
+Execution Mode: delegate
+Tool Scope: write
+Device Target: macos-node
+Action Class: local_write
+Action Id: file_write
+Inputs Summary: source outbound diagnostics.txt, destination inbound diagnostics.txt, node Mac Mini
+Approval Gate: CORY_MINIAPP_APPROVED
+Evidence Required: source path, destination path, command/result payload, final checksum or listing
+Rollback:
+- Delete only the destination file created by this packet if verification fails.
+Output Format:
+- Status plus proof paths and checksum/listing evidence.
+```
 
 ## Per-Agent Inbox Guidance
 

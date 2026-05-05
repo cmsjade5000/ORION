@@ -47,17 +47,18 @@ openclaw models status
 ```
 
 Latest local/runtime baseline:
-- Runtime verified on 2026-04-29 against `OpenClaw 2026.4.27`.
+- Runtime verified on 2026-05-04 against `OpenClaw 2026.5.3-1`.
 - Historical upgrade note remains in `docs/OPENCLAW_2026_3_13_UPGRADE_NOTES.md`.
 - Current sweep baseline and follow-on decisions live in:
   - `docs/ORION_RUNTIME_BASELINE_2026_04_07.md`
   - `docs/ORION_TOOL_PILOTS_2026_04.md`
   - `docs/ORION_AGENT_SYSTEM_SWEEP_2026_04_07.md`
 
-Current verification snapshot (2026-04-29):
-- `openclaw --version` returned `OpenClaw 2026.4.27`.
-- `openclaw config validate --json` returned `{"valid":true,...}`.
-- `openclaw gateway status --json` returned a healthy loopback LaunchAgent and `openclaw gateway call status --json` reported the current `2026.4.x` runtime.
+Current verification snapshot (2026-05-04):
+- `openclaw --version` returned `OpenClaw 2026.5.3-1`.
+- `openclaw gateway status --json` returned a running loopback LaunchAgent on `127.0.0.1:18789` with RPC connectivity.
+- `openclaw channels status --probe` confirmed Telegram is enabled, configured, running, and connected as `@Orion_GatewayBot`.
+- The ORION Mini App returned `{"ok":true,"app":"ORION"}` from both `http://127.0.0.1:8787/readyz` and the current Tailscale Funnel entrypoint.
 - Live runtime plugin entries include `acpx`, `bluebubbles`, `discord`, `memory-core`, `minimax`, `open-prose`, `openai`, `openrouter`, `slack`, and `telegram`.
 - Live runtime memory slot is `memory-core`, and dreaming is enabled in runtime.
 - ACPX is enabled in the live runtime for bounded specialist execution.
@@ -66,6 +67,8 @@ Current verification snapshot (2026-04-29):
 - Checked-in templates still keep `memory-lancedb` as the conservative default while the live runtime uses `memory-core` with dreaming enabled.
 - OpenClaw `2026.4.20` and `2026.4.21` added stricter owner-command auth, startup/health-reporting improvements, session pruning by default, cron runtime-state splitting (`jobs-state.json` beside `jobs.json`), and better doctor/plugin dependency repair paths.
 - OpenClaw `2026.4.27` adds ORION-relevant Telegram startup/send/topic-cron fixes, plugin registry/startup hygiene, strict model fallback behavior, and `models.pricing.enabled` for low-cost/offline startup.
+- OpenClaw `2026.4.29` and `2026.5.x` add useful active-run and visibility candidates such as `/steer`, `/side`, `messages.visibleReplies`, progress streaming, commitments, Active Memory filters, REM harness improvements, plugin install/update hardening, and a bundled file-transfer plugin.
+- ORION should adopt `/steer` and `/side` as operator habits first. Keep visible replies, progress streaming, commitments, new channels/providers, and file-transfer behind focused pilots with Mini App and Telegram regression checks.
 - Deferred `2026.4.27` surfaces: DeepInfra, Yuanbao, QQBot, Matrix, Slack, Docker GPU passthrough, and mobile node presence.
 - The older `OPENCLAW_GATEWAY_TOKEN` LaunchAgent audit warning from `2026.4.14` is not the current verified state on this machine; the current LaunchAgent config audit is clean, but still verify after reinstalls.
 - The bundled Discord runtime dependency stack required a local npm rebuild after the `2026.4.21` upgrade; gateway and Telegram recovered cleanly afterward.
@@ -118,7 +121,7 @@ Internal reliability review:
 Memory/dreaming:
 - ORION keeps `memory-lancedb` as the active checked-in template default for now.
 - Live runtime has moved to `memory-core` with dreaming enabled; treat that as runtime state, not a blanket repo default.
-- OpenClaw `2026.4.14` is the current verified runtime; dreaming remains documented here as the active `memory-core` path.
+- OpenClaw `2026.5.3-1` is the current verified runtime; dreaming remains documented here as the active `memory-core` path.
 - See `docs/OPENCLAW_MEMORY_DREAMING.md` before switching the memory slot or enabling `/dreaming`.
 - For dreaming to populate short-term recall, ORION memory search must include `memory` in `agents.list[].memorySearch.sources`; `sessions` alone will not write the dreaming recall store.
 - For deterministic direct ORION turns, prefer the guarded wrapper path over raw `openclaw agent`:

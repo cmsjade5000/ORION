@@ -177,6 +177,19 @@ Permission-profile mapping for ORION work:
 | External delivery or user-facing messaging | explicit approval path | Require Task Packet evidence, delivery surface, and proof before claiming sent/done |
 | Destructive/reset/persistent system change | confirmation-gated | Ask for explicit approval and prefer dry-run/backup/list first |
 
+## OpenClaw 2026.5.x Adoption Notes
+
+Latest local verification (2026-05-04): `OpenClaw 2026.5.3-1`.
+
+Treat the 2026.5.x line as a reliability and control upgrade for ORION, not permission to widen the runtime surface.
+
+- Adopt `/steer` and `/side` as operator guidance after a small Telegram/Mini App validation pass. They fit ORION because they help Cory redirect or branch active work without starting over.
+- Keep `messages.visibleReplies` behind a focused Mini App compatibility pilot. It may reduce silent completions, but it changes visible reply behavior and can affect guarded-turn assumptions.
+- Keep Telegram progress streaming behind a DM-only pilot with an easy rollback to the current behavior.
+- Keep `commitments.enabled` off globally until a scoped Cory-admin workflow proves it improves follow-through without creating noisy magical reminders. Task Packets and `tasks/JOBS/summary.json` remain the durable contract.
+- Use Active Memory filters and REM harness improvements for read-only dreaming/memory review before changing default recall behavior.
+- Keep the bundled file-transfer plugin, new providers, and new channels disabled by default unless a separate allowlist, trust-boundary, and rollback review approves a specific use case.
+
 ## Compatibility Note (OpenClaw 2026.3.x): `gateway.auth.mode`
 
 As of OpenClaw `2026.3.x`, runtime config requires explicit `gateway.auth.mode` when both auth

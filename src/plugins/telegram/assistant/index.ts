@@ -3,7 +3,7 @@ import path from "node:path";
 import { requireOperatorAccess } from "../access";
 import { runCommand } from "../process";
 import { BoundedExecutor, ChatTaskQueue } from "../queue";
-const { assertPayloadLimit } = require("../../../apps/extensions/telegram/orion-miniapp/subprocess_guard.cjs");
+const { assertPayloadLimit } = require("../../../../apps/extensions/telegram/orion-miniapp/subprocess_guard.cjs");
 
 type AssistantCmd =
   | "today"

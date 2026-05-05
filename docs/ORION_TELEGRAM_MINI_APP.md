@@ -4,16 +4,29 @@ The ORION Telegram Mini App lives under:
 
 - `apps/extensions/telegram/orion-miniapp/`
 
-It is now a chat-first `Starship Console` surface for talking to ORION inside Telegram, with the inbox and today views available as secondary screens.
+It is now the private ORION Relay Console for Telegram: ask ORION, inspect what needs attention, approve or deny gated work, and continue the daily operator loop without creating a shadow task system.
 
 ## What It Does
 
-- `Chat`
+- `Home`
+  The command-center view: running/waiting/needs-input counts, the daily loop, last request, attention items, system health, and quick templates.
+- `Compose Request`
   Real ORION turns inside the Mini App using the local guarded OpenClaw runtime path with stable session continuity.
-- `Inbox`
+- `Task Queue`
   Actionable approvals plus delegated work highlights from `tasks/JOBS/summary.json`.
-- `Today`
-  Readable `today`, `followups`, and `review` snapshots from the existing assistant status scripts.
+- `System Status`
+  Compact relay health for the Mini App API, queue, worker, and update freshness.
+- `Recent Activity`
+  A short feed derived from the same runtime and job artifacts.
+
+The daily loop is intentionally small:
+
+- `/capture <text>` for quick admin capture routed to POLARIS
+- `/today` for agenda and next actions
+- `/followups` for waiting-on items and POLARIS queue
+- `/review` for a concise close-the-loop pass
+
+Readable `today`, `followups`, and `review` snapshots come from the existing assistant status scripts.
 
 The Mini App intentionally reuses repo-native and runtime-native state instead of inventing a shadow system:
 
@@ -87,11 +100,12 @@ BotFather / Telegram setup:
    - `https://t.me/<bot>?startapp=approvals`
    - `https://t.me/<bot>?startapp=review`
 4. New direct routes are also valid:
-   - `https://t.me/<bot>?startapp=chat`
-   - `https://t.me/<bot>?startapp=inbox`
-   - `https://t.me/<bot>?startapp=today`
+   - `https://t.me/<bot>?startapp=compose`
+   - `https://t.me/<bot>?startapp=queue`
+   - `https://t.me/<bot>?startapp=status`
+   - `https://t.me/<bot>?startapp=activity`
 
-`home` now lands on the chat-first default surface.
+Compatibility aliases such as `chat`, `inbox`, and `today` still land on the closest current Relay Console surface.
 
 ## Chat Transport
 
@@ -123,6 +137,17 @@ Delegated work:
 - the inbox reads `tasks/JOBS/summary.json`
 - actionable follow-up buttons route into the existing `assistant_capture.py` path
 - the Mini App does not create or maintain a duplicate task database
+
+## OpenClaw 2026.5.x Usage
+
+The local runtime supports newer active-run commands such as `/steer` and `/side`.
+
+Use them as operator habits before enabling broader behavior changes:
+
+- `/steer <correction>`: redirect an active ORION run when it is drifting, without starting over.
+- `/side <question>`: ask a side question without derailing the main task.
+
+Keep `messages.visibleReplies`, Telegram progress streaming, commitments, new channels, and file transfer behind focused pilots. They should not be enabled globally until the Mini App and Telegram regression paths prove the visible behavior is good.
 
 ## Public Exposure
 

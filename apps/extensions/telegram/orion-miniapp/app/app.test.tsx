@@ -246,6 +246,11 @@ describe("ORION Relay Console route model", () => {
     expect(screenFromStartapp("home")).toBe("home");
     expect(screenFromStartapp("queue")).toBe("queue");
     expect(screenFromStartapp("compose")).toBe("compose");
+    expect(screenFromStartapp("chat")).toBe("compose");
+    expect(screenFromStartapp("inbox")).toBe("queue");
+    expect(screenFromStartapp("today")).toBe("home");
+    expect(screenFromStartapp("followups")).toBe("home");
+    expect(screenFromStartapp("review")).toBe("home");
     expect(screenFromStartapp("activity")).toBe("activity");
     expect(screenFromStartapp("feed")).toBe("activity");
     expect(screenFromStartapp("settings")).toBe("settings");
@@ -303,7 +308,10 @@ describe("ORION Relay Console route model", () => {
     );
 
     expect(screen.getByText("What is Orion doing right now?")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Daily loop" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New Request" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "What needs me?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Plan today" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "System Health" })).toBeInTheDocument();
   });
 

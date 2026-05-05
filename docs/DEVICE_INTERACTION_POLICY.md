@@ -47,6 +47,7 @@ Preferred typed verbs:
 - `notify`
 - `finder_reveal`
 - `shortcut`
+- brokered file-transfer verbs from `docs/ORION_FILE_TRANSFER_BROKER.md`
 - bounded `applescript`
 - future typed content actions such as `notes_create`, `calendar_capture`, `mail_compose`
 
@@ -138,6 +139,7 @@ Cron/hooks may not imply that an approval-gated action was already executed unle
 - Treat personal browser sessions as identity-bearing surfaces.
 - Prefer typed verbs over generic execution.
 - Keep direct interaction auditable through Task Packets, artifacts, and proof bundles.
+- Keep node file movement brokered through ATLAS, configured paths, approval gates, and proof artifacts.
 
 ## Design Consequences
 
@@ -145,3 +147,22 @@ Cron/hooks may not imply that an approval-gated action was already executed unle
 - Add typed actions before adding more autonomy.
 - Package capabilities as operator workflows instead of exposing raw power first.
 - Keep unsafe fallback paths narrow, explicit, and reviewable.
+
+## Brokered File Transfer
+
+OpenClaw `file-transfer` may be enabled only through the broker policy in `docs/ORION_FILE_TRANSFER_BROKER.md`.
+
+Allowed posture:
+- ATLAS-owned Task Packet
+- Mac Mini node policy only
+- `ask: always`
+- `followSymlinks: false`
+- staging/artifact paths only
+- final command payload plus listing or checksum proof
+
+Disallowed posture:
+- wildcard node policy
+- freeform home-directory browsing
+- writes outside broker inbound staging
+- silent sync behavior
+- claims of completion without proof

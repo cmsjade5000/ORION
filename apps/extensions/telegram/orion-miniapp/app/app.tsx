@@ -79,10 +79,11 @@ const QUEUE_FILTERS: Array<{ id: QueueFilter; label: string }> = [
 ];
 
 const QUICK_TEMPLATES = [
-  { key: "status", label: "System Health", template: "/health" },
-  { key: "queue", label: "Queue Check", template: "/queue" },
-  { key: "review", label: "Status Pulse", template: "/review" },
-  { key: "open", label: "Search", template: "Open the latest Orion activity and tell me what is blocked." },
+  { key: "needs-me", label: "What needs me?", template: "/followups" },
+  { key: "plan-today", label: "Plan today", template: "/today" },
+  { key: "close-loop", label: "Close the loop", template: "/review" },
+  { key: "delegate", label: "Delegate this", template: "/capture " },
+  { key: "changed", label: "Explain changes", template: "Explain what changed and what needs my attention." },
 ];
 
 const QUEUE_TONES: Readonly<Record<TaskStatus | "stalled", "good" | "warn" | "alert" | "neutral">> = {
@@ -238,6 +239,12 @@ function formatQueueRequestTime(value: string): string {
   const ts = Date.parse(value);
   if (!Number.isFinite(ts)) return "recently";
   return new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function digestPreview(value?: string): string {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "No current signal.";
+  return text.length > 132 ? `${text.slice(0, 129)}...` : text;
 }
 
 type MiniAppViewProps = {
@@ -652,6 +659,53 @@ export function MiniAppView(props: MiniAppViewProps) {
               <button type="button" className="button" onClick={() => props.onNavigate("status")}>
                 Open System Status
               </button>
+            </div>
+          </Section>
+
+          <Section title="Daily loop" subtitle="Capture, plan, follow up, review.">
+            <div className="daily-loop-grid">
+              <article className="daily-loop-card">
+                <p className="mini-task__status">Today</p>
+                <p className="detail-text">{digestPreview(props.review?.today || props.home?.today)}</p>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    props.onComposerChange("/today");
+                    props.onNavigate("compose");
+                  }}
+                >
+                  Plan Today
+                </button>
+              </article>
+              <article className="daily-loop-card">
+                <p className="mini-task__status">Follow-ups</p>
+                <p className="detail-text">{digestPreview(props.review?.followups)}</p>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    props.onComposerChange("/followups");
+                    props.onNavigate("compose");
+                  }}
+                >
+                  What Needs Me?
+                </button>
+              </article>
+              <article className="daily-loop-card">
+                <p className="mini-task__status">Review</p>
+                <p className="detail-text">{digestPreview(props.review?.review || props.home?.review)}</p>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    props.onComposerChange("/review");
+                    props.onNavigate("compose");
+                  }}
+                >
+                  Close The Loop
+                </button>
+              </article>
             </div>
           </Section>
 

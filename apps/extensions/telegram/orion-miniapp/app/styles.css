@@ -149,18 +149,32 @@ h1 {
   gap: 8px;
 }
 
+.daily-loop-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 @media (max-width: 620px) {
-  .card-row {
+  .card-row,
+  .daily-loop-grid {
     grid-template-columns: 1fr;
   }
 }
 
 .stat-card,
-.mini-task-tone {
+.mini-task-tone,
+.daily-loop-card {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px;
   background: var(--surface-strong);
+}
+
+.daily-loop-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
 }
 
 .stat-card__label,
