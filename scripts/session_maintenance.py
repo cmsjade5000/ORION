@@ -82,6 +82,31 @@ def recall_store_missing(root: Path) -> bool:
     return not (root / "memory" / ".dreams" / "short-term-recall.json").exists()
 
 
+def recall_store_entry_count(root: Path) -> int:
+    recall_path = root / "memory" / ".dreams" / "short-term-recall.json"
+    if not recall_path.exists():
+        return 0
+    try:
+        raw = json.loads(recall_path.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+    if isinstance(raw, list):
+        return len(raw)
+    if not isinstance(raw, dict):
+        return 0
+    for key in ("entries", "items", "recalls", "records"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            return len(value)
+        if isinstance(value, dict):
+            return len(value)
+    return 0
+
+
+def recall_store_needs_seed(root: Path, *, min_entries: int = 3) -> bool:
+    return recall_store_entry_count(root) < min_entries
+
+
 def stage_dreaming_recall(root: Path, agent: str) -> subprocess.CompletedProcess[str]:
     return run_cmd(
         [
@@ -324,7 +349,7 @@ def main() -> int:
     dreaming_recall_result: subprocess.CompletedProcess[str] | None = None
     reindex_required = False
     maintenance_ok = True
-    recall_seed_required = dreaming_enabled(root) and recall_store_missing(root)
+    recall_seed_required = dreaming_enabled(root) and recall_store_needs_seed(root)
 
     if args.apply and apply_allowed:
         consolidation_result, _ = consolidate_apply(root)

@@ -115,7 +115,7 @@ exit 2
             (root / "memory").mkdir(parents=True, exist_ok=True)
             (root / "memory" / ".dreams").mkdir(parents=True, exist_ok=True)
             (root / "memory" / ".dreams" / "short-term-recall.json").write_text(
-                '{"entries":[]}\n',
+                '{"entries":[{"key":"a"},{"key":"b"},{"key":"c"}]}\n',
                 encoding="utf-8",
             )
             (root / "memory" / "2026-04-06-gateway-update.md").write_text("# Session\n\nhello\n", encoding="utf-8")
@@ -175,7 +175,7 @@ exit 2
             (root / "memory").mkdir(parents=True, exist_ok=True)
             (root / "memory" / ".dreams").mkdir(parents=True, exist_ok=True)
             (root / "memory" / ".dreams" / "short-term-recall.json").write_text(
-                '{"entries":[]}\n',
+                '{"entries":[{"key":"a"},{"key":"b"},{"key":"c"}]}\n',
                 encoding="utf-8",
             )
             self._write_fake_openclaw(root, missing=120, before=200, after=50)
@@ -260,6 +260,48 @@ exit 2
             report = (root / "tasks" / "NOTES" / "session-maintenance.md").read_text(encoding="utf-8")
             self.assertIn("## Dreaming Recall Store", report)
             self.assertIn("- seeded: `true`", report)
+
+    def test_apply_reseeds_collapsed_dreaming_recall_even_when_file_exists(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "tasks" / "NOTES").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / ".dreams").mkdir(parents=True, exist_ok=True)
+            (root / "memory" / ".dreams" / "short-term-recall.json").write_text(
+                '{"entries":[{"key":"single-live-recall"}]}\n',
+                encoding="utf-8",
+            )
+            self._write_fake_openclaw(root, missing=1, before=20, after=19)
+            env = dict(os.environ)
+            env["PATH"] = f"{root}:{env.get('PATH', '')}"
+            env["AUTO_OK"] = "1"
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--agent",
+                    "main",
+                    "--fix-missing",
+                    "--apply",
+                    "--min-missing",
+                    "50",
+                    "--min-reclaim",
+                    "25",
+                    "--json",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["dreaming_recall"]["required"])
+            self.assertTrue(payload["dreaming_recall"]["ok"])
+            command_log = (root / "command-log.txt").read_text(encoding="utf-8")
+            self.assertIn("memory rem-backfill --agent main", command_log)
 
     def test_reindex_failure_is_reported_and_not_silent(self):
         with tempfile.TemporaryDirectory() as td:
