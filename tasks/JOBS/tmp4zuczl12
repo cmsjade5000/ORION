@@ -1,0 +1,57 @@
+{
+  "age_hours": null,
+  "inbox": {
+    "line": 9,
+    "path": "tasks/INBOX/ATLAS.md"
+  },
+  "job_id": "pkt-56b620502f5d5624",
+  "notification_delivery": {
+    "queued": {
+      "channels": {},
+      "status": "not-requested"
+    },
+    "result": {
+      "channels": {},
+      "status": "not-requested"
+    }
+  },
+  "notify": "",
+  "notify_channels": [],
+  "objective": "Deploy the updated AEGIS `aegis-sentinel` script to the AEGIS host so routine Tailscale online/active churn no longer messages Cory.",
+  "owner": "ATLAS",
+  "packet_id": "pkt-56b620502f5d5624",
+  "parent_packet_id": "",
+  "pending_since_ts": null,
+  "queued_digest": "56b620502f5d56246d2899a0e183a10ced7776b9615325f090b9c9ce8c5e0483",
+  "requester": "ORION",
+  "result": {
+    "job_state": "complete",
+    "present": true,
+    "preview_lines": [
+      "Status: OK",
+      "Findings:",
+      "- Remote `/usr/local/bin/aegis-sentinel` sha256 matches repo `scripts/aegis_remote/aegis-sentinel`: `ea60c1eb1a3d4c8a029d626339bed33205147bbfc35963f3117be8dc3fa7ed51`.",
+      "- `systemctl is-active aegis-sentinel.timer` returned `active` on 2026-04-09.",
+      "- `systemctl is-active aegis-sentinel.service` returned `inactive`, consistent with a timer-driven oneshot service.",
+      "- `/var/log/aegis-sentinel/sentinel.log` shows repeated `OK: sentinel cycle` entries through `2026-04-09T13:59:07Z`.",
+      "- Recent Tailscale online/active churn is logged as `suppressed`, matching the intended noise fix.",
+      "Artifacts:",
+      "- scripts/aegis_remote/aegis-sentinel",
+      "- ssh root@100.75.104.54 verification output captured in this turn",
+      "Next step (if any):",
+      "- None."
+    ],
+    "raw_status": "OK",
+    "status": "ok"
+  },
+  "result_digest": "401c4b4b91a56baeb55adf922a4114322a1fd0d9c3935865347ccd220d229317",
+  "result_status": "OK",
+  "root_packet_id": "pkt-56b620502f5d5624",
+  "stale_threshold_hours": 24.0,
+  "state": "complete",
+  "state_reason": "result_ok_no_ticket_refs",
+  "ticket_refs": [],
+  "updated_ts": 1778054667.959323,
+  "version": 1,
+  "workflow_id": "pkt-56b620502f5d5624"
+}

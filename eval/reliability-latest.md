@@ -1,6 +1,6 @@
 # Reliability Snapshot
 
-- Generated at: `2026-05-05T14:10:17.853559+00:00`
+- Generated at: `2026-05-08T00:08:11.647915+00:00`
 - Window: last `24h`
 
 ## Lane Wait
@@ -31,8 +31,8 @@
 
 - Version: `1`
 - Total: `35`
-- By last status: `{'ok': 28, 'error': 5}`
-- Delivery status counts: `{'delivered': 5, 'not-requested': 6, 'not-delivered': 12, 'unknown': 3}`
+- By last status: `{'ok': 24, 'error': 9}`
+- Delivery status counts: `{'delivered': 5, 'not-requested': 7, 'not-delivered': 12, 'unknown': 2}`
 
 ## Queue Health
 
@@ -57,5 +57,5 @@
 ## Queue Snapshot
 
 - Source: `tasks/JOBS/summary.json`
-- Counts: `{'queued': 0, 'pending_verification': 0, 'total_jobs': 5, 'workflow_count': 5}`
-- Workflow count: `5`
+- Counts: `{'queued': 0, 'pending_verification': 0, 'total_jobs': 4, 'workflow_count': 4}`
+- Workflow count: `4`
