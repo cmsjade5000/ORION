@@ -66,6 +66,7 @@ Canary results source: `/Users/corystoner/src/ORION/docs/skills/canary-results-2
 
 | Date (ET) | Lane Wait Count | Lane Wait P95 (ms) | Cron Enabled | Delivery Queue | Eval Gate | Snapshot |
 | --- | ---: | ---: | ---: | ---: | --- | --- |
+| 2026-05-09 | 0 | 0 | 5 | 0 | pass | `eval/history/reliability-20260509-141008.json` |
 | 2026-05-08 | 0 | 0 | 5 | 0 | pass | `eval/history/reliability-20260508-141008.json` |
 | 2026-05-07 | 0 | 0 | 5 | 0 | pass | `eval/history/reliability-20260508-000811.json` |
 | 2026-05-05 | 0 | 0 | 5 | 0 | pass | `eval/history/reliability-20260505-141017.json` |
