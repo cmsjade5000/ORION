@@ -46,6 +46,26 @@ class TestEmailTriageRouter(unittest.TestCase):
         self.assertEqual(self.r.classify_intent("Need budget review", "Should we buy this?"), "money")
         self.assertEqual(self.r.classify_intent("Please draft a reply", "Polish this email"), "draft")
         self.assertEqual(self.r.classify_intent("Any latest AI news", "headlines please"), "news")
+        self.assertEqual(
+            self.r.classify_intent(
+                "Fwd: tracking information",
+                "Monitor this shipment and let me know when it is about to be delivered.",
+            ),
+            "ops",
+        )
+
+    def test_coalesce_body_text_extracts_forwarded_html_directions(self):
+        message = {
+            "subject": "Fwd: tracking information",
+            "html": (
+                "<html><head><style>.x{display:none}</style></head><body>"
+                "Orion, monitor this shipment please.<div>Tracking number: 9218490379172215665551</div>"
+                "</body></html>"
+            ),
+        }
+        body = self.r.coalesce_body_text(message)
+        self.assertIn("Orion, monitor this shipment please.", body)
+        self.assertIn("Tracking number: 9218490379172215665551", body)
 
     def test_assess_risk_executable_and_raw_ip(self):
         reasons = self.r.assess_risk(

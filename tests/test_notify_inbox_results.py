@@ -466,6 +466,65 @@ class TestNotifyInboxResults(unittest.TestCase):
             self.assertIn("[POLARIS] Prepare today's agenda.", r.stdout)
             self.assertIn("[WIRE] Summarize research.", r.stdout)
 
+    def test_dry_run_marks_cancelled_summary_results_seen(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_jobs_summary(
+                root,
+                {
+                    "version": 1,
+                    "jobs": [
+                        {
+                            "job_id": "pkt-cancelled",
+                            "workflow_id": "wf-cancelled",
+                            "state": "cancelled",
+                            "state_reason": "result_cancelled",
+                            "owner": "ATLAS",
+                            "objective": "Cancel stale work.",
+                            "notify": "telegram",
+                            "notify_channels": ["telegram"],
+                            "queued_digest": "digest-old",
+                            "result_digest": "digest-cancelled",
+                            "result": {
+                                "status": "cancelled",
+                                "job_state": "cancelled",
+                                "present": True,
+                                "raw_status": "CANCELLED",
+                                "preview_lines": ["Status: CANCELLED", "Next step: none"],
+                            },
+                            "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 12},
+                        }
+                    ],
+                    "workflows": [],
+                },
+            )
+
+            env = dict(os.environ)
+            env["NOTIFY_DRY_RUN"] = "1"
+            r = subprocess.run(
+                [
+                    "python3",
+                    str(self._script()),
+                    "--repo-root",
+                    str(root),
+                    "--state-path",
+                    "tmp/state.json",
+                    "--require-notify-telegram",
+                    "--max-per-run",
+                    "10",
+                ],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("NOTIFY_OK", r.stdout)
+            state = json.loads((root / "tmp" / "state.json").read_text(encoding="utf-8"))
+            self.assertIn("telegram:result:suppressed:digest-cancelled", state)
+
     def test_dry_run_sends_only_scribe_telegram_message_body(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

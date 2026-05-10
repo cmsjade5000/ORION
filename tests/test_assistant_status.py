@@ -386,6 +386,95 @@ class TestAssistantStatus(unittest.TestCase):
             self.assertIn("Follow-through:", message)
             self.assertIn("Notification issues: 1", message)
 
+    def test_status_attention_items_include_job_proof_location(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            jobs_dir = root / "tasks" / "JOBS"
+            jobs_dir.mkdir(parents=True, exist_ok=True)
+            (jobs_dir / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "updated_ts": 1777576026.0,
+                        "job_count": 1,
+                        "counts": {"blocked": 1},
+                        "jobs": [
+                            {
+                                "job_id": "pkt-blocked",
+                                "state": "blocked",
+                                "state_reason": "result_blocked",
+                                "owner": "ATLAS",
+                                "objective": "Repair stuck follow-through.",
+                                "notification_delivery": {
+                                    "queued": {"status": "delivered", "channels": {}},
+                                    "result": {"status": "delivered", "channels": {}},
+                                },
+                                "result": {"status": "blocked", "present": True},
+                                "inbox": {"path": "tasks/INBOX/ATLAS.md", "line": 9},
+                            }
+                        ],
+                        "workflows": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            proc = subprocess.run(
+                ["python3", str(self._script()), "--repo-root", str(root), "--cmd", "status", "--json"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            message = json.loads(proc.stdout)["message"]
+
+            self.assertIn("ATLAS: Repair stuck follow-through. [tasks/INBOX/ATLAS.md:9]", message)
+
+    def test_runtime_health_summarizes_core_runtime_checks(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._init_repo(root)
+            with mock.patch.object(
+                self.mod,
+                "_run_text_command",
+                return_value=(True, "OpenClaw 2026.5.7"),
+            ), mock.patch.object(
+                self.mod,
+                "run_json_command",
+                side_effect=[
+                    {"valid": True, "path": "/Users/corystoner/.openclaw/openclaw.json"},
+                    {
+                        "service": {"loaded": True, "runtime": {"status": "running"}, "configAudit": {"ok": True}},
+                        "rpc": {"ok": True},
+                    },
+                    {
+                        "eventLoop": {"degraded": True, "reasons": ["cpu"]},
+                        "channels": {"telegram": {"configured": True, "running": True, "probe": {"ok": True}}},
+                    },
+                    {"defaultModel": "openai-codex/gpt-5.5", "auth": {"missingProvidersInUse": []}},
+                    [
+                        {
+                            "status": {"sources": ["memory", "sessions"]},
+                            "audit": {"exists": True, "entryCount": 3, "invalidEntryCount": 0, "issues": []},
+                        }
+                    ],
+                    {"ok": True, "issues": []},
+                ],
+            ):
+                message = self.mod._render_runtime_health(root)
+
+            self.assertIn("ORION runtime health", message)
+            self.assertIn("Overall: warning", message)
+            self.assertIn("OpenClaw: healthy (OpenClaw 2026.5.7)", message)
+            self.assertIn("Config: healthy", message)
+            self.assertIn("Gateway: healthy", message)
+            self.assertIn("Telegram: warning", message)
+            self.assertIn("Models: healthy", message)
+            self.assertIn("Memory: healthy", message)
+            self.assertIn("Follow-through: healthy", message)
+
     def test_status_missing_summary_uses_fallback_without_crashing(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

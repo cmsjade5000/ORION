@@ -170,12 +170,14 @@ Apply a high-autonomy Discord configuration for ORION in a specific guild and pr
 
 ### Purpose
 Build the generated assistant agenda/status views used by `/today`, `/status`, `/followups`, and `/review`.
+It also exposes the compact runtime-health readback used for low-cost operator checks.
 
 ### Usage
 
 ```bash
 python3 scripts/assistant_status.py --cmd today --json
 python3 scripts/assistant_status.py --cmd status --json
+python3 scripts/assistant_status.py --cmd runtime-health --json
 python3 scripts/assistant_status.py --cmd refresh --json
 ```
 

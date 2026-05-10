@@ -563,7 +563,7 @@ def _find_packets_from_job_summary(repo_root: Path) -> tuple[list[PacketQueued],
 
         result_status = str(result.get("status") or "").strip().lower()
         digest = str(job.get("result_digest") or "").strip()
-        if result_status in {"ok", "failed", "blocked"} and digest:
+        if result_status in {"ok", "failed", "blocked", "cancelled"} and digest:
             preview = result.get("preview_lines", [])
             if not isinstance(preview, list):
                 preview = []

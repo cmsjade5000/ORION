@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from delegation_delivery_rules import blocked_direct_telegram_delivery
 
 AGENDA_PATH = Path("tasks/NOTES/assistant-agenda.md")
 DREAMING_COMMANDS = ["dreaming-status", "dreaming-help", "dreaming-on", "dreaming-off"]
+RUNTIME_COMMANDS = ["runtime-health"]
 STATUS_ATTENTION_LIMIT = 6
 SUMMARY_STALE_HOURS = 24
 
@@ -143,7 +145,14 @@ def _is_terminal_job(job: dict[str, object]) -> bool:
 def _status_job_label(job: dict[str, object]) -> str:
     owner = str(job.get("owner") or "UNKNOWN").strip() or "UNKNOWN"
     objective = str(job.get("objective") or "(no objective)").strip() or "(no objective)"
-    return f"{owner}: {objective}"
+    label = f"{owner}: {objective}"
+    inbox = job.get("inbox")
+    if isinstance(inbox, dict):
+        path = str(inbox.get("path") or "").strip()
+        line = _safe_int(inbox.get("line"), 0)
+        if path and line > 0:
+            label = f"{label} [{path}:{line}]"
+    return label
 
 
 def _status_attention_items(summary: dict[str, object], jobs: list[dict[str, object]], workflows: list[dict[str, object]]) -> list[tuple[int, str]]:
@@ -256,6 +265,130 @@ def _render_status(root: Path) -> tuple[str, str]:
     )
     message = "\n".join(lines).strip()
     return message, message
+
+
+def _health_rank(level: str) -> int:
+    return {"healthy": 0, "warning": 1, "blocked": 2}.get(level, 2)
+
+
+def _overall_health_level(levels: list[str]) -> str:
+    if any(level == "blocked" for level in levels):
+        return "blocked"
+    if any(level == "warning" for level in levels):
+        return "warning"
+    return "healthy"
+
+
+def _json_list_first(payload: object) -> dict[str, object]:
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        return payload[0]
+    return payload if isinstance(payload, dict) else {}
+
+
+def _render_runtime_health(root: Path) -> str:
+    version_ok, version = _run_text_command(["openclaw", "--version"], cwd=root, timeout=10)
+    config = run_json_command(["openclaw", "config", "validate", "--json"], cwd=root, timeout=45)
+    gateway = run_json_command(["openclaw", "gateway", "status", "--json"], cwd=root, timeout=45)
+    channels = run_json_command(["openclaw", "channels", "status", "--probe", "--json"], cwd=root, timeout=45)
+    models = run_json_command(["openclaw", "models", "status", "--json"], cwd=root, timeout=45)
+    memory = run_json_command(["openclaw", "memory", "status", "--agent", "main", "--json"], cwd=root, timeout=45)
+    doctor = run_json_command(
+        [sys.executable or "python3", "scripts/inbox_doctor.py", "--repo-root", str(root), "--json"],
+        cwd=root,
+        timeout=45,
+    )
+
+    checks: list[tuple[str, str, str]] = []
+
+    checks.append(("OpenClaw", "healthy" if version_ok and version else "blocked", version or "version unavailable"))
+
+    config_payload = config if isinstance(config, dict) else {}
+    config_valid = config_payload.get("valid") is True
+    config_path = str(config_payload.get("path") or "~/.openclaw/openclaw.json")
+    checks.append(("Config", "healthy" if config_valid else "blocked", config_path if config_valid else "validation failed"))
+
+    gateway_payload = gateway if isinstance(gateway, dict) else {}
+    service = gateway_payload.get("service") if isinstance(gateway_payload.get("service"), dict) else {}
+    runtime = service.get("runtime") if isinstance(service.get("runtime"), dict) else {}
+    rpc = gateway_payload.get("rpc") if isinstance(gateway_payload.get("rpc"), dict) else {}
+    gateway_ok = bool(service.get("loaded")) and str(runtime.get("status") or "").lower() == "running" and rpc.get("ok") is True
+    gateway_detail = f"{str(runtime.get('status') or 'unknown')}, RPC {'ok' if rpc.get('ok') is True else 'not ok'}"
+    checks.append(("Gateway", "healthy" if gateway_ok else "blocked", gateway_detail))
+
+    channels_payload = channels if isinstance(channels, dict) else {}
+    telegram = (channels_payload.get("channels") or {}).get("telegram") if isinstance(channels_payload.get("channels"), dict) else {}
+    telegram_probe = telegram.get("probe") if isinstance(telegram, dict) and isinstance(telegram.get("probe"), dict) else {}
+    telegram_ok = (
+        isinstance(telegram, dict)
+        and telegram.get("configured") is True
+        and telegram.get("running") is True
+        and telegram_probe.get("ok") is True
+    )
+    event_loop = channels_payload.get("eventLoop") if isinstance(channels_payload.get("eventLoop"), dict) else {}
+    event_loop_degraded = bool(event_loop.get("degraded"))
+    if not telegram_ok:
+        telegram_level = "blocked"
+    elif event_loop_degraded:
+        telegram_level = "warning"
+    else:
+        telegram_level = "healthy"
+    reasons = event_loop.get("reasons") if isinstance(event_loop.get("reasons"), list) else []
+    telegram_detail = "probe ok" if telegram_ok else "probe failed"
+    if reasons:
+        telegram_detail += f"; event loop: {', '.join(str(reason) for reason in reasons)}"
+    checks.append(("Telegram", telegram_level, telegram_detail))
+
+    models_payload = models if isinstance(models, dict) else {}
+    auth = models_payload.get("auth") if isinstance(models_payload.get("auth"), dict) else {}
+    missing = auth.get("missingProvidersInUse") if isinstance(auth.get("missingProvidersInUse"), list) else []
+    default_model = str(models_payload.get("defaultModel") or models_payload.get("resolvedDefault") or "").strip()
+    models_ok = bool(default_model) and not missing
+    model_detail = default_model or "default model unavailable"
+    if missing:
+        model_detail += f"; missing providers: {', '.join(str(item) for item in missing)}"
+    checks.append(("Models", "healthy" if models_ok else "blocked", model_detail))
+
+    memory_entry = _json_list_first(memory)
+    audit = memory_entry.get("audit") if isinstance(memory_entry.get("audit"), dict) else {}
+    status = memory_entry.get("status") if isinstance(memory_entry.get("status"), dict) else {}
+    invalid_count = _safe_int(audit.get("invalidEntryCount"), 0)
+    entry_count = _safe_int(audit.get("entryCount"), 0)
+    memory_ok = bool(audit.get("exists")) and entry_count > 0 and invalid_count == 0
+    memory_level = "healthy" if memory_ok else "warning" if audit else "blocked"
+    sources = status.get("sources") if isinstance(status.get("sources"), list) else []
+    memory_detail = f"entries={entry_count}"
+    if sources:
+        memory_detail += f"; sources={', '.join(str(source) for source in sources)}"
+    checks.append(("Memory", memory_level, memory_detail))
+
+    doctor_payload = doctor if isinstance(doctor, dict) else {}
+    doctor_ok = doctor_payload.get("ok") is True
+    issues = doctor_payload.get("issues") if isinstance(doctor_payload.get("issues"), list) else []
+    doctor_detail = "issues=none" if not issues else f"issues={', '.join(str(issue) for issue in issues)}"
+    checks.append(("Follow-through", "healthy" if doctor_ok else "blocked", doctor_detail))
+
+    overall = _overall_health_level([level for _, level, _ in checks])
+    ordered = sorted(checks, key=lambda item: (-_health_rank(item[1]), item[0]))
+
+    lines = [
+        "ORION runtime health",
+        "",
+        f"Overall: {overall}",
+        "",
+        "Checks:",
+    ]
+    for name, level, detail in ordered:
+        lines.append(f"- {name}: {level} ({detail})")
+    lines.extend(
+        [
+            "",
+            "Proof paths:",
+            "- Runtime: openclaw config/gateway/channels/models/memory checks",
+            "- Follow-through: scripts/inbox_doctor.py --json",
+            "- Full bundle artifact: make operator-health-bundle",
+        ]
+    )
+    return "\n".join(lines).strip()
 
 
 def _run_text_command(argv: list[str], *, cwd: Path, timeout: int = 20) -> tuple[bool, str]:
@@ -679,6 +812,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         message = _set_dreaming_enabled(root, True)
     elif args.cmd == "dreaming-off":
         message = _set_dreaming_enabled(root, False)
+    elif args.cmd == "runtime-health":
+        message = _render_runtime_health(root)
     else:
         raise SystemExit(f"unsupported command: {args.cmd}")
 
@@ -695,7 +830,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cmd",
         required=True,
-        choices=["today", "status", "followups", "review", "refresh", *DREAMING_COMMANDS],
+        choices=["today", "status", "followups", "review", "refresh", *DREAMING_COMMANDS, *RUNTIME_COMMANDS],
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     parser.set_defaults(func=cmd_status)

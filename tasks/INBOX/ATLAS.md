@@ -156,3 +156,47 @@ What changed / what I found:
 - Cancelled as obsolete while cleaning up stale approval smoke tests; no approval decision or external side effect is needed anymore.
 Next step (if any):
 - None.
+
+TASK_PACKET v1
+Owner: ATLAS
+Requester: ORION
+Objective: Translate inbound ops request into a safe execution plan with explicit stop gates.
+Notify: telegram
+Idempotency Key: 17a890f850cc69cb2128
+Success Criteria:
+- Risk preflight is documented (sender, link domains only, attachment types only).
+- Result block states whether to proceed, block, or request Cory approval.
+Constraints:
+- Do not click email links or open/execute attachments from this packet.
+- Do not send external email or perform side effects without explicit Cory approval via ORION.
+Inputs:
+- Message ID: <1910E10F-7E34-4F38-BC5A-622A5815C72F@icloud.com>
+- Timestamp: 2026-05-10T15:54:07.000Z
+- Sender: Cory Stoner <cory.stoner@icloud.com>
+- Sender Domain: icloud.com
+- Subject: Fwd: Cory, your tracking information is inside
+- Request Summary: Subject: Fwd: Cory, your tracking information is inside. Ask: Orion, figure out a way to monitor and track this shipment, and to let me know when it about to be delivered, please.
+- Link Domains: (none)
+- Attachment Types: (none)
+Risks:
+- low
+Stop Gates:
+- Any outbound send, credential handling, payment action, or destructive action requires Cory approval.
+- If new risk indicators appear, pause and return BLOCKED with rationale.
+Output Format:
+- Result:
+- Status: OK | FAILED | BLOCKED
+- What changed / what I found:
+- Next step (if any):
+
+Result:
+Status: OK
+What changed / what I found:
+- Risk preflight completed: sender Cory Stoner <cory.stoner@icloud.com>, sender domain `icloud.com`, no link domains, no attachments, low risk.
+- ORION successfully triaged the forwarded Scentbird shipment email into this ATLAS packet after reading the full AgentMail body.
+- Shipment tracking number identified: `9218490379172215665551`.
+- USPS public tracking returned JS/anti-bot-gated content from the command-line path, not a reliable machine-readable tracking state.
+- Repo/runtime notification evidence shows Telegram is the canonical notification path, but specialists must return results to ORION and not message Cory directly.
+- No existing enabled monitor job for this Scentbird/USPS tracking number was found.
+Next step (if any):
+- None for this reliability cleanup; shipment monitoring is not configured and should be handled as a separate execution pass with an approved tracking data source.

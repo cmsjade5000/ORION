@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import os
 import re
@@ -20,6 +21,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -102,6 +104,12 @@ OPS_TERMS = {
     "cron",
     "automation",
     "monitor",
+    "track",
+    "tracking",
+    "shipment",
+    "delivered",
+    "delivery",
+    "package",
     "healthcheck",
     "service",
     "pipeline",
@@ -154,6 +162,36 @@ class TriageResult:
     timestamp: str
 
 
+class _HTMLTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "head", "title"}:
+            self._skip_depth += 1
+            return
+        if tag.lower() in {"br", "div", "p", "tr", "table", "blockquote", "li"}:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "head", "title"} and self._skip_depth > 0:
+            self._skip_depth -= 1
+            return
+        if tag.lower() in {"div", "p", "tr", "table", "blockquote", "li"}:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        if data:
+            self._parts.append(data)
+
+    def text(self) -> str:
+        return html.unescape("".join(self._parts))
+
+
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -163,6 +201,18 @@ def normalize_ws(value: str, *, limit: int | None = None) -> str:
     if limit is not None and len(text) > limit:
         return text[: max(0, limit - 3)] + "..."
     return text
+
+
+def strip_html_to_text(value: str) -> str:
+    if not value:
+        return ""
+    parser = _HTMLTextExtractor()
+    try:
+        parser.feed(value)
+        parser.close()
+        return normalize_ws(parser.text())
+    except Exception:
+        return normalize_ws(re.sub(r"<[^>]+>", " ", html.unescape(value)))
 
 
 def extract_email(value: str) -> str:
@@ -266,6 +316,10 @@ def coalesce_body_text(message: dict[str, Any]) -> str:
     for value in candidates:
         if isinstance(value, str) and value.strip():
             return value
+    for key in ("extracted_html", "html"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return strip_html_to_text(value)
     return ""
 
 
@@ -483,6 +537,26 @@ def _load_messages_from_cli(from_inbox: str, limit: int) -> list[dict[str, Any]]
     if not isinstance(messages, list):
         return []
     return [m for m in messages if isinstance(m, dict)]
+
+
+def _hydrate_message_from_cli(from_inbox: str, message: dict[str, Any]) -> dict[str, Any]:
+    message_id = _message_id(message)
+    if not message_id:
+        return message
+    cli_path = _repo_root() / "skills" / "agentmail" / "cli.js"
+    cmd = ["node", str(cli_path), "get-message", from_inbox, message_id]
+    cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if cp.returncode != 0:
+        return message
+    try:
+        obj = json.loads(cp.stdout)
+    except json.JSONDecodeError:
+        return message
+    if not isinstance(obj, dict):
+        return message
+    merged = dict(message)
+    merged.update(obj)
+    return merged
 
 
 def _load_messages_from_file(path: Path) -> list[dict[str, Any]]:
@@ -716,6 +790,8 @@ def main(argv: list[str] | None = None) -> int:
         message_id = _message_id(message)
         if not message_id or message_id in processed_ids:
             continue
+        if not args.messages_json:
+            message = _hydrate_message_from_cli(args.from_inbox, message)
 
         triage = triage_message(
             message,

@@ -105,6 +105,7 @@ Deterministic assistant commands:
 - `/capture <text>` -> quick admin capture queued to POLARIS
 - `/followups` -> waiting-on items and POLARIS queue
 - `/review` -> concise daily review / next actions
+- `python3 scripts/assistant_status.py --cmd runtime-health --json` -> compact proof-backed runtime readback
 
 Generated assistant artifacts:
 - `memory/ASSISTANT_PROFILE.md`
