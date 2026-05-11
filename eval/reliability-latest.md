@@ -1,6 +1,6 @@
 # Reliability Snapshot
 
-- Generated at: `2026-05-10T14:10:10.986111+00:00`
+- Generated at: `2026-05-11T14:10:06.767296+00:00`
 - Window: last `24h`
 
 ## Lane Wait
@@ -57,5 +57,5 @@
 ## Queue Snapshot
 
 - Source: `tasks/JOBS/summary.json`
-- Counts: `{'queued': 0, 'pending_verification': 0, 'total_jobs': 4, 'workflow_count': 4}`
-- Workflow count: `4`
+- Counts: `{'queued': 0, 'pending_verification': 0, 'total_jobs': 5, 'workflow_count': 5}`
+- Workflow count: `5`
