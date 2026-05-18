@@ -32,7 +32,11 @@ body,
 body {
   color: var(--text);
   font: 15px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: linear-gradient(180deg, #050914 0%, #070b15 45%, #080f19 100%);
+  background:
+    linear-gradient(180deg, rgba(5, 9, 20, 0.88) 0%, rgba(7, 11, 21, 0.92) 45%, rgba(8, 15, 25, 0.96) 100%),
+    image-set(url("./assets/control-deck-bg.webp") 1x);
+  background-attachment: fixed;
+  background-size: cover;
 }
 
 #root {
@@ -43,6 +47,13 @@ button,
 textarea,
 input {
   font: inherit;
+}
+
+button:disabled,
+textarea:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .orion-shell {
@@ -353,4 +364,261 @@ h1 {
 
 .tone-neutral {
   color: var(--text);
+}
+
+.control-deck-shell {
+  max-width: 1120px;
+  gap: 10px;
+}
+
+.deck-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.deck-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.deck-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.deck-grid--single,
+.verdict-card,
+.deck-panel:nth-last-child(-n + 2) {
+  grid-column: 1 / -1;
+}
+
+.verdict-card,
+.deck-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.verdict-card {
+  min-height: 150px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent 48%),
+    var(--surface-strong);
+}
+
+.verdict-card h1,
+.deck-topbar h1 {
+  margin: 3px 0 0;
+  letter-spacing: 0;
+}
+
+.verdict-card h1 {
+  font-size: clamp(26px, 6vw, 42px);
+  line-height: 1;
+}
+
+.verdict-card p {
+  margin: 7px 0 0;
+  max-width: 680px;
+  color: var(--muted);
+}
+
+.verdict-actions,
+.deck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.verdict-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.deck-panel {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.deck-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.deck-panel__header h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.18;
+}
+
+.deck-panel__header p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.signal-stack,
+.activity-stack,
+.cleanup-list {
+  display: grid;
+  gap: 7px;
+}
+
+.signal-row,
+.activity-card,
+.cleanup-item,
+.action-result {
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
+}
+
+.signal-row,
+.cleanup-item {
+  min-height: 58px;
+  padding: 9px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+}
+
+.signal-row--compact {
+  min-height: 48px;
+}
+
+.signal-row h3,
+.activity-card p,
+.cleanup-item strong,
+.action-result strong {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.22;
+}
+
+.cleanup-item span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.signal-row p,
+.activity-card span,
+.activity-card small,
+.cleanup-item small,
+.action-result p,
+.action-result span {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+
+.signal-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.activity-card,
+.action-result {
+  padding: 9px;
+}
+
+.action-result {
+  display: grid;
+  gap: 3px;
+}
+
+.action-result--succeeded {
+  border-color: color-mix(in srgb, var(--good) 42%, var(--line));
+}
+
+.action-result--failed,
+.action-result--blocked {
+  border-color: color-mix(in srgb, var(--alert) 42%, var(--line));
+}
+
+.cleanup-item input {
+  width: 18px;
+  height: 18px;
+}
+
+.cleanup-item b {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.settings-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-grid div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: var(--surface-strong);
+}
+
+.settings-grid dt,
+.settings-grid dd {
+  margin: 0;
+}
+
+.settings-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-grid dd {
+  margin-top: 3px;
+  font-weight: 750;
+}
+
+@media (max-width: 760px) {
+  .deck-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .verdict-card,
+  .deck-topbar {
+    flex-direction: column;
+  }
+
+  .verdict-actions {
+    justify-content: flex-start;
+  }
+
+  .signal-row,
+  .cleanup-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .signal-row > strong,
+  .cleanup-item > b {
+    grid-column: 2;
+    justify-self: start;
+  }
 }

@@ -6,6 +6,16 @@ const { createChatManager } = require("./chat.cjs");
 const { publicConfig } = require("./config.cjs");
 const { validateInitData } = require("./auth.cjs");
 const {
+  actionDescriptors,
+  approveAction,
+  auditEvents,
+  controlDeckSnapshot,
+  isLoopbackRequest,
+  localTokenCookie,
+  previewAction,
+  validateLocalToken,
+} = require("./control_deck.cjs");
+const {
   approvalSnapshot,
   findJobById,
   homeState,
@@ -217,6 +227,18 @@ function serveIndex(req, res) {
 }
 
 async function withAuth(req, res, handler) {
+  if (validateLocalToken(req, CONFIG.workspaceRoot)) {
+    await handler({
+      user: {
+        id: "local",
+        first_name: "Local",
+        username: "mac-mini",
+      },
+      auth_type: "local-token",
+    });
+    return;
+  }
+
   const rawInitData = initDataFromRequest(req);
   try {
     const validated = validateInitData(rawInitData, CONFIG.botToken, {
@@ -251,8 +273,80 @@ async function routeApi(req, res, pathname) {
         user: fields.user || null,
         hasQueryId: Boolean(fields.query_id),
         operatorIdsConfigured: CONFIG.operatorIds.length > 0,
+        authType: fields.auth_type || "telegram",
         conversation: chatManager.bootstrap(fields.user || {}),
       });
+    });
+  }
+
+  if (pathname === "/api/control-deck/snapshot" && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      sendJson(res, 200, await controlDeckSnapshot(CONFIG.workspaceRoot));
+    });
+  }
+
+  if (pathname === "/api/control-deck/actions" && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      sendJson(res, 200, { actions: actionDescriptors() });
+    });
+  }
+
+  const controlDeckPreviewMatch = pathname.match(/^\/api\/control-deck\/actions\/([^/]+)\/preview$/i);
+  if (controlDeckPreviewMatch && req.method === "POST") {
+    return withAuth(req, res, async () => {
+      const body = parseJsonBody(await readBody(req));
+      if (!body) {
+        sendJson(res, 400, { error: "invalid json payload" });
+        return;
+      }
+      sendJson(res, 200, await previewAction(CONFIG.workspaceRoot, decodeURIComponent(controlDeckPreviewMatch[1]), body));
+    });
+  }
+
+  const controlDeckApproveMatch = pathname.match(/^\/api\/control-deck\/actions\/([^/]+)\/approve$/i);
+  if (controlDeckApproveMatch && req.method === "POST") {
+    return withAuth(req, res, async (fields) => {
+      const body = parseJsonBody(await readBody(req));
+      if (!body) {
+        sendJson(res, 400, { error: "invalid json payload" });
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        await approveAction(
+          CONFIG.workspaceRoot,
+          decodeURIComponent(controlDeckApproveMatch[1]),
+          body,
+          actorFromTelegram(fields)
+        )
+      );
+    });
+  }
+
+  const controlDeckRestoreMatch = pathname.match(/^\/api\/control-deck\/quarantine\/([^/]+)\/restore$/i);
+  if (controlDeckRestoreMatch && req.method === "POST") {
+    return withAuth(req, res, async (fields) => {
+      const body = parseJsonBody(await readBody(req));
+      if (!body) {
+        sendJson(res, 400, { error: "invalid json payload" });
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        await approveAction(CONFIG.workspaceRoot, "restore-quarantine", {
+          ...body,
+          itemId: decodeURIComponent(controlDeckRestoreMatch[1]),
+          actor: actorFromTelegram(fields),
+        })
+      );
+    });
+  }
+
+  if (pathname === "/api/control-deck/audit" && req.method === "GET") {
+    return withAuth(req, res, async () => {
+      sendJson(res, 200, { events: auditEvents(CONFIG.workspaceRoot, 100) });
     });
   }
 
@@ -555,6 +649,16 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/healthz" || pathname === "/readyz") {
     sendJson(res, 200, { ok: true, app: CONFIG.appName });
+    return;
+  }
+  if (pathname === "/local") {
+    if (!isLoopbackRequest(req)) {
+      sendJson(res, 403, { error: "local entrypoint requires loopback access" });
+      return;
+    }
+    logRequest(req, pathname);
+    res.setHeader("Set-Cookie", localTokenCookie(CONFIG.workspaceRoot));
+    serveIndex(req, res);
     return;
   }
   if (pathname === "/app.js") {

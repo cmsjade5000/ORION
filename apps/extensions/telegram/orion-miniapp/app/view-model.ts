@@ -26,6 +26,7 @@ function parseStartappTaskId(value: string): string | null {
 export function screenFromStartapp(startapp?: string): MiniAppScreen {
   const value = String(startapp || "").trim().toLowerCase();
   if (parseStartappTaskId(value)) return "task";
+  if (["deck", "control", "mac", "control-deck", "mac-mini", "mini-control"].includes(value)) return "deck";
   if (["home", "home-screen", "command", "console", "today", "followups", "review"].includes(value)) return "home";
   if (["compose", "chat", "request", "new"].includes(value)) return "compose";
   if (["queue", "work", "tasks", "inbox", "approvals"].includes(value)) return "queue";
@@ -36,6 +37,7 @@ export function screenFromStartapp(startapp?: string): MiniAppScreen {
 }
 
 export function screenTitle(screen: MiniAppScreen): string {
+  if (screen === "deck") return "Control Deck";
   if (screen === "compose") return "Compose Request";
   if (screen === "queue") return "Task Queue";
   if (screen === "task") return "Task Detail";

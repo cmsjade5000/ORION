@@ -1,4 +1,4 @@
-export type MiniAppScreen = "home" | "compose" | "queue" | "task" | "status" | "activity" | "settings";
+export type MiniAppScreen = "deck" | "home" | "compose" | "queue" | "task" | "status" | "activity" | "settings";
 
 export type TaskStatus = "queued" | "running" | "waiting" | "needs_input" | "done" | "failed" | "stuck";
 
@@ -182,4 +182,123 @@ export type ReviewPayload = {
   today: string;
   followups: string;
   review: string;
+};
+
+export type ControlDeckTone = "good" | "warn" | "alert" | "neutral";
+
+export type HealthSignal = {
+  id: string;
+  label: string;
+  status: string;
+  tone?: ControlDeckTone;
+  detail?: string | null;
+  value?: string | number | boolean | null;
+  updatedAt?: string | null;
+  nextStep?: string | null;
+};
+
+export type RepoSignal = {
+  id: string;
+  name: string;
+  path: string;
+  branch?: string | null;
+  status: string;
+  tone?: ControlDeckTone;
+  dirty?: boolean;
+  ahead?: number;
+  behind?: number;
+  detail?: string | null;
+  updatedAt?: string | null;
+};
+
+export type LaunchAgentSignal = {
+  id: string;
+  label: string;
+  status: string;
+  tone?: ControlDeckTone;
+  loaded?: boolean;
+  running?: boolean;
+  pid?: number | null;
+  lastExitStatus?: number | null;
+  detail?: string | null;
+  updatedAt?: string | null;
+};
+
+export type CleanupCandidate = {
+  id: string;
+  label: string;
+  kind: string;
+  path?: string | null;
+  description?: string | null;
+  sizeBytes?: number | null;
+  risk?: "low" | "medium" | "high";
+  selected?: boolean;
+  preview?: string | null;
+};
+
+export type ActionDescriptor = {
+  id: string;
+  title: string;
+  lane: "overview" | "orion" | "workstation" | "repos" | "cleanup" | "activity" | string;
+  description?: string | null;
+  risk?: "low" | "medium" | "high";
+  requiresApproval?: boolean;
+  enabled?: boolean;
+  unavailableReason?: string | null;
+};
+
+export type ActionPreview = {
+  actionId: string;
+  previewId?: string | null;
+  title: string;
+  summary: string;
+  risk?: "low" | "medium" | "high";
+  requiresApproval?: boolean;
+  blocked?: boolean;
+  blockedReason?: string | null;
+  candidates?: CleanupCandidate[];
+  changes?: string[];
+  commands?: string[];
+  restoreAvailable?: boolean;
+  expiresAt?: string | null;
+};
+
+export type ActionRun = {
+  actionId: string;
+  runId: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "blocked";
+  message: string;
+  previewId?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  restoreToken?: string | null;
+  output?: string[];
+};
+
+export type AuditEvent = {
+  id: string;
+  at: string;
+  type: string;
+  title: string;
+  detail?: string | null;
+  actionId?: string | null;
+  actor?: string | null;
+  status?: "succeeded" | "failed" | "blocked" | "pending" | string;
+};
+
+export type ControlDeckSnapshot = {
+  generatedAt: string | null;
+  verdict: {
+    title: string;
+    summary: string;
+    tone: ControlDeckTone;
+    updatedAt?: string | null;
+  };
+  attentionItems: HealthSignal[];
+  workstation: HealthSignal[];
+  orion: HealthSignal[];
+  repos: RepoSignal[];
+  launchAgents: LaunchAgentSignal[];
+  cleanup: CleanupCandidate[];
+  activity: AuditEvent[];
 };
