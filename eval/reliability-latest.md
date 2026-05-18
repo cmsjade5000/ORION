@@ -1,6 +1,6 @@
 # Reliability Snapshot
 
-- Generated at: `2026-05-17T14:10:08.621179+00:00`
+- Generated at: `2026-05-18T14:10:08.186046+00:00`
 - Window: last `24h`
 
 ## Lane Wait
