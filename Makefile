@@ -1,5 +1,5 @@
 # Top-level workflow runner
-.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview dreaming-status dreaming-help dreaming-on dreaming-off operator-health-bundle party-batch-once inbox-cycle task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
+.PHONY: soul restart routingsim routing-regression-live routing-regression-live-tools routing-regression-live-dry-run eval-routing eval-routing-tools eval-compare eval-run eval-reliability eval-reliability-daily monthly-scorecard route-hygiene lane-hotspots stop-gate-enforce canary-health-check canary-stage skill-discovery assistant-skill-refresh firecrawl-wire-pilot acpx-pilot acpx-smoke github-workflow-pilot assistant-agenda-refresh incident-bundle error-review session-maintenance dreaming-preview dreaming-status dreaming-help dreaming-on dreaming-off operator-health-bundle machine-status party-batch-once inbox-cycle task-loop task-loop-heartbeat task-loop-weekly looptest avatar audio-check lint dev config-validate openclaw-compat toolset-audit task-packets plan-graph test shellcheck redteam-validate redteam-gate mcp-harness-smoke policy-gate-check orion-policy-check policy-scorecard secure-preflight-check supply-chain-check llm-vuln-probe-check langfuse-bootstrap-check mcp-schema-check llm-provider-bench llm-provider-bench-dry llm-provider-configure-dry skill-guards-smoke ci
 
 PROMPTFOO_CONFIG ?= config/promptfoo/orion-safety-gate.yaml
 THINKING ?= high
@@ -227,6 +227,10 @@ operator-health-bundle:
 			--output-md tmp/openclaw_operator_health_bundle_latest.md \
 			$$args \
 			--json
+
+## Read-only machine/ORION health digest; no repairs, restarts, provider probes, or Telegram sends
+machine-status:
+	@python3 scripts/orion_machine_status.py --repo-root . --json
 
 ## One-shot coding-party batch (eval + reliability + canary health)
 party-batch-once:

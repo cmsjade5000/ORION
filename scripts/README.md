@@ -899,6 +899,32 @@ Notes:
 
 ---
 
+## orion_machine_status.py
+
+### Purpose
+Read-only machine/ORION digest for the recurring "is everything okay?" check.
+
+It summarizes:
+- gateway resurrector log classification
+- latest operator health bundle artifact, if present
+- relevant LaunchAgent last-exit/path drift signals
+- Codex/OpenClaw paths and versions
+- storage watcher headline, if configured
+- Remodex bridge status, if installed
+
+### Usage
+
+```bash
+make machine-status
+python3 scripts/orion_machine_status.py --repo-root . --json
+```
+
+Notes:
+- This script does not repair, restart, update, probe live models, send Telegram messages, or install LaunchAgents.
+- Missing optional tools degrade to `unknown` instead of failing the digest.
+
+---
+
 ## polymarket_sports_paper.py
 
 ### Purpose

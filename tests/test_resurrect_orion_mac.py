@@ -34,13 +34,45 @@ class TestResurrectOrionMac(unittest.TestCase):
         thread.start()
         return server, f"http://127.0.0.1:{server.server_address[1]}"
 
-    def _write_fake_openclaw(self, root: Path, *, fail_until_restart: bool, log_path: Path) -> Path:
+    def _start_restart_gated_http_server(self, state_path: Path):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                if self.path in {"/readyz", "/healthz"}:
+                    if state_path.exists() and state_path.read_text(encoding="utf-8").strip() == "restarted":
+                        self.send_response(200)
+                        self.end_headers()
+                        self.wfile.write(b"ok\n")
+                        return
+                    self.send_response(503)
+                    self.end_headers()
+                    self.wfile.write(b"starting\n")
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+    def _write_fake_openclaw(
+        self,
+        root: Path,
+        *,
+        fail_until_restart: bool,
+        log_path: Path,
+        status_mode: str = "normal",
+    ) -> Path:
         state_path = root / "state.txt"
         script = root / "fake-openclaw.sh"
         body = f"""#!/usr/bin/env bash
 set -euo pipefail
 state_file={state_path!s}
 log_file={log_path!s}
+status_mode={status_mode}
 cmd="${{1-}}"
 shift || true
 state="fresh"
@@ -54,6 +86,14 @@ case "$cmd" in
     case "$sub" in
       status)
         if [[ "${{1-}}" == "--json" ]]; then
+          if [[ "$status_mode" == "exit-fail" ]]; then
+            echo "status command unavailable" >&2
+            exit 7
+          fi
+          if [[ "$status_mode" == "invalid-json" ]]; then
+            echo "{{not json"
+            exit 0
+          fi
           if [[ "{'1' if fail_until_restart else '0'}" == "1" && "$state" != "restarted" ]]; then
             cat <<'JSON'
 {{"service":{{"loaded":false,"runtime":{{"status":"stopped"}},"configAudit":{{"ok":true}}}},"rpc":{{"ok":false}}}}
@@ -120,12 +160,78 @@ exit 2
             self.assertIn("no action needed", result.stdout.lower())
             self.assertFalse(actions.exists(), actions.read_text(encoding="utf-8") if actions.exists() else "")
 
+    def test_http_healthy_gateway_skips_restart_when_status_command_fails(self):
+        with tempfile.TemporaryDirectory() as td_name:
+            td = Path(td_name)
+            actions = td / "actions.log"
+            fake = self._write_fake_openclaw(
+                td,
+                fail_until_restart=True,
+                log_path=actions,
+                status_mode="exit-fail",
+            )
+            server, base_url = self._start_http_server()
+            try:
+                env = dict(os.environ)
+                env["OPENCLAW_BIN"] = str(fake)
+                env["ORION_GATEWAY_BASE_URL"] = base_url
+                env["ORION_GATEWAY_GUARD_STATE_DIR"] = str(td / "state")
+                env["ORION_GATEWAY_SETTLE_SECONDS"] = "0"
+                result = subprocess.run(
+                    [str(self._script_path())],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("degraded but still serving local probes", result.stdout.lower())
+            self.assertFalse(actions.exists(), actions.read_text(encoding="utf-8") if actions.exists() else "")
+
+    def test_http_healthy_gateway_skips_restart_when_status_json_is_invalid(self):
+        with tempfile.TemporaryDirectory() as td_name:
+            td = Path(td_name)
+            actions = td / "actions.log"
+            fake = self._write_fake_openclaw(
+                td,
+                fail_until_restart=True,
+                log_path=actions,
+                status_mode="invalid-json",
+            )
+            server, base_url = self._start_http_server()
+            try:
+                env = dict(os.environ)
+                env["OPENCLAW_BIN"] = str(fake)
+                env["ORION_GATEWAY_BASE_URL"] = base_url
+                env["ORION_GATEWAY_GUARD_STATE_DIR"] = str(td / "state")
+                env["ORION_GATEWAY_SETTLE_SECONDS"] = "0"
+                result = subprocess.run(
+                    [str(self._script_path())],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("degraded but still serving local probes", result.stdout.lower())
+            self.assertFalse(actions.exists(), actions.read_text(encoding="utf-8") if actions.exists() else "")
+
     def test_failed_gateway_restarts_and_recovers(self):
         with tempfile.TemporaryDirectory() as td_name:
             td = Path(td_name)
             actions = td / "actions.log"
             fake = self._write_fake_openclaw(td, fail_until_restart=True, log_path=actions)
-            server, base_url = self._start_http_server()
+            server, base_url = self._start_restart_gated_http_server(td / "state.txt")
             try:
                 env = dict(os.environ)
                 env["OPENCLAW_BIN"] = str(fake)
@@ -148,6 +254,95 @@ exit 2
             self.assertIn("restarting openclaw gateway", result.stdout.lower())
             self.assertIn("gateway recovery complete", result.stdout.lower())
             self.assertEqual(actions.read_text(encoding="utf-8").strip(), "restart")
+
+    def test_cli_unknown_and_http_down_restarts(self):
+        with tempfile.TemporaryDirectory() as td_name:
+            td = Path(td_name)
+            actions = td / "actions.log"
+            fake = self._write_fake_openclaw(
+                td,
+                fail_until_restart=True,
+                log_path=actions,
+                status_mode="exit-fail",
+            )
+            env = dict(os.environ)
+            env["OPENCLAW_BIN"] = str(fake)
+            env["ORION_GATEWAY_BASE_URL"] = "http://127.0.0.1:1"
+            env["ORION_GATEWAY_GUARD_STATE_DIR"] = str(td / "state")
+            env["ORION_GATEWAY_SETTLE_SECONDS"] = "0"
+            result = subprocess.run(
+                [str(self._script_path())],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("restarting openclaw gateway", result.stdout.lower())
+            self.assertIn("gateway still unhealthy after restart", result.stdout.lower())
+            self.assertEqual(actions.read_text(encoding="utf-8").strip(), "restart")
+
+    def test_minimal_path_resolves_user_node_and_openclaw_through_wrapper(self):
+        with tempfile.TemporaryDirectory() as td_name:
+            td = Path(td_name)
+            home = td / "home"
+            bin_dir = home / ".npm-global" / "bin"
+            bin_dir.mkdir(parents=True)
+            actions = td / "actions.log"
+            node = bin_dir / "node"
+            node.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            node.chmod(node.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            openclaw = bin_dir / "openclaw"
+            openclaw.write_text(
+                f"""#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v node >/dev/null 2>&1; then
+  echo "node unavailable" >&2
+  exit 66
+fi
+if [[ "$(command -v node)" == "/usr/local/bin/node" ]]; then
+  echo "unexpected node: $(command -v node)" >&2
+  exit 67
+fi
+if [[ "${{1-}}" == "gateway" && "${{2-}}" == "status" && "${{3-}}" == "--json" ]]; then
+  cat <<'JSON'
+{{"service":{{"loaded":true,"runtime":{{"status":"running"}},"configAudit":{{"ok":true}}}},"rpc":{{"ok":true}}}}
+JSON
+  echo status-ok >> {actions}
+  exit 0
+fi
+echo "unexpected command: $*" >&2
+exit 2
+""",
+                encoding="utf-8",
+            )
+            openclaw.chmod(openclaw.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            server, base_url = self._start_http_server()
+            try:
+                env = {
+                    "HOME": str(home),
+                    "PATH": "/usr/bin:/bin",
+                    "ORION_GATEWAY_BASE_URL": base_url,
+                    "ORION_GATEWAY_GUARD_STATE_DIR": str(td / "state"),
+                    "ORION_GATEWAY_SETTLE_SECONDS": "0",
+                }
+                result = subprocess.run(
+                    [str(self._script_path())],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("no action needed", result.stdout.lower())
+            self.assertEqual(actions.read_text(encoding="utf-8").strip(), "status-ok")
 
     def test_restart_guard_blocks_flapping(self):
         with tempfile.TemporaryDirectory() as td_name:

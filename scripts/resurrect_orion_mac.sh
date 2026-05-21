@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:${HOME}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 default_openclaw="${repo_root}/scripts/openclaww.sh"
 OPENCLAW_BIN="${OPENCLAW_BIN:-$default_openclaw}"
 GATEWAY_BASE_URL="${ORION_GATEWAY_BASE_URL:-http://127.0.0.1:18789}"
@@ -116,18 +117,24 @@ gateway_state() {
   tmp="$(mktemp)"
   local status_rc=0
   if ! "$OPENCLAW_BIN" gateway status --json >"$tmp" 2>/dev/null; then
-    status_rc=$?
+    status_rc=1
   fi
 
-  local loaded runtime rpc
+  local loaded=0
+  local runtime="unknown"
+  local rpc="unknown"
   if [[ "$status_rc" -eq 0 ]]; then
-    eval "$(
+    local parsed
+    if parsed="$(
       python3 - "$tmp" <<'PY'
 import json
 import shlex
 import sys
 
-data = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+try:
+    data = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
 service = data.get("service") or {}
 runtime = service.get("runtime") or {}
 rpc = (data.get("rpc") or {}).get("ok")
@@ -142,11 +149,9 @@ print(f"loaded={'1' if service.get('loaded') else '0'}")
 print(f"runtime={shlex.quote(runtime_status)}")
 print(f"rpc={shlex.quote(rpc_status)}")
 PY
-    )"
-  else
-    loaded=0
-    runtime="unknown"
-    rpc="unknown"
+    )"; then
+      eval "$parsed"
+    fi
   fi
   rm -f "$tmp"
 
@@ -160,13 +165,13 @@ PY
   probe_http "${GATEWAY_BASE_URL%/}/readyz" && readyz=1 || true
   probe_http "${GATEWAY_BASE_URL%/}/healthz" && healthz=1 || true
 
-  local classification="degraded"
-  if [[ "$loaded" == "1" && "$runtime" == "running" && "$port_listening" == "1" ]]; then
-    if [[ "$rpc" == "1" || "$readyz" == "1" || "$healthz" == "1" ]]; then
-      classification="healthy"
-    elif [[ "$rpc" == "0" && "$readyz" == "0" && "$healthz" == "0" ]]; then
-      classification="failed"
-    fi
+  local classification="failed"
+  if [[ "$loaded" == "1" && "$runtime" == "running" && "$port_listening" == "1" && "$rpc" == "1" ]]; then
+    classification="healthy"
+  elif [[ "$readyz" == "1" || "$healthz" == "1" ]]; then
+    classification="degraded"
+  elif [[ "$loaded" == "1" && "$runtime" == "running" && "$port_listening" == "1" && "$rpc" != "0" ]]; then
+    classification="degraded"
   else
     classification="failed"
   fi
