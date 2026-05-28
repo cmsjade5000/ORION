@@ -1,6 +1,6 @@
 # Reliability Snapshot
 
-- Generated at: `2026-05-27T15:57:35.939138+00:00`
+- Generated at: `2026-05-28T14:18:06.058620+00:00`
 - Window: last `24h`
 
 ## Lane Wait
@@ -31,8 +31,8 @@
 
 - Version: `1`
 - Total: `35`
-- By last status: `{'ok': 26, 'error': 7}`
-- Delivery status counts: `{'delivered': 5, 'not-requested': 7, 'not-delivered': 12, 'unknown': 2}`
+- By last status: `{'ok': 25, 'error': 8}`
+- Delivery status counts: `{'delivered': 5, 'not-requested': 6, 'not-delivered': 12, 'unknown': 3}`
 
 ## Queue Health
 
