@@ -53,7 +53,7 @@ PY
 
 case "${job}" in
   assistant-inbox-notify)
-    exec /usr/bin/python3 scripts/inbox_cycle.py --repo-root "${repo_root}" --runner-max-packets 4 --stale-hours 24 --notify-max-per-run 8
+    exec /usr/bin/env ORION_SUPPRESS_TELEGRAM=1 /usr/bin/python3 scripts/inbox_cycle.py --repo-root "${repo_root}" --runner-max-packets 4 --stale-hours 24 --notify-max-per-run 8
     ;;
   assistant-email-triage)
     exec /usr/bin/python3 scripts/email_triage_router.py --from-inbox orion_gatewaybot@agentmail.to --limit 20 --apply
