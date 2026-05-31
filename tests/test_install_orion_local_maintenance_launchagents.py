@@ -23,6 +23,7 @@ class TestInstallOrionLocalMaintenanceLaunchAgents(unittest.TestCase):
         ):
             self.assertIn(needle, self.runner)
         self.assertIn("scripts/inbox_cycle.py", self.runner)
+        self.assertIn("ORION_SUPPRESS_TELEGRAM=1", self.runner)
         self.assertNotIn("assistant-task-loop)", self.runner)
         for needle in (
             "kalshi-ref-arb-digest",
