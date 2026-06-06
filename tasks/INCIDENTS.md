@@ -3624,3 +3624,675 @@ Follow-up Owner: ATLAS
 Follow-up Tasks:
 - Review recurring runtime error and harden the prevention path.
 Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:28:09.254-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=0b7448a7c1bf8390 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:28:09.426-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=eb07b85408d7b0e2 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:28:09.577-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=7daeac0d08ba0579 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:28:09.853-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=3ab07d73aa404b7f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:28:10.772-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=67f927c1f11ad8a1 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:28:10.814-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=ee2030581a652aae occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:31:21.659-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=4344fa47a7a2fcb0 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:31:22.173-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=31da6050ecd6318e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:33:23.634-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=9662cae800c2a07b occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:33:24.222-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=020a757acb88093d occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:35:25.761-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=03b965cfa1c93982 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:35:26.121-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=61b020ca6f9fde78 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:40:42.606-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=77a8806b5038575f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:40:56.601-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=cfb226f2ff8a13fc occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:40:56.771-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=913c47e309f9609e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:40:57.189-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=2637d58c83aba57b occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:43:34.703-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=a2246d4a936a82aa occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:45:38.008-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=3e237edccb37ef18 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:45:38.367-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=9653a736fa205f8b occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:45:39.938-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=4634f44d203e5c15 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t20:47:41.118-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=00512621cd0bf41e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t21:28:53.644-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=8d504e73ff090b50 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t21:30:22.766-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=862a52a4575ce4b8 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t21:30:23.586-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=77ba097b854d19ab occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t21:32:24.992-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=e20e57b03a5aa386 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-07t21:32:25.550-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=ad3b77d76020b19f occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:27.637-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=9d03b8749b82205d occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:27.640-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=6e3ab42d2571ae53 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:27.642-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=07b15aecaa544116 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:27.671-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=27d4c284339269ec occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:27.811-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=df53948767fdc7e7 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:28.229-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=126db2635b836336 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:29.151-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=fa8f05270ac8381e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:29.194-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=b8bac6ec99382690 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:29.360-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=3f91e83156ffb9a9 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:29.796-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=54485a9133661fa0 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:00:30.720-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=7a17ee9c6e3cbba4 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:02:52.510-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=8e46039d688cbdf1 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: 2026-05-08t00:02:54.850-04:00 [ws] ✗ parse-error error=error: enospc: no space left on device, open '/users/corystoner/.
+Evidence:
+- fingerprint=f60974e361e18004 occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: [openclaw] uncaught exception: error: enospc: no space left on device, write
+Evidence:
+- fingerprint=b183c639c7c177ad occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: session
+Evidence:
+- fingerprint=43e262afee0f1b4e occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
+
+INCIDENT v1
+Id: INC-20260606-0615-orion-recurring-erro
+Opened: 2026-06-06T06:15:31Z
+Opened By: ORION
+Severity: P1
+Trigger: ORION_RECURRING_ERROR
+Summary: {"0":"{\"subsystem\":\"diagnostic\"}","1":"lane task error: lane=cron-nested durationms=76 error=\"error: requested agen
+Evidence:
+- fingerprint=e52e9b93091a3bed occurrences=3
+Actions:
+- Nightly ORION error review escalated the recurring error.
+Follow-up Owner: ATLAS
+Follow-up Tasks:
+- Review recurring runtime error and harden the prevention path.
+Closed: open
