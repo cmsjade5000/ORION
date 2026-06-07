@@ -1,6 +1,6 @@
 # Reliability Snapshot
 
-- Generated at: `2026-06-06T14:10:08.888273+00:00`
+- Generated at: `2026-06-07T14:10:06.933965+00:00`
 - Window: last `24h`
 
 ## Lane Wait
@@ -12,27 +12,27 @@
 
 ## Cron
 
-- Total / Enabled / Disabled: `35 / 5 / 30`
-- By agent: `{'main': 4, 'unknown': 1}`
-- By delivery channel: `{'last': 4, 'none': 1}`
+- Total / Enabled / Disabled: `0 / 0 / 0`
+- By agent: `{}`
+- By delivery channel: `{}`
 
 ## Inbox Queue Contract
 
-- Contract status: `pass`
+- Contract status: `warn`
 - Canonical job present: `False`
 - Canonical job enabled: `True`
 - Canonical session target: `launchagent`
 - Canonical delivery mode: `launchagent`
 - Legacy queue jobs present: `[]`
 - Legacy queue jobs enabled: `[]`
-- Contract assertions: `[]`
+- Contract assertions: `[{'severity': 'warn', 'code': 'jobs_json_missing', 'message': 'jobs.json missing for inbox contract validation'}]`
 
 ## Job State (`jobs-state.json`)
 
-- Version: `1`
-- Total: `35`
-- By last status: `{'ok': 29, 'error': 4}`
-- Delivery status counts: `{'delivered': 5, 'not-requested': 7, 'not-delivered': 12, 'unknown': 2}`
+- Version: `None`
+- Total: `0`
+- By last status: `{}`
+- Delivery status counts: `{}`
 
 ## Queue Health
 
