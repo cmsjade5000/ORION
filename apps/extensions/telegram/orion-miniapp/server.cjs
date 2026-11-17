@@ -56,15 +56,14 @@ function readBody(req) {
   });
 }
 
-function logClientError(req, body) {
+function logClientError(body) {
   try {
     const payload = JSON.parse(body || "{}");
-    const kind = String(payload.kind || "client-error").replace(/[^\w.-]/g, "_").slice(0, 64);
-    const detail = String(payload.detail || "").replace(/\s+/g, " ").slice(0, 500);
-    const userAgent = String(payload.userAgent || req.headers["user-agent"] || "").replace(/\s+/g, " ").slice(0, 240);
-    const href = String(payload.href || "").slice(0, 240);
-    console.error(`[miniapp-client-error] kind=${kind} detail=${detail} href=${href} ua=${userAgent}`);
-  } catch (error) {
+    const kind = payload?.kind === "error" || payload?.kind === "unhandledrejection"
+      ? payload.kind
+      : "client-error";
+    console.error(`[miniapp-client-error] kind=${kind}`);
+  } catch {
     console.error("[miniapp-client-error] unreadable payload");
   }
 }
@@ -528,7 +527,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/client-error" && req.method === "POST") {
     logRequest(req, pathname);
     try {
-      logClientError(req, await readBody(req));
+      logClientError(await readBody(req));
     } catch {
       console.error("[miniapp-client-error] failed to read payload");
     }

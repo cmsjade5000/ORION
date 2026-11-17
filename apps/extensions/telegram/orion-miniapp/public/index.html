@@ -35,24 +35,19 @@
         }
       };
       window.__orionSignalTelegramReady(60);
-      function reportBootError(kind, detail) {
+      function reportBootError(kind) {
         try {
           navigator.sendBeacon(
             "/client-error",
-            JSON.stringify({
-              kind: kind,
-              detail: String(detail || "").slice(0, 500),
-              userAgent: navigator.userAgent,
-              href: window.location.href,
-            })
+            JSON.stringify({ kind: kind })
           );
         } catch (error) {}
       }
-      window.addEventListener("error", function (event) {
-        reportBootError("error", event.message || (event.error && event.error.message));
+      window.addEventListener("error", function () {
+        reportBootError("error");
       });
-      window.addEventListener("unhandledrejection", function (event) {
-        reportBootError("unhandledrejection", event.reason && (event.reason.message || event.reason));
+      window.addEventListener("unhandledrejection", function () {
+        reportBootError("unhandledrejection");
       });
       if (window.location.protocol === "file:") {
         window.__ORION_FILE_MODE__ = true;
